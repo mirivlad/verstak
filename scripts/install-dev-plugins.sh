@@ -34,11 +34,19 @@ echo "  → installing platform-test to $PLUGIN_DIR"
 
 mkdir -p "$ROOT/plugins"
 
+# Clean up any leftover temp directories
+for tmp in "$ROOT/plugins"/.platform-test-tmp.*; do
+  [ -d "$tmp" ] && rm -rf "$tmp"
+done
+
 # Atomic replace: install to temp then rename
 TMP_DIR=$(mktemp -d "$ROOT/plugins/.platform-test-tmp.XXXXXX")
 cp -r "$DIST_PACKAGE/." "$TMP_DIR/"
-rm -f "$PLUGIN_DIR" 2>/dev/null          # remove broken symlink if any
-rm -rf "$PLUGIN_DIR"                      # remove old directory
+# Remove old directory (fix permissions first if needed)
+if [ -d "$PLUGIN_DIR" ]; then
+  chmod -R u+rwx "$PLUGIN_DIR" 2>/dev/null || true
+  rm -rf "$PLUGIN_DIR"
+fi
 mv "$TMP_DIR" "$PLUGIN_DIR"
 
 # ── verify ──

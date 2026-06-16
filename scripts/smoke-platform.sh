@@ -36,6 +36,9 @@ checks = {
     'frontend.entry': m.get('frontend', {}).get('entry') == 'frontend/dist/index.js',
     'contributes.views': len(m.get('contributes', {}).get('views', [])) > 0,
     'contributes.commands': len(m.get('contributes', {}).get('commands', [])) > 0,
+    'contributes.settingsPanels': len(m.get('contributes', {}).get('settingsPanels', [])) > 0,
+    'permissions.storage': 'storage.namespace' in m.get('permissions', []),
+    'permissions.ui': 'ui.register' in m.get('permissions', []),
 }
 all_ok = True
 for name, ok in checks.items():
