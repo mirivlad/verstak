@@ -7,16 +7,31 @@
   let permissions = [];
   let loading = true;
   let error = '';
+  let hasConfig = true;
+
+  // Wails binding call with timeout
+  async function rpc(promise, label, timeoutMs = 8000) {
+    const timeout = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error(`${label}: timeout (${timeoutMs}ms)`)), timeoutMs)
+    );
+    return await Promise.race([promise, timeout]);
+  }
 
   async function loadData() {
     loading = true;
     error = '';
     try {
-      plugins = await window.go.api.App.GetPlugins();
-      capabilities = await window.go.api.App.GetCapabilities();
-      permissions = await window.go.api.App.GetPermissions();
+      const [p, caps, perms] = await Promise.all([
+        rpc(window.go.api.App.GetPlugins(), 'GetPlugins'),
+        rpc(window.go.api.App.GetCapabilities(), 'GetCapabilities'),
+        rpc(window.go.api.App.GetPermissions(), 'GetPermissions'),
+      ]);
+      plugins = p;
+      capabilities = caps;
+      permissions = perms;
     } catch (e) {
       error = String(e);
+      console.error('[PluginManager] load error:', e);
     } finally {
       loading = false;
     }
@@ -27,8 +42,16 @@
   });
 
   async function reload() {
-    await window.go.api.App.ReloadPlugins();
-    await loadData();
+    loading = true;
+    error = '';
+    try {
+      await rpc(window.go.api.App.ReloadPlugins(), 'ReloadPlugins');
+      await loadData();
+    } catch (e) {
+      error = String(e);
+      console.error('[PluginManager] reload error:', e);
+      loading = false;
+    }
   }
 
   $: totalPlugins = plugins.length;
@@ -47,7 +70,11 @@
   {#if loading}
     <div class="loading">Scanning plugin directories...</div>
   {:else if error}
-    <div class="error">Error: {error}</div>
+    <div class="error">
+      <div class="error-icon">⚠</div>
+      <div class="error-message">{error}</div>
+      <button class="retry-btn" on:click={loadData} type="button">⟳ Retry</button>
+    </div>
   {:else}
     <!-- Plugin Count -->
     <div class="summary">
@@ -59,8 +86,14 @@
     <!-- Plugin List -->
     {#if plugins.length === 0}
       <div class="empty">
-        <p>No plugins discovered.</p>
-        <p class="hint">Place plugins in <code>~/.config/verstak/plugins/</code> or <code>./plugins/</code></p>
+        <div class="empty-icon">📂</div>
+        <p>No plugins found</p>
+        <p class="hint">Plugin directories scanned:</p>
+        <ul class="hint-list">
+          <li><code>~/.config/verstak/plugins/</code> — user plugins</li>
+          <li><code>./plugins/</code> — bundled plugins (app directory)</li>
+        </ul>
+        <p class="hint">Place a plugin folder with <code>plugin.json</code> in one of these directories and click Reload.</p>
       </div>
     {:else}
       <div class="plugin-list">
@@ -143,10 +176,37 @@
     color: #e94560;
   }
 
+  .error-icon {
+    font-size: 2rem;
+    margin-bottom: 0.5rem;
+  }
+
+  .error-message {
+    font-family: monospace;
+    font-size: 0.85rem;
+    margin-bottom: 1rem;
+    word-break: break-word;
+  }
+
+  .retry-btn {
+    background: #0f3460;
+    color: #e0e0e0;
+    border: 1px solid #533483;
+    padding: 0.4rem 1rem;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.85rem;
+  }
+
+  .retry-btn:hover {
+    background: #533483;
+  }
+
   .summary {
     display: flex;
     gap: 0.5rem;
     margin-bottom: 1rem;
+    flex-wrap: wrap;
   }
 
   .badge {
@@ -167,10 +227,27 @@
     border: 1px dashed #0f3460;
   }
 
+  .empty-icon {
+    font-size: 2rem;
+    margin-bottom: 0.5rem;
+  }
+
   .hint {
     font-size: 0.85rem;
     margin-top: 0.5rem;
     opacity: 0.7;
+  }
+
+  .hint-list {
+    list-style: none;
+    padding: 0;
+    margin: 0.5rem 0;
+    font-size: 0.8rem;
+    opacity: 0.7;
+  }
+
+  .hint-list li {
+    margin: 0.25rem 0;
   }
 
   .hint code {

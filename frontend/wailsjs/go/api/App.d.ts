@@ -13,6 +13,6 @@ export function GetPermissions():Promise<Array<permissions.Entry>>;
 
 export function GetPlugins():Promise<Array<plugin.Plugin>>;
 
-export function ReloadPlugins():Promise<void>;
+export function ReloadPlugins():Promise<number|string>;
 
 export function Startup():Promise<void>;

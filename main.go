@@ -3,6 +3,9 @@ package main
 import (
 	"embed"
 	"log"
+	"os"
+	"path/filepath"
+	"strings"
 
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"
@@ -19,6 +22,19 @@ import (
 //go:embed frontend/dist
 var assets embed.FS
 
+// expandPath resolves "~" to the user's home directory.
+func expandPath(path string) string {
+	if strings.HasPrefix(path, "~/") {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			log.Printf("[main] expandPath: cannot get home dir: %v", err)
+			return path
+		}
+		return filepath.Join(home, path[2:])
+	}
+	return path
+}
+
 func main() {
 	// ─── Initialize Core Registries ──────────────────────────
 	capRegistry := capability.NewRegistry()
@@ -31,6 +47,13 @@ func main() {
 		"~/.config/verstak/plugins",
 		"./plugins",
 	}
+
+	// Expand tilde in all paths
+	for i, d := range discoveryDirs {
+		discoveryDirs[i] = expandPath(d)
+	}
+
+	log.Printf("[main] plugin dirs: %v", discoveryDirs)
 
 	plugins, discErrors := plugin.DiscoverPlugins(discoveryDirs)
 	for _, err := range discErrors {

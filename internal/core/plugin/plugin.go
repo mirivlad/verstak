@@ -4,6 +4,7 @@ package plugin
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -231,6 +232,18 @@ func isAllowedInID(r rune) bool {
 
 // ─── Discovery ──────────────────────────────────────────────
 
+// FormatDiscoverySummary returns a human-readable summary of discovered plugins.
+func FormatDiscoverySummary(plugins []Plugin) string {
+	if len(plugins) == 0 {
+		return "no plugins found"
+	}
+	ids := make([]string, 0, len(plugins))
+	for _, p := range plugins {
+		ids = append(ids, p.Manifest.ID+"@"+p.Manifest.Version)
+	}
+	return fmt.Sprintf("%d plugin(s): %s", len(plugins), strings.Join(ids, ", "))
+}
+
 // DiscoverPlugins scans the given directories for plugin.json manifests.
 func DiscoverPlugins(dirs []string) ([]Plugin, []error) {
 	var plugins []Plugin
@@ -238,15 +251,21 @@ func DiscoverPlugins(dirs []string) ([]Plugin, []error) {
 
 	seen := make(map[string]bool)
 
+	log.Printf("[discovery] start: %d dir(s): %v", len(dirs), dirs)
+
 	for _, dir := range dirs {
 		entries, err := os.ReadDir(dir)
 		if os.IsNotExist(err) {
+			log.Printf("[discovery]   dir %q: does not exist (skip)", dir)
 			continue
 		}
 		if err != nil {
 			errs = append(errs, fmt.Errorf("reading plugin directory %s: %w", dir, err))
+			log.Printf("[discovery]   dir %q: error: %v", dir, err)
 			continue
 		}
+
+		log.Printf("[discovery]   dir %q: %d entries", dir, len(entries))
 
 		for _, entry := range entries {
 			if !entry.IsDir() {
@@ -257,23 +276,29 @@ func DiscoverPlugins(dirs []string) ([]Plugin, []error) {
 			manifestPath := filepath.Join(pluginDir, "plugin.json")
 
 			if _, err := os.Stat(manifestPath); os.IsNotExist(err) {
+				log.Printf("[discovery]     %s: no plugin.json (skip)", entry.Name())
 				continue
 			}
 
 			plugin, err := loadPlugin(pluginDir)
 			if err != nil {
 				errs = append(errs, fmt.Errorf("plugin %s: %w", entry.Name(), err))
+				log.Printf("[discovery]     %s: load error: %v", entry.Name(), err)
 				continue
 			}
 
 			if seen[plugin.Manifest.ID] {
 				errs = append(errs, fmt.Errorf("duplicate plugin ID %q in %s", plugin.Manifest.ID, pluginDir))
+				log.Printf("[discovery]     %s: duplicate ID %q (skip)", entry.Name(), plugin.Manifest.ID)
 				continue
 			}
 			seen[plugin.Manifest.ID] = true
 			plugins = append(plugins, plugin)
+			log.Printf("[discovery]     %s: ✅ %s@%s", entry.Name(), plugin.Manifest.ID, plugin.Manifest.Version)
 		}
 	}
+
+	log.Printf("[discovery] end: %d plugin(s) found, %d error(s)", len(plugins), len(errs))
 
 	return plugins, errs
 }
