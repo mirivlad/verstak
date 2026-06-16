@@ -2,6 +2,7 @@
   export let p = {};
   export let capabilities = [];
   export let permissions = [];
+  export let contributions = {};
 
   $: m = p.manifest || {};
 
@@ -15,6 +16,24 @@
     loading: '#ffc857',
     discovered: '#a0a0b8',
   }[p.status] || '#a0a0b8');
+
+  $: pluginId = m.id || 'unknown';
+
+  $: contribCounts = {
+    views: (contributions.views || []).filter(v => v.pluginId === pluginId).length,
+    commands: (contributions.commands || []).filter(c => c.pluginId === pluginId).length,
+    sidebar: (contributions.sidebarItems || []).filter(s => s.pluginId === pluginId).length,
+    statusbar: (contributions.statusBarItems || []).filter(s => s.pluginId === pluginId).length,
+  };
+
+  $: contribSummary = (() => {
+    const parts = [];
+    if (contribCounts.views > 0) parts.push(contribCounts.views + ' view' + (contribCounts.views !== 1 ? 's' : ''));
+    if (contribCounts.commands > 0) parts.push(contribCounts.commands + ' command' + (contribCounts.commands !== 1 ? 's' : ''));
+    if (contribCounts.sidebar > 0) parts.push(contribCounts.sidebar + ' sidebar' + (contribCounts.sidebar !== 1 ? 's' : ''));
+    if (contribCounts.statusbar > 0) parts.push(contribCounts.statusbar + ' statusbar' + (contribCounts.statusbar !== 1 ? 's' : ''));
+    return parts.length > 0 ? parts.join(', ') : 'none';
+  })();
 
   $: dangerousPermissions = (m.permissions || []).filter(name => {
     let perm = permissions.find(p => p.name === name);
@@ -44,6 +63,10 @@
     <span class="status-badge" style="color: {statusColor}">{p.status}</span>
   </div>
 
+  {#if p.status === 'degraded'}
+    <p class="degraded-text">Plugin is usable, but some optional capabilities are unavailable.</p>
+  {/if}
+
   {#if m.description}
     <p class="description">{m.description}</p>
   {/if}
@@ -64,6 +87,10 @@
     <div class="meta-row">
       <span class="label">Root:</span>
       <span class="path">{p.rootPath || '-'}</span>
+    </div>
+    <div class="meta-row">
+      <span class="label">Contributions:</span>
+      <span>{contribSummary}</span>
     </div>
   </div>
 
@@ -103,10 +130,13 @@
           {@const found = capabilities.some(c => c.name === opt)}
           <span class="tag" class:optional-ok={found} class:optional-missing={!found}>
             {opt}
-            {#if found}<span class="check">✓</span>{:else}<span class="x">✗</span>{/if}
+            {#if found}<span class="check">✓</span>{/if}
           </span>
         {/each}
       </div>
+      {#if missingOptional.length > 0}
+        <p class="info">ℹ Optional capabilities not available — plugin running in degraded mode</p>
+      {/if}
     </div>
   {/if}
 
@@ -184,6 +214,13 @@
     color: #a0a0b8;
     font-size: 0.85rem;
     margin-bottom: 0.75rem;
+  }
+
+  .degraded-text {
+    color: #ffc857;
+    font-size: 0.8rem;
+    margin-bottom: 0.5rem;
+    font-style: italic;
   }
 
   .card-meta {
@@ -266,8 +303,13 @@
   }
 
   .check { color: #4ecca3; margin-left: 2px; }
-  .x { color: #e94560; margin-left: 2px; }
   .danger-icon { color: #e94560; margin-left: 2px; }
+
+  .info {
+    color: #ffc857;
+    font-size: 0.8rem;
+    margin-top: 0.3rem;
+  }
 
   .warning {
     color: #ffc857;

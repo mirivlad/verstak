@@ -1,11 +1,12 @@
 <script>
   import PluginCard from './PluginCard.svelte';
   import { onMount } from 'svelte';
-  import { GetPlugins, GetCapabilities, GetPermissions, ReloadPlugins } from '../../../wailsjs/go/api/App';
+  import { GetPlugins, GetCapabilities, GetPermissions, GetContributions, ReloadPlugins } from '../../../wailsjs/go/api/App';
 
   let plugins = [];
   let capabilities = [];
   let permissions = [];
+  let contributions = {};
   let loading = true;
   let error = '';
 
@@ -23,6 +24,7 @@
     // Capabilities and permissions are non-critical — load async
     GetCapabilities().then(c => { capabilities = c || []; }).catch(() => {});
     GetPermissions().then(p => { permissions = p || []; }).catch(() => {});
+    GetContributions().then(c => { contributions = c || {}; }).catch(() => {});
     loading = false;
   }
 
@@ -71,8 +73,11 @@
 
     {#if plugins.length === 0}
       <div class="empty">
-        <div class="empty-icon">📂</div>
-        <p>No plugins found</p>
+        <div class="empty-icon">
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+          </svg>
+        </div>        <p>No plugins found</p>
         <p class="hint">Plugin directories scanned:</p>
         <ul class="hint-list">
           <li><code>~/.config/verstak/plugins/</code> — user plugins</li>
@@ -83,7 +88,7 @@
     {:else}
       <div class="plugin-list">
         {#each plugins as p}
-          <PluginCard {p} {capabilities} {permissions} />
+          <PluginCard {p} {capabilities} {permissions} {contributions} />
         {/each}
       </div>
     {/if}
@@ -93,13 +98,14 @@
         <summary>Capability Registry ({totalCaps})</summary>
         <table>
           <thead>
-            <tr><th>Capability</th><th>Provider</th><th>Status</th></tr>
+            <tr><th>Capability</th><th>Provider</th><th>Source</th><th>Status</th></tr>
           </thead>
           <tbody>
             {#each capabilities as cap}
               <tr>
                 <td><code>{cap.name}</code></td>
                 <td>{cap.pluginId}</td>
+                <td><span class="source-badge" class:source-core={cap.pluginId === 'verstak-desktop'} class:source-plugin={cap.pluginId !== 'verstak-desktop'}>{cap.pluginId === 'verstak-desktop' ? 'core' : 'plugin'}</span></td>
                 <td><span class="status-{cap.status}">{cap.status}</span></td>
               </tr>
             {/each}
@@ -149,7 +155,7 @@
     padding: 2rem; text-align: center; color: #a0a0b8;
     background: #16213e; border-radius: 8px; border: 1px dashed #0f3460;
   }
-  .empty-icon { font-size: 2rem; margin-bottom: 0.5rem; }
+  .empty-icon { margin-bottom: 0.5rem; color: #0f3460; }
   .hint { font-size: 0.85rem; margin-top: 0.5rem; opacity: 0.7; }
   .hint-list { list-style: none; padding: 0; margin: 0.5rem 0; font-size: 0.8rem; opacity: 0.7; }
   .hint-list li { margin: 0.25rem 0; }
@@ -171,4 +177,20 @@
   :global(.status-stable) { color: #4ecca3; }
   :global(.status-draft) { color: #ffc857; }
   :global(.status-deprecated) { color: #e94560; }
+  .source-badge {
+    font-size: 0.75rem;
+    padding: 0.1rem 0.4rem;
+    border-radius: 4px;
+    font-weight: 600;
+  }
+  .source-core {
+    background: #1a3a5c;
+    color: #4ecca3;
+    border: 1px solid #4ecca3;
+  }
+  .source-plugin {
+    background: #0f3460;
+    color: #a0a0b8;
+    border: 1px solid #533483;
+  }
 </style>
