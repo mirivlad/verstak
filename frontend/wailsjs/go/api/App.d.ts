@@ -9,6 +9,12 @@ export function CloseVault():Promise<void>;
 
 export function CreateVault(arg1:string):Promise<void>;
 
+export function DisablePlugin(arg1:string):Promise<string>;
+
+export function EnablePlugin(arg1:string):Promise<string>;
+
+export function GetAppSettings():Promise<Record<string, any>>;
+
 export function GetCapabilities():Promise<Array<capability.Entry>>;
 
 export function GetContributions():Promise<api.ContributionSummary>;
@@ -17,10 +23,30 @@ export function GetPermissions():Promise<Array<permissions.Entry>>;
 
 export function GetPlugins():Promise<Array<plugin.Plugin>>;
 
+export function GetVaultPluginState():Promise<Record<string, any>>;
+
 export function GetVaultStatus():Promise<Record<string, string>>;
 
 export function OpenVault(arg1:string):Promise<void>;
 
+export function ReadPluginDataJSON(arg1:string,arg2:string):Promise<Record<string, any>>;
+
+export function ReadPluginSetting(arg1:string,arg2:string):Promise<any>;
+
+export function ReadPluginSettings(arg1:string):Promise<Record<string, any>>;
+
+export function RecordDesiredPlugin(arg1:string,arg2:string,arg3:string):Promise<string>;
+
 export function ReloadPlugins():Promise<number|string>;
 
+export function SetCurrentVault(arg1:string):Promise<string>;
+
 export function Startup():Promise<void>;
+
+export function UpdateAppSettings(arg1:Record<string, any>):Promise<string>;
+
+export function WritePluginDataJSON(arg1:string,arg2:string,arg3:Record<string, any>):Promise<string>;
+
+export function WritePluginSetting(arg1:string,arg2:string,arg3:any):Promise<string>;
+
+export function WritePluginSettings(arg1:string,arg2:Record<string, any>):Promise<string>;

@@ -254,12 +254,15 @@
 <style>
   .plugin-manager {
     max-width: 900px;
+    padding-top: 0.5rem;
   }
   header {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    margin-bottom: 1rem;
+    margin-bottom: 1.25rem;
+    padding-bottom: 0.75rem;
+    border-bottom: 1px solid #0f3460;
   }
   .header-left {
     display: flex;

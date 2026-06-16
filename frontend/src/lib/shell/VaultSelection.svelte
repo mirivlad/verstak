@@ -16,7 +16,8 @@
       appSettings = await App.GetAppSettings() || {};
       recentVaults = appSettings.recentVaults || [];
     } catch (e) {
-      error = 'Failed to load app settings: ' + String(e);
+      // App settings might fail if backend not ready — show selection anyway
+      console.error('[VaultSelection] load settings:', e);
     }
     loading = false;
   });
@@ -29,21 +30,27 @@
     }
     creating = true;
     try {
-      // Create the vault
+      // Step 1: Create the vault directory + metadata
       const createErr = await App.CreateVault(newVaultPath.trim());
       if (createErr) {
         error = 'Create vault: ' + createErr;
         creating = false;
         return;
       }
-      // Open it and save to app settings
-      const setErr = await App.SetCurrentVault(newVaultPath.trim());
-      if (setErr) {
-        error = 'Set current vault: ' + setErr;
+      // Step 2: Open it (registers capabilities, loads plugin state)
+      const openErr = await App.OpenVault(newVaultPath.trim());
+      if (openErr) {
+        error = 'Open vault: ' + openErr;
         creating = false;
         return;
       }
-      // Success — dispatch event for app to transition
+      // Step 3: Save to app settings (set current + add to recent)
+      const setErr = await App.SetCurrentVault(newVaultPath.trim());
+      if (setErr) {
+        // Vault is open but settings save failed — still proceed
+        console.warn('[VaultSelection] SetCurrentVault:', setErr);
+      }
+      // Success — notify app to transition to main UI
       window.dispatchEvent(new CustomEvent('verstak:vault-opened'));
     } catch (e) {
       error = String(e);
@@ -59,11 +66,17 @@
     }
     opening = true;
     try {
-      const setErr = await App.SetCurrentVault(openVaultPath.trim());
-      if (setErr) {
-        error = setErr;
+      // Step 1: Open the vault
+      const openErr = await App.OpenVault(openVaultPath.trim());
+      if (openErr) {
+        error = 'Open vault: ' + openErr;
         opening = false;
         return;
+      }
+      // Step 2: Save to app settings
+      const setErr = await App.SetCurrentVault(openVaultPath.trim());
+      if (setErr) {
+        console.warn('[VaultSelection] SetCurrentVault:', setErr);
       }
       window.dispatchEvent(new CustomEvent('verstak:vault-opened'));
     } catch (e) {
@@ -76,11 +89,15 @@
     error = '';
     opening = true;
     try {
-      const setErr = await App.SetCurrentVault(path);
-      if (setErr) {
-        error = setErr;
+      const openErr = await App.OpenVault(path);
+      if (openErr) {
+        error = 'Open vault: ' + openErr;
         opening = false;
         return;
+      }
+      const setErr = await App.SetCurrentVault(path);
+      if (setErr) {
+        console.warn('[VaultSelection] SetCurrentVault:', setErr);
       }
       window.dispatchEvent(new CustomEvent('verstak:vault-opened'));
     } catch (e) {
@@ -90,6 +107,13 @@
   }
 </script>
 
+{#if loading}
+  <div class="vault-selection">
+    <div class="vault-selection-inner">
+      <p class="loading-text">Loading...</p>
+    </div>
+  </div>
+{:else}
 <div class="vault-selection">
   <div class="vault-selection-inner">
     <div class="logo">
@@ -160,6 +184,7 @@
     {/if}
   </div>
 </div>
+{/if}
 
 <style>
   .vault-selection {
@@ -173,6 +198,11 @@
   .vault-selection-inner {
     max-width: 520px;
     width: 100%;
+  }
+  .loading-text {
+    color: #a0a0b8;
+    text-align: center;
+    font-size: 1rem;
   }
   .logo {
     text-align: center;

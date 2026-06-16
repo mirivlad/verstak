@@ -33,9 +33,14 @@
     vaultStatus = { status: 'open', path: '', vaultId: '' };
   }
 
+  function onNav(e) {
+    currentView = e.detail.viewId;
+  }
+
   // Listen for vault-opened event from VaultSelection
   if (typeof window !== 'undefined') {
     window.addEventListener('verstak:vault-opened', onVaultOpened);
+    window.addEventListener('verstak:nav', onNav);
   }
 
   checkVault();
@@ -62,6 +67,19 @@
 {/if}
 
 <style>
+  :global(*) {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+  }
+
+  :global(body) {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: #1a1a2e;
+    color: #e0e0f0;
+    overflow: hidden;
+  }
+
   .app-loading {
     display: flex;
     align-items: center;
@@ -71,11 +89,13 @@
     color: #a0a0b8;
     font-size: 1rem;
   }
+
   main {
     display: flex;
     height: 100vh;
     background: #1a1a2e;
   }
+
   .content {
     flex: 1;
     display: flex;

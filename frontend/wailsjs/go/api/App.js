@@ -10,6 +10,18 @@ export function CreateVault(arg1) {
   return window['go']['api']['App']['CreateVault'](arg1);
 }
 
+export function DisablePlugin(arg1) {
+  return window['go']['api']['App']['DisablePlugin'](arg1);
+}
+
+export function EnablePlugin(arg1) {
+  return window['go']['api']['App']['EnablePlugin'](arg1);
+}
+
+export function GetAppSettings() {
+  return window['go']['api']['App']['GetAppSettings']();
+}
+
 export function GetCapabilities() {
   return window['go']['api']['App']['GetCapabilities']();
 }
@@ -26,6 +38,10 @@ export function GetPlugins() {
   return window['go']['api']['App']['GetPlugins']();
 }
 
+export function GetVaultPluginState() {
+  return window['go']['api']['App']['GetVaultPluginState']();
+}
+
 export function GetVaultStatus() {
   return window['go']['api']['App']['GetVaultStatus']();
 }
@@ -34,10 +50,46 @@ export function OpenVault(arg1) {
   return window['go']['api']['App']['OpenVault'](arg1);
 }
 
+export function ReadPluginDataJSON(arg1, arg2) {
+  return window['go']['api']['App']['ReadPluginDataJSON'](arg1, arg2);
+}
+
+export function ReadPluginSetting(arg1, arg2) {
+  return window['go']['api']['App']['ReadPluginSetting'](arg1, arg2);
+}
+
+export function ReadPluginSettings(arg1) {
+  return window['go']['api']['App']['ReadPluginSettings'](arg1);
+}
+
+export function RecordDesiredPlugin(arg1, arg2, arg3) {
+  return window['go']['api']['App']['RecordDesiredPlugin'](arg1, arg2, arg3);
+}
+
 export function ReloadPlugins() {
   return window['go']['api']['App']['ReloadPlugins']();
 }
 
+export function SetCurrentVault(arg1) {
+  return window['go']['api']['App']['SetCurrentVault'](arg1);
+}
+
 export function Startup() {
   return window['go']['api']['App']['Startup']();
+}
+
+export function UpdateAppSettings(arg1) {
+  return window['go']['api']['App']['UpdateAppSettings'](arg1);
+}
+
+export function WritePluginDataJSON(arg1, arg2, arg3) {
+  return window['go']['api']['App']['WritePluginDataJSON'](arg1, arg2, arg3);
+}
+
+export function WritePluginSetting(arg1, arg2, arg3) {
+  return window['go']['api']['App']['WritePluginSetting'](arg1, arg2, arg3);
+}
+
+export function WritePluginSettings(arg1, arg2) {
+  return window['go']['api']['App']['WritePluginSettings'](arg1, arg2);
 }

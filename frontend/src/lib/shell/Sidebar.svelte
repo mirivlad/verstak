@@ -2,74 +2,191 @@
   import { onMount } from 'svelte';
   import * as App from '../../../wailsjs/go/api/App';
 
-  let sidebarItems = [];
-  let activeView = '';
   let plugins = [];
-  let contributions = { sidebarItems: [], views: [], commands: [], settingsPanels: [] };
+  let vaultStatus = { status: 'unknown', path: '', vaultId: '' };
+  let sidebarItems = [];
+
+  let navItems = [
+    { id: 'plugin-manager', label: 'Plugin Manager', icon: '🧩' },
+  ];
+
+  $: vaultOpen = vaultStatus.status === 'open';
 
   onMount(async () => {
     try {
-      const [contribs, pluginList] = await Promise.all([
-        App.GetContributions(),
-        App.GetPlugins(),
+      const [p, v, contribs] = await Promise.all([
+        App.GetPlugins().catch(() => []),
+        App.GetVaultStatus().catch(() => ({ status: 'unknown', path: '', vaultId: '' })),
+        App.GetContributions().catch(() => ({})),
       ]);
-      contributions = contribs;
-      plugins = pluginList;
-      const pluginMap = new Map(pluginList.map(p => [p.manifest.id, p]));
+      plugins = p || [];
+      vaultStatus = v;
       sidebarItems = (contribs.sidebarItems || []).filter(item => {
-        const plugin = pluginMap.get(item.pluginId);
-        return plugin && plugin.manifest.permissions.includes('ui.register');
+        const plugin = plugins.find(p => p.manifest?.id === item.pluginId);
+        if (!plugin) return false;
+        return plugin.status !== 'disabled' && plugin.status !== 'failed' && plugin.status !== 'incompatible' && plugin.status !== 'missing-required-capability';
       });
     } catch (e) {
       console.error('[Sidebar] load error:', e);
     }
   });
 
-  function openView(viewId) {
-    activeView = viewId;
-    window.dispatchEvent(new CustomEvent('verstak:open-view', { detail: { viewId } }));
+  function handleNav(id) {
+    window.dispatchEvent(new CustomEvent('verstak:nav', { detail: { viewId: id } }));
+  }
+
+  function handleSidebarItem(item) {
+    window.dispatchEvent(new CustomEvent('verstak:open-view', { detail: { viewId: item.id } }));
   }
 </script>
 
-<nav class="sidebar">
-  {#each sidebarItems as item}
-    <button
-      class="sidebar-item"
-      class:active={activeView === item.item.view}
-      on:click={() => openView(item.item.view)}
-      type="button"
-    >
-      {#if item.item.icon}<span class="icon">{item.item.icon}</span>{/if}
-      <span class="label">{item.item.title}</span>
-    </button>
-  {/each}
-</nav>
+<aside class="sidebar">
+  <div class="sidebar-header">
+    <span class="sidebar-logo">📦</span>
+    <span class="sidebar-title">Verstak</span>
+  </div>
+
+  <nav class="sidebar-nav">
+    {#each navItems as item}
+      <button
+        class="nav-item"
+        on:click={() => handleNav(item.id)}
+        type="button"
+      >
+        <span class="nav-icon">{item.icon}</span>
+        <span class="nav-label">{item.label}</span>
+      </button>
+    {/each}
+  </nav>
+
+  {#if sidebarItems.length > 0}
+    <div class="sidebar-section">
+      <span class="section-label">Plugins</span>
+      {#each sidebarItems as item}
+        <button
+          class="nav-item plugin-item"
+          on:click={() => handleSidebarItem(item)}
+          type="button"
+        >
+          <span class="nav-icon">{item.icon || '📌'}</span>
+          <span class="nav-label">{item.label || item.id}</span>
+        </button>
+      {/each}
+    </div>
+  {/if}
+
+  <div class="sidebar-footer">
+    {#if vaultStatus.status !== 'unknown'}
+      <span class="vault-indicator" class:vault-open={vaultStatus.status === 'open'} class:vault-closed={vaultStatus.status !== 'open'}>
+        ● Vault: {vaultStatus.status}
+      </span>
+    {/if}
+  </div>
+</aside>
 
 <style>
   .sidebar {
-    width: 200px;
+    width: 220px;
+    min-width: 220px;
     background: #16213e;
-    border-right: 1px solid #0f3460;
     display: flex;
     flex-direction: column;
-    padding: 0.5rem 0;
-    overflow-y: auto;
+    border-right: 1px solid #0f3460;
+    overflow: hidden;
   }
-  .sidebar-item {
+
+  .sidebar-header {
     display: flex;
     align-items: center;
     gap: 0.5rem;
-    padding: 0.5rem 1rem;
+    padding: 1rem 1.25rem;
+    border-bottom: 1px solid #0f3460;
+  }
+
+  .sidebar-logo {
+    font-size: 1.2rem;
+  }
+
+  .sidebar-title {
+    color: #e0e0f0;
+    font-size: 1rem;
+    font-weight: 600;
+  }
+
+  .sidebar-nav {
+    display: flex;
+    flex-direction: column;
+    padding: 0.5rem 0.75rem;
+    gap: 0.15rem;
+  }
+
+  .sidebar-section {
+    display: flex;
+    flex-direction: column;
+    padding: 0.5rem 0.75rem;
+    gap: 0.15rem;
+    border-top: 1px solid #0f3460;
+    margin-top: 0.25rem;
+  }
+
+  .section-label {
+    color: #666;
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    padding: 0.25rem 0.5rem;
+  }
+
+  .nav-item {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.45rem 0.75rem;
     background: none;
     border: none;
-    color: #a0a0b0;
+    color: #a0a0b8;
+    font-size: 0.85rem;
     cursor: pointer;
+    border-radius: 6px;
     text-align: left;
-    font-size: 0.9rem;
     width: 100%;
+    transition: background 0.15s, color 0.15s;
   }
-  .sidebar-item:hover { background: #0f3460; color: #e0e0f0; }
-  .sidebar-item.active { background: #0f3460; color: #4ecca3; }
-  .icon { font-size: 1.1rem; }
-  .label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+  .nav-item:hover {
+    background: #0f3460;
+    color: #e0e0f0;
+  }
+
+  .nav-icon {
+    font-size: 1rem;
+    flex-shrink: 0;
+    width: 1.2rem;
+    text-align: center;
+  }
+
+  .nav-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .sidebar-footer {
+    margin-top: auto;
+    padding: 0.75rem 1.25rem;
+    border-top: 1px solid #0f3460;
+  }
+
+  .vault-indicator {
+    font-size: 0.7rem;
+    color: #666;
+  }
+
+  .vault-indicator.vault-open {
+    color: #4ecca3;
+  }
+
+  .vault-indicator.vault-closed {
+    color: #a0a0b8;
+  }
 </style>
