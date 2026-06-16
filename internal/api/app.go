@@ -13,6 +13,7 @@ import (
 	"github.com/verstak/verstak-desktop/internal/core/events"
 	"github.com/verstak/verstak-desktop/internal/core/permissions"
 	"github.com/verstak/verstak-desktop/internal/core/plugin"
+	"github.com/verstak/verstak-desktop/internal/core/vault"
 )
 
 // App is the main application struct exposed to the Wails frontend.
@@ -22,6 +23,7 @@ type App struct {
 	permRegistry    *permissions.Registry
 	eventBus        *events.Bus
 	plugins         []plugin.Plugin
+	vault           *vault.Vault
 }
 
 // NewApp creates a new App instance.
@@ -31,6 +33,7 @@ func NewApp(
 	permReg *permissions.Registry,
 	bus *events.Bus,
 	plugins []plugin.Plugin,
+	vaultService *vault.Vault,
 ) *App {
 	return &App{
 		capRegistry:     capReg,
@@ -38,6 +41,7 @@ func NewApp(
 		permRegistry:    permReg,
 		eventBus:        bus,
 		plugins:         plugins,
+		vault:           vaultService,
 	}
 }
 
@@ -124,6 +128,13 @@ func (a *App) ReloadPlugins() (int, string) {
 		log.Printf("[api] ReloadPlugins: failed to re-register core capabilities: %v", err)
 	}
 
+	// Re-register vault capability if vault is open
+	if a.vault != nil && a.vault.GetVaultStatus() == vault.StatusOpen {
+		if err := a.capRegistry.Register("verstak-desktop", []string{"verstak/core/vault/v1"}); err != nil {
+			log.Printf("[api] ReloadPlugins: failed to re-register vault capability: %v", err)
+		}
+	}
+
 	plugins, errs := plugin.DiscoverPlugins(discoveryDirs)
 
 	// Plugin lifecycle: register capabilities + contributions
@@ -182,6 +193,55 @@ func (a *App) ReloadPlugins() (int, string) {
 	log.Printf("[api] ReloadPlugins: dirs=[%s] %s", discoveryDirsStr, summary)
 
 	return len(plugins), summary
+}
+
+// ─── Vault API ──────────────────────────────────────────────
+
+// GetVaultStatus returns the current vault status, path, and vault ID.
+func (a *App) GetVaultStatus() map[string]string {
+	status := "not-created"
+	path := ""
+	vaultID := ""
+
+	if a.vault != nil {
+		status = string(a.vault.GetVaultStatus())
+		path = a.vault.GetVaultPath()
+		meta := a.vault.GetVaultMeta()
+		if meta != nil {
+			vaultID = meta.VaultID
+		}
+	}
+
+	return map[string]string{
+		"status":  status,
+		"path":    path,
+		"vaultId": vaultID,
+	}
+}
+
+// CreateVault creates a new vault at the given path.
+func (a *App) CreateVault(path string) error {
+	if a.vault == nil {
+		return fmt.Errorf("vault service not initialized")
+	}
+	return a.vault.CreateVault(path)
+}
+
+// OpenVault opens an existing vault at the given path.
+func (a *App) OpenVault(path string) error {
+	if a.vault == nil {
+		return fmt.Errorf("vault service not initialized")
+	}
+	return a.vault.OpenVault(path)
+}
+
+// CloseVault closes the current vault.
+func (a *App) CloseVault() error {
+	if a.vault == nil {
+		return fmt.Errorf("vault service not initialized")
+	}
+	a.vault.CloseVault()
+	return nil
 }
 
 // ContributionSummary aggregates all contribution types for the frontend.

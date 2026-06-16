@@ -5,6 +5,10 @@ import {api} from '../models';
 import {permissions} from '../models';
 import {plugin} from '../models';
 
+export function CloseVault():Promise<void>;
+
+export function CreateVault(arg1:string):Promise<void>;
+
 export function GetCapabilities():Promise<Array<capability.Entry>>;
 
 export function GetContributions():Promise<api.ContributionSummary>;
@@ -12,6 +16,10 @@ export function GetContributions():Promise<api.ContributionSummary>;
 export function GetPermissions():Promise<Array<permissions.Entry>>;
 
 export function GetPlugins():Promise<Array<plugin.Plugin>>;
+
+export function GetVaultStatus():Promise<Record<string, string>>;
+
+export function OpenVault(arg1:string):Promise<void>;
 
 export function ReloadPlugins():Promise<number|string>;
 

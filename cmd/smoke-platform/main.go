@@ -167,6 +167,14 @@ func main() {
 		fmt.Printf("  ✅ registered %d core capabilities\n", len(coreCaps))
 	}
 
+	// Register vault capability (core service)
+	if err := reg.Register("verstak-desktop", []string{"verstak/core/vault/v1"}); err != nil {
+		fmt.Printf("  ❌ register vault capability: %v\n", err)
+		allGood = false
+	} else {
+		fmt.Printf("  ✅ registered vault capability\n")
+	}
+
 	// Register plugin capabilities
 	for _, p := range m.Provides {
 		if err := reg.Register(m.ID, []string{p}); err != nil {
@@ -232,10 +240,10 @@ func main() {
 	fmt.Printf("\n[capability count]\n")
 	totalCaps := len(reg.List())
 	fmt.Printf("  total capabilities: %d\n", totalCaps)
-	if totalCaps >= 7 {
-		fmt.Printf("  ✅ total capabilities >= 7 (%d)\n", totalCaps)
+	if totalCaps >= 8 {
+		fmt.Printf("  ✅ total capabilities >= 8 (%d)\n", totalCaps)
 	} else {
-		fmt.Printf("  ❌ total capabilities < 7 (got %d, expected >= 7)\n", totalCaps)
+		fmt.Printf("  ❌ total capabilities < 8 (got %d, expected >= 8)\n", totalCaps)
 		allGood = false
 	}
 

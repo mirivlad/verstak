@@ -18,6 +18,7 @@ import (
 	"github.com/verstak/verstak-desktop/internal/core/events"
 	"github.com/verstak/verstak-desktop/internal/core/permissions"
 	"github.com/verstak/verstak-desktop/internal/core/plugin"
+	"github.com/verstak/verstak-desktop/internal/core/vault"
 )
 
 //go:embed frontend/dist
@@ -43,6 +44,9 @@ func main() {
 	permRegistry := permissions.NewRegistry()
 	eventBus := events.NewBus()
 
+	// ─── Initialize Vault ────────────────────────────────────
+	vaultService := vault.NewVault(eventBus)
+
 	// ─── Register Core Capabilities ─────────────────────────
 	// These are provided by the desktop core itself, not by plugins.
 	// Registered before plugin discovery so that plugins can resolve
@@ -59,6 +63,12 @@ func main() {
 		log.Fatalf("[main] failed to register core capabilities: %v", err)
 	}
 	log.Printf("[main] registered %d core capabilities", len(coreCaps))
+
+	// Register vault capability (vault is available as a core service)
+	if err := capRegistry.Register(corePluginID, []string{"verstak/core/vault/v1"}); err != nil {
+		log.Fatalf("[main] failed to register vault capability: %v", err)
+	}
+	log.Printf("[main] registered vault capability")
 
 	// ─── Plugin Discovery ───────────────────────────────────
 	discoveryDirs := []string{
@@ -136,10 +146,11 @@ func main() {
 			failed++
 		}
 	}
-	log.Printf("[main] lifecycle summary: loaded=%d degraded=%d failed=%d", loaded, degraded, failed)
+	log.Printf("[main] lifecycle summary: loaded=%d degraded=%d failed=%d vault=%s",
+		loaded, degraded, failed, vaultService.GetVaultStatus())
 
 	// Create the App struct
-	app := api.NewApp(capRegistry, contribRegistry, permRegistry, eventBus, plugins)
+	app := api.NewApp(capRegistry, contribRegistry, permRegistry, eventBus, plugins, vaultService)
 
 	// ─── Wails App ───────────────────────────────────────────
 	err := wails.Run(&options.App{
