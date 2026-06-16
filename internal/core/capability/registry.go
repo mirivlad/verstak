@@ -9,7 +9,7 @@ import (
 
 // Registry tracks available capabilities and which plugins provide them.
 type Registry struct {
-	mu         sync.RWMutex
+	mu           sync.RWMutex
 	capabilities map[string]*Entry // capability name -> entry
 }
 

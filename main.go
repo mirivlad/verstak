@@ -46,9 +46,9 @@ func main() {
 	err := wails.Run(&options.App{
 		Title:            "Verstak",
 		Width:            1200,
-		Height:          800,
-		MinWidth:        800,
-		MinHeight:       600,
+		Height:           800,
+		MinWidth:         800,
+		MinHeight:        600,
 		WindowStartState: options.Normal,
 		AssetServer: &assetserver.Options{
 			Assets: assets,

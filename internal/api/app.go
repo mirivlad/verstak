@@ -11,11 +11,11 @@ import (
 
 // App is the main application struct exposed to the Wails frontend.
 type App struct {
-	capRegistry    *capability.Registry
+	capRegistry     *capability.Registry
 	contribRegistry *contribution.Registry
-	permRegistry   *permissions.Registry
-	eventBus       *events.Bus
-	plugins        []plugin.Plugin
+	permRegistry    *permissions.Registry
+	eventBus        *events.Bus
+	plugins         []plugin.Plugin
 }
 
 // NewApp creates a new App instance.
@@ -27,11 +27,11 @@ func NewApp(
 	plugins []plugin.Plugin,
 ) *App {
 	return &App{
-		capRegistry:    capReg,
+		capRegistry:     capReg,
 		contribRegistry: contribReg,
-		permRegistry:   permReg,
-		eventBus:       bus,
-		plugins:        plugins,
+		permRegistry:    permReg,
+		eventBus:        bus,
+		plugins:         plugins,
 	}
 }
 
@@ -60,12 +60,12 @@ func (a *App) GetPermissions() []permissions.Entry {
 // GetContributions returns all registered contributions.
 func (a *App) GetContributions() ContributionSummary {
 	return ContributionSummary{
-		Views:          a.contribRegistry.Views(),
-		Commands:       a.contribRegistry.Commands(),
-		SettingsPanels: a.contribRegistry.SettingsPanels(),
-		SidebarItems:   a.contribRegistry.SidebarItems(),
-		FileActions:    a.contribRegistry.FileActions(),
-		NoteActions:    a.contribRegistry.NoteActions(),
+		Views:           a.contribRegistry.Views(),
+		Commands:        a.contribRegistry.Commands(),
+		SettingsPanels:  a.contribRegistry.SettingsPanels(),
+		SidebarItems:    a.contribRegistry.SidebarItems(),
+		FileActions:     a.contribRegistry.FileActions(),
+		NoteActions:     a.contribRegistry.NoteActions(),
 		SearchProviders: a.contribRegistry.SearchProviders(),
 	}
 }

@@ -11,23 +11,23 @@ import (
 
 // Manifest represents a Verstak plugin.json manifest.
 type Manifest struct {
-	SchemaVersion   int                `json:"schemaVersion"`
-	ID              string             `json:"id"`
-	Name            string             `json:"name"`
-	Version         string             `json:"version"`
-	APIVersion      string             `json:"apiVersion"`
-	Description     string             `json:"description,omitempty"`
-	Source          string             `json:"source,omitempty"`
-	Icon            string             `json:"icon,omitempty"`
-	Provides        []string           `json:"provides"`
-	Requires        []string           `json:"requires,omitempty"`
-	OptionalRequires []string           `json:"optionalRequires,omitempty"`
-	Permissions     []string           `json:"permissions"`
-	Frontend        *FrontendConfig    `json:"frontend,omitempty"`
-	Backend         *BackendConfig     `json:"backend,omitempty"`
-	Migrations      *MigrationConfig   `json:"migrations,omitempty"`
-	Contributes     *Contributions     `json:"contributes,omitempty"`
-	Sync            *SyncConfig        `json:"sync,omitempty"`
+	SchemaVersion    int              `json:"schemaVersion"`
+	ID               string           `json:"id"`
+	Name             string           `json:"name"`
+	Version          string           `json:"version"`
+	APIVersion       string           `json:"apiVersion"`
+	Description      string           `json:"description,omitempty"`
+	Source           string           `json:"source,omitempty"`
+	Icon             string           `json:"icon,omitempty"`
+	Provides         []string         `json:"provides"`
+	Requires         []string         `json:"requires,omitempty"`
+	OptionalRequires []string         `json:"optionalRequires,omitempty"`
+	Permissions      []string         `json:"permissions"`
+	Frontend         *FrontendConfig  `json:"frontend,omitempty"`
+	Backend          *BackendConfig   `json:"backend,omitempty"`
+	Migrations       *MigrationConfig `json:"migrations,omitempty"`
+	Contributes      *Contributions   `json:"contributes,omitempty"`
+	Sync             *SyncConfig      `json:"sync,omitempty"`
 }
 
 // FrontendConfig describes the plugin's frontend bundle.
@@ -38,8 +38,8 @@ type FrontendConfig struct {
 
 // BackendConfig describes the plugin's backend sidecar.
 type BackendConfig struct {
-	Type        string            `json:"type"`
-	Entry       map[string]string `json:"entry"`
+	Type        string             `json:"type"`
+	Entry       map[string]string  `json:"entry"`
 	HealthCheck *HealthCheckConfig `json:"healthCheck,omitempty"`
 }
 
@@ -56,16 +56,16 @@ type MigrationConfig struct {
 
 // Contributions describes UI and action contributions.
 type Contributions struct {
-	Views             []ContributionView              `json:"views,omitempty"`
-	Commands          []ContributionCommand           `json:"commands,omitempty"`
-	SettingsPanels    []ContributionSettingsPanel      `json:"settingsPanels,omitempty"`
-	SidebarItems      []ContributionSidebarItem       `json:"sidebarItems,omitempty"`
-	FileActions       []ContributionAction            `json:"fileActions,omitempty"`
-	NoteActions       []ContributionAction            `json:"noteActions,omitempty"`
+	Views              []ContributionView             `json:"views,omitempty"`
+	Commands           []ContributionCommand          `json:"commands,omitempty"`
+	SettingsPanels     []ContributionSettingsPanel    `json:"settingsPanels,omitempty"`
+	SidebarItems       []ContributionSidebarItem      `json:"sidebarItems,omitempty"`
+	FileActions        []ContributionAction           `json:"fileActions,omitempty"`
+	NoteActions        []ContributionAction           `json:"noteActions,omitempty"`
 	ContextMenuEntries []ContributionContextMenuEntry `json:"contextMenuEntries,omitempty"`
-	SearchProviders   []ContributionSearchProvider    `json:"searchProviders,omitempty"`
-	ActivityProviders []ContributionActivityProvider  `json:"activityProviders,omitempty"`
-	StatusBarItems    []ContributionStatusBarItem     `json:"statusBarItems,omitempty"`
+	SearchProviders    []ContributionSearchProvider   `json:"searchProviders,omitempty"`
+	ActivityProviders  []ContributionActivityProvider `json:"activityProviders,omitempty"`
+	StatusBarItems     []ContributionStatusBarItem    `json:"statusBarItems,omitempty"`
 }
 
 // ContributionView represents a view contribution.
@@ -153,13 +153,13 @@ type SyncConfig struct {
 type Status string
 
 const (
-	StatusDiscovered              Status = "discovered"
-	StatusDisabled                Status = "disabled"
-	StatusLoading                 Status = "loading"
-	StatusLoaded                  Status = "loaded"
-	StatusDegraded                Status = "degraded"
-	StatusFailed                  Status = "failed"
-	StatusIncompatible            Status = "incompatible"
+	StatusDiscovered                Status = "discovered"
+	StatusDisabled                  Status = "disabled"
+	StatusLoading                   Status = "loading"
+	StatusLoaded                    Status = "loaded"
+	StatusDegraded                  Status = "degraded"
+	StatusFailed                    Status = "failed"
+	StatusIncompatible              Status = "incompatible"
 	StatusMissingRequiredCapability Status = "missing-required-capability"
 )
 

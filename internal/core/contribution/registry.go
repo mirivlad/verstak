@@ -12,60 +12,60 @@ import (
 type Registry struct {
 	mu sync.RWMutex
 
-	views            []ContributionView
-	commands         []ContributionCommand
-	settingsPanels   []ContributionSettingsPanel
-	sidebarItems     []ContributionSidebarItem
-	fileActions      []ContributionAction
-	noteActions      []ContributionAction
-	contextMenus     []ContributionContextMenuEntry
-	searchProviders  []ContributionSearchProvider
+	views             []ContributionView
+	commands          []ContributionCommand
+	settingsPanels    []ContributionSettingsPanel
+	sidebarItems      []ContributionSidebarItem
+	fileActions       []ContributionAction
+	noteActions       []ContributionAction
+	contextMenus      []ContributionContextMenuEntry
+	searchProviders   []ContributionSearchProvider
 	activityProviders []ContributionActivityProvider
-	statusBarItems   []ContributionStatusBarItem
+	statusBarItems    []ContributionStatusBarItem
 }
 
 type ContributionView struct {
-	PluginID string                `json:"pluginId"`
+	PluginID string                  `json:"pluginId"`
 	Item     plugin.ContributionView `json:"item"`
 }
 
 type ContributionCommand struct {
-	PluginID string                  `json:"pluginId"`
+	PluginID string                     `json:"pluginId"`
 	Item     plugin.ContributionCommand `json:"item"`
 }
 
 type ContributionSettingsPanel struct {
-	PluginID string                        `json:"pluginId"`
+	PluginID string                           `json:"pluginId"`
 	Item     plugin.ContributionSettingsPanel `json:"item"`
 }
 
 type ContributionSidebarItem struct {
-	PluginID string                       `json:"pluginId"`
+	PluginID string                         `json:"pluginId"`
 	Item     plugin.ContributionSidebarItem `json:"item"`
 }
 
 type ContributionAction struct {
-	PluginID string                   `json:"pluginId"`
+	PluginID string                    `json:"pluginId"`
 	Item     plugin.ContributionAction `json:"item"`
 }
 
 type ContributionContextMenuEntry struct {
-	PluginID string                           `json:"pluginId"`
+	PluginID string                              `json:"pluginId"`
 	Item     plugin.ContributionContextMenuEntry `json:"item"`
 }
 
 type ContributionSearchProvider struct {
-	PluginID string                         `json:"pluginId"`
+	PluginID string                            `json:"pluginId"`
 	Item     plugin.ContributionSearchProvider `json:"item"`
 }
 
 type ContributionActivityProvider struct {
-	PluginID string                           `json:"pluginId"`
+	PluginID string                              `json:"pluginId"`
 	Item     plugin.ContributionActivityProvider `json:"item"`
 }
 
 type ContributionStatusBarItem struct {
-	PluginID string                         `json:"pluginId"`
+	PluginID string                           `json:"pluginId"`
 	Item     plugin.ContributionStatusBarItem `json:"item"`
 }
 
