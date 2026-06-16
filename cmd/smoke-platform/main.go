@@ -148,20 +148,98 @@ func main() {
 		fmt.Printf("  ℹ️  contributes: none\n")
 	}
 
-	// ── 7. Capability registration ──
+	// ── 7. Capability registration (core + plugin) ──
 	fmt.Printf("\n[capability registration]\n")
 	reg := capability.NewRegistry()
+
+	// Register core capabilities (same list as main.go)
+	coreCaps := []string{
+		"verstak/core/plugin-manager/v1",
+		"verstak/core/capability-registry/v1",
+		"verstak/core/contribution-registry/v1",
+		"verstak/core/permissions/v1",
+		"verstak/core/events/v1",
+	}
+	if err := reg.Register("verstak-desktop", coreCaps); err != nil {
+		fmt.Printf("  ❌ register core capabilities: %v\n", err)
+		allGood = false
+	} else {
+		fmt.Printf("  ✅ registered %d core capabilities\n", len(coreCaps))
+	}
+
+	// Register plugin capabilities
 	for _, p := range m.Provides {
-		err := reg.Register(target.Manifest.ID, []string{p})
-		if err != nil {
+		if err := reg.Register(m.ID, []string{p}); err != nil {
 			fmt.Printf("  ❌ register capability %s: %v\n", p, err)
 			allGood = false
 		} else {
-			fmt.Printf("  ✅ registered capability: %s\n", p)
+			fmt.Printf("  ✅ registered plugin capability: %s\n", p)
 		}
 	}
 
-	// ── 8. Summary ──
+	// ── 8. Verify core capabilities present ──
+	fmt.Printf("\n[core capability verification]\n")
+	for _, capName := range coreCaps {
+		if reg.Has(capName) {
+			fmt.Printf("  ✅ core capability present: %s\n", capName)
+		} else {
+			fmt.Printf("  ❌ core capability MISSING: %s\n", capName)
+			allGood = false
+		}
+	}
+
+	// ── 9. Verify required capabilities resolved ──
+	fmt.Printf("\n[required capability resolution]\n")
+	missingRequired := reg.CheckRequired(m.Requires)
+	if len(missingRequired) > 0 {
+		for _, miss := range missingRequired {
+			fmt.Printf("  ❌ MISSING required: %s\n", miss)
+		}
+		allGood = false
+	} else {
+		fmt.Printf("  ✅ all required capabilities resolved\n")
+	}
+
+	// ── 10. Check optional capabilities ──
+	fmt.Printf("\n[optional capability resolution]\n")
+	missingOptional := reg.CheckRequired(m.OptionalRequires)
+	if len(missingOptional) > 0 {
+		for _, miss := range missingOptional {
+			fmt.Printf("  ⚠️  missing optional (degraded): %s\n", miss)
+		}
+	}
+
+	// ── 11. Determine expected status ──
+	fmt.Printf("\n[plugin status]\n")
+	expectedStatus := "loaded"
+	if len(missingOptional) > 0 {
+		expectedStatus = "degraded"
+	}
+	if len(missingRequired) > 0 {
+		expectedStatus = "missing-required-capability"
+	}
+	fmt.Printf("  ℹ️  expected status: %s\n", expectedStatus)
+	if expectedStatus == "degraded" {
+		fmt.Printf("  ✅ degraded is correct (optional capabilities missing, required OK)\n")
+	} else if expectedStatus == "loaded" {
+		fmt.Printf("  ✅ loaded is correct (all capabilities resolved)\n")
+	} else {
+		fmt.Printf("  ❌ unexpected: required capabilities should be resolved\n")
+		allGood = false
+	}
+
+	// ── 12. Total capability count ──
+	fmt.Printf("\n[capability count]\n")
+	totalCaps := len(reg.List())
+	fmt.Printf("  total capabilities: %d\n", totalCaps)
+	if totalCaps >= 7 {
+		fmt.Printf("  ✅ total capabilities >= 7 (%d)\n", totalCaps)
+	} else {
+		fmt.Printf("  ❌ total capabilities < 7 (got %d, expected >= 7)\n", totalCaps)
+		allGood = false
+	}
+
+	// ── 13. Summary ──
 	fmt.Printf("\n=== summary ===\n")
 	if allGood {
 		fmt.Printf("✅ smoke-platform passed\n")

@@ -2,6 +2,7 @@
 package api
 
 import (
+	"fmt"
 	"log"
 	"os"
 	"path/filepath"
@@ -108,7 +109,55 @@ func (a *App) ReloadPlugins() (int, string) {
 
 	log.Printf("[api] ReloadPlugins: scanning dirs: %v", discoveryDirs)
 
+	// Unregister all non-core capabilities
+	a.capRegistry.UnregisterAll()
+
+	// Re-register core capabilities
+	coreCaps := []string{
+		"verstak/core/plugin-manager/v1",
+		"verstak/core/capability-registry/v1",
+		"verstak/core/contribution-registry/v1",
+		"verstak/core/permissions/v1",
+		"verstak/core/events/v1",
+	}
+	if err := a.capRegistry.Register("verstak-desktop", coreCaps); err != nil {
+		log.Printf("[api] ReloadPlugins: failed to re-register core capabilities: %v", err)
+	}
+
 	plugins, errs := plugin.DiscoverPlugins(discoveryDirs)
+
+	// Plugin lifecycle: register capabilities + contributions
+	for i := range plugins {
+		p := &plugins[i]
+
+		if len(p.Manifest.Provides) > 0 {
+			if err := a.capRegistry.Register(p.Manifest.ID, p.Manifest.Provides); err != nil {
+				log.Printf("[plugin] %s: capability registration failed: %v", p.Manifest.ID, err)
+				p.Status = plugin.StatusFailed
+				p.Error = err.Error()
+				continue
+			}
+		}
+
+		missingRequired := a.capRegistry.CheckRequired(p.Manifest.Requires)
+		if len(missingRequired) > 0 {
+			p.Status = plugin.StatusMissingRequiredCapability
+			p.Error = fmt.Sprintf("missing required: %s", strings.Join(missingRequired, ", "))
+			continue
+		}
+
+		missingOptional := a.capRegistry.CheckRequired(p.Manifest.OptionalRequires)
+		if len(missingOptional) > 0 {
+			p.Status = plugin.StatusDegraded
+		} else {
+			p.Status = plugin.StatusLoaded
+		}
+
+		if p.Manifest.Contributes != nil {
+			a.contribRegistry.Register(p.Manifest.ID, p.Manifest.Contributes)
+		}
+	}
+
 	a.plugins = plugins
 
 	var buf strings.Builder

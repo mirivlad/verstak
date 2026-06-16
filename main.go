@@ -2,6 +2,7 @@ package main
 
 import (
 	"embed"
+	"fmt"
 	"log"
 	"os"
 	"path/filepath"
@@ -42,6 +43,23 @@ func main() {
 	permRegistry := permissions.NewRegistry()
 	eventBus := events.NewBus()
 
+	// ─── Register Core Capabilities ─────────────────────────
+	// These are provided by the desktop core itself, not by plugins.
+	// Registered before plugin discovery so that plugins can resolve
+	// required capabilities (e.g. verstak/core/plugin-manager/v1) at load time.
+	corePluginID := "verstak-desktop"
+	coreCaps := []string{
+		"verstak/core/plugin-manager/v1",
+		"verstak/core/capability-registry/v1",
+		"verstak/core/contribution-registry/v1",
+		"verstak/core/permissions/v1",
+		"verstak/core/events/v1",
+	}
+	if err := capRegistry.Register(corePluginID, coreCaps); err != nil {
+		log.Fatalf("[main] failed to register core capabilities: %v", err)
+	}
+	log.Printf("[main] registered %d core capabilities", len(coreCaps))
+
 	// ─── Plugin Discovery ───────────────────────────────────
 	discoveryDirs := []string{
 		"~/.config/verstak/plugins",
@@ -61,6 +79,64 @@ func main() {
 	}
 
 	log.Printf("[plugin] discovered %d plugins", len(plugins))
+
+	// ─── Plugin Lifecycle: Register Capabilities + Contributions ──
+	for i := range plugins {
+		p := &plugins[i]
+
+		// Register provided capabilities
+		if len(p.Manifest.Provides) > 0 {
+			if err := capRegistry.Register(p.Manifest.ID, p.Manifest.Provides); err != nil {
+				log.Printf("[plugin] %s: capability registration failed: %v", p.Manifest.ID, err)
+				p.Status = plugin.StatusFailed
+				p.Error = err.Error()
+				continue
+			}
+			log.Printf("[plugin] %s: registered %d capabilities", p.Manifest.ID, len(p.Manifest.Provides))
+		}
+
+		// Resolve required capabilities
+		missingRequired := capRegistry.CheckRequired(p.Manifest.Requires)
+		if len(missingRequired) > 0 {
+			log.Printf("[plugin] %s: missing required capabilities: %v", p.Manifest.ID, missingRequired)
+			p.Status = plugin.StatusMissingRequiredCapability
+			p.Error = fmt.Sprintf("missing required: %s", strings.Join(missingRequired, ", "))
+			continue
+		}
+
+		// Check optional capabilities for degraded mode
+		missingOptional := capRegistry.CheckRequired(p.Manifest.OptionalRequires)
+		if len(missingOptional) > 0 {
+			log.Printf("[plugin] %s: missing optional capabilities (degraded): %v", p.Manifest.ID, missingOptional)
+			p.Status = plugin.StatusDegraded
+		} else {
+			p.Status = plugin.StatusLoaded
+		}
+
+		// Register contributions
+		if p.Manifest.Contributes != nil {
+			contribRegistry.Register(p.Manifest.ID, p.Manifest.Contributes)
+			log.Printf("[plugin] %s: contributions registered", p.Manifest.ID)
+		}
+
+		log.Printf("[plugin] %s: status=%s", p.Manifest.ID, p.Status)
+	}
+
+	// ─── Log Summary ───────────────────────────────────────
+	loaded := 0
+	degraded := 0
+	failed := 0
+	for _, p := range plugins {
+		switch p.Status {
+		case plugin.StatusLoaded:
+			loaded++
+		case plugin.StatusDegraded:
+			degraded++
+		default:
+			failed++
+		}
+	}
+	log.Printf("[main] lifecycle summary: loaded=%d degraded=%d failed=%d", loaded, degraded, failed)
 
 	// Create the App struct
 	app := api.NewApp(capRegistry, contribRegistry, permRegistry, eventBus, plugins)

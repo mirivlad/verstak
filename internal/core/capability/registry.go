@@ -46,6 +46,13 @@ func (r *Registry) Register(pluginID string, capabilities []string) error {
 	return nil
 }
 
+// UnregisterAll removes all capabilities (used before reload).
+func (r *Registry) UnregisterAll() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.capabilities = make(map[string]*Entry)
+}
+
 // Unregister removes all capabilities provided by a plugin.
 func (r *Registry) Unregister(pluginID string) {
 	r.mu.Lock()
