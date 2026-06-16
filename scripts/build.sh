@@ -86,14 +86,57 @@ report "go test" $?
 
 # ── Wails ──
 echo "[wails]"
-if ! command -v wails &>/dev/null; then
-  echo "  📦 wails not found — installing..."
-  go install github.com/wailsapp/wails/v2/cmd/wails@latest
-  report "wails install" $?
-fi
+WAILS=""
 if command -v wails &>/dev/null; then
-  (cd "$ROOT" && wails build -clean)
+  WAILS="wails"
+else
+  # Check GO bin paths
+  GOBIN="$(go env GOBIN 2>/dev/null)"
+  GOPATH="$(go env GOPATH 2>/dev/null)"
+  if [ -n "$GOBIN" ] && [ -f "$GOBIN/wails" ]; then
+    WAILS="$GOBIN/wails"
+  elif [ -f "$GOPATH/bin/wails" ]; then
+    WAILS="$GOPATH/bin/wails"
+  fi
+  if [ -z "$WAILS" ]; then
+    echo "  📦 wails not found — installing..."
+    go install github.com/wailsapp/wails/v2/cmd/wails@latest
+    report "wails install" $?
+    if [ -n "$GOBIN" ] && [ -f "$GOBIN/wails" ]; then
+      WAILS="$GOBIN/wails"
+    elif [ -f "$GOPATH/bin/wails" ]; then
+      WAILS="$GOPATH/bin/wails"
+    fi
+  fi
+fi
+WAILS_BINARY="verstak-desktop"
+WAILS_TAGS=""
+if command -v pkg-config &>/dev/null; then
+  if pkg-config --exists webkit2gtk-4.1 2>/dev/null; then
+    WAILS_TAGS="-tags webkit2_41"
+    echo "  ℹ️  using webkit2gtk-4.1"
+  elif pkg-config --exists webkit2gtk-4.0 2>/dev/null; then
+    echo "  ℹ️  using webkit2gtk-4.0"
+  else
+    echo "  ⚠️  no webkit2gtk found — wails requires libwebkit2gtk-4.0-dev or libwebkit2gtk-4.1-dev"
+  fi
+else
+  echo "  ⚠️  pkg-config not found"
+fi
+if [ -n "$WAILS" ]; then
+  echo "  🔨 wails build..."
+  (cd "$ROOT" && "$WAILS" build -clean $WAILS_TAGS)
   report "wails build" $?
+  # Show where the binary ended up
+  if [ -f "$ROOT/build/bin/$WAILS_BINARY" ]; then
+    echo "  📦 binary: $ROOT/build/bin/$WAILS_BINARY"
+  fi
+  if [ -f "$ROOT/$WAILS_BINARY" ]; then
+    echo "  📦 binary: $ROOT/$WAILS_BINARY"
+  fi
+else
+  echo "  ❌ wails: could not install"
+  FAILED=1
 fi
 
 echo ""
