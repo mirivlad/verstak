@@ -2,9 +2,12 @@
   export let p = {};
   export let capabilities = [];
   export let permissions = [];
-  export let contributions = {};
+  export let onSettings = () => {};
 
-  $: m = p.manifest || {};
+  $: hasSettingsPanel = (contributions.settingsPanels || []).some(sp => sp.pluginId === pluginId);
+  $: hasUIPermission = (m.permissions || []).includes('ui.register');
+  $: hasStoragePermission = (m.permissions || []).includes('storage.namespace');
+  $: hasCommandsPermission = (m.permissions || []).includes('commands.register');
 
   $: statusColor = ({
     loaded: '#4ecca3',
@@ -159,6 +162,20 @@
   <!-- Error -->
   {#if p.error}
     <div class="error-box">{p.error}</div>
+  {/if}
+
+  <!-- Actions -->
+  <div class="card-actions">
+    {#if hasSettingsPanel}
+      <button class="btn-settings" on:click={() => onSettings(m.id)} type="button">
+        ⚙ Settings
+      </button>
+    {/if}
+  </div>
+
+  <!-- Permission warnings -->
+  {#if !hasUIPermission && (m.contributes && (m.contributes.views || m.contributes.sidebarItems || m.contributes.settingsPanels).length > 0)}
+    <p class="warning">⚠ Plugin has UI contributions but lacks ui.register permission</p>
   {/if}
 </div>
 
@@ -326,5 +343,27 @@
     font-size: 0.8rem;
     color: #e94560;
     font-family: monospace;
+  }
+
+  .card-actions {
+    display: flex;
+    gap: 0.5rem;
+    margin-top: 0.75rem;
+    padding-top: 0.5rem;
+    border-top: 1px solid #0f3460;
+  }
+
+  .btn-settings {
+    background: #0f3460;
+    border: 1px solid #1a3a5c;
+    color: #e0e0f0;
+    padding: 0.3rem 0.75rem;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.8rem;
+  }
+
+  .btn-settings:hover {
+    background: #1a3a5c;
   }
 </style>

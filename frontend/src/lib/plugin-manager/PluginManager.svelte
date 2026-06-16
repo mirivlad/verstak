@@ -10,6 +10,9 @@
   let loading = true;
   let error = '';
   let vaultStatus = { status: 'unknown', path: '', vaultId: '' };
+  let settingsPanel = null;
+  let settingsData = {};
+  let settingsPluginId = '';
 
   async function loadAll() {
     error = '';
@@ -49,6 +52,34 @@
   $: totalPlugins = plugins.length;
   $: totalCaps = capabilities.length;
   $: totalPerms = permissions.length;
+
+  function openSettings(pluginId) {
+    const panel = (contributions.settingsPanels || []).find(sp => sp.pluginId === pluginId);
+    if (panel) {
+      settingsPanel = panel;
+      settingsPluginId = pluginId;
+      // Load existing settings
+      try {
+        const data = JSON.parse(localStorage.getItem('verstak-settings-' + pluginId) || '{}');
+        settingsData = data;
+      } catch (e) {
+        settingsData = {};
+      }
+    }
+  }
+
+  function saveSettings() {
+    try {
+      localStorage.setItem('verstak-settings-' + settingsPluginId, JSON.stringify(settingsData));
+      // Also try Wails backend
+      const { WritePluginSettings } = require('../../../wailsjs/go/api/App');
+      WritePluginSettings(settingsPluginId, settingsData).then(err => {
+        if (err) console.error('WritePluginSettings:', err);
+      }).catch(() => {});
+    } catch (e) {
+      console.error('saveSettings:', e);
+    }
+  }
 </script>
 
 <div class="plugin-manager">
@@ -98,7 +129,7 @@
     {:else}
       <div class="plugin-list">
         {#each plugins as p}
-          <PluginCard {p} {capabilities} {permissions} {contributions} />
+          <PluginCard {p} {capabilities} {permissions} {contributions} onSettings={openSettings} />
         {/each}
       </div>
     {/if}
@@ -123,11 +154,47 @@
         </table>
       </details>
     {/if}
-  {/if}
-</div>
+    {/if}
 
-<style>
-  .plugin-manager { max-width: 900px; }
+    <!-- Settings Panel Modal -->
+    {#if settingsPanel}
+    <div class="modal-overlay" on:click|self={() => settingsPanel = null}>
+    <div class="modal" role="dialog" aria-modal="true" aria-label="Plugin Settings">
+      <div class="modal-header">
+        <h3>{settingsPanel.item.title}</h3>
+        <button class="modal-close" on:click={() => settingsPanel = null} type="button">✕</button>
+      </div>
+      <div class="modal-body">
+        <p class="settings-hint">Plugin: <code>{settingsPluginId}</code></p>
+        <p class="settings-hint">Component: <code>{settingsPanel.item.component}</code></p>
+
+        {#if settingsPanel.item.id === 'verstak.platform-test.settings'}
+          <div class="settings-form">
+            <h4>Test Settings</h4>
+            <div class="form-row">
+              <label for="test-name">Test Name</label>
+              <input id="test-name" type="text" bind:value={settingsData.testName} placeholder="Enter test name" />
+            </div>
+            <div class="form-row">
+              <label for="test-interval">Test Interval (seconds)</label>
+              <input id="test-interval" type="number" bind:value={settingsData.testInterval} min="1" max="300" />
+            </div>
+            <div class="form-row">
+              <label><input type="checkbox" bind:checked={settingsData.autoRun} /> Auto-run on startup</label>
+            </div>
+            <button class="btn-save" on:click={() => saveSettings()} type="button">Save Settings</button>
+          </div>
+        {:else}
+          <p class="placeholder">Settings component: {settingsPanel.item.component}</p>
+        {/if}
+      </div>
+    </div>
+    </div>
+    {/if}
+    </div>
+
+    <style>
+    .plugin-manager { max-width: 900px; }
   header {
     display: flex;
     align-items: center;
@@ -234,5 +301,87 @@
     background: #0f3460;
     color: #a0a0b8;
     border: 1px solid #533483;
+  }
+
+  /* ── Modal ── */
+  .modal-overlay {
+    position: fixed; inset: 0;
+    background: rgba(0, 0, 0, 0.6);
+    display: flex; align-items: center; justify-content: center;
+    z-index: 1000;
+  }
+  .modal {
+    background: #16213e;
+    border: 1px solid #0f3460;
+    border-radius: 8px;
+    width: 480px;
+    max-width: 90vw;
+    max-height: 80vh;
+    display: flex;
+    flex-direction: column;
+  }
+  .modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 1rem;
+    border-bottom: 1px solid #0f3460;
+  }
+  .modal-header h3 { margin: 0; color: #e0e0f0; font-size: 1.1rem; }
+  .modal-close {
+    background: none; border: none; color: #a0a0b8;
+    font-size: 1.2rem; cursor: pointer; padding: 0.2rem 0.5rem;
+  }
+  .modal-close:hover { color: #e94560; }
+  .modal-body { padding: 1rem; overflow-y: auto; }
+  .settings-hint { color: #666; font-size: 0.8rem; margin: 0.25rem 0; }
+  .settings-hint code { color: #4ecca3; }
+
+  /* ── Settings Form ── */
+  .settings-form {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+  .settings-form h4 {
+    margin: 0 0 0.5rem 0;
+    color: #e0e0f0;
+    font-size: 1rem;
+  }
+  .form-row {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+  }
+  .form-row label {
+    color: #a0a0b8;
+    font-size: 0.85rem;
+  }
+  .form-row input[type="text"],
+  .form-row input[type="number"] {
+    background: #0f3460;
+    border: 1px solid #1a3a5c;
+    color: #e0e0f0;
+    padding: 0.4rem 0.6rem;
+    border-radius: 4px;
+    font-size: 0.9rem;
+  }
+  .form-row input:focus {
+    outline: none;
+    border-color: #4ecca3;
+  }
+  .btn-save {
+    background: #4ecca3;
+    color: #1a1a2e;
+    border: none;
+    padding: 0.5rem 1rem;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    font-weight: 600;
+    margin-top: 0.5rem;
+  }
+  .btn-save:hover {
+    background: #3dbb92;
   }
 </style>

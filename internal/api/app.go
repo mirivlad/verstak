@@ -13,6 +13,7 @@ import (
 	"github.com/verstak/verstak-desktop/internal/core/events"
 	"github.com/verstak/verstak-desktop/internal/core/permissions"
 	"github.com/verstak/verstak-desktop/internal/core/plugin"
+	"github.com/verstak/verstak-desktop/internal/core/storage"
 	"github.com/verstak/verstak-desktop/internal/core/vault"
 )
 
@@ -24,6 +25,7 @@ type App struct {
 	eventBus        *events.Bus
 	plugins         []plugin.Plugin
 	vault           *vault.Vault
+	storage         *storage.Storage
 }
 
 // NewApp creates a new App instance.
@@ -34,6 +36,7 @@ func NewApp(
 	bus *events.Bus,
 	plugins []plugin.Plugin,
 	vaultService *vault.Vault,
+	storageService *storage.Storage,
 ) *App {
 	return &App{
 		capRegistry:     capReg,
@@ -42,6 +45,7 @@ func NewApp(
 		eventBus:        bus,
 		plugins:         plugins,
 		vault:           vaultService,
+		storage:         storageService,
 	}
 }
 
@@ -246,6 +250,83 @@ func (a *App) CloseVault() error {
 	}
 	a.vault.CloseVault()
 	return nil
+}
+
+// ─── Storage API ────────────────────────────────────────────
+
+// ReadPluginSettings returns all settings for a plugin.
+func (a *App) ReadPluginSettings(pluginID string) map[string]interface{} {
+	if a.storage == nil {
+		return make(map[string]interface{})
+	}
+	data, err := a.storage.ReadPluginSettings(pluginID)
+	if err != nil {
+		log.Printf("[api] ReadPluginSettings(%s): %v", pluginID, err)
+		return make(map[string]interface{})
+	}
+	return data
+}
+
+// WritePluginSettings writes all settings for a plugin.
+func (a *App) WritePluginSettings(pluginID string, data map[string]interface{}) string {
+	if a.storage == nil {
+		return "storage not initialized"
+	}
+	if err := a.storage.WritePluginSettings(pluginID, data); err != nil {
+		log.Printf("[api] WritePluginSettings(%s): %v", pluginID, err)
+		return err.Error()
+	}
+	return ""
+}
+
+// ReadPluginSetting returns a single setting value.
+func (a *App) ReadPluginSetting(pluginID, key string) interface{} {
+	if a.storage == nil {
+		return nil
+	}
+	val, err := a.storage.ReadPluginSetting(pluginID, key)
+	if err != nil {
+		log.Printf("[api] ReadPluginSetting(%s, %s): %v", pluginID, key, err)
+		return nil
+	}
+	return val
+}
+
+// WritePluginSetting writes a single setting value.
+func (a *App) WritePluginSetting(pluginID, key string, value interface{}) string {
+	if a.storage == nil {
+		return "storage not initialized"
+	}
+	if err := a.storage.WritePluginSetting(pluginID, key, value); err != nil {
+		log.Printf("[api] WritePluginSetting(%s, %s): %v", pluginID, key, err)
+		return err.Error()
+	}
+	return ""
+}
+
+// ReadPluginDataJSON reads a named JSON data file for a plugin.
+func (a *App) ReadPluginDataJSON(pluginID, name string) map[string]interface{} {
+	if a.storage == nil {
+		return make(map[string]interface{})
+	}
+	data, err := a.storage.ReadPluginDataJSON(pluginID, name)
+	if err != nil {
+		log.Printf("[api] ReadPluginDataJSON(%s, %s): %v", pluginID, name, err)
+		return make(map[string]interface{})
+	}
+	return data
+}
+
+// WritePluginDataJSON writes a named JSON data file for a plugin.
+func (a *App) WritePluginDataJSON(pluginID, name string, data map[string]interface{}) string {
+	if a.storage == nil {
+		return "storage not initialized"
+	}
+	if err := a.storage.WritePluginDataJSON(pluginID, name, data); err != nil {
+		log.Printf("[api] WritePluginDataJSON(%s, %s): %v", pluginID, name, err)
+		return err.Error()
+	}
+	return ""
 }
 
 // ContributionSummary aggregates all contribution types for the frontend.

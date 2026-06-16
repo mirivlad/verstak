@@ -18,6 +18,7 @@ import (
 	"github.com/verstak/verstak-desktop/internal/core/events"
 	"github.com/verstak/verstak-desktop/internal/core/permissions"
 	"github.com/verstak/verstak-desktop/internal/core/plugin"
+	"github.com/verstak/verstak-desktop/internal/core/storage"
 	"github.com/verstak/verstak-desktop/internal/core/vault"
 )
 
@@ -155,7 +156,8 @@ func main() {
 		loaded, degraded, failed, vaultService.GetVaultStatus())
 
 	// Create the App struct
-	app := api.NewApp(capRegistry, contribRegistry, permRegistry, eventBus, plugins, vaultService)
+	storageService := storage.New(vaultService)
+	app := api.NewApp(capRegistry, contribRegistry, permRegistry, eventBus, plugins, vaultService, storageService)
 
 	// ─── Wails App ───────────────────────────────────────────
 	err := wails.Run(&options.App{
