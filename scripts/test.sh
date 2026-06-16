@@ -13,15 +13,34 @@ report() {
   fi
 }
 
+ensure_npm_deps() {
+  local dir="$1"
+  if [ ! -f "$dir/package.json" ]; then
+    return 1
+  fi
+  if [ ! -d "$dir/node_modules" ]; then
+    echo "  📦 node_modules missing — installing..."
+    if [ -f "$dir/package-lock.json" ]; then
+      (cd "$dir" && npm ci --no-audit --no-fund)
+    else
+      (cd "$dir" && npm install --no-audit --no-fund)
+    fi
+    report "npm install in $(basename "$dir")" $?
+  fi
+  return 0
+}
+
 echo "=== verstak-desktop test ==="
 
-# Go tests
-(cd "$ROOT" && go test -count=1 -v ./... 2>&1 || true)
+# ── Go tests ──
+(cd "$ROOT" && go mod download)
+OUTPUT=$(cd "$ROOT" && go test -count=1 -v ./... 2>&1) || true
+echo "$OUTPUT" | grep -E '(FAIL|PASS|---)' || true
 report "go test" $?
 
-# Frontend tests
-if [ -f "$ROOT/frontend/package.json" ]; then
-  # Only run if vitest or jest is in the config
+# ── Frontend tests ──
+echo "[frontend]"
+if ensure_npm_deps "$ROOT/frontend"; then
   if grep -q '"test"' "$ROOT/frontend/package.json" 2>/dev/null; then
     (cd "$ROOT/frontend" && npm test 2>&1 || true)
     report "frontend test" $?

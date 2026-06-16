@@ -13,13 +13,34 @@ report() {
   fi
 }
 
+ensure_npm_deps() {
+  local dir="$1"
+  if [ ! -f "$dir/package.json" ]; then
+    return 1
+  fi
+  if [ ! -d "$dir/node_modules" ]; then
+    echo "  📦 node_modules missing — installing..."
+    if [ -f "$dir/package-lock.json" ]; then
+      (cd "$dir" && npm ci --no-audit --no-fund)
+    else
+      (cd "$dir" && npm install --no-audit --no-fund)
+    fi
+    report "npm install in $(basename "$dir")" $?
+  fi
+  return 0
+}
+
 echo "=== verstak-desktop check ==="
 
-# Go vet
+# ── Go deps ──
+(cd "$ROOT" && go mod download)
+report "go mod download" $?
+
+# ── Go vet ──
 (cd "$ROOT" && go vet ./...)
 report "go vet" $?
 
-# Go fmt (non-destructive — only report unformatted files)
+# ── Go fmt (non-destructive — only report unformatted files) ──
 UNFORMATTED=$(cd "$ROOT" && gofmt -l . 2>/dev/null || go fmt -n ./... 2>&1 || true)
 if [ -z "$UNFORMATTED" ]; then
   echo "  ✅ gofmt: all files formatted"
@@ -29,22 +50,26 @@ else
   FAILED=1
 fi
 
-# Go mod tidy check (non-destructive — report only)
+# ── Go mod tidy check (non-destructive) ──
 (cd "$ROOT" && go mod tidy -diff 2>&1 || echo "  ⚠️  go mod tidy check skipped")
 report "go mod tidy" $?
 
-# Frontend lint
-if [ -f "$ROOT/frontend/package.json" ]; then
-  # Check if npm ci is needed (node_modules missing)
-  if [ ! -d "$ROOT/frontend/node_modules" ]; then
-    echo "  ℹ️  frontend/node_modules missing — run build.sh first"
-  fi
+# ── Frontend checks ──
+echo "[frontend]"
+if ensure_npm_deps "$ROOT/frontend"; then
   if grep -q '"lint"' "$ROOT/frontend/package.json" 2>/dev/null; then
-    (cd "$ROOT/frontend" && npx tsc --noEmit 2>&1 || true)
-    report "frontend tsc --noEmit" $?
+    (cd "$ROOT/frontend" && npm run lint 2>&1 || true)
+    report "frontend lint" $?
   else
     echo "  ℹ️  no lint script in frontend/package.json"
   fi
+  # Always run tsc --noEmit if typescript is available
+  if [ -f "$ROOT/frontend/node_modules/.bin/tsc" ]; then
+    (cd "$ROOT/frontend" && npx tsc --noEmit 2>&1 || true)
+    report "frontend tsc --noEmit" $?
+  fi
+else
+  echo "  ℹ️  no frontend/package.json"
 fi
 
 echo ""
