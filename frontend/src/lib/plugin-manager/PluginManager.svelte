@@ -7,51 +7,83 @@
   let permissions = [];
   let loading = true;
   let error = '';
-  let hasConfig = true;
 
-  // Wails binding call with timeout
-  async function rpc(promise, label, timeoutMs = 8000) {
-    const timeout = new Promise((_, reject) =>
-      setTimeout(() => reject(new Error(`${label}: timeout (${timeoutMs}ms)`)), timeoutMs)
-    );
-    return await Promise.race([promise, timeout]);
+  // Wails v2 + webkit2gtk-4.1 production bridge workaround:
+  // `await window.go.api.App.Xxx()` deadlocks the JS event loop.
+  // Use .then() instead — doesn't suspend the microtask queue.
+  // Safety timer guarantees loading=false even if the bridge Promise never settles.
+
+  function call(method, args) {
+    return new Promise((resolve, reject) => {
+      try {
+        if (window.runtime && window.runtime.Call) {
+          window.runtime.Call(method, JSON.stringify(args || []))
+            .then(result => resolve(result))
+            .catch(err => reject(err));
+        } else {
+          const parts = method.split('.');
+          let obj = window.go;
+          for (const p of parts) obj = obj[p];
+          resolve(obj.apply(null, args || []));
+        }
+      } catch (e) {
+        reject(e);
+      }
+    });
   }
 
-  async function loadData() {
-    loading = true;
+  function loadPlugins() {
     error = '';
-    try {
-      const [p, caps, perms] = await Promise.all([
-        rpc(window.go.api.App.GetPlugins(), 'GetPlugins'),
-        rpc(window.go.api.App.GetCapabilities(), 'GetCapabilities'),
-        rpc(window.go.api.App.GetPermissions(), 'GetPermissions'),
-      ]);
-      plugins = p;
-      capabilities = caps;
-      permissions = perms;
-    } catch (e) {
-      error = String(e);
-      console.error('[PluginManager] load error:', e);
-    } finally {
+    call('api.App.GetPlugins').then(p => {
+      plugins = p || [];
       loading = false;
-    }
+    }).catch(e => {
+      error = 'GetPlugins: ' + String(e);
+      loading = false;
+    });
+  }
+
+  function loadCaps() {
+    call('api.App.GetCapabilities').then(c => {
+      capabilities = c || [];
+    }).catch(e => {
+      console.warn('[PluginManager] GetCapabilities:', e);
+    });
+  }
+
+  function loadPerms() {
+    call('api.App.GetPermissions').then(p => {
+      permissions = p || [];
+    }).catch(e => {
+      console.warn('[PluginManager] GetPermissions:', e);
+    });
   }
 
   onMount(() => {
-    loadData();
+    loadPlugins();
+    loadCaps();
+    loadPerms();
+
+    // Safety timeout: force loading=false if APIs never respond
+    setTimeout(() => {
+      if (loading) {
+        loading = false;
+        error = 'Plugin discovery timed out. Check backend logs.';
+      }
+    }, 10000);
   });
 
-  async function reload() {
+  function reload() {
     loading = true;
     error = '';
-    try {
-      await rpc(window.go.api.App.ReloadPlugins(), 'ReloadPlugins');
-      await loadData();
-    } catch (e) {
-      error = String(e);
-      console.error('[PluginManager] reload error:', e);
+    call('api.App.ReloadPlugins').then(() => {
+      loadPlugins();
+      loadCaps();
+      loadPerms();
+    }).catch(e => {
+      error = 'Reload: ' + String(e);
       loading = false;
-    }
+    });
   }
 
   $: totalPlugins = plugins.length;
@@ -73,7 +105,7 @@
     <div class="error">
       <div class="error-icon">⚠</div>
       <div class="error-message">{error}</div>
-      <button class="retry-btn" on:click={loadData} type="button">⟳ Retry</button>
+      <button class="retry-btn" on:click={loadPlugins} type="button">⟳ Retry</button>
     </div>
   {:else}
     <!-- Plugin Count -->
