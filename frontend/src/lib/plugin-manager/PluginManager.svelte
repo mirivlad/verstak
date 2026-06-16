@@ -1,7 +1,7 @@
 <script>
   import PluginCard from './PluginCard.svelte';
   import { onMount } from 'svelte';
-  import { GetPlugins, GetCapabilities, GetPermissions, GetContributions, ReloadPlugins } from '../../../wailsjs/go/api/App';
+  import { GetPlugins, GetCapabilities, GetPermissions, GetContributions, ReloadPlugins, GetVaultStatus } from '../../../wailsjs/go/api/App';
 
   let plugins = [];
   let capabilities = [];
@@ -9,6 +9,7 @@
   let contributions = {};
   let loading = true;
   let error = '';
+  let vaultStatus = { status: 'unknown', path: '', vaultId: '' };
 
   async function loadAll() {
     error = '';
@@ -21,6 +22,8 @@
       loading = false;
       return;
     }
+    // Vault status — non-critical
+    GetVaultStatus().then(v => { vaultStatus = v || { status: 'unknown', path: '', vaultId: '' }; }).catch(() => {});
     // Capabilities and permissions are non-critical — load async
     GetCapabilities().then(c => { capabilities = c || []; }).catch(() => {});
     GetPermissions().then(p => { permissions = p || []; }).catch(() => {});
@@ -50,7 +53,14 @@
 
 <div class="plugin-manager">
   <header>
-    <h2>Plugin Manager</h2>
+    <div class="header-left">
+      <h2>Plugin Manager</h2>
+      {#if vaultStatus.status !== 'unknown'}
+        <span class="vault-badge" class:vault-open={vaultStatus.status === 'open'} class:vault-not-created={vaultStatus.status === 'not-created'} class:vault-closed={vaultStatus.status === 'closed'} class:vault-error={vaultStatus.status === 'error'}>
+          Vault: {vaultStatus.status}{#if vaultStatus.path} ({vaultStatus.path}){/if}
+        </span>
+      {/if}
+    </div>
     <button class="reload-btn" on:click={reload} type="button" disabled={loading}>
       {loading ? '⟳ Loading...' : '⟳ Reload'}
     </button>
@@ -124,7 +134,39 @@
     justify-content: space-between;
     margin-bottom: 1rem;
   }
-  h2 { color: #e0e0e0; font-size: 1.3rem; }
+  .header-left {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+  }
+  h2 { color: #e0e0e0; font-size: 1.3rem; margin: 0; }
+  .vault-badge {
+    font-size: 0.75rem;
+    padding: 0.2rem 0.6rem;
+    border-radius: 12px;
+    font-weight: 600;
+    border: 1px solid;
+  }
+  .vault-open {
+    background: rgba(78, 204, 163, 0.15);
+    color: #4ecca3;
+    border-color: #4ecca3;
+  }
+  .vault-not-created {
+    background: rgba(255, 200, 87, 0.15);
+    color: #ffc857;
+    border-color: #ffc857;
+  }
+  .vault-closed {
+    background: rgba(160, 160, 184, 0.15);
+    color: #a0a0b8;
+    border-color: #a0a0b8;
+  }
+  .vault-error {
+    background: rgba(233, 69, 96, 0.15);
+    color: #e94560;
+    border-color: #e94560;
+  }
   .reload-btn {
     background: #0f3460; color: #e0e0e0; border: 1px solid #533483;
     padding: 0.4rem 1rem; border-radius: 6px; cursor: pointer; font-size: 0.85rem;
