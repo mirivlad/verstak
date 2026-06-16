@@ -85,6 +85,9 @@ coreCaps := []string{
     "verstak/core/events/v1",
 }
 capRegistry.Register("verstak-desktop", coreCaps)
+
+// Vault capability — регистрируется отдельно после vault initialization
+capRegistry.Register("verstak-desktop", []string{"verstak/core/vault/v1"})
 ```
 
 Это гарантирует, что любой plugin с `requires: ["verstak/core/plugin-manager/v1"]` будет загружен.
@@ -185,6 +188,64 @@ foreach plugin:
 
 Frontend вызывает это при нажатии "Reload" в Plugin Manager.
 
+## Vault Core Capability
+
+- `verstak/core/vault/v1` — регистрируется в `main.go` после остальных core capabilities, когда vault инициализирован.
+- Vault layout: `<base>/VerstakVault/.verstak/` с подпапками (см. ниже).
+- Plugin namespace paths: `plugin-data/<id>`, `plugin-settings/<id>`, `plugin-cache/<id>`.
+- Vault events: `vault.created`, `vault.opened`, `vault.closed`, `vault.error`.
+- Vault status: `not-created`, `closed`, `open`, `error`.
+- Path traversal protection через `ResolveSafePath`.
+
+### Vault Directory Layout
+
+```
+<base>/
+  VerstakVault/           ← vault root (создаётся CreateVault)
+    .verstak/
+      vault.json          ← VaultMeta (schemaVersion, vaultId, createdAt, app)
+      plugin-data/        ← per-plugin data namespaces
+        <plugin-id>/
+      plugin-settings/    ← per-plugin settings namespaces
+        <plugin-id>/
+      plugin-cache/       ← per-plugin cache namespaces
+        <plugin-id>/
+      trash/              ← soft-deleted items
+      logs/               ← vault-scoped logs
+```
+
+### Vault API
+
+| Метод | Описание |
+|---|---|
+| `CreateVault(path)` | Создаёт `VerstakVault/` с `.verstak/` layout и `vault.json`. Публикует `vault.created`. |
+| `OpenVault(path)` | Открывает существующий vault, валидирует `vault.json`. Публикует `vault.opened`. |
+| `CloseVault()` | Закрывает vault, сбрасывает path/meta. Публикует `vault.closed`. |
+| `GetVaultStatus()` | Возвращает текущий статус: `not-created`, `closed`, `open`, `error`. |
+| `GetVaultPath()` | Возвращает путь к vault root. |
+| `GetVaultMeta()` | Возвращает `VaultMeta` (vaultId, schemaVersion, timestamps). |
+| `ResolveSafePath(rel)` | Безопасно резолвит относительный путь внутри vault. Блокирует path traversal. |
+| `GetPluginDataPath(id)` | Возвращает (и создаёт) `plugin-data/<id>/`. |
+| `GetPluginSettingsPath(id)` | Возвращает (и создаёт) `plugin-settings/<id>/`. |
+| `GetPluginCachePath(id)` | Возвращает (и создаёт) `plugin-cache/<id>/`. |
+
+### Vault Events
+
+| Event | Когда публикуется | Payload |
+|---|---|---|
+| `vault.created` | После успешного `CreateVault` | `path`, `vaultId` |
+| `vault.opened` | После успешного `OpenVault` | `path`, `vaultId` |
+| `vault.closed` | После `CloseVault` | `vaultId` |
+| `vault.error` | При ошибках операций | `error` |
+
+### Vault Status Flow
+
+```
+not-created ──CreateVault──▶ open ──CloseVault──▶ closed
+                                │                    │
+                                └──OpenVault─────────┘
+```
+
 ## Файлы реализации
 
 | Файл | Назначение |
@@ -195,4 +256,6 @@ Frontend вызывает это при нажатии "Reload" в Plugin Manage
 | `internal/core/permissions/registry.go` | PermissionsRegistry |
 | `internal/core/events/bus.go` | EventBus |
 | `internal/api/app.go` | Wails API, ReloadPlugins |
+| `internal/core/vault/vault.go` | Vault service: CreateVault, OpenVault, CloseVault, ResolveSafePath, plugin namespace paths |
+| `internal/core/vault/vault_test.go` | Vault tests: layout creation, open/close, path traversal, events |
 | `main.go` | Инициализация, lifecycle orchestration |
