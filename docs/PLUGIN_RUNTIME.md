@@ -257,5 +257,87 @@ not-created ──CreateVault──▶ open ──CloseVault──▶ closed
 | `internal/core/events/bus.go` | EventBus |
 | `internal/api/app.go` | Wails API, ReloadPlugins |
 | `internal/core/vault/vault.go` | Vault service: CreateVault, OpenVault, CloseVault, ResolveSafePath, plugin namespace paths |
-| `internal/core/vault/vault_test.go` | Vault tests: layout creation, open/close, path traversal, events |
-| `main.go` | Инициализация, lifecycle orchestration |
+|| `internal/core/vault/vault_test.go` | Vault tests: layout creation, open/close, path traversal, events |
+|| `internal/core/storage/api.go` | Plugin storage API: settings/data/cache JSON with namespace isolation |
+|| `internal/core/storage/api_test.go` | Storage tests: write/read, path traversal, atomic write |
+|| `internal/core/appsettings/manager.go` | App settings manager: Load/Save/Update, recent vaults, defaults |
+|| `internal/core/appsettings/manager_test.go` | App settings tests: defaults, corrupt config, recent dedup |
+|| `internal/core/pluginstate/manager.go` | Vault plugin state: enable/disable, desired plugins, missing-installed |
+|| `internal/core/pluginstate/manager_test.go` | Plugin state tests: enable/disable, persist, corrupt, missing |
+
+---
+
+## App Settings
+
+App settings хранятся **локально** (НЕ внутри vault) в `~/.config/verstak/config.json`.
+
+### Поле | Назначение
+---|---
+`currentVaultPath` | Путь к текущему vault
+`recentVaults` | Список недавних vault (max 10, без дублей)
+`theme` | Тема (dark/light)
+`devMode` | Режим разработки
+`userPluginsDir` | Директория пользовательских плагинов
+`windowState` | Состояние окна (размеры, максимизация)
+`lastOpenedAt` | Время последнего запуска
+
+### Правила
+- Если config отсутствует — создаётся с defaults
+- Если config битый — backup + создание defaults с понятной ошибкой
+- `currentVaultPath` при запуске проверяется и vault открывается автоматически
+- Secrets НЕ хранятся в app settings
+
+---
+
+## Vault Plugin State
+
+Vault plugin state хранится **внутри vault** в `.verstak/plugins.json`.
+
+### Структура
+
+```json
+{
+  "schemaVersion": 1,
+  "enabledPlugins": ["verstak.platform-test"],
+  "disabledPlugins": [],
+  "desiredPlugins": [
+    {
+      "id": "verstak.platform-test",
+      "version": "0.1.0",
+      "source": "official"
+    }
+  ],
+  "updatedAt": "2026-06-17T..."
+}
+```
+
+### Поле | Назначение
+---|---
+`enabledPlugins` | Плагины, которые активны в этом vault
+`disabledPlugins` | Плагины, которые явно отключены
+`desiredPlugins` | Плагины, которые нужны этому vault (для будущей синхронизации)
+`updatedAt` | Время последнего обновления
+
+### Правила
+- Enabled/disabled состояние относится к конкретному vault
+- Disabled plugin не регистрирует provides/contributions
+- Plugin settings остаются в `.verstak/plugin-settings/<id>/settings.json`
+- Отсутствие `plugins.json` → создаётся с defaults
+- Битый `plugins.json` → backup + defaults с понятной ошибкой
+- App settings НЕ хранятся внутри vault
+- Plugin packages НЕ хранятся в vault settings
+
+### Installed vs Enabled
+
+- **Installed** — plugin package существует в discovery directory
+- **Enabled** — plugin активен в vault plugin state
+- **Disabled** — plugin установлен, но отключен в vault
+- **Missing installed** — plugin listed в `desiredPlugins`, но package отсутствует локально
+
+### Missing Installed Plugins
+
+Состояние для будущей синхронизации:
+- `desiredPlugins` может содержать plugin, которого нет локально
+- Plugin Manager показывает "Missing installed plugin"
+- Auto-install пока НЕ делается
+- Показывается подсказка: "Install official plugin package"
