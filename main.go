@@ -13,11 +13,13 @@ import (
 	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
 
 	"github.com/verstak/verstak-desktop/internal/api"
+	"github.com/verstak/verstak-desktop/internal/core/appsettings"
 	"github.com/verstak/verstak-desktop/internal/core/capability"
 	"github.com/verstak/verstak-desktop/internal/core/contribution"
 	"github.com/verstak/verstak-desktop/internal/core/events"
 	"github.com/verstak/verstak-desktop/internal/core/permissions"
 	"github.com/verstak/verstak-desktop/internal/core/plugin"
+	"github.com/verstak/verstak-desktop/internal/core/pluginstate"
 	"github.com/verstak/verstak-desktop/internal/core/storage"
 	"github.com/verstak/verstak-desktop/internal/core/vault"
 )
@@ -71,6 +73,31 @@ func main() {
 	}
 	log.Printf("[main] registered vault capability")
 
+	// ─── Initialize App Settings ─────────────────────────────
+	appSettingsMgr := appsettings.NewDefaultManager()
+	if err := appSettingsMgr.Load(); err != nil {
+		log.Printf("[main] app settings: %v", err)
+	}
+
+	// ─── Vault Auto-Open ─────────────────────────────────────
+	// If currentVaultPath is set in app settings, try to open it.
+	cfg := appSettingsMgr.Get()
+	if cfg.CurrentVaultPath != "" {
+		if err := vaultService.OpenVault(cfg.CurrentVaultPath); err != nil {
+			log.Printf("[main] failed to auto-open vault at %s: %v", cfg.CurrentVaultPath, err)
+		} else {
+			log.Printf("[main] auto-opened vault at %s", cfg.CurrentVaultPath)
+		}
+	}
+
+	// ─── Initialize Vault Plugin State ───────────────────────
+	pluginStateMgr := pluginstate.NewManager(vaultService)
+	if vaultService.GetVaultStatus() == vault.StatusOpen {
+		if err := pluginStateMgr.Load(); err != nil {
+			log.Printf("[main] vault plugin state: %v", err)
+		}
+	}
+
 	// ─── Plugin Discovery ───────────────────────────────────
 	// Resolve plugin directories relative to the binary location,
 	// not CWD (Wails may launch from a different directory).
@@ -99,6 +126,14 @@ func main() {
 	// ─── Plugin Lifecycle: Register Capabilities + Contributions ──
 	for i := range plugins {
 		p := &plugins[i]
+
+		// Check if plugin is disabled in vault plugin state
+		if pluginStateMgr != nil && pluginStateMgr.IsDisabled(p.Manifest.ID) {
+			log.Printf("[plugin] %s: disabled in vault plugin state — skipping", p.Manifest.ID)
+			p.Status = plugin.StatusDisabled
+			p.Enabled = false
+			continue
+		}
 
 		// Register provided capabilities
 		if len(p.Manifest.Provides) > 0 {
@@ -157,7 +192,7 @@ func main() {
 
 	// Create the App struct
 	storageService := storage.New(vaultService)
-	app := api.NewApp(capRegistry, contribRegistry, permRegistry, eventBus, plugins, vaultService, storageService)
+	app := api.NewApp(capRegistry, contribRegistry, permRegistry, eventBus, plugins, vaultService, storageService, appSettingsMgr, pluginStateMgr)
 
 	// ─── Wails App ───────────────────────────────────────────
 	err := wails.Run(&options.App{

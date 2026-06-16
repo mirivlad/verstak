@@ -8,11 +8,13 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/verstak/verstak-desktop/internal/core/appsettings"
 	"github.com/verstak/verstak-desktop/internal/core/capability"
 	"github.com/verstak/verstak-desktop/internal/core/contribution"
 	"github.com/verstak/verstak-desktop/internal/core/events"
 	"github.com/verstak/verstak-desktop/internal/core/permissions"
 	"github.com/verstak/verstak-desktop/internal/core/plugin"
+	"github.com/verstak/verstak-desktop/internal/core/pluginstate"
 	"github.com/verstak/verstak-desktop/internal/core/storage"
 	"github.com/verstak/verstak-desktop/internal/core/vault"
 )
@@ -26,6 +28,8 @@ type App struct {
 	plugins         []plugin.Plugin
 	vault           *vault.Vault
 	storage         *storage.Storage
+	appSettings     *appsettings.Manager
+	pluginState     *pluginstate.Manager
 }
 
 // NewApp creates a new App instance.
@@ -37,6 +41,8 @@ func NewApp(
 	plugins []plugin.Plugin,
 	vaultService *vault.Vault,
 	storageService *storage.Storage,
+	appSettingsMgr *appsettings.Manager,
+	pluginStateMgr *pluginstate.Manager,
 ) *App {
 	return &App{
 		capRegistry:     capReg,
@@ -46,6 +52,8 @@ func NewApp(
 		plugins:         plugins,
 		vault:           vaultService,
 		storage:         storageService,
+		appSettings:     appSettingsMgr,
+		pluginState:     pluginStateMgr,
 	}
 }
 
@@ -148,6 +156,14 @@ func (a *App) ReloadPlugins() (int, string) {
 	// Plugin lifecycle: register capabilities + contributions
 	for i := range plugins {
 		p := &plugins[i]
+
+		// Skip disabled plugins
+		if a.pluginState != nil && a.pluginState.IsDisabled(p.Manifest.ID) {
+			log.Printf("[plugin] %s: disabled in vault plugin state — skipping", p.Manifest.ID)
+			p.Status = plugin.StatusDisabled
+			p.Enabled = false
+			continue
+		}
 
 		if len(p.Manifest.Provides) > 0 {
 			if err := a.capRegistry.Register(p.Manifest.ID, p.Manifest.Provides); err != nil {
@@ -324,6 +340,87 @@ func (a *App) WritePluginDataJSON(pluginID, name string, data map[string]interfa
 	}
 	if err := a.storage.WritePluginDataJSON(pluginID, name, data); err != nil {
 		log.Printf("[api] WritePluginDataJSON(%s, %s): %v", pluginID, name, err)
+		return err.Error()
+	}
+	return ""
+}
+
+// ─── App Settings API ──────────────────────────────────────
+
+// GetAppSettings returns the current app settings.
+func (a *App) GetAppSettings() map[string]interface{} {
+	if a.appSettings == nil {
+		return map[string]interface{}{"status": "not initialized"}
+	}
+	cfg := a.appSettings.Get()
+	return map[string]interface{}{
+		"schemaVersion":    cfg.SchemaVersion,
+		"currentVaultPath": cfg.CurrentVaultPath,
+		"recentVaults":     cfg.RecentVaults,
+		"theme":            cfg.Theme,
+		"devMode":          cfg.DevMode,
+		"userPluginsDir":   cfg.UserPluginsDir,
+		"lastOpenedAt":     cfg.LastOpenedAt,
+	}
+}
+
+// UpdateAppSettings patches and saves app settings.
+func (a *App) UpdateAppSettings(patch map[string]interface{}) string {
+	if a.appSettings == nil {
+		return "app settings not initialized"
+	}
+
+	cfg := &appsettings.Config{}
+	if v, ok := patch["theme"].(string); ok && v != "" {
+		cfg.Theme = v
+	}
+	if v, ok := patch["devMode"].(bool); ok {
+		cfg.DevMode = v
+	}
+	if v, ok := patch["userPluginsDir"].(string); ok && v != "" {
+		cfg.UserPluginsDir = v
+	}
+
+	if err := a.appSettings.Update(cfg); err != nil {
+		return err.Error()
+	}
+	return ""
+}
+
+// ─── Vault Plugin State API ────────────────────────────────
+
+// GetVaultPluginState returns the current vault plugin state.
+func (a *App) GetVaultPluginState() map[string]interface{} {
+	if a.pluginState == nil {
+		return map[string]interface{}{"status": "not initialized"}
+	}
+	state := a.pluginState.Get()
+	return map[string]interface{}{
+		"schemaVersion":   state.SchemaVersion,
+		"enabledPlugins":  state.EnabledPlugins,
+		"disabledPlugins": state.DisabledPlugins,
+		"desiredPlugins":  state.DesiredPlugins,
+		"updatedAt":       state.UpdatedAt,
+	}
+}
+
+// EnablePlugin enables a plugin in the vault.
+func (a *App) EnablePlugin(pluginID string) string {
+	if a.pluginState == nil {
+		return "plugin state not initialized"
+	}
+	if err := a.pluginState.EnablePlugin(pluginID); err != nil {
+		return err.Error()
+	}
+	return ""
+}
+
+// DisablePlugin disables a plugin in the vault.
+func (a *App) DisablePlugin(pluginID string) string {
+	if a.pluginState == nil {
+		return "plugin state not initialized"
+	}
+	if err := a.pluginState.DisablePlugin(pluginID); err != nil {
 		return err.Error()
 	}
 	return ""
