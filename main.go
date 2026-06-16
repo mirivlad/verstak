@@ -71,9 +71,14 @@ func main() {
 	log.Printf("[main] registered vault capability")
 
 	// ─── Plugin Discovery ───────────────────────────────────
+	// Resolve plugin directories relative to the binary location,
+	// not CWD (Wails may launch from a different directory).
+	binDir := filepath.Dir(os.Args[0])
+	pluginDir := filepath.Join(binDir, "plugins")
+
 	discoveryDirs := []string{
 		"~/.config/verstak/plugins",
-		"./plugins",
+		pluginDir,
 	}
 
 	// Expand tilde in all paths

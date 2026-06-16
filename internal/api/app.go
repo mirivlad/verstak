@@ -101,9 +101,13 @@ func expandPath(path string) string {
 
 // ReloadPlugins re-discovers plugins from disk and returns a summary.
 func (a *App) ReloadPlugins() (int, string) {
+	// Resolve plugin directories relative to the binary location
+	binDir := filepath.Dir(os.Args[0])
+	pluginDir := filepath.Join(binDir, "plugins")
+
 	discoveryDirs := []string{
 		"~/.config/verstak/plugins",
-		"./plugins",
+		pluginDir,
 	}
 
 	// Expand tilde in all paths

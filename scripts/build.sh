@@ -127,6 +127,12 @@ if [ -n "$WAILS" ]; then
   echo "  🔨 wails build..."
   (cd "$ROOT" && "$WAILS" build -clean $WAILS_TAGS)
   report "wails build" $?
+  # Copy plugins/ to build/bin/ so the binary can find them at runtime
+  if [ -d "$ROOT/plugins" ]; then
+    mkdir -p "$ROOT/build/bin/plugins"
+    cp -r "$ROOT/plugins/"* "$ROOT/build/bin/plugins/" 2>/dev/null || true
+    echo "  📦 plugins copied to build/bin/plugins/"
+  fi
   # Show where the binary ended up
   if [ -f "$ROOT/build/bin/$WAILS_BINARY" ]; then
     echo "  📦 binary: $ROOT/build/bin/$WAILS_BINARY"
