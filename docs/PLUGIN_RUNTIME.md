@@ -342,93 +342,43 @@ Vault plugin state хранится **внутри vault** в `.verstak/plugins.
 - Auto-install пока НЕ делается
 - Показывается подсказка: "Install official plugin package"
 
-## App Settings
 
-App settings хранятся локально (НЕ внутри vault): `~/.config/verstak/config.json`
+## UI Layout
 
-Поля:
-- `currentVaultPath` — путь к текущему vault
-- `recentVaults` — список недавних vault (max 10, без дублей)
-- `theme` — тема (dark/light)
-- `devMode` — режим разработки
-- `userPluginsDir` — директория пользовательских плагинов
-- `windowState` — состояние окна
-- `lastOpenedAt` — время последнего открытия
-
-API:
-- `LoadAppSettings()` / `SaveAppSettings()` / `GetAppSettings()`
-- `UpdateAppSettings(patch)` — частичное обновление
-- `SetCurrentVault(path)` — установить текущий vault + открыть + сохранить
-
-Правила:
-- Если config отсутствует — создать defaults
-- Если config битый — backup + создать defaults + вернуть ошибку
-- `currentVaultPath` не обязан существовать, но при запуске проверяется
-- Secrets НЕ хранятся в app settings
-
-## Vault Plugin State
-
-Vault plugin state хранится внутри vault: `<vault>/.verstak/plugins.json`
-
-Структура:
-```json
-{
-  "schemaVersion": 1,
-  "enabledPlugins": ["verstak.platform-test"],
-  "disabledPlugins": [],
-  "desiredPlugins": [
-    {
-      "id": "verstak.platform-test",
-      "version": "0.1.0",
-      "source": "official"
-    }
-  ],
-  "updatedAt": "2026-06-17T04:00:00Z"
-}
+```
+┌─────────────────────────────────────────────────────┐
+│ App.svelte                                          │
+│ ┌──────────┬──────────────────────────────────────┐ │
+│ │ Sidebar  │ Content area                         │ │
+│ │          │                                       │ │
+│ │ Verstak  │ PluginManager | ViewContainer         │ │
+│ │          │                                       │ │
+│ │ 🧩 Plugin│ (padding: 1.5rem)                    │ │
+│ │   Manager│                                       │ │
+│ │          │                                       │ │
+│ │ Plugins  │                                       │ │
+│ │ 📌 item1 │                                       │ │
+│ │ 📌 item2 │                                       │ │
+│ │          │                                       │ │
+│ │ ● Vault  │                                       │ │
+│ └──────────┴──────────────────────────────────────┘ │
+└─────────────────────────────────────────────────────┘
 ```
 
-API:
-- `LoadVaultPluginState()` / `SaveVaultPluginState()`
-- `IsPluginEnabled(id)` / `IsPluginDisabled(id)`
-- `EnablePlugin(id)` / `DisablePlugin(id)`
-- `RecordDesiredPlugin(id, version, source)`
-- `ListMissingInstalled(installedIDs)`
+- **Sidebar** (220px): навигация (Plugin Manager), plugin sidebar items, vault status
+- **Content**: Plugin Manager или ViewContainer в зависимости от выбранного view
+- **Vault Selection**: полноэкранный экран, показывается когда vault не открыт
 
-Правила:
-- Enabled/disabled состояние относится к конкретному vault
-- Если vault закрыт — plugin state недоступен
-- Plugin settings остаются в `.verstak/plugin-settings/<id>/settings.json`
-- Отсутствие `plugins.json` — создать defaults
-- Битый `plugins.json` — backup + создать defaults + ошибка
+## Milestone 4b — UI Completion (2026-06-17)
 
-## First Run / Vault Selection Flow
+Сделано:
+- VaultSelection.svelte: исправлен flow (CreateVault → OpenVault → SetCurrentVault)
+- Sidebar.svelte: полная навигация с отступами, plugin sidebar items, vault status
+- App.svelte: обработка `verstak:nav` событий, global reset стилей
+- PluginManager.svelte: исправлены отступы header
 
-При запуске:
-1. Загрузить app settings
-2. Если `currentVaultPath` пустой или vault не открывается → показать Vault Selection UI
-3. Если `currentVaultPath` валиден → открыть vault автоматически
-
-Vault Selection UI:
-- Create new vault → `CreateVault(path)` → `SetCurrentVault(path)`
-- Open existing vault → `SetCurrentVault(path)`
-- Recent vaults → `SetCurrentVault(path)`
-- Ошибка открытия → показать понятный текст
-
-После успешного открытия:
-- `currentVaultPath` сохранён в app settings
-- Путь добавлен в `recentVaults`
-- Переход в основной UI
-
-## Enable/Disable Lifecycle
-
-1. Пользователь нажимает Enable/Disable в Plugin Manager
-2. Фронт вызывает `EnablePlugin(id)` / `DisablePlugin(id)` на бэкенде
-3. Бэкенд пишет в `<vault>/.verstak/plugins.json`
-4. Фронт вызывает `ReloadPlugins()` для пересчёта lifecycle
-5. Disabled plugin не регистрирует capabilities/contributions
-6. После enable — capabilities/contributions возвращаются
-
-Важно:
-- Installed plugin package ≠ enabled plugin
-- Disabled plugin виден как installed/disabled
-- Missing desired plugin показывается как "missing"
+Проверки:
+- `go test ./...` — 52 PASS
+- `./scripts/check.sh` — ✅
+- `./scripts/smoke-platform.sh` — ✅ (enable/disable/plugins.json)
+- `./scripts/build.sh` — ✅
