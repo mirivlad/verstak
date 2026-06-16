@@ -1,7 +1,7 @@
 <script>
   import PluginCard from './PluginCard.svelte';
   import { onMount } from 'svelte';
-  import { GetPlugins, GetCapabilities, GetPermissions, GetContributions, ReloadPlugins, GetVaultStatus } from '../../../wailsjs/go/api/App';
+  import { GetPlugins, GetCapabilities, GetPermissions, GetContributions, ReloadPlugins, GetVaultStatus, GetVaultPluginState, EnablePlugin, DisablePlugin } from '../../../wailsjs/go/api/App';
 
   let plugins = [];
   let capabilities = [];
@@ -10,9 +10,19 @@
   let loading = true;
   let error = '';
   let vaultStatus = { status: 'unknown', path: '', vaultId: '' };
+  let vaultPluginState = { enabledPlugins: [], disabledPlugins: [], desiredPlugins: [] };
   let settingsPanel = null;
   let settingsData = {};
   let settingsPluginId = '';
+
+  $: vaultOpen = vaultStatus.status === 'open';
+  $: missingInstalled = computeMissingInstalled();
+
+  function computeMissingInstalled() {
+    if (!vaultPluginState.desiredPlugins) return [];
+    const installedIDs = new Set(plugins.map(p => p.manifest?.id).filter(Boolean));
+    return (vaultPluginState.desiredPlugins || []).filter(dp => !installedIDs.has(dp.id));
+  }
 
   async function loadAll() {
     error = '';
@@ -27,6 +37,10 @@
     }
     // Vault status — non-critical
     GetVaultStatus().then(v => { vaultStatus = v || { status: 'unknown', path: '', vaultId: '' }; }).catch(() => {});
+    // Vault plugin state
+    if (vaultStatus.status === 'open') {
+      GetVaultPluginState().then(s => { vaultPluginState = s || { enabledPlugins: [], disabledPlugins: [], desiredPlugins: [] }; }).catch(() => {});
+    }
     // Capabilities and permissions are non-critical — load async
     GetCapabilities().then(c => { capabilities = c || []; }).catch(() => {});
     GetPermissions().then(p => { permissions = p || []; }).catch(() => {});
@@ -49,6 +63,24 @@
     await loadAll();
   }
 
+  async function enablePlugin(pluginId) {
+    const err = await EnablePlugin(pluginId);
+    if (err) {
+      error = 'Enable: ' + err;
+      return;
+    }
+    await reload();
+  }
+
+  async function disablePlugin(pluginId) {
+    const err = await DisablePlugin(pluginId);
+    if (err) {
+      error = 'Disable: ' + err;
+      return;
+    }
+    await reload();
+  }
+
   $: totalPlugins = plugins.length;
   $: totalCaps = capabilities.length;
   $: totalPerms = permissions.length;
@@ -58,24 +90,22 @@
     if (panel) {
       settingsPanel = panel;
       settingsPluginId = pluginId;
-      // Load existing settings
-      try {
-        const data = JSON.parse(localStorage.getItem('verstak-settings-' + pluginId) || '{}');
-        settingsData = data;
-      } catch (e) {
-        settingsData = {};
-      }
+      // Load existing settings from Wails backend
+      import('../../../wailsjs/go/api/App').then(mod => {
+        mod.ReadPluginSettings(pluginId).then(data => {
+          settingsData = data || {};
+        }).catch(() => { settingsData = {}; });
+      });
     }
   }
 
   function saveSettings() {
     try {
-      localStorage.setItem('verstak-settings-' + settingsPluginId, JSON.stringify(settingsData));
-      // Also try Wails backend
-      const { WritePluginSettings } = require('../../../wailsjs/go/api/App');
-      WritePluginSettings(settingsPluginId, settingsData).then(err => {
-        if (err) console.error('WritePluginSettings:', err);
-      }).catch(() => {});
+      import('../../../wailsjs/go/api/App').then(mod => {
+        mod.WritePluginSettings(settingsPluginId, settingsData).then(err => {
+          if (err) console.error('WritePluginSettings:', err);
+        }).catch(e => console.error('WritePluginSettings:', e));
+      });
     } catch (e) {
       console.error('saveSettings:', e);
     }
@@ -112,13 +142,14 @@
       <span class="badge">{totalPerms} permissions known</span>
     </div>
 
-    {#if plugins.length === 0}
+    {#if plugins.length === 0 && missingInstalled.length === 0}
       <div class="empty">
         <div class="empty-icon">
           <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
             <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
           </svg>
-        </div>        <p>No plugins found</p>
+        </div>
+        <p>No plugins found</p>
         <p class="hint">Plugin directories scanned:</p>
         <ul class="hint-list">
           <li><code>~/.config/verstak/plugins/</code> — user plugins</li>
@@ -129,8 +160,35 @@
     {:else}
       <div class="plugin-list">
         {#each plugins as p}
-          <PluginCard {p} {capabilities} {permissions} {contributions} onSettings={openSettings} />
+          <PluginCard {p} {capabilities} {permissions} {contributions} {vaultOpen} onSettings={openSettings} onEnable={enablePlugin} onDisable={disablePlugin} />
         {/each}
+      </div>
+    {/if}
+
+    {#if missingInstalled.length > 0}
+      <div class="missing-section">
+        <h3>Missing Installed Plugins</h3>
+        <p class="missing-hint">These plugins are required by this vault but their packages are not installed locally.</p>
+        <div class="plugin-list">
+          {#each missingInstalled as mp}
+            <div class="plugin-card missing-card">
+              <div class="card-header">
+                <div class="plugin-id">
+                  <span class="status-dot" style="background: #e94560"></span>
+                  <strong>{mp.id}</strong>
+                  {#if mp.version}<span class="version">v{mp.version}</span>{/if}
+                </div>
+                <span class="status-badge" style="color: #e94560">missing</span>
+              </div>
+              <p class="missing-text">
+                This plugin is listed in the vault's desired plugins but the package is not installed.
+                {#if mp.source && mp.source !== 'unknown'}
+                  <span class="source-hint">Source: {mp.source}</span>
+                {/if}
+              </p>
+            </div>
+          {/each}
+        </div>
       </div>
     {/if}
 
@@ -154,47 +212,49 @@
         </table>
       </details>
     {/if}
-    {/if}
+  {/if}
 
-    <!-- Settings Panel Modal -->
-    {#if settingsPanel}
-    <div class="modal-overlay" on:click|self={() => settingsPanel = null}>
-    <div class="modal" role="dialog" aria-modal="true" aria-label="Plugin Settings">
-      <div class="modal-header">
-        <h3>{settingsPanel.item.title}</h3>
-        <button class="modal-close" on:click={() => settingsPanel = null} type="button">✕</button>
-      </div>
-      <div class="modal-body">
-        <p class="settings-hint">Plugin: <code>{settingsPluginId}</code></p>
-        <p class="settings-hint">Component: <code>{settingsPanel.item.component}</code></p>
+  <!-- Settings Panel Modal -->
+  {#if settingsPanel}
+  <div class="modal-overlay" on:click|self={() => settingsPanel = null}>
+  <div class="modal" role="dialog" aria-modal="true" aria-label="Plugin Settings">
+    <div class="modal-header">
+      <h3>{settingsPanel.item.title}</h3>
+      <button class="modal-close" on:click={() => settingsPanel = null} type="button">✕</button>
+    </div>
+    <div class="modal-body">
+      <p class="settings-hint">Plugin: <code>{settingsPluginId}</code></p>
+      <p class="settings-hint">Component: <code>{settingsPanel.item.component}</code></p>
 
-        {#if settingsPanel.item.id === 'verstak.platform-test.settings'}
-          <div class="settings-form">
-            <h4>Test Settings</h4>
-            <div class="form-row">
-              <label for="test-name">Test Name</label>
-              <input id="test-name" type="text" bind:value={settingsData.testName} placeholder="Enter test name" />
-            </div>
-            <div class="form-row">
-              <label for="test-interval">Test Interval (seconds)</label>
-              <input id="test-interval" type="number" bind:value={settingsData.testInterval} min="1" max="300" />
-            </div>
-            <div class="form-row">
-              <label><input type="checkbox" bind:checked={settingsData.autoRun} /> Auto-run on startup</label>
-            </div>
-            <button class="btn-save" on:click={() => saveSettings()} type="button">Save Settings</button>
+      {#if settingsPanel.item.id === 'verstak.platform-test.settings'}
+        <div class="settings-form">
+          <h4>Test Settings</h4>
+          <div class="form-row">
+            <label for="test-name">Test Name</label>
+            <input id="test-name" type="text" bind:value={settingsData.testName} placeholder="Enter test name" />
           </div>
-        {:else}
-          <p class="placeholder">Settings component: {settingsPanel.item.component}</p>
-        {/if}
-      </div>
+          <div class="form-row">
+            <label for="test-interval">Test Interval (seconds)</label>
+            <input id="test-interval" type="number" bind:value={settingsData.testInterval} min="1" max="300" />
+          </div>
+          <div class="form-row">
+            <label><input type="checkbox" bind:checked={settingsData.autoRun} /> Auto-run on startup</label>
+          </div>
+          <button class="btn-save" on:click={() => saveSettings()} type="button">Save Settings</button>
+        </div>
+      {:else}
+        <p class="placeholder">Settings component: {settingsPanel.item.component}</p>
+      {/if}
     </div>
-    </div>
-    {/if}
-    </div>
+  </div>
+  </div>
+  {/if}
+</div>
 
-    <style>
-    .plugin-manager { max-width: 900px; }
+<style>
+  .plugin-manager {
+    max-width: 900px;
+  }
   header {
     display: flex;
     align-items: center;
@@ -270,6 +330,37 @@
   .hint-list li { margin: 0.25rem 0; }
   .hint code { background: #0f3460; padding: 0.1rem 0.3rem; border-radius: 3px; }
   .plugin-list { display: flex; flex-direction: column; gap: 0.75rem; margin-bottom: 1.5rem; }
+
+  /* Missing installed section */
+  .missing-section {
+    margin-bottom: 1.5rem;
+  }
+  .missing-section h3 {
+    color: #e94560;
+    font-size: 1rem;
+    margin: 0 0 0.25rem;
+  }
+  .missing-hint {
+    color: #a0a0b8;
+    font-size: 0.8rem;
+    margin: 0 0 0.75rem;
+  }
+  .missing-card {
+    border-color: #e94560;
+    opacity: 0.8;
+  }
+  .missing-text {
+    color: #a0a0b8;
+    font-size: 0.85rem;
+    margin: 0.5rem 0 0;
+  }
+  .source-hint {
+    display: block;
+    margin-top: 0.25rem;
+    font-size: 0.75rem;
+    color: #666;
+  }
+
   .registry-section {
     background: #16213e; border: 1px solid #0f3460;
     border-radius: 8px; padding: 0.75rem; margin-top: 1rem;

@@ -63,5 +63,15 @@ if [ "$SMOKE_EXIT" -ne 0 ]; then
   exit 1
 fi
 
+# ── test enable/disable via Go smoke ──
+echo ""
+echo "[go smoke: enable/disable]"
+(cd "$ROOT" && go run -mod=mod ./cmd/smoke-platform/ -test-enable-disable 2>&1)
+SMOKE_ED_EXIT=$?
+if [ "$SMOKE_ED_EXIT" -ne 0 ]; then
+  echo "  ❌ smoke-platform: enable/disable test failed"
+  exit 1
+fi
+
 echo ""
 echo "✅ smoke-platform done"

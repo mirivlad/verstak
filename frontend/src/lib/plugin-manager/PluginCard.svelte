@@ -2,8 +2,14 @@
   export let p = {};
   export let capabilities = [];
   export let permissions = [];
+  export let contributions = {};
+  export let vaultOpen = false;
   export let onSettings = () => {};
+  export let onEnable = () => {};
+  export let onDisable = () => {};
 
+  $: m = p.manifest || {};
+  $: pluginId = m.id || 'unknown';
   $: hasSettingsPanel = (contributions.settingsPanels || []).some(sp => sp.pluginId === pluginId);
   $: hasUIPermission = (m.permissions || []).includes('ui.register');
   $: hasStoragePermission = (m.permissions || []).includes('storage.namespace');
@@ -19,8 +25,6 @@
     loading: '#ffc857',
     discovered: '#a0a0b8',
   }[p.status] || '#a0a0b8');
-
-  $: pluginId = m.id || 'unknown';
 
   $: contribCounts = {
     views: (contributions.views || []).filter(v => v.pluginId === pluginId).length,
@@ -54,13 +58,16 @@
   $: missingOptional = (m.optionalRequires || []).filter(opt =>
     !capabilities.some(c => c.name === opt)
   );
+
+  $: isDisabled = p.status === 'disabled' || !p.enabled;
+  $: canToggle = p.status !== 'failed' && p.status !== 'incompatible' && p.status !== 'missing-required-capability' && p.status !== 'discovered';
 </script>
 
-<div class="plugin-card" class:disabled={!p.enabled} class:failed={p.status === 'failed'}>
+<div class="plugin-card" class:disabled={isDisabled} class:failed={p.status === 'failed'}>
   <div class="card-header">
     <div class="plugin-id">
       <span class="status-dot" style="background: {statusColor}"></span>
-      <strong>{m.id || 'unknown'}</strong>
+      <strong>{pluginId}</strong>
       <span class="version">v{m.version || '?'}</span>
     </div>
     <span class="status-badge" style="color: {statusColor}">{p.status}</span>
@@ -170,6 +177,20 @@
       <button class="btn-settings" on:click={() => onSettings(m.id)} type="button">
         ⚙ Settings
       </button>
+    {/if}
+    {#if vaultOpen && canToggle}
+      {#if isDisabled}
+        <button class="btn-enable" on:click={() => onEnable(m.id)} type="button">
+          ▶ Enable
+        </button>
+      {:else}
+        <button class="btn-disable" on:click={() => onDisable(m.id)} type="button">
+          ⏸ Disable
+        </button>
+      {/if}
+    {/if}
+    {#if !vaultOpen && canToggle}
+      <span class="vault-hint">Open a vault to manage plugin state</span>
     {/if}
   </div>
 
@@ -347,6 +368,7 @@
 
   .card-actions {
     display: flex;
+    align-items: center;
     gap: 0.5rem;
     margin-top: 0.75rem;
     padding-top: 0.5rem;
@@ -365,5 +387,41 @@
 
   .btn-settings:hover {
     background: #1a3a5c;
+  }
+
+  .btn-enable {
+    background: #4ecca3;
+    color: #1a1a2e;
+    border: none;
+    padding: 0.3rem 0.75rem;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.8rem;
+    font-weight: 600;
+  }
+
+  .btn-enable:hover {
+    background: #3dbb92;
+  }
+
+  .btn-disable {
+    background: #533483;
+    color: #e0e0f0;
+    border: none;
+    padding: 0.3rem 0.75rem;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.8rem;
+    font-weight: 600;
+  }
+
+  .btn-disable:hover {
+    background: #6b44a0;
+  }
+
+  .vault-hint {
+    color: #666;
+    font-size: 0.75rem;
+    font-style: italic;
   }
 </style>

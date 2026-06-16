@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
 	"sync"
 	"time"
 )
@@ -237,17 +236,9 @@ func addRecent(list []string, path string, max int) []string {
 			filtered = append(filtered, p)
 		}
 	}
-	// Prepend
+	// Prepend (most recent first)
 	result := append([]string{path}, filtered...)
 	// Trim
-	if len(result) > max {
-		result = result[:max]
-	}
-	sort.SliceStable(result, func(i, j int) bool {
-		return result[i] < result[j]
-	})
-	// Actually keep insertion order: prepend is correct, just trim
-	result = append([]string{path}, filtered...)
 	if len(result) > max {
 		result = result[:max]
 	}

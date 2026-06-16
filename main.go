@@ -170,6 +170,17 @@ func main() {
 			log.Printf("[plugin] %s: contributions registered", p.Manifest.ID)
 		}
 
+		// Record as desired plugin in vault state (only if vault is open)
+		if pluginStateMgr != nil && vaultService.GetVaultStatus() == vault.StatusOpen {
+			source := p.Manifest.Source
+			if source == "" {
+				source = "unknown"
+			}
+			if err := pluginStateMgr.RecordDesiredPlugin(p.Manifest.ID, p.Manifest.Version, source); err != nil {
+				log.Printf("[plugin] %s: failed to record desired: %v", p.Manifest.ID, err)
+			}
+		}
+
 		log.Printf("[plugin] %s: status=%s", p.Manifest.ID, p.Status)
 	}
 

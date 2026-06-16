@@ -3,15 +3,20 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"os"
 	"path/filepath"
 
 	"github.com/verstak/verstak-desktop/internal/core/capability"
 	"github.com/verstak/verstak-desktop/internal/core/plugin"
+	"github.com/verstak/verstak-desktop/internal/core/pluginstate"
+	"github.com/verstak/verstak-desktop/internal/core/vault"
 )
 
 func main() {
+	testEnableDisable := flag.Bool("test-enable-disable", false, "Test enable/disable lifecycle")
+	flag.Parse()
 	exitCode := 0
 	defer func() {
 		os.Exit(exitCode)
@@ -19,6 +24,11 @@ func main() {
 
 	root, _ := os.Getwd()
 	pluginDir := filepath.Join(root, "plugins")
+
+	if *testEnableDisable {
+		runEnableDisableTest(root)
+		return
+	}
 
 	fmt.Printf("=== smoke-platform: headless plugin verification ===\n\n")
 	fmt.Printf("  plugin dir: %s\n", pluginDir)
@@ -255,4 +265,172 @@ func main() {
 		fmt.Printf("❌ smoke-platform failed\n")
 		exitCode = 1
 	}
+}
+
+// runEnableDisableTest tests the enable/disable lifecycle with vault plugin state.
+func runEnableDisableTest(root string) {
+	exitCode := 0
+	defer func() {
+		os.Exit(exitCode)
+	}()
+
+	fmt.Printf("=== smoke-platform: enable/disable test ===\n\n")
+
+	// Create a temp vault
+	tmpDir, err := os.MkdirTemp("", "verstak-smoke-*")
+	if err != nil {
+		fmt.Printf("  ❌ failed to create temp dir: %v\n", err)
+		exitCode = 1
+		return
+	}
+	defer os.RemoveAll(tmpDir)
+
+	vaultPath := filepath.Join(tmpDir, "testvault")
+	fmt.Printf("  vault path: %s\n", vaultPath)
+
+	// Initialize vault
+	v := vault.NewVault(nil)
+	if err := v.CreateVault(vaultPath); err != nil {
+		fmt.Printf("  ❌ create vault: %v\n", err)
+		exitCode = 1
+		return
+	}
+	fmt.Printf("  ✅ vault created\n")
+
+	// Open the vault at the path returned by CreateVault (path/VerstakVault)
+	openedPath := v.GetVaultPath()
+	if err := v.OpenVault(openedPath); err != nil {
+		fmt.Printf("  ❌ open vault: %v\n", err)
+		exitCode = 1
+		return
+	}
+	fmt.Printf("  ✅ vault opened at %s\n", openedPath)
+
+	// Initialize plugin state
+	psm := pluginstate.NewManager(v)
+	if err := psm.Load(); err != nil {
+		fmt.Printf("  ❌ load plugin state: %v\n", err)
+		exitCode = 1
+		return
+	}
+	fmt.Printf("  ✅ plugin state loaded\n")
+
+	// Discover plugins
+	pluginDir := filepath.Join(root, "plugins")
+	plugins, _ := plugin.DiscoverPlugins([]string{pluginDir})
+	if len(plugins) == 0 {
+		fmt.Printf("  ❌ no plugins discovered\n")
+		exitCode = 1
+		return
+	}
+	fmt.Printf("  ✅ discovered %d plugin(s)\n", len(plugins))
+
+	// Find platform-test
+	var target *plugin.Plugin
+	for i, p := range plugins {
+		if p.Manifest.ID == "verstak.platform-test" {
+			target = &plugins[i]
+			break
+		}
+	}
+	if target == nil {
+		fmt.Printf("  ❌ platform-test not found\n")
+		exitCode = 1
+		return
+	}
+	fmt.Printf("  ✅ platform-test found\n")
+
+	// Register capabilities
+	reg := capability.NewRegistry()
+	coreCaps := []string{
+		"verstak/core/plugin-manager/v1",
+		"verstak/core/capability-registry/v1",
+		"verstak/core/contribution-registry/v1",
+		"verstak/core/permissions/v1",
+		"verstak/core/events/v1",
+	}
+	reg.Register("verstak-desktop", coreCaps)
+	reg.Register("verstak-desktop", []string{"verstak/core/vault/v1"})
+	for _, cap := range target.Manifest.Provides {
+		reg.Register(target.Manifest.ID, []string{cap})
+	}
+	totalCaps := len(reg.List())
+	fmt.Printf("  ✅ registered %d capabilities (core + plugin)\n", totalCaps)
+
+	// ── Test 1: Disable platform-test ──
+	fmt.Printf("\n[disable]\n")
+	if err := psm.DisablePlugin("verstak.platform-test"); err != nil {
+		fmt.Printf("  ❌ disable: %v\n", err)
+		exitCode = 1
+		return
+	}
+	fmt.Printf("  ✅ disabled platform-test\n")
+
+	if !psm.IsDisabled("verstak.platform-test") {
+		fmt.Printf("  ❌ IsDisabled returned false after disable\n")
+		exitCode = 1
+		return
+	}
+	fmt.Printf("  ✅ IsDisabled: true\n")
+
+	if psm.IsEnabled("verstak.platform-test") {
+		fmt.Printf("  ❌ IsEnabled returned true after disable\n")
+		exitCode = 1
+		return
+	}
+	fmt.Printf("  ✅ IsEnabled: false\n")
+
+	// Check plugins.json
+	state := psm.Get()
+	found := false
+	for _, dp := range state.DesiredPlugins {
+		if dp.ID == "verstak.platform-test" {
+			found = true
+			break
+		}
+	}
+	if found {
+		fmt.Printf("  ✅ platform-test in desiredPlugins\n")
+	} else {
+		fmt.Printf("  ℹ️  platform-test not in desiredPlugins (ok if not recorded)\n")
+	}
+
+	// ── Test 2: Enable platform-test ──
+	fmt.Printf("\n[enable]\n")
+	if err := psm.EnablePlugin("verstak.platform-test"); err != nil {
+		fmt.Printf("  ❌ enable: %v\n", err)
+		exitCode = 1
+		return
+	}
+	fmt.Printf("  ✅ enabled platform-test\n")
+
+	if !psm.IsEnabled("verstak.platform-test") {
+		fmt.Printf("  ❌ IsEnabled returned false after enable\n")
+		exitCode = 1
+		return
+	}
+	fmt.Printf("  ✅ IsEnabled: true\n")
+
+	if psm.IsDisabled("verstak.platform-test") {
+		fmt.Printf("  ❌ IsDisabled returned true after enable\n")
+		exitCode = 1
+		return
+	}
+	fmt.Printf("  ✅ IsDisabled: false\n")
+
+	// ── Test 3: Verify plugins.json on disk ──
+	fmt.Printf("\n[plugins.json verification]\n")
+	statePath := filepath.Join(v.GetVaultPath(), ".verstak", "plugins.json")
+	data, err := os.ReadFile(statePath)
+	if err != nil {
+		fmt.Printf("  ❌ read plugins.json: %v\n", err)
+		exitCode = 1
+		return
+	}
+	fmt.Printf("  ✅ plugins.json exists on disk\n")
+	fmt.Printf("  content:\n%s\n", string(data))
+
+	// ── Summary ──
+	fmt.Printf("\n=== summary ===\n")
+	fmt.Printf("✅ enable/disable test passed\n")
 }

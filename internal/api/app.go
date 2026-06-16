@@ -191,6 +191,17 @@ func (a *App) ReloadPlugins() (int, string) {
 		if p.Manifest.Contributes != nil {
 			a.contribRegistry.Register(p.Manifest.ID, p.Manifest.Contributes)
 		}
+
+		// Record as desired plugin in vault state (only if vault is open)
+		if a.pluginState != nil && a.vault != nil && a.vault.GetVaultStatus() == vault.StatusOpen {
+			source := p.Manifest.Source
+			if source == "" {
+				source = "unknown"
+			}
+			if err := a.pluginState.RecordDesiredPlugin(p.Manifest.ID, p.Manifest.Version, source); err != nil {
+				log.Printf("[plugin] %s: failed to record desired: %v", p.Manifest.ID, err)
+			}
+		}
 	}
 
 	a.plugins = plugins
@@ -387,6 +398,35 @@ func (a *App) UpdateAppSettings(patch map[string]interface{}) string {
 	return ""
 }
 
+// SetCurrentVault sets the current vault path in app settings and re-opens the vault.
+func (a *App) SetCurrentVault(path string) string {
+	if a.appSettings == nil {
+		return "app settings not initialized"
+	}
+	if a.vault == nil {
+		return "vault service not initialized"
+	}
+	// Try to open the vault first
+	if err := a.vault.OpenVault(path); err != nil {
+		return fmt.Sprintf("failed to open vault: %v", err)
+	}
+	// Save to app settings
+	if err := a.appSettings.SetCurrentVault(path); err != nil {
+		return fmt.Sprintf("failed to save app settings: %v", err)
+	}
+	// Load plugin state for the vault
+	if a.pluginState != nil {
+		if err := a.pluginState.Load(); err != nil {
+			log.Printf("[api] SetCurrentVault: warning loading plugin state: %v", err)
+		}
+	}
+	// Register vault capability
+	if err := a.capRegistry.Register("verstak-desktop", []string{"verstak/core/vault/v1"}); err != nil {
+		log.Printf("[api] SetCurrentVault: failed to register vault capability: %v", err)
+	}
+	return ""
+}
+
 // ─── Vault Plugin State API ────────────────────────────────
 
 // GetVaultPluginState returns the current vault plugin state.
@@ -421,6 +461,17 @@ func (a *App) DisablePlugin(pluginID string) string {
 		return "plugin state not initialized"
 	}
 	if err := a.pluginState.DisablePlugin(pluginID); err != nil {
+		return err.Error()
+	}
+	return ""
+}
+
+// RecordDesiredPlugin records a plugin as desired for this vault.
+func (a *App) RecordDesiredPlugin(pluginID, version, source string) string {
+	if a.pluginState == nil {
+		return "plugin state not initialized"
+	}
+	if err := a.pluginState.RecordDesiredPlugin(pluginID, version, source); err != nil {
 		return err.Error()
 	}
 	return ""
