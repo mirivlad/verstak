@@ -86,12 +86,14 @@ report "go test" $?
 
 # ── Wails ──
 echo "[wails]"
+if ! command -v wails &>/dev/null; then
+  echo "  📦 wails not found — installing..."
+  go install github.com/wailsapp/wails/v2/cmd/wails@latest
+  report "wails install" $?
+fi
 if command -v wails &>/dev/null; then
   (cd "$ROOT" && wails build -clean)
   report "wails build" $?
-else
-  echo "  ❌ wails: command not found. Install with: go install github.com/wailsapp/wails/v2/cmd/wails@latest"
-  FAILED=1
 fi
 
 echo ""
