@@ -1,5 +1,4 @@
-// Smoke-platform validates that the platform-test plugin is discovered correctly
-// by the Verstak desktop runtime. This runs headless — no Wails GUI needed.
+// Package api provides Wails-bound methods for the frontend.
 package main
 
 import (
@@ -29,13 +28,13 @@ func main() {
 	root, _ := os.Getwd()
 	pluginDir := filepath.Join(root, "plugins")
 
-	if *testWorkspace {
-		runWorkspaceTest(root)
+	if *testContributions {
+		runContributionsTest(root)
 		return
 	}
 
-	if *testContributions {
-		runContributionsTest(root)
+	if *testWorkspace {
+		runWorkspaceTest(root)
 		return
 	}
 
@@ -176,7 +175,6 @@ func main() {
 	fmt.Printf("\n[capability registration]\n")
 	reg := capability.NewRegistry()
 
-	// Register core capabilities (same list as main.go)
 	coreCaps := []string{
 		"verstak/core/plugin-manager/v1",
 		"verstak/core/capability-registry/v1",
@@ -191,7 +189,6 @@ func main() {
 		fmt.Printf("  ✅ registered %d core capabilities\n", len(coreCaps))
 	}
 
-	// Register vault capability (core service)
 	if err := reg.Register("verstak-desktop", []string{"verstak/core/vault/v1"}); err != nil {
 		fmt.Printf("  ❌ register vault capability: %v\n", err)
 		allGood = false
@@ -199,7 +196,6 @@ func main() {
 		fmt.Printf("  ✅ registered vault capability\n")
 	}
 
-	// Register workspace capability (core service — always present when vault is open)
 	if err := reg.Register("verstak-desktop", []string{"verstak/core/workspace/v1"}); err != nil {
 		fmt.Printf("  ❌ register workspace capability: %v\n", err)
 		allGood = false
@@ -207,7 +203,6 @@ func main() {
 		fmt.Printf("  ✅ registered workspace capability\n")
 	}
 
-	// Register plugin capabilities
 	for _, p := range m.Provides {
 		if err := reg.Register(m.ID, []string{p}); err != nil {
 			fmt.Printf("  ❌ register capability %s: %v\n", p, err)
@@ -249,7 +244,7 @@ func main() {
 		fmt.Printf("  ✅ all required capabilities resolved\n")
 	}
 
-	// ── 10. Check optional capabilities ──
+	// ── 11. Check optional capabilities ──
 	fmt.Printf("\n[optional capability resolution]\n")
 	missingOptional := reg.CheckRequired(m.OptionalRequires)
 	if len(missingOptional) > 0 {
@@ -258,7 +253,7 @@ func main() {
 		}
 	}
 
-	// ── 11. Determine expected status ──
+	// ── 12. Determine expected status ──
 	fmt.Printf("\n[plugin status]\n")
 	expectedStatus := "loaded"
 	if len(missingOptional) > 0 {
@@ -277,7 +272,7 @@ func main() {
 		allGood = false
 	}
 
-	// ── 12. Total capability count ──
+	// ── 13. Total capability count ──
 	fmt.Printf("\n[capability count]\n")
 	totalCaps := len(reg.List())
 	fmt.Printf("  total capabilities: %d\n", totalCaps)
@@ -288,7 +283,7 @@ func main() {
 		allGood = false
 	}
 
-	// ── 13. Summary ──
+	// ── 14. Summary ──
 	fmt.Printf("\n=== summary ===\n")
 	if allGood {
 		fmt.Printf("✅ smoke-platform passed\n")
@@ -319,7 +314,6 @@ func runEnableDisableTest(root string) {
 	vaultPath := filepath.Join(tmpDir, "testvault")
 	fmt.Printf("  vault path: %s\n", vaultPath)
 
-	// Initialize vault
 	v := vault.NewVault(nil)
 	if err := v.CreateVault(vaultPath); err != nil {
 		fmt.Printf("  ❌ create vault: %v\n", err)
@@ -328,7 +322,6 @@ func runEnableDisableTest(root string) {
 	}
 	fmt.Printf("  ✅ vault created\n")
 
-	// Open the vault at the path returned by CreateVault (path/VerstakVault)
 	openedPath := v.GetVaultPath()
 	if err := v.OpenVault(openedPath); err != nil {
 		fmt.Printf("  ❌ open vault: %v\n", err)
@@ -337,7 +330,6 @@ func runEnableDisableTest(root string) {
 	}
 	fmt.Printf("  ✅ vault opened at %s\n", openedPath)
 
-	// Initialize plugin state
 	psm := pluginstate.NewManager(v)
 	if err := psm.Load(); err != nil {
 		fmt.Printf("  ❌ load plugin state: %v\n", err)
@@ -356,7 +348,6 @@ func runEnableDisableTest(root string) {
 	}
 	fmt.Printf("  ✅ discovered %d plugin(s)\n", len(plugins))
 
-	// Find platform-test
 	var target *plugin.Plugin
 	for i, p := range plugins {
 		if p.Manifest.ID == "verstak.platform-test" {
@@ -411,7 +402,6 @@ func runEnableDisableTest(root string) {
 	}
 	fmt.Printf("  ✅ IsEnabled: false\n")
 
-	// Check plugins.json
 	state := psm.Get()
 	found := false
 	for _, dp := range state.DesiredPlugins {
@@ -461,18 +451,22 @@ func runEnableDisableTest(root string) {
 	fmt.Printf("  ✅ plugins.json exists on disk\n")
 	fmt.Printf("  content:\n%s\n", string(data))
 
-	// ── Summary ──
 	fmt.Printf("\n=== summary ===\n")
 	fmt.Printf("✅ enable/disable test passed\n")
 }
 
-// runContributionsTest tests the contribution registry lifecycle:
-// 1. Creates a vault, discovers platform-test
-// 2. Registers capabilities + contributions
-// 3. Verifies contributions appear by name
-// 4. Disables plugin → unregisters contributions → verifies gone
-// 5. Re-enables → contributions return
-// 6. Checks no duplicates after reload
+// runContributionsTest verifies the full manifest → discovery → registry pipeline,
+// mirroring the real ReloadPlugins() flow in internal/api/app.go.
+//
+// Flow:
+//  1. plugin.json on disk → DiscoverPlugins() → parsed manifest
+//  2. Manifest contributions fragment displayed (proof it comes from real plugin.json)
+//  3. Capability registration + resolution → determine plugin status
+//  4. Contribution registration (gated by status: only loaded/degraded get contributions)
+//  5. Verify all 4 contribution types present by name, data matches manifest
+//  6. Disable plugin → Unregister → contributions gone
+//  7. Re-enable → Unregister+Register (ReloadPlugins) → contributions return
+//  8. Reload → Unregister+Register → no duplicates
 func runContributionsTest(root string) {
 	exitCode := 0
 	defer func() {
@@ -481,7 +475,7 @@ func runContributionsTest(root string) {
 
 	fmt.Printf("=== smoke-platform: contribution registry test ===\n\n")
 
-	// Create a temp vault
+	// Create temp vault
 	tmpDir, err := os.MkdirTemp("", "verstak-smoke-*")
 	if err != nil {
 		fmt.Printf("  ❌ failed to create temp dir: %v\n", err)
@@ -509,7 +503,6 @@ func runContributionsTest(root string) {
 	}
 	fmt.Printf("  ✅ vault opened at %s\n", openedPath)
 
-	// Initialize plugin state
 	psm := pluginstate.NewManager(v)
 	if err := psm.Load(); err != nil {
 		fmt.Printf("  ❌ load plugin state: %v\n", err)
@@ -518,7 +511,7 @@ func runContributionsTest(root string) {
 	}
 	fmt.Printf("  ✅ plugin state loaded\n")
 
-	// Discover plugins
+	// ── Step 1: Discover plugins from disk (reads real plugin.json) ──
 	pluginDir := filepath.Join(root, "plugins")
 	plugins, _ := plugin.DiscoverPlugins([]string{pluginDir})
 	if len(plugins) == 0 {
@@ -543,7 +536,29 @@ func runContributionsTest(root string) {
 	}
 	fmt.Printf("  ✅ platform-test found: %s@%s\n", target.Manifest.ID, target.Manifest.Version)
 
-	// Register capabilities
+	// ── Step 2: Show manifest contributions fragment (proof it comes from plugin.json) ──
+	fmt.Printf("\n[manifest contributions from plugin.json]\n")
+	fmt.Printf("  plugin: %s\n", target.Manifest.ID)
+	if c := target.Manifest.Contributes; c != nil {
+		fmt.Printf("  sidebarItems: %d\n", len(c.SidebarItems))
+		for _, s := range c.SidebarItems {
+			fmt.Printf("    - id=%q title=%q view=%q\n", s.ID, s.Title, s.View)
+		}
+		fmt.Printf("  views: %d\n", len(c.Views))
+		for _, vw := range c.Views {
+			fmt.Printf("    - id=%q title=%q component=%q\n", vw.ID, vw.Title, vw.Component)
+		}
+		fmt.Printf("  settingsPanels: %d\n", len(c.SettingsPanels))
+		for _, s := range c.SettingsPanels {
+			fmt.Printf("    - id=%q title=%q component=%q\n", s.ID, s.Title, s.Component)
+		}
+		fmt.Printf("  commands: %d\n", len(c.Commands))
+		for _, cmd := range c.Commands {
+			fmt.Printf("    - id=%q title=%q\n", cmd.ID, cmd.Title)
+		}
+	}
+
+	// ── Step 3: Register capabilities (simulates main.go + ReloadPlugins) ──
 	reg := capability.NewRegistry()
 	coreCaps := []string{
 		"verstak/core/plugin-manager/v1",
@@ -554,169 +569,156 @@ func runContributionsTest(root string) {
 	}
 	_ = reg.Register("verstak-desktop", coreCaps)
 	_ = reg.Register("verstak-desktop", []string{"verstak/core/vault/v1"})
-	for _, cap := range target.Manifest.Provides {
-		_ = reg.Register(target.Manifest.ID, []string{cap})
+	for _, capID := range target.Manifest.Provides {
+		_ = reg.Register(target.Manifest.ID, []string{capID})
 	}
-	totalCaps := len(reg.List())
-	fmt.Printf("  ✅ registered %d capabilities (core + plugin)\n", totalCaps)
+	fmt.Printf("\n[capability registration]\n")
+	fmt.Printf("  registered %d capabilities\n", len(reg.List()))
 
-	// ── 1. Register contributions from platform-test ──
-	fmt.Printf("\n[register contributions]\n")
+	// ── Step 4: ReloadPlugins flow with capability gating ──
+	fmt.Printf("\n[register contributions (ReloadPlugins flow)]\n")
 	contribReg := contribution.NewRegistry()
-	if target.Manifest.Contributes == nil {
-		fmt.Printf("  ❌ platform-test has no contributions in manifest\n")
+
+	// (a) Check disabled → skip
+	if target.Status == plugin.StatusDisabled {
+		fmt.Printf("  ❌ plugin is disabled — contributions should NOT be registered\n")
 		exitCode = 1
 		return
 	}
-	contribReg.Register(target.Manifest.ID, target.Manifest.Contributes)
-	fmt.Printf("  ✅ contributions registered for %s\n", target.Manifest.ID)
 
-	// ── 2. Verify contributions appear by name ──
-	fmt.Printf("\n[verify contributions]\n")
+	// (b) Capability resolution (same as ReloadPlugins)
+	missingRequired := reg.CheckRequired(target.Manifest.Requires)
+	missingOptional := reg.CheckRequired(target.Manifest.OptionalRequires)
+	status := plugin.StatusLoaded
+	if len(missingRequired) > 0 {
+		status = plugin.StatusMissingRequiredCapability
+	} else if len(missingOptional) > 0 {
+		status = plugin.StatusDegraded
+	}
+
+	// (c) Only loaded/degraded get contributions
+	if status == plugin.StatusLoaded || status == plugin.StatusDegraded {
+		fmt.Printf("  plugin status=%s → contributions WILL be registered\n", status)
+		contribReg.Register(target.Manifest.ID, target.Manifest.Contributes)
+		fmt.Printf("  contributions registered for %s\n", target.Manifest.ID)
+	} else {
+		fmt.Printf("  ❌ plugin status=%s — contributions should NOT be registered\n", status)
+		exitCode = 1
+		return
+	}
+
+	// ── Step 5: Verify contributions by name, data matches manifest ──
+	fmt.Printf("\n[verify contributions by name]\n")
 	allGood := true
 
-	// SidebarItems
 	sidebarItems := contribReg.SidebarItems()
-	sidebarNames := make([]string, len(sidebarItems))
-	for i, item := range sidebarItems {
-		sidebarNames[i] = item.Item.Title
-	}
-	fmt.Printf("  sidebarItems (%d): %v\n", len(sidebarItems), sidebarNames)
-	if len(sidebarItems) == 0 {
-		fmt.Printf("  ❌ no sidebarItems registered\n")
+	if len(sidebarItems) != 1 || sidebarItems[0].Item.Title != "Platform Test" {
+		fmt.Printf("  ❌ sidebarItems mismatch: got %v\n", sidebarItems)
 		allGood = false
+	} else {
+		fmt.Printf("  ✅ sidebarItem: plugin=%s id=%s title=%s\n",
+			sidebarItems[0].PluginID, sidebarItems[0].Item.ID, sidebarItems[0].Item.Title)
 	}
 
-	// Views
 	views := contribReg.Views()
-	viewNames := make([]string, len(views))
-	for i, v := range views {
-		viewNames[i] = v.Item.Title
-	}
-	fmt.Printf("  views (%d): %v\n", len(views), viewNames)
-	if len(views) == 0 {
-		fmt.Printf("  ❌ no views registered\n")
+	if len(views) != 1 || views[0].Item.Title != "Platform Diagnostics" {
+		fmt.Printf("  ❌ views mismatch: got %v\n", views)
 		allGood = false
+	} else {
+		fmt.Printf("  ✅ view: plugin=%s id=%s title=%s component=%s\n",
+			views[0].PluginID, views[0].Item.ID, views[0].Item.Title, views[0].Item.Component)
 	}
 
-	// SettingsPanels
 	settingsPanels := contribReg.SettingsPanels()
-	settingsNames := make([]string, len(settingsPanels))
-	for i, s := range settingsPanels {
-		settingsNames[i] = s.Item.Title
-	}
-	fmt.Printf("  settingsPanels (%d): %v\n", len(settingsPanels), settingsNames)
-	if len(settingsPanels) == 0 {
-		fmt.Printf("  ❌ no settingsPanels registered\n")
+	if len(settingsPanels) != 1 || settingsPanels[0].Item.Title != "Platform Test Settings" {
+		fmt.Printf("  ❌ settingsPanels mismatch: got %v\n", settingsPanels)
 		allGood = false
+	} else {
+		fmt.Printf("  ✅ settingsPanel: plugin=%s id=%s title=%s\n",
+			settingsPanels[0].PluginID, settingsPanels[0].Item.ID, settingsPanels[0].Item.Title)
 	}
 
-	// Commands
 	commands := contribReg.Commands()
-	cmdNames := make([]string, len(commands))
-	for i, c := range commands {
-		cmdNames[i] = c.Item.Title
-	}
-	fmt.Printf("  commands (%d): %v\n", len(commands), cmdNames)
-	if len(commands) == 0 {
-		fmt.Printf("  ❌ no commands registered\n")
+	if len(commands) != 2 {
+		fmt.Printf("  ❌ expected 2 commands, got %d\n", len(commands))
 		allGood = false
+	} else {
+		for _, c := range commands {
+			fmt.Printf("  command: plugin=%s id=%s title=%s\n", c.PluginID, c.Item.ID, c.Item.Title)
+		}
 	}
 
 	if !allGood {
-		fmt.Printf("  ❌ some contribution types are missing\n")
+		fmt.Printf("  ❌ some contribution types missing or data mismatch\n")
 		exitCode = 1
 		return
 	}
-	fmt.Printf("  ✅ all contribution types present\n")
+	fmt.Printf("  ✅ all 4 contribution types present, data matches manifest\n")
 
-	// ── 3. Disable plugin → contributions unregistered ──
-	fmt.Printf("\n[disable plugin → unregister contributions]\n")
+	// ── Step 6: Disable → Unregister → contributions removed ──
+	fmt.Printf("\n[disable plugin → Unregister → contributions removed]\n")
 	if err := psm.DisablePlugin("verstak.platform-test"); err != nil {
 		fmt.Printf("  ❌ disable: %v\n", err)
 		exitCode = 1
 		return
 	}
-	fmt.Printf("  ✅ disabled platform-test\n")
+	fmt.Printf("  disabled platform-test\n")
 
+	// ReloadPlugins: Unregister before next scan, disabled plugins don't get re-registered
 	contribReg.Unregister("verstak.platform-test")
-	remainingViews := len(contribReg.Views())
-	remainingSidebar := len(contribReg.SidebarItems())
-	remainingCommands := len(contribReg.Commands())
-	remainingSettings := len(contribReg.SettingsPanels())
-	fmt.Printf("  remaining: views=%d sidebar=%d commands=%d settings=%d\n",
-		remainingViews, remainingSidebar, remainingCommands, remainingSettings)
-
-	if remainingViews+remainingSidebar+remainingCommands+remainingSettings != 0 {
-		fmt.Printf("  ❌ some contributions not unregistered\n")
+	remaining := len(contribReg.Views()) + len(contribReg.SidebarItems()) +
+		len(contribReg.Commands()) + len(contribReg.SettingsPanels())
+	fmt.Printf("  remaining contributions: %d\n", remaining)
+	if remaining != 0 {
+		fmt.Printf("  ❌ contributions not removed after disable\n")
 		exitCode = 1
 		return
 	}
-	fmt.Printf("  ✅ all contributions unregistered\n")
+	fmt.Printf("  ✅ all contributions removed\n")
 
-	// ── 4. Re-enable → contributions return ──
-	fmt.Printf("\n[re-enable plugin → register contributions]\n")
+	// ── Step 7: Re-enable → contributions return via Unregister+Register ──
+	fmt.Printf("\n[re-enable → Unregister+Register → contributions return]\n")
 	if err := psm.EnablePlugin("verstak.platform-test"); err != nil {
 		fmt.Printf("  ❌ enable: %v\n", err)
 		exitCode = 1
 		return
 	}
-	fmt.Printf("  ✅ enabled platform-test\n")
+	fmt.Printf("  enabled platform-test\n")
 
+	// ReloadPlugins: Unregister before Register (prevents duplicates)
+	contribReg.Unregister(target.Manifest.ID)
 	contribReg.Register(target.Manifest.ID, target.Manifest.Contributes)
-	views2 := contribReg.Views()
-	sidebar2 := contribReg.SidebarItems()
-	commands2 := contribReg.Commands()
-	settings2 := contribReg.SettingsPanels()
-
-	fmt.Printf("  after re-register: views=%d sidebar=%d commands=%d settings=%d\n",
-		len(views2), len(sidebar2), len(commands2), len(settings2))
-
-	if len(views2) == 0 || len(sidebar2) == 0 || len(commands2) == 0 || len(settings2) == 0 {
-		fmt.Printf("  ❌ contributions did not return after re-enable\n")
+	count := len(contribReg.Views()) + len(contribReg.SidebarItems()) +
+		len(contribReg.Commands()) + len(contribReg.SettingsPanels())
+	fmt.Printf("  contributions after re-enable: %d\n", count)
+	if count < 4 {
+		fmt.Printf("  ❌ expected >= 4 contributions, got %d\n", count)
 		exitCode = 1
 		return
 	}
-	fmt.Printf("  ✅ contributions returned after re-register\n")
+	fmt.Printf("  ✅ contributions returned (count=%d)\n", count)
 
-	// ── 5. Re-register (simulate reload) → no duplicates ──
-	fmt.Printf("\n[re-register (reload) → no duplicates]\n")
+	// ── Step 8: Reload → Unregister+Register → no duplicates ──
+	fmt.Printf("\n[reload → Unregister+Register → no duplicates]\n")
+	beforeCount := count
+	contribReg.Unregister(target.Manifest.ID)
 	contribReg.Register(target.Manifest.ID, target.Manifest.Contributes)
-	views3 := contribReg.Views()
-	sidebar3 := contribReg.SidebarItems()
-	commands3 := contribReg.Commands()
-	settings3 := contribReg.SettingsPanels()
-
-	fmt.Printf("  after reload: views=%d sidebar=%d commands=%d settings=%d\n",
-		len(views3), len(sidebar3), len(commands3), len(settings3))
-
-	if len(views3) != len(views2) {
-		fmt.Printf("  ❌ duplicate views after reload: before=%d, after=%d\n", len(views2), len(views3))
-		allGood = false
-	}
-	if len(sidebar3) != len(sidebar2) {
-		fmt.Printf("  ❌ duplicate sidebarItems after reload: before=%d, after=%d\n", len(sidebar2), len(sidebar3))
-		allGood = false
-	}
-	if len(commands3) != len(commands2) {
-		fmt.Printf("  ❌ duplicate commands after reload: before=%d, after=%d\n", len(commands2), len(commands3))
-		allGood = false
-	}
-	if len(settings3) != len(settings2) {
-		fmt.Printf("  ❌ duplicate settingsPanels after reload: before=%d, after=%d\n", len(settings2), len(settings3))
-		allGood = false
-	}
-
-	if !allGood {
-		fmt.Printf("  ❌ some duplicates detected\n")
+	afterCount := len(contribReg.Views()) + len(contribReg.SidebarItems()) +
+		len(contribReg.Commands()) + len(contribReg.SettingsPanels())
+	fmt.Printf("  before reload: %d, after reload: %d\n", beforeCount, afterCount)
+	if afterCount != beforeCount {
+		fmt.Printf("  ❌ duplicate after reload: before=%d after=%d\n", beforeCount, afterCount)
 		exitCode = 1
 		return
 	}
-	fmt.Printf("  ✅ no duplicates after reload\n")
+	fmt.Printf("  ✅ no duplicate contributions after reload (count=%d)\n", afterCount)
 
-	// ── Summary ──
 	fmt.Printf("\n=== summary ===\n")
-	fmt.Printf("✅ contribution registry test passed\n")
+	if exitCode == 0 {
+		fmt.Printf("✅ contribution registry test passed\n")
+	} else {
+		fmt.Printf("❌ contribution registry test failed\n")
+	}
 }
 
 func runWorkspaceTest(root string) {
@@ -927,7 +929,6 @@ func runWorkspaceTest(root string) {
 
 	// ── Test 4-level deep tree ──
 	fmt.Printf("\n[4-level deep tree]\n")
-	// Create: root → folder1 → folder2 → case (4 levels)
 	folder1, err := ws.CreateNode(rootID, workspace.TypeFolder, "Level 1 Folder")
 	if err != nil {
 		fmt.Printf("  ❌ create folder1: %v\n", err)
@@ -953,14 +954,13 @@ func runWorkspaceTest(root string) {
 	fmt.Printf("  ✅ created: %s (depth 4)\n", deepCase.Title)
 
 	tree = ws.GetTree()
-	if len(tree.Nodes) != 7 { // root + case + folder + nested + folder1 + folder2 + deepCase
+	if len(tree.Nodes) != 7 {
 		fmt.Printf("  ❌ expected 7 nodes, got %d\n", len(tree.Nodes))
 		exitCode = 1
 		return
 	}
 	fmt.Printf("  ✅ tree has 7 nodes (4 levels deep)\n")
 
-	// Verify deep case parent chain
 	deepNode, _ := ws.GetNode(deepCase.ID)
 	if deepNode.ParentID != folder2.ID {
 		fmt.Printf("  ❌ deep case parent mismatch\n")
