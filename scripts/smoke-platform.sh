@@ -73,9 +73,6 @@ if [ "$SMOKE_ED_EXIT" -ne 0 ]; then
   exit 1
 fi
 
-echo ""
-echo "✅ smoke-platform done"
-
 # ── test workspace via Go smoke ──
 echo ""
 echo "[go smoke: workspace]"
@@ -94,6 +91,20 @@ SMOKE_CONT_EXIT=$?
 if [ "$SMOKE_CONT_EXIT" -ne 0 ]; then
   echo "  ❌ smoke-platform: contributions test failed"
   exit 1
+fi
+
+# ── bundle host test (JS smoke for error boundary + real mount proof) ──
+echo ""
+echo "[bundle host test]"
+if ! command -v node &>/dev/null; then
+  echo "  ⚠️  node not found — skipping bundle-host-test"
+else
+  (node "$ROOT/frontend/tests/bundle-host-test.cjs" 2>&1)
+  BUNDLE_HOST_EXIT=$?
+  if [ "$BUNDLE_HOST_EXIT" -ne 0 ]; then
+    echo "  ❌ bundle-host-test failed"
+    exit 1
+  fi
 fi
 
 echo ""
