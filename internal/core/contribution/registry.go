@@ -24,6 +24,73 @@ type Registry struct {
 	statusBarItems    []ContributionStatusBarItem
 }
 
+// ContributionPointType defines the type of contribution point.
+type ContributionPointType string
+
+const (
+	PointViews           ContributionPointType = "views"
+	PointCommands        ContributionPointType = "commands"
+	PointSettingsPanels  ContributionPointType = "settingsPanels"
+	PointSidebarItems    ContributionPointType = "sidebarItems"
+	PointFileActions     ContributionPointType = "fileActions"
+	PointNoteActions     ContributionPointType = "noteActions"
+	PointContextMenus    ContributionPointType = "contextMenus"
+	PointSearchProviders ContributionPointType = "searchProviders"
+	PointActivity        ContributionPointType = "activityProviders"
+	PointStatusBar       ContributionPointType = "statusBarItems"
+)
+
+// ListByPoint returns all contributions for a given point type.
+func (r *Registry) ListByPoint(point ContributionPointType) []interface{} {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	var result []interface{}
+	switch point {
+	case PointViews:
+		for _, v := range r.views {
+			result = append(result, v)
+		}
+	case PointCommands:
+		for _, v := range r.commands {
+			result = append(result, v)
+		}
+	case PointSettingsPanels:
+		for _, v := range r.settingsPanels {
+			result = append(result, v)
+		}
+	case PointSidebarItems:
+		for _, v := range r.sidebarItems {
+			result = append(result, v)
+		}
+	case PointFileActions:
+		for _, v := range r.fileActions {
+			result = append(result, v)
+		}
+	case PointNoteActions:
+		for _, v := range r.noteActions {
+			result = append(result, v)
+		}
+	case PointContextMenus:
+		for _, v := range r.contextMenus {
+			result = append(result, v)
+		}
+	case PointSearchProviders:
+		for _, v := range r.searchProviders {
+			result = append(result, v)
+		}
+	case PointActivity:
+		for _, v := range r.activityProviders {
+			result = append(result, v)
+		}
+	case PointStatusBar:
+		for _, v := range r.statusBarItems {
+			result = append(result, v)
+		}
+	}
+	return result
+}
+
 type ContributionView struct {
 	PluginID string                  `json:"pluginId"`
 	Item     plugin.ContributionView `json:"item"`
@@ -75,9 +142,23 @@ func NewRegistry() *Registry {
 }
 
 // Register adds all contributions from a plugin.
+// If the plugin already has registered contributions they are replaced
+// (supports reload without duplicates).
 func (r *Registry) Register(pluginID string, c *plugin.Contributions) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+
+	// Remove existing contributions for this plugin to prevent duplicates on reload
+	r.views = removeViews(r.views, pluginID)
+	r.commands = removeCommands(r.commands, pluginID)
+	r.settingsPanels = removeSettingsPanels(r.settingsPanels, pluginID)
+	r.sidebarItems = removeSidebarItems(r.sidebarItems, pluginID)
+	r.fileActions = removeActions(r.fileActions, pluginID)
+	r.noteActions = removeActions(r.noteActions, pluginID)
+	r.contextMenus = removeContextMenus(r.contextMenus, pluginID)
+	r.searchProviders = removeSearchProviders(r.searchProviders, pluginID)
+	r.activityProviders = removeActivityProviders(r.activityProviders, pluginID)
+	r.statusBarItems = removeStatusBarItems(r.statusBarItems, pluginID)
 
 	for _, item := range c.Views {
 		r.views = append(r.views, ContributionView{PluginID: pluginID, Item: item})

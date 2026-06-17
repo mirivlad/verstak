@@ -4,13 +4,13 @@
   export let permissions = [];
   export let contributions = {};
   export let vaultOpen = false;
-  export let onSettings = () => {};
+  export let settingsPanels = [];
   export let onEnable = () => {};
   export let onDisable = () => {};
 
   $: m = p.manifest || {};
   $: pluginId = m.id || 'unknown';
-  $: hasSettingsPanel = (contributions.settingsPanels || []).some(sp => sp.pluginId === pluginId);
+  $: hasSettingsPanel = settingsPanels.length > 0;
   $: hasUIPermission = (m.permissions || []).includes('ui.register');
   $: hasStoragePermission = (m.permissions || []).includes('storage.namespace');
   $: hasCommandsPermission = (m.permissions || []).includes('commands.register');
@@ -174,7 +174,7 @@
   <!-- Actions -->
   <div class="card-actions">
     {#if hasSettingsPanel}
-      <button class="btn-settings" on:click={() => onSettings(m.id)} type="button">
+      <button class="btn-settings" on:click={() => window.dispatchEvent(new CustomEvent('verstak:open-settings', { detail: { pluginId: m.id, panelId: settingsPanels[0]?.id } }))} type="button" disabled={isDisabled || p.status === 'failed'}>
         ⚙ Settings
       </button>
     {/if}

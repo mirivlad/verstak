@@ -2,70 +2,80 @@
   import { onMount } from 'svelte';
   import * as App from '../../../wailsjs/go/api/App';
 
+  export let activeView = null;
+  export let activeViewPluginId = null;
+
   let views = [];
-  let activeView = '';
-  let pluginStates = {};
   let plugins = [];
+  let renderError = null;
 
   onMount(async () => {
     try {
       const [contribs, pluginList] = await Promise.all([
-        App.GetContributions(),
-        App.GetPlugins(),
+        App.GetContributions().catch(() => ({ views: [] })),
+        App.GetPlugins().catch(() => []),
       ]);
       views = contribs.views || [];
       plugins = pluginList;
-      for (const p of pluginList) {
-        pluginStates[p.manifest.id] = p.status;
-      }
     } catch (e) {
       console.error('[ViewContainer] load error:', e);
     }
-
-    window.addEventListener('verstak:open-view', (e) => {
-      activeView = e.detail.viewId;
-    });
   });
 
-  function getViewStatus(view) {
-    const status = pluginStates[view.pluginId];
-    if (status === 'failed' || status === 'incompatible') return 'error';
-    if (status === 'degraded') return 'degraded';
-    return 'ok';
+  $: currentView = views.find(v => v.id === activeView && v.pluginId === activeViewPluginId);
+  $: currentPlugin = currentView
+    ? plugins.find(p => p.manifest?.id === currentView.pluginId)
+    : null;
+  $: pluginStatus = currentPlugin ? currentPlugin.status : 'unknown';
+
+  // Reset render error when view changes
+  $: if (activeView) {
+    renderError = null;
   }
 </script>
 
-<div class="view-container">
-  {#if activeView}
-    {#each views.filter(v => v.item.id === activeView) as view}
-      <div class="view" class:degraded={getViewStatus(view) === 'degraded'}>
+{#key `${activeViewPluginId}:${activeView}`}
+  {#if renderError}
+    <div class="view-container">
+      <div class="error-boundary">
+        <div class="error-fallback">
+          <span class="error-icon">⚠</span>
+          <p class="error-title">Plugin UI failed</p>
+          <p class="error-text">{renderError}</p>
+        </div>
+      </div>
+    </div>
+  {:else if currentView}
+    <div class="view-container">
+      <div class="view" class:degraded={pluginStatus === 'degraded'}>
         <div class="view-header">
-          <span class="view-icon">{view.item.icon || '📦'}</span>
-          <h2>{view.item.title}</h2>
-          {#if getViewStatus(view) === 'degraded'}
-            <span class="badge degraded">degraded</span>
-          {/if}
+          <span class="view-icon">{currentView.icon || '📦'}</span>
+          <h2>{currentView.title}</h2>
         </div>
         <div class="view-content">
-          <div class="plugin-view-host" data-view-id={view.item.id} data-component={view.item.component}>
-            <p class="placeholder">
-              Plugin view: <strong>{view.item.component}</strong>
-              <br />
-              <span class="sub">from {view.pluginId}</span>
-            </p>
+          <div class="plugin-view-host" data-view-id={currentView.id} data-component={currentView.component}>
+            <div class="placeholder">
+              <p class="placeholder-label">Plugin View Host</p>
+              <p class="placeholder-info"><span class="placeholder-key">Plugin:</span> <strong>{currentView.pluginId}</strong></p>
+              <p class="placeholder-info"><span class="placeholder-key">View ID:</span> <code>{currentView.id}</code></p>
+              <p class="placeholder-info"><span class="placeholder-key">Component:</span> <code>{currentView.component}</code></p>
+              <p class="placeholder-badge">frontend bundle host not implemented yet</p>
+            </div>
           </div>
         </div>
       </div>
-    {:else}
-      <div class="empty">View "{activeView}" not found in contributions</div>
-    {/each}
+    </div>
+  {:else if activeView}
+    <div class="view-container empty">
+      <p>View "{activeView}" not found in contributions</p>
+    </div>
   {:else}
-    <div class="empty">
-      <p>Select an item from the sidebar</p>
+    <div class="view-container empty">
+      <p>Select a plugin view from the sidebar</p>
       <p class="sub">Plugin views will appear here</p>
     </div>
   {/if}
-</div>
+{/key}
 
 <style>
   .view-container {
@@ -115,8 +125,68 @@
     border: 1px dashed #333;
     border-radius: 8px;
   }
-  .placeholder strong { color: #4ecca3; }
-  .placeholder .sub { font-size: 0.85rem; color: #555; }
+  .placeholder-label {
+    font-size: 1rem;
+    color: #a0a0b8;
+    font-weight: 600;
+    margin-bottom: 1rem;
+    font-style: normal;
+  }
+  .placeholder-info {
+    font-size: 0.85rem;
+    color: #666;
+    margin: 0.3rem 0;
+    font-style: normal;
+  }
+  .placeholder-key {
+    color: #a0a0b8;
+  }
+  .placeholder-info strong { color: #4ecca3; }
+  .placeholder-info code {
+    color: #e0e0f0;
+    background: #16213e;
+    padding: 0.1rem 0.3rem;
+    border-radius: 3px;
+    font-size: 0.8rem;
+  }
+  .placeholder-badge {
+    display: inline-block;
+    margin-top: 1rem;
+    padding: 0.25rem 0.75rem;
+    background: #533483;
+    color: #e0e0f0;
+    border-radius: 12px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    font-style: normal;
+  }
+  .error-boundary {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+  }
+  .error-fallback {
+    text-align: center;
+    padding: 2rem;
+  }
+  .error-icon {
+    font-size: 2rem;
+    color: #e94560;
+  }
+  .error-title {
+    color: #e94560;
+    font-size: 1.1rem;
+    font-weight: 600;
+    margin: 0.5rem 0;
+  }
+  .error-text {
+    color: #a0a0b8;
+    font-size: 0.85rem;
+    font-family: monospace;
+    margin-top: 0.5rem;
+  }
   .empty {
     display: flex;
     flex-direction: column;
@@ -127,11 +197,4 @@
     font-size: 1rem;
   }
   .empty .sub { font-size: 0.85rem; color: #444; margin-top: 0.5rem; }
-  .badge {
-    padding: 0.15rem 0.5rem;
-    border-radius: 3px;
-    font-size: 0.75rem;
-    font-weight: 600;
-  }
-  .badge.degraded { background: #ffc857; color: #1a1a2e; }
 </style>

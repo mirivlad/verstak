@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 
 	"github.com/verstak/verstak-desktop/internal/core/capability"
+	"github.com/verstak/verstak-desktop/internal/core/contribution"
 	"github.com/verstak/verstak-desktop/internal/core/plugin"
 	"github.com/verstak/verstak-desktop/internal/core/pluginstate"
 	"github.com/verstak/verstak-desktop/internal/core/vault"
@@ -18,6 +19,7 @@ import (
 func main() {
 	testEnableDisable := flag.Bool("test-enable-disable", false, "Test enable/disable lifecycle")
 	testWorkspace := flag.Bool("test-workspace", false, "Test workspace/cases lifecycle")
+	testContributions := flag.Bool("test-contributions", false, "Test contribution registry lifecycle")
 	flag.Parse()
 	exitCode := 0
 	defer func() {
@@ -29,6 +31,11 @@ func main() {
 
 	if *testWorkspace {
 		runWorkspaceTest(root)
+		return
+	}
+
+	if *testContributions {
+		runContributionsTest(root)
 		return
 	}
 
@@ -459,7 +466,259 @@ func runEnableDisableTest(root string) {
 	fmt.Printf("✅ enable/disable test passed\n")
 }
 
-// runWorkspaceTest tests the workspace/cases lifecycle.
+// runContributionsTest tests the contribution registry lifecycle:
+// 1. Creates a vault, discovers platform-test
+// 2. Registers capabilities + contributions
+// 3. Verifies contributions appear by name
+// 4. Disables plugin → unregisters contributions → verifies gone
+// 5. Re-enables → contributions return
+// 6. Checks no duplicates after reload
+func runContributionsTest(root string) {
+	exitCode := 0
+	defer func() {
+		os.Exit(exitCode)
+	}()
+
+	fmt.Printf("=== smoke-platform: contribution registry test ===\n\n")
+
+	// Create a temp vault
+	tmpDir, err := os.MkdirTemp("", "verstak-smoke-*")
+	if err != nil {
+		fmt.Printf("  ❌ failed to create temp dir: %v\n", err)
+		exitCode = 1
+		return
+	}
+	defer os.RemoveAll(tmpDir)
+
+	vaultPath := filepath.Join(tmpDir, "testvault")
+	fmt.Printf("  vault path: %s\n", vaultPath)
+
+	v := vault.NewVault(nil)
+	if err := v.CreateVault(vaultPath); err != nil {
+		fmt.Printf("  ❌ create vault: %v\n", err)
+		exitCode = 1
+		return
+	}
+	fmt.Printf("  ✅ vault created\n")
+
+	openedPath := v.GetVaultPath()
+	if err := v.OpenVault(openedPath); err != nil {
+		fmt.Printf("  ❌ open vault: %v\n", err)
+		exitCode = 1
+		return
+	}
+	fmt.Printf("  ✅ vault opened at %s\n", openedPath)
+
+	// Initialize plugin state
+	psm := pluginstate.NewManager(v)
+	if err := psm.Load(); err != nil {
+		fmt.Printf("  ❌ load plugin state: %v\n", err)
+		exitCode = 1
+		return
+	}
+	fmt.Printf("  ✅ plugin state loaded\n")
+
+	// Discover plugins
+	pluginDir := filepath.Join(root, "plugins")
+	plugins, _ := plugin.DiscoverPlugins([]string{pluginDir})
+	if len(plugins) == 0 {
+		fmt.Printf("  ❌ no plugins discovered\n")
+		exitCode = 1
+		return
+	}
+	fmt.Printf("  ✅ discovered %d plugin(s)\n", len(plugins))
+
+	// Find platform-test
+	var target *plugin.Plugin
+	for i, p := range plugins {
+		if p.Manifest.ID == "verstak.platform-test" {
+			target = &plugins[i]
+			break
+		}
+	}
+	if target == nil {
+		fmt.Printf("  ❌ platform-test not found\n")
+		exitCode = 1
+		return
+	}
+	fmt.Printf("  ✅ platform-test found: %s@%s\n", target.Manifest.ID, target.Manifest.Version)
+
+	// Register capabilities
+	reg := capability.NewRegistry()
+	coreCaps := []string{
+		"verstak/core/plugin-manager/v1",
+		"verstak/core/capability-registry/v1",
+		"verstak/core/contribution-registry/v1",
+		"verstak/core/permissions/v1",
+		"verstak/core/events/v1",
+	}
+	_ = reg.Register("verstak-desktop", coreCaps)
+	_ = reg.Register("verstak-desktop", []string{"verstak/core/vault/v1"})
+	for _, cap := range target.Manifest.Provides {
+		_ = reg.Register(target.Manifest.ID, []string{cap})
+	}
+	totalCaps := len(reg.List())
+	fmt.Printf("  ✅ registered %d capabilities (core + plugin)\n", totalCaps)
+
+	// ── 1. Register contributions from platform-test ──
+	fmt.Printf("\n[register contributions]\n")
+	contribReg := contribution.NewRegistry()
+	if target.Manifest.Contributes == nil {
+		fmt.Printf("  ❌ platform-test has no contributions in manifest\n")
+		exitCode = 1
+		return
+	}
+	contribReg.Register(target.Manifest.ID, target.Manifest.Contributes)
+	fmt.Printf("  ✅ contributions registered for %s\n", target.Manifest.ID)
+
+	// ── 2. Verify contributions appear by name ──
+	fmt.Printf("\n[verify contributions]\n")
+	allGood := true
+
+	// SidebarItems
+	sidebarItems := contribReg.SidebarItems()
+	sidebarNames := make([]string, len(sidebarItems))
+	for i, item := range sidebarItems {
+		sidebarNames[i] = item.Item.Title
+	}
+	fmt.Printf("  sidebarItems (%d): %v\n", len(sidebarItems), sidebarNames)
+	if len(sidebarItems) == 0 {
+		fmt.Printf("  ❌ no sidebarItems registered\n")
+		allGood = false
+	}
+
+	// Views
+	views := contribReg.Views()
+	viewNames := make([]string, len(views))
+	for i, v := range views {
+		viewNames[i] = v.Item.Title
+	}
+	fmt.Printf("  views (%d): %v\n", len(views), viewNames)
+	if len(views) == 0 {
+		fmt.Printf("  ❌ no views registered\n")
+		allGood = false
+	}
+
+	// SettingsPanels
+	settingsPanels := contribReg.SettingsPanels()
+	settingsNames := make([]string, len(settingsPanels))
+	for i, s := range settingsPanels {
+		settingsNames[i] = s.Item.Title
+	}
+	fmt.Printf("  settingsPanels (%d): %v\n", len(settingsPanels), settingsNames)
+	if len(settingsPanels) == 0 {
+		fmt.Printf("  ❌ no settingsPanels registered\n")
+		allGood = false
+	}
+
+	// Commands
+	commands := contribReg.Commands()
+	cmdNames := make([]string, len(commands))
+	for i, c := range commands {
+		cmdNames[i] = c.Item.Title
+	}
+	fmt.Printf("  commands (%d): %v\n", len(commands), cmdNames)
+	if len(commands) == 0 {
+		fmt.Printf("  ❌ no commands registered\n")
+		allGood = false
+	}
+
+	if !allGood {
+		fmt.Printf("  ❌ some contribution types are missing\n")
+		exitCode = 1
+		return
+	}
+	fmt.Printf("  ✅ all contribution types present\n")
+
+	// ── 3. Disable plugin → contributions unregistered ──
+	fmt.Printf("\n[disable plugin → unregister contributions]\n")
+	if err := psm.DisablePlugin("verstak.platform-test"); err != nil {
+		fmt.Printf("  ❌ disable: %v\n", err)
+		exitCode = 1
+		return
+	}
+	fmt.Printf("  ✅ disabled platform-test\n")
+
+	contribReg.Unregister("verstak.platform-test")
+	remainingViews := len(contribReg.Views())
+	remainingSidebar := len(contribReg.SidebarItems())
+	remainingCommands := len(contribReg.Commands())
+	remainingSettings := len(contribReg.SettingsPanels())
+	fmt.Printf("  remaining: views=%d sidebar=%d commands=%d settings=%d\n",
+		remainingViews, remainingSidebar, remainingCommands, remainingSettings)
+
+	if remainingViews+remainingSidebar+remainingCommands+remainingSettings != 0 {
+		fmt.Printf("  ❌ some contributions not unregistered\n")
+		exitCode = 1
+		return
+	}
+	fmt.Printf("  ✅ all contributions unregistered\n")
+
+	// ── 4. Re-enable → contributions return ──
+	fmt.Printf("\n[re-enable plugin → register contributions]\n")
+	if err := psm.EnablePlugin("verstak.platform-test"); err != nil {
+		fmt.Printf("  ❌ enable: %v\n", err)
+		exitCode = 1
+		return
+	}
+	fmt.Printf("  ✅ enabled platform-test\n")
+
+	contribReg.Register(target.Manifest.ID, target.Manifest.Contributes)
+	views2 := contribReg.Views()
+	sidebar2 := contribReg.SidebarItems()
+	commands2 := contribReg.Commands()
+	settings2 := contribReg.SettingsPanels()
+
+	fmt.Printf("  after re-register: views=%d sidebar=%d commands=%d settings=%d\n",
+		len(views2), len(sidebar2), len(commands2), len(settings2))
+
+	if len(views2) == 0 || len(sidebar2) == 0 || len(commands2) == 0 || len(settings2) == 0 {
+		fmt.Printf("  ❌ contributions did not return after re-enable\n")
+		exitCode = 1
+		return
+	}
+	fmt.Printf("  ✅ contributions returned after re-register\n")
+
+	// ── 5. Re-register (simulate reload) → no duplicates ──
+	fmt.Printf("\n[re-register (reload) → no duplicates]\n")
+	contribReg.Register(target.Manifest.ID, target.Manifest.Contributes)
+	views3 := contribReg.Views()
+	sidebar3 := contribReg.SidebarItems()
+	commands3 := contribReg.Commands()
+	settings3 := contribReg.SettingsPanels()
+
+	fmt.Printf("  after reload: views=%d sidebar=%d commands=%d settings=%d\n",
+		len(views3), len(sidebar3), len(commands3), len(settings3))
+
+	if len(views3) != len(views2) {
+		fmt.Printf("  ❌ duplicate views after reload: before=%d, after=%d\n", len(views2), len(views3))
+		allGood = false
+	}
+	if len(sidebar3) != len(sidebar2) {
+		fmt.Printf("  ❌ duplicate sidebarItems after reload: before=%d, after=%d\n", len(sidebar2), len(sidebar3))
+		allGood = false
+	}
+	if len(commands3) != len(commands2) {
+		fmt.Printf("  ❌ duplicate commands after reload: before=%d, after=%d\n", len(commands2), len(commands3))
+		allGood = false
+	}
+	if len(settings3) != len(settings2) {
+		fmt.Printf("  ❌ duplicate settingsPanels after reload: before=%d, after=%d\n", len(settings2), len(settings3))
+		allGood = false
+	}
+
+	if !allGood {
+		fmt.Printf("  ❌ some duplicates detected\n")
+		exitCode = 1
+		return
+	}
+	fmt.Printf("  ✅ no duplicates after reload\n")
+
+	// ── Summary ──
+	fmt.Printf("\n=== summary ===\n")
+	fmt.Printf("✅ contribution registry test passed\n")
+}
+
 func runWorkspaceTest(root string) {
 	exitCode := 0
 	defer func() {

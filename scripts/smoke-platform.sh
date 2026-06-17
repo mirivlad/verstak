@@ -86,5 +86,15 @@ if [ "$SMOKE_WS_EXIT" -ne 0 ]; then
   exit 1
 fi
 
+# ── test contributions via Go smoke ──
+echo ""
+echo "[go smoke: contributions]"
+(cd "$ROOT" && go run -mod=mod ./cmd/smoke-platform/ -test-contributions 2>&1)
+SMOKE_CONT_EXIT=$?
+if [ "$SMOKE_CONT_EXIT" -ne 0 ]; then
+  echo "  ❌ smoke-platform: contributions test failed"
+  exit 1
+fi
+
 echo ""
 echo "✅ smoke-platform all tests done"

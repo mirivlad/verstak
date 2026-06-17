@@ -10,6 +10,11 @@
   let needsVaultSelection = false;
   let loading = true;
 
+  let activeView = null;
+  let activeViewPluginId = '';
+  let activeSettingsPluginId = '';
+  let activeSettingsPanelId = '';
+
   async function checkVault() {
     loading = true;
     try {
@@ -37,10 +42,30 @@
     currentView = e.detail.viewId;
   }
 
-  // Listen for vault-opened event from VaultSelection
+  function onOpenView(e) {
+    activeView = e.detail.viewId;
+    activeViewPluginId = e.detail.pluginId || '';
+    currentView = 'plugin-view';
+  }
+
+  function onOpenSettings(e) {
+    activeSettingsPluginId = e.detail.pluginId;
+    activeSettingsPanelId = e.detail.panelId || '';
+    currentView = 'plugin-manager';
+  }
+
+  function onCloseSettings() {
+    activeSettingsPluginId = '';
+    activeSettingsPanelId = '';
+  }
+
+  // Listen for events
   if (typeof window !== 'undefined') {
     window.addEventListener('verstak:vault-opened', onVaultOpened);
     window.addEventListener('verstak:nav', onNav);
+    window.addEventListener('verstak:open-view', onOpenView);
+    window.addEventListener('verstak:open-settings', onOpenSettings);
+    window.addEventListener('verstak:close-settings', onCloseSettings);
   }
 
   checkVault();
@@ -58,9 +83,9 @@
 
     <section class="content">
       {#if currentView === 'plugin-manager'}
-        <PluginManager />
+        <PluginManager {activeSettingsPluginId} {activeSettingsPanelId} />
       {:else}
-        <ViewContainer />
+        <ViewContainer {activeView} {activeViewPluginId} />
       {/if}
     </section>
   </main>

@@ -93,17 +93,88 @@ func (a *App) GetPermissions() []permissions.Entry {
 	return entries
 }
 
-// GetContributions returns all registered contributions.
-func (a *App) GetContributions() ContributionSummary {
-	return ContributionSummary{
-		Views:           a.contribRegistry.Views(),
-		Commands:        a.contribRegistry.Commands(),
-		SettingsPanels:  a.contribRegistry.SettingsPanels(),
-		SidebarItems:    a.contribRegistry.SidebarItems(),
-		FileActions:     a.contribRegistry.FileActions(),
-		NoteActions:     a.contribRegistry.NoteActions(),
-		SearchProviders: a.contribRegistry.SearchProviders(),
+// ─── Flat contribution types for frontend ─────────────────
+
+// FlatSidebarItem is a flattened sidebar item for the frontend.
+type FlatSidebarItem struct {
+	PluginID string `json:"pluginId"`
+	ID       string `json:"id"`
+	Title    string `json:"title"`
+	Icon     string `json:"icon,omitempty"`
+	View     string `json:"view"`
+	Position int    `json:"position,omitempty"`
+}
+
+// FlatView is a flattened view contribution for the frontend.
+type FlatView struct {
+	PluginID  string `json:"pluginId"`
+	ID        string `json:"id"`
+	Title     string `json:"title"`
+	Icon      string `json:"icon,omitempty"`
+	Component string `json:"component"`
+}
+
+// FlatSettingsPanel is a flattened settings panel for the frontend.
+type FlatSettingsPanel struct {
+	PluginID  string `json:"pluginId"`
+	ID        string `json:"id"`
+	Title     string `json:"title"`
+	Icon      string `json:"icon,omitempty"`
+	Component string `json:"component"`
+}
+
+// FlatCommand is a flattened command contribution for the frontend.
+type FlatCommand struct {
+	PluginID string `json:"pluginId"`
+	ID       string `json:"id"`
+	Title    string `json:"title"`
+	Icon     string `json:"icon,omitempty"`
+	Handler  string `json:"handler,omitempty"`
+}
+
+// ContributionSummary aggregates all contribution types for the frontend.
+type ContributionSummary struct {
+	Views          []FlatView          `json:"views"`
+	Commands       []FlatCommand       `json:"commands"`
+	SettingsPanels []FlatSettingsPanel `json:"settingsPanels"`
+	SidebarItems   []FlatSidebarItem   `json:"sidebarItems"`
+}
+
+// buildContributionSummary creates a ContributionSummary from the registry.
+func buildContributionSummary(r *contribution.Registry) ContributionSummary {
+	if r == nil {
+		return ContributionSummary{}
 	}
+	regViews := r.Views()
+	regCmds := r.Commands()
+	regPanels := r.SettingsPanels()
+	regSidebar := r.SidebarItems()
+
+	views := make([]FlatView, len(regViews))
+	for i, v := range regViews {
+		views[i] = FlatView{PluginID: v.PluginID, ID: v.Item.ID, Title: v.Item.Title, Icon: v.Item.Icon, Component: v.Item.Component}
+	}
+	cmds := make([]FlatCommand, len(regCmds))
+	for i, v := range regCmds {
+		cmds[i] = FlatCommand{PluginID: v.PluginID, ID: v.Item.ID, Title: v.Item.Title, Icon: v.Item.Icon, Handler: v.Item.Handler}
+	}
+	panels := make([]FlatSettingsPanel, len(regPanels))
+	for i, v := range regPanels {
+		panels[i] = FlatSettingsPanel{PluginID: v.PluginID, ID: v.Item.ID, Title: v.Item.Title, Icon: v.Item.Icon, Component: v.Item.Component}
+	}
+	sidebar := make([]FlatSidebarItem, len(regSidebar))
+	for i, v := range regSidebar {
+		sidebar[i] = FlatSidebarItem{PluginID: v.PluginID, ID: v.Item.ID, Title: v.Item.Title, Icon: v.Item.Icon, View: v.Item.View, Position: v.Item.Position}
+	}
+	return ContributionSummary{Views: views, Commands: cmds, SettingsPanels: panels, SidebarItems: sidebar}
+}
+
+// GetContributions returns all registered contributions flattened for the frontend.
+func (a *App) GetContributions() ContributionSummary {
+	if a.contribRegistry == nil {
+		return ContributionSummary{}
+	}
+	return buildContributionSummary(a.contribRegistry)
 }
 
 // expandPath resolves "~" to the user's home directory.
@@ -203,7 +274,9 @@ func (a *App) ReloadPlugins() (int, string) {
 			p.Status = plugin.StatusLoaded
 		}
 
+		// Register contributions (unregister first to prevent duplicates)
 		if p.Manifest.Contributes != nil {
+			a.contribRegistry.Unregister(p.Manifest.ID)
 			a.contribRegistry.Register(p.Manifest.ID, p.Manifest.Contributes)
 		}
 
@@ -637,15 +710,4 @@ func (a *App) SelectVaultForOpen() string {
 		return ""
 	}
 	return selected
-}
-
-// ContributionSummary aggregates all contribution types for the frontend.
-type ContributionSummary struct {
-	Views           []contribution.ContributionView           `json:"views"`
-	Commands        []contribution.ContributionCommand        `json:"commands"`
-	SettingsPanels  []contribution.ContributionSettingsPanel  `json:"settingsPanels"`
-	SidebarItems    []contribution.ContributionSidebarItem    `json:"sidebarItems"`
-	FileActions     []contribution.ContributionAction         `json:"fileActions"`
-	NoteActions     []contribution.ContributionAction         `json:"noteActions"`
-	SearchProviders []contribution.ContributionSearchProvider `json:"searchProviders"`
 }

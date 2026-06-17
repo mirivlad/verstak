@@ -2,7 +2,9 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+VERSTAK_ROOT="$(cd "$ROOT/.." && pwd)"
 FAILED=0
+GLOBAL_ERRORS=""
 
 report() {
   if [ "$2" -eq 0 ]; then
@@ -11,6 +13,71 @@ report() {
     echo "  ❌ $1"
     FAILED=1
   fi
+}
+
+# ── Global update: pull all repos, build official plugins ─────────────────
+global_update() {
+  local repos=("verstak-desktop" "verstak-sdk" "verstak-official-plugins" "verstak-sync-server" "verstak-browser-extension" "verstak-docs")
+  local errors=""
+
+  echo ""
+  echo "=== global update: pull all repos ==="
+  for repo in "${repos[@]}"; do
+    local repo_path="$VERSTAK_ROOT/$repo"
+    if [ ! -d "$repo_path" ]; then
+      errors="$errors  ⚠️  $repo: directory not found at $repo_path\n"
+      continue
+    fi
+    echo "[$repo]"
+    (cd "$repo_path" && git pull --ff-only 2>&1) && echo "  ✅ pulled" || {
+      errors="$errors  ❌ $repo: git pull failed\n"
+      echo "  ❌ git pull failed"
+    }
+  done
+
+  # Build official plugins
+  local official_plugins="$VERSTAK_ROOT/verstak-official-plugins"
+  if [ -d "$official_plugins" ]; then
+    echo ""
+    echo "=== build official plugins ==="
+    (cd "$official_plugins" && if [ -f "package.json" ] && [ -d "plugins" ]; then
+      if [ ! -d "node_modules" ]; then
+        echo "[official-plugins] installing npm deps..."
+        npm install --no-audit --no-fund 2>&1 || true
+      fi
+      # Build each plugin that has a frontend
+      for plugin_dir in plugins/*/; do
+        local plugin_name=$(basename "$plugin_dir")
+        local fe_dir="$plugin_dir/frontend"
+        if [ -d "$fe_dir" ] && [ -f "$fe_dir/package.json" ]; then
+          echo "[$plugin_name] building frontend..."
+          (cd "$fe_dir" && [ ! -d "node_modules" ] && npm install --no-audit --no-fund 2>&1 || true; npm run build 2>&1 || true)
+        fi
+        # Build backend if main.go exists
+        local backend_dir="$plugin_dir/backend"
+        if [ -f "$backend_dir/main.go" ]; then
+          echo "[$plugin_name] building backend..."
+          (cd "$backend_dir" && go build -o "$(basename "$backend_dir")" . 2>&1 || true)
+        fi
+      done
+      echo "  ✅ official plugins built"
+    else
+      echo "  ℹ️  no plugins to build"
+    fi)
+  fi
+
+  # Copy official plugins to desktop
+  local dest="$ROOT/plugins"
+  if [ -d "$official_plugins/plugins" ]; then
+    echo ""
+    echo "=== install official plugins to desktop ==="
+    rm -rf "$dest"
+    mkdir -p "$dest"
+    cp -r "$official_plugins/plugins/"* "$dest/" 2>/dev/null || true
+    echo "  ✅ plugins installed to $dest"
+  fi
+
+  GLOBAL_ERRORS="$errors"
 }
 
 ensure_npm_deps() {
@@ -31,6 +98,10 @@ ensure_npm_deps() {
 }
 
 echo "=== verstak-desktop build ==="
+echo ""
+
+# ── Global update (best-effort — errors collected, not fatal) ──
+global_update
 
 # ── Dependency checks ──
 echo "[deps]"
@@ -146,9 +217,14 @@ else
 fi
 
 echo ""
-if [ "$FAILED" -eq 0 ]; then
+if [ "$FAILED" -eq 0 ] && [ -z "$GLOBAL_ERRORS" ]; then
   echo "✅ build passed"
 else
-  echo "❌ build failed"
+  echo "❌ build completed with issues"
+  if [ -n "$GLOBAL_ERRORS" ]; then
+    echo ""
+    echo "Global update errors:"
+    echo -e "$GLOBAL_ERRORS"
+  fi
 fi
 exit "$FAILED"

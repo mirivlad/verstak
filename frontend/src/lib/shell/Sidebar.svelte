@@ -6,6 +6,7 @@
   let plugins = [];
   let vaultStatus = { status: 'unknown', path: '', vaultId: '' };
   let sidebarItems = [];
+  let errorMessage = '';
 
   let navItems = [
     { id: 'plugin-manager', label: 'Plugin Manager', icon: '🧩' },
@@ -14,21 +15,27 @@
   $: vaultOpen = vaultStatus.status === 'open';
 
   onMount(async () => {
+    let contribErr = false;
     try {
       const [p, v, contribs] = await Promise.all([
         App.GetPlugins().catch(() => []),
         App.GetVaultStatus().catch(() => ({ status: 'unknown', path: '', vaultId: '' })),
-        App.GetContributions().catch(() => ({})),
+        App.GetContributions().catch(() => { contribErr = true; return {}; }),
       ]);
       plugins = p || [];
       vaultStatus = v;
+      if (contribErr) {
+        errorMessage = 'Failed to load plugin contributions';
+      }
       sidebarItems = (contribs.sidebarItems || []).filter(item => {
         const plugin = plugins.find(p => p.manifest?.id === item.pluginId);
         if (!plugin) return false;
         return plugin.status !== 'disabled' && plugin.status !== 'failed' && plugin.status !== 'incompatible' && plugin.status !== 'missing-required-capability';
       });
+      sidebarItems.sort((a, b) => (a.position || 100) - (b.position || 100));
     } catch (e) {
       console.error('[Sidebar] load error:', e);
+      errorMessage = 'Failed to load sidebar';
     }
   });
 
@@ -37,7 +44,7 @@
   }
 
   function handleSidebarItem(item) {
-    window.dispatchEvent(new CustomEvent('verstak:open-view', { detail: { viewId: item.id } }));
+    window.dispatchEvent(new CustomEvent('verstak:open-view', { detail: { viewId: item.id, pluginId: item.pluginId } }));
   }
 </script>
 
@@ -70,7 +77,7 @@
           type="button"
         >
           <span class="nav-icon">{item.icon || '📌'}</span>
-          <span class="nav-label">{item.label || item.id}</span>
+          <span class="nav-label">{item.title || item.id}</span>
         </button>
       {/each}
     </div>
@@ -81,6 +88,9 @@
   {/if}
 
   <div class="sidebar-footer">
+    {#if errorMessage}
+      <span class="sidebar-error">⚠️ Plugin UI error</span>
+    {/if}
     {#if vaultStatus.status !== 'unknown'}
       <span class="vault-indicator" class:vault-open={vaultStatus.status === 'open'} class:vault-closed={vaultStatus.status !== 'open'}>
         ● Vault: {vaultStatus.status}
@@ -200,5 +210,12 @@
 
   .vault-indicator.vault-closed {
     color: #a0a0b8;
+  }
+
+  .sidebar-error {
+    display: block;
+    font-size: 0.7rem;
+    color: #e94560;
+    margin-bottom: 0.25rem;
   }
 </style>

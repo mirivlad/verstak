@@ -1,7 +1,7 @@
 <script>
   import PluginCard from './PluginCard.svelte';
   import { onMount } from 'svelte';
-  import { GetPlugins, GetCapabilities, GetPermissions, GetContributions, ReloadPlugins, GetVaultStatus, GetVaultPluginState, EnablePlugin, DisablePlugin } from '../../../wailsjs/go/api/App';
+  import { GetPlugins, GetCapabilities, GetPermissions, GetContributions, ReloadPlugins, GetVaultStatus, GetVaultPluginState, EnablePlugin, DisablePlugin, ReadPluginSettings, WritePluginSettings } from '../../../wailsjs/go/api/App';
 
   let plugins = [];
   let capabilities = [];
@@ -14,6 +14,31 @@
   let settingsPanel = null;
   let settingsData = {};
   let settingsPluginId = '';
+  let settingsError = null;
+  let lastOpenedKey = '';
+
+  export let activeSettingsPluginId = '';
+  export let activeSettingsPanelId = '';
+
+  $: if (activeSettingsPluginId && activeSettingsPanelId) {
+    const key = `${activeSettingsPluginId}:${activeSettingsPanelId}`;
+    if (key !== lastOpenedKey) {
+      lastOpenedKey = key;
+      openSettingsFromProps(activeSettingsPluginId, activeSettingsPanelId);
+    }
+  }
+
+  function openSettingsFromProps(pluginId, panelId) {
+    const panel = (contributions.settingsPanels || []).find(sp => sp.pluginId === pluginId && (!panelId || sp.id === panelId));
+    if (panel) {
+      settingsPanel = panel;
+      settingsPluginId = pluginId;
+      settingsError = null;
+      ReadPluginSettings(pluginId).then(data => {
+        settingsData = data || {};
+      }).catch(() => { settingsData = {}; });
+    }
+  }
 
   $: vaultOpen = vaultStatus.status === 'open';
   $: missingInstalled = computeMissingInstalled();
@@ -85,30 +110,18 @@
   $: totalCaps = capabilities.length;
   $: totalPerms = permissions.length;
 
-  function openSettings(pluginId) {
-    const panel = (contributions.settingsPanels || []).find(sp => sp.pluginId === pluginId);
-    if (panel) {
-      settingsPanel = panel;
-      settingsPluginId = pluginId;
-      // Load existing settings from Wails backend
-      import('../../../wailsjs/go/api/App').then(mod => {
-        mod.ReadPluginSettings(pluginId).then(data => {
-          settingsData = data || {};
-        }).catch(() => { settingsData = {}; });
-      });
-    }
+  function closeSettings() {
+    settingsPanel = null;
+    settingsPluginId = '';
+    settingsError = null;
+    lastOpenedKey = '';
+    window.dispatchEvent(new CustomEvent('verstak:close-settings'));
   }
 
   function saveSettings() {
-    try {
-      import('../../../wailsjs/go/api/App').then(mod => {
-        mod.WritePluginSettings(settingsPluginId, settingsData).then(err => {
-          if (err) console.error('WritePluginSettings:', err);
-        }).catch(e => console.error('WritePluginSettings:', e));
-      });
-    } catch (e) {
-      console.error('saveSettings:', e);
-    }
+    WritePluginSettings(settingsPluginId, settingsData).then(err => {
+      if (err) console.error('WritePluginSettings:', err);
+    }).catch(e => console.error('WritePluginSettings:', e));
   }
 </script>
 
@@ -160,7 +173,7 @@
     {:else}
       <div class="plugin-list">
         {#each plugins as p}
-          <PluginCard {p} {capabilities} {permissions} {contributions} {vaultOpen} onSettings={openSettings} onEnable={enablePlugin} onDisable={disablePlugin} />
+          <PluginCard {p} {capabilities} {permissions} {contributions} {vaultOpen} settingsPanels={(contributions.settingsPanels || []).filter(sp => sp.pluginId === p.manifest?.id)} onEnable={enablePlugin} onDisable={disablePlugin} />
         {/each}
       </div>
     {/if}
@@ -215,12 +228,25 @@
   {/if}
 
   <!-- Settings Panel Modal -->
-  {#if settingsPanel}
-  <div class="modal-overlay" on:click|self={() => settingsPanel = null}>
+  {#key `settings-${settingsPluginId}`}
+  {#if settingsError}
+  <div class="modal-overlay" on:click|self={closeSettings} on:keydown|self={(e) => e.key === 'Escape' && closeSettings()} role="presentation">
+  <div class="modal" role="dialog" aria-modal="true" aria-label="Settings Error">
+    <div class="modal-header">
+      <h3>Settings Error</h3>
+      <button class="modal-close" on:click={closeSettings} type="button">✕</button>
+    </div>
+    <div class="modal-body">
+      <p class="error" style="color: #e94560;">{settingsError}</p>
+    </div>
+  </div>
+  </div>
+  {:else if settingsPanel}
+  <div class="modal-overlay" on:click|self={closeSettings} on:keydown|self={(e) => e.key === 'Escape' && closeSettings()} role="presentation">
   <div class="modal" role="dialog" aria-modal="true" aria-label="Plugin Settings">
     <div class="modal-header">
       <h3>{settingsPanel.item.title}</h3>
-      <button class="modal-close" on:click={() => settingsPanel = null} type="button">✕</button>
+      <button class="modal-close" on:click={closeSettings} type="button">✕</button>
     </div>
     <div class="modal-body">
       <p class="settings-hint">Plugin: <code>{settingsPluginId}</code></p>
@@ -249,6 +275,7 @@
   </div>
   </div>
   {/if}
+  {/key}
 </div>
 
 <style>

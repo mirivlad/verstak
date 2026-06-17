@@ -161,30 +161,95 @@ foreach plugin:
 
 ## Contribution Points
 
-Плагины могут регистрировать UI contributions через поле `contributes`:
+Плагины могут регистрировать UI contributions через поле `contributes` в `plugin.json`.
 
-| Тип | Описание |
-|---|---|
-| `views` | Панели/страницы (component — Svelte) |
-| `commands` | Команды command palette |
-| `settingsPanels` | Панели в Settings |
-| `sidebarItems` | Элементы боковой панели |
-| `fileActions` | Действия над файлами |
-| `noteActions` | Действия над заметками |
-| `contextMenuEntries` | Пункты контекстного меню |
-| `searchProviders` | Провайдеры поиска |
-| `activityProviders` | Провайдеры активности |
-| `statusBarItems` | Элементы status bar |
+### Реализованные contribution points (Milestone 5a)
+
+| Тип | Поле manifest | Описание | Frontend host |
+|---|---|---|---|
+| Боковая панель | `sidebarItems` | Элементы в sidebar слева | ✅ Sidebar.svelte (из ContributionRegistry) |
+| Основные панели | `views` | Полноценные страницы/панели | ✅ ViewContainer.svelte (placeholder — frontend bundle host not implemented) |
+| Панели настроек | `settingsPanels` | Панели в Plugin Manager | ✅ PluginManager.svelte (кнопка Settings, открывает modal) |
+| Команды | `commands` | Команды для command palette | ✅ ContributionRegistry (UI command palette не реализован) |
+
+### Планируемые contribution points
+
+| Тип | Поле manifest | Статус |
+|---|---|---|
+| Действия над файлами | `fileActions` | Registry готов, UI не реализован |
+| Действия над заметками | `noteActions` | Registry готов, UI не реализован |
+| Контекстное меню | `contextMenuEntries` | Registry готов, UI не реализован |
+| Провайдеры поиска | `searchProviders` | Registry готов, UI не реализован |
+| Провайдеры активности | `activityProviders` | Registry готов, UI не реализован |
+| Элементы status bar | `statusBarItems` | Registry готов, UI не реализован |
+
+### Структура contribution points в manifest
+
+```json
+{
+  "contributes": {
+    "sidebarItems": [
+      {
+        "id": "mypanel.sidebar",
+        "title": "My Panel",
+        "icon": "📌",
+        "view": "mypanel.view",
+        "position": 100
+      }
+    ],
+    "views": [
+      {
+        "id": "mypanel.view",
+        "title": "My Panel View",
+        "icon": "📌",
+        "component": "MyPanelComponent"
+      }
+    ],
+    "settingsPanels": [
+      {
+        "id": "mypanel.settings",
+        "title": "My Settings",
+        "component": "MySettingsPanel"
+      }
+    ],
+    "commands": [
+      {
+        "id": "mypanel.cmd",
+        "title": "Do Something",
+        "icon": "⚡",
+        "handler": "doSomething"
+      }
+    ]
+  }
+}
+```
+
+### Contribution lifecycle
+
+1. Plugin `Register(pluginID, contributions)` — все contributions регистрируются
+2. `Unregister(pluginID)` — удаляет все contributions указанного plugin
+3. Reload: `Unregister → Register` (предотвращает дублирование)
+4. Disable plugin → `Unregister` (contributions исчезают из UI)
+5. Enable plugin → `Register` при следующем Reload
+6. Registry idempotent: Register удаляет старые записи перед добавлением новых
+
+### Error boundary
+
+- Ошибка в plugin view/settings placeholder не роняет shell
+- ViewContainer показывает "⚠️ Plugin UI failed" fallback
+- Error канал: `console.error` + видимый fallback в UI
 
 ## Reload
 
 `ReloadPlugins()` в `internal/api/app.go` позволяет перезагрузить plugins без перезапуска приложения:
 
-1. Unregister all capabilities (кроме core).
-2. Re-register core capabilities.
+1. Unregister all non-core capabilities.
+2. Re-register core capabilities + vault + workspace (если открыт).
 3. Re-scan discovery directories.
-4. Re-run capability resolution.
-5. Re-register contributions.
+4. For each plugin: re-run capability resolution.
+5. **Unregister contributions** before re-registering (предотвращает дубли).
+6. Register contributions for loaded/degraded plugins (disabled/failed — не регистрируются).
+7. Update plugins list.
 
 Frontend вызывает это при нажатии "Reload" в Plugin Manager.
 
