@@ -20,6 +20,12 @@
   let settingsPluginInfo = null;
   let lastOpenedKey = '';
 
+  // Per-action loading state — shows feedback on specific buttons without hiding the whole list
+  let actionFeedback = {}; // { [pluginId]: 'enabling' | 'disabling' | null }
+  let reloading = false;
+  let toastMessage = '';
+  let toastType = 'success'; // 'success' | 'error' | 'info'
+
   export let activeSettingsPluginId = '';
   export let activeSettingsPanelId = '';
 
@@ -31,13 +37,20 @@
     }
   }
 
+  function showToast(msg, type = 'success') {
+    toastMessage = msg;
+    toastType = type;
+    setTimeout(() => {
+      toastMessage = '';
+    }, 4000);
+  }
+
   async function openSettingsFromProps(pluginId, panelId) {
     const panel = (contributions.settingsPanels || []).find(sp => sp.pluginId === pluginId && (!panelId || sp.id === panelId));
     if (panel) {
       settingsPanel = panel;
       settingsPluginId = pluginId;
       settingsError = null;
-      // Get plugin frontend info
       try {
         const info = await GetPluginFrontendInfo(pluginId);
         settingsPluginInfo = info;
@@ -45,6 +58,8 @@
       ReadPluginSettings(pluginId).then(data => {
         settingsData = data || {};
       }).catch(() => { settingsData = {}; });
+    } else {
+      settingsError = `Settings panel not found for plugin "${pluginId}". Check that the plugin is enabled and has settingsPanels in its manifest.`;
     }
   }
 
@@ -68,50 +83,79 @@
       loading = false;
       return;
     }
-    // Vault status — non-critical
-    GetVaultStatus().then(v => { vaultStatus = v || { status: 'unknown', path: '', vaultId: '' }; }).catch(() => {});
-    // Vault plugin state
-    if (vaultStatus.status === 'open') {
-      GetVaultPluginState().then(s => { vaultPluginState = s || { enabledPlugins: [], disabledPlugins: [], desiredPlugins: [] }; }).catch(() => {});
+    // Collect all async loads but await them so loading stays true until all are done
+    try {
+      const [v, caps, perms, contribs] = await Promise.all([
+        GetVaultStatus().catch(() => ({ status: 'unknown', path: '', vaultId: '' })),
+        GetCapabilities().catch(() => []),
+        GetPermissions().catch(() => []),
+        GetContributions().catch(() => ({})),
+      ]);
+      vaultStatus = v || { status: 'unknown', path: '', vaultId: '' };
+      capabilities = caps || [];
+      permissions = perms || [];
+      contributions = contribs || {};
+    } catch (e) {
+      // Non-critical — log but don't fail
+      console.error('[PluginManager] non-critical load error:', e);
     }
-    // Capabilities and permissions are non-critical — load async
-    GetCapabilities().then(c => { capabilities = c || []; }).catch(() => {});
-    GetPermissions().then(p => { permissions = p || []; }).catch(() => {});
-    GetContributions().then(c => { contributions = c || {}; }).catch(() => {});
+    if (vaultStatus.status === 'open') {
+      try {
+        vaultPluginState = await GetVaultPluginState() || { enabledPlugins: [], disabledPlugins: [], desiredPlugins: [] };
+      } catch { /* non-critical */ }
+    }
     loading = false;
   }
 
   onMount(() => { loadAll(); });
 
   async function reload() {
-    loading = true;
+    reloading = true;
     error = '';
+    let resultMsg = '';
     try {
-      await ReloadPlugins();
+      const [count, summary] = await ReloadPlugins();
+      resultMsg = `Reloaded ${count} plugin(s). ${summary}`;
     } catch (e) {
       error = 'Reload: ' + String(e);
-      loading = false;
+      reloading = false;
       return;
     }
     await loadAll();
+    reloading = false;
+    showToast(resultMsg, 'success');
   }
 
   async function enablePlugin(pluginId) {
+    actionFeedback = { ...actionFeedback, [pluginId]: 'enabling' };
+    error = '';
     const err = await EnablePlugin(pluginId);
     if (err) {
+      actionFeedback = { ...actionFeedback, [pluginId]: null };
       error = 'Enable: ' + err;
       return;
     }
-    await reload();
+    // Reload to get updated state
+    try { await ReloadPlugins(); } catch (e) { /* ignore */ }
+    await loadAll();
+    actionFeedback = { ...actionFeedback, [pluginId]: null };
+    showToast(`Plugin "${pluginId}" enabled`, 'success');
   }
 
   async function disablePlugin(pluginId) {
+    actionFeedback = { ...actionFeedback, [pluginId]: 'disabling' };
+    error = '';
     const err = await DisablePlugin(pluginId);
     if (err) {
+      actionFeedback = { ...actionFeedback, [pluginId]: null };
       error = 'Disable: ' + err;
       return;
     }
-    await reload();
+    // Reload to get updated state
+    try { await ReloadPlugins(); } catch (e) { /* ignore */ }
+    await loadAll();
+    actionFeedback = { ...actionFeedback, [pluginId]: null };
+    showToast(`Plugin "${pluginId}" disabled`, 'info');
   }
 
   $: totalPlugins = plugins.length;
@@ -134,6 +178,13 @@
 </script>
 
 <div class="plugin-manager">
+  <!-- Toast notification -->
+  {#if toastMessage}
+    <div class="toast" class:toast-success={toastType === 'success'} class:toast-error={toastType === 'error'} class:toast-info={toastType === 'info'}>
+      {toastMessage}
+    </div>
+  {/if}
+
   <header>
     <div class="header-left">
       <h2>Plugin Manager</h2>
@@ -143,8 +194,8 @@
         </span>
       {/if}
     </div>
-    <button class="reload-btn" on:click={reload} type="button" disabled={loading}>
-      {loading ? '⟳ Loading...' : '⟳ Reload'}
+    <button class="reload-btn" on:click={reload} type="button" disabled={loading || reloading}>
+      {reloading ? '⟳ Reloading...' : '⟳ Reload'}
     </button>
   </header>
 
@@ -181,7 +232,7 @@
     {:else}
       <div class="plugin-list">
         {#each plugins as p}
-          <PluginCard {p} {capabilities} {permissions} {contributions} {vaultOpen} settingsPanels={(contributions.settingsPanels || []).filter(sp => sp.pluginId === p.manifest?.id)} onEnable={enablePlugin} onDisable={disablePlugin} />
+          <PluginCard {p} {capabilities} {permissions} {contributions} {vaultOpen} {actionFeedback} settingsPanels={(contributions.settingsPanels || []).filter(sp => sp.pluginId === p.manifest?.id)} onEnable={enablePlugin} onDisable={disablePlugin} />
         {/each}
       </div>
     {/if}
@@ -278,6 +329,7 @@
   .plugin-manager {
     max-width: 900px;
     padding-top: 0.5rem;
+    position: relative;
   }
   header {
     display: flex;
@@ -300,32 +352,29 @@
     font-weight: 600;
     border: 1px solid;
   }
-  .vault-open {
-    background: rgba(78, 204, 163, 0.15);
-    color: #4ecca3;
-    border-color: #4ecca3;
-  }
-  .vault-not-created {
-    background: rgba(255, 200, 87, 0.15);
-    color: #ffc857;
-    border-color: #ffc857;
-  }
-  .vault-closed {
-    background: rgba(160, 160, 184, 0.15);
-    color: #a0a0b8;
-    border-color: #a0a0b8;
-  }
-  .vault-error {
-    background: rgba(233, 69, 96, 0.15);
-    color: #e94560;
-    border-color: #e94560;
-  }
+  .vault-open { background: rgba(78, 204, 163, 0.15); color: #4ecca3; border-color: #4ecca3; }
+  .vault-not-created { background: rgba(255, 200, 87, 0.15); color: #ffc857; border-color: #ffc857; }
+  .vault-closed { background: rgba(160, 160, 184, 0.15); color: #a0a0b8; border-color: #a0a0b8; }
+  .vault-error { background: rgba(233, 69, 96, 0.15); color: #e94560; border-color: #e94560; }
   .reload-btn {
     background: #0f3460; color: #e0e0e0; border: 1px solid #533483;
     padding: 0.4rem 1rem; border-radius: 6px; cursor: pointer; font-size: 0.85rem;
   }
   .reload-btn:hover:not(:disabled) { background: #533483; }
   .reload-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  /* Toast */
+  .toast {
+    position: fixed; top: 1rem; right: 1rem; z-index: 2000;
+    padding: 0.6rem 1.2rem; border-radius: 6px; font-size: 0.85rem;
+    max-width: 400px; word-break: break-word;
+    animation: toastIn 0.25s ease-out;
+  }
+  .toast-success { background: #1a3a2e; color: #4ecca3; border: 1px solid #4ecca3; }
+  .toast-error { background: #3a1a1a; color: #e94560; border: 1px solid #e94560; }
+  .toast-info { background: #1a1a3a; color: #a78bfa; border: 1px solid #a78bfa; }
+  @keyframes toastIn { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
+
   .loading, .error {
     padding: 2rem; text-align: center; color: #a0a0b8;
   }
@@ -357,70 +406,30 @@
   .hint code { background: #0f3460; padding: 0.1rem 0.3rem; border-radius: 3px; }
   .plugin-list { display: flex; flex-direction: column; gap: 0.75rem; margin-bottom: 1.5rem; }
 
-  /* Missing installed section */
-  .missing-section {
-    margin-bottom: 1.5rem;
-  }
-  .missing-section h3 {
-    color: #e94560;
-    font-size: 1rem;
-    margin: 0 0 0.25rem;
-  }
-  .missing-hint {
-    color: #a0a0b8;
-    font-size: 0.8rem;
-    margin: 0 0 0.75rem;
-  }
-  .missing-card {
-    border-color: #e94560;
-    opacity: 0.8;
-  }
-  .missing-text {
-    color: #a0a0b8;
-    font-size: 0.85rem;
-    margin: 0.5rem 0 0;
-  }
-  .source-hint {
-    display: block;
-    margin-top: 0.25rem;
-    font-size: 0.75rem;
-    color: #666;
-  }
+  .missing-section { margin-bottom: 1.5rem; }
+  .missing-section h3 { color: #e94560; font-size: 1rem; margin: 0 0 0.25rem; }
+  .missing-hint { color: #a0a0b8; font-size: 0.8rem; margin: 0 0 0.75rem; }
+  .missing-card { border-color: #e94560; opacity: 0.8; }
+  .missing-text { color: #a0a0b8; font-size: 0.85rem; margin: 0.5rem 0 0; }
+  .source-hint { display: block; margin-top: 0.25rem; font-size: 0.75rem; color: #666; }
 
   .registry-section {
     background: #16213e; border: 1px solid #0f3460;
     border-radius: 8px; padding: 0.75rem; margin-top: 1rem;
   }
-  .registry-section summary {
-    cursor: pointer; color: #a0a0b8; font-size: 0.9rem; font-weight: 600;
-  }
+  .registry-section summary { cursor: pointer; color: #a0a0b8; font-size: 0.9rem; font-weight: 600; }
   table { width: 100%; margin-top: 0.5rem; border-collapse: collapse; font-size: 0.85rem; }
-  th {
-    text-align: left; padding: 0.4rem 0.5rem; color: #a0a0b8; border-bottom: 1px solid #0f3460;
-  }
+  th { text-align: left; padding: 0.4rem 0.5rem; color: #a0a0b8; border-bottom: 1px solid #0f3460; }
   td { padding: 0.3rem 0.5rem; border-bottom: 1px solid #0f3460; }
   td code { color: #e0e0e0; }
   :global(.status-stable) { color: #4ecca3; }
   :global(.status-draft) { color: #ffc857; }
   :global(.status-deprecated) { color: #e94560; }
-  .source-badge {
-    font-size: 0.75rem;
-    padding: 0.1rem 0.4rem;
-    border-radius: 4px;
-    font-weight: 600;
-  }
-  .source-core {
-    background: #1a3a5c;
-    color: #4ecca3;
-    border: 1px solid #4ecca3;
-  }
-  .source-plugin {
-    background: #0f3460;
-    color: #a0a0b8;
-    border: 1px solid #533483;
-  }
+  .source-badge { font-size: 0.75rem; padding: 0.1rem 0.4rem; border-radius: 4px; font-weight: 600; }
+  .source-core { background: #1a3a5c; color: #4ecca3; border: 1px solid #4ecca3; }
+  .source-plugin { background: #0f3460; color: #a0a0b8; border: 1px solid #533483; }
 
-  /* ── Modal ── */
+  /* Modal */
   .modal-overlay {
     position: fixed; inset: 0;
     background: rgba(0, 0, 0, 0.6);
@@ -428,77 +437,17 @@
     z-index: 1000;
   }
   .modal {
-    background: #16213e;
-    border: 1px solid #0f3460;
-    border-radius: 8px;
-    width: 480px;
-    max-width: 90vw;
-    max-height: 80vh;
-    display: flex;
-    flex-direction: column;
+    background: #16213e; border: 1px solid #0f3460; border-radius: 8px;
+    width: 480px; max-width: 90vw; max-height: 80vh; display: flex; flex-direction: column;
   }
   .modal-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 1rem;
-    border-bottom: 1px solid #0f3460;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 1rem; border-bottom: 1px solid #0f3460;
   }
   .modal-header h3 { margin: 0; color: #e0e0f0; font-size: 1.1rem; }
-  .modal-close {
-    background: none; border: none; color: #a0a0b8;
-    font-size: 1.2rem; cursor: pointer; padding: 0.2rem 0.5rem;
-  }
+  .modal-close { background: none; border: none; color: #a0a0b8; font-size: 1.2rem; cursor: pointer; padding: 0.2rem 0.5rem; }
   .modal-close:hover { color: #e94560; }
   .modal-body { padding: 1rem; overflow-y: auto; }
   .settings-hint { color: #666; font-size: 0.8rem; margin: 0.25rem 0; }
   .settings-hint code { color: #4ecca3; }
-
-  /* ── Settings Form ── */
-  .settings-form {
-    display: flex;
-    flex-direction: column;
-    gap: 0.75rem;
-  }
-  .settings-form h4 {
-    margin: 0 0 0.5rem 0;
-    color: #e0e0f0;
-    font-size: 1rem;
-  }
-  .form-row {
-    display: flex;
-    flex-direction: column;
-    gap: 0.25rem;
-  }
-  .form-row label {
-    color: #a0a0b8;
-    font-size: 0.85rem;
-  }
-  .form-row input[type="text"],
-  .form-row input[type="number"] {
-    background: #0f3460;
-    border: 1px solid #1a3a5c;
-    color: #e0e0f0;
-    padding: 0.4rem 0.6rem;
-    border-radius: 4px;
-    font-size: 0.9rem;
-  }
-  .form-row input:focus {
-    outline: none;
-    border-color: #4ecca3;
-  }
-  .btn-save {
-    background: #4ecca3;
-    color: #1a1a2e;
-    border: none;
-    padding: 0.5rem 1rem;
-    border-radius: 4px;
-    cursor: pointer;
-    font-size: 0.9rem;
-    font-weight: 600;
-    margin-top: 0.5rem;
-  }
-  .btn-save:hover {
-    background: #3dbb92;
-  }
 </style>

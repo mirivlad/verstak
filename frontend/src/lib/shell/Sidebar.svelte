@@ -45,7 +45,9 @@
   }
 
   function handleSidebarItem(item) {
-    window.dispatchEvent(new CustomEvent('verstak:open-view', { detail: { viewId: item.id, pluginId: item.pluginId } }));
+    // Use item.view (the view contribution ID) if available, fall back to item.id
+    const viewId = item.view || item.id;
+    window.dispatchEvent(new CustomEvent('verstak:open-view', { detail: { viewId, pluginId: item.pluginId } }));
   }
 </script>
 

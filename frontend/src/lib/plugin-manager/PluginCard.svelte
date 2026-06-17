@@ -60,8 +60,12 @@
     !capabilities.some(c => c.name === opt)
   );
 
+  export let actionFeedback = {}; // { [pluginId]: 'enabling' | 'disabling' | null }
+
   $: isDisabled = p.status === 'disabled' || !p.enabled;
   $: canToggle = p.status !== 'failed' && p.status !== 'incompatible' && p.status !== 'missing-required-capability' && p.status !== 'discovered';
+  $: isBusy = actionFeedback[pluginId] != null;
+  $: busyAction = actionFeedback[pluginId] || null;
 </script>
 
 <div class="plugin-card" class:disabled={isDisabled} class:failed={p.status === 'failed'}>
@@ -181,12 +185,12 @@
     {/if}
     {#if vaultOpen && canToggle}
       {#if isDisabled}
-        <button class="btn-enable" on:click={() => onEnable(m.id)} type="button">
-          ▶ Enable
+        <button class="btn-enable" on:click={() => onEnable(m.id)} type="button" disabled={isBusy}>
+          {#if busyAction === 'enabling'}⟳ Enabling...{:else}▶ Enable{/if}
         </button>
       {:else}
-        <button class="btn-disable" on:click={() => onDisable(m.id)} type="button">
-          ⏸ Disable
+        <button class="btn-disable" on:click={() => onDisable(m.id)} type="button" disabled={isBusy}>
+          {#if busyAction === 'disabling'}⟳ Disabling...{:else}⏸ Disable{/if}
         </button>
       {/if}
     {/if}
