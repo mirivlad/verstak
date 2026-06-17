@@ -16,41 +16,49 @@
       appSettings = await App.GetAppSettings() || {};
       recentVaults = appSettings.recentVaults || [];
     } catch (e) {
-      // App settings might fail if backend not ready — show selection anyway
       console.error('[VaultSelection] load settings:', e);
     }
     loading = false;
   });
 
+  async function browseNewVault() {
+    const path = await App.SelectDirectory();
+    if (path) {
+      newVaultPath = path;
+    }
+  }
+
+  async function browseOpenVault() {
+    const path = await App.SelectVaultForOpen();
+    if (path) {
+      openVaultPath = path;
+    }
+  }
+
   async function createVault() {
     error = '';
     if (!newVaultPath.trim()) {
-      error = 'Please enter a path for the new vault';
+      error = 'Please enter or select a path for the new vault';
       return;
     }
     creating = true;
     try {
-      // Step 1: Create the vault directory + metadata
       const createErr = await App.CreateVault(newVaultPath.trim());
       if (createErr) {
         error = 'Create vault: ' + createErr;
         creating = false;
         return;
       }
-      // Step 2: Open it (registers capabilities, loads plugin state)
       const openErr = await App.OpenVault(newVaultPath.trim());
       if (openErr) {
         error = 'Open vault: ' + openErr;
         creating = false;
         return;
       }
-      // Step 3: Save to app settings (set current + add to recent)
       const setErr = await App.SetCurrentVault(newVaultPath.trim());
       if (setErr) {
-        // Vault is open but settings save failed — still proceed
         console.warn('[VaultSelection] SetCurrentVault:', setErr);
       }
-      // Success — notify app to transition to main UI
       window.dispatchEvent(new CustomEvent('verstak:vault-opened'));
     } catch (e) {
       error = String(e);
@@ -61,19 +69,17 @@
   async function openExistingVault() {
     error = '';
     if (!openVaultPath.trim()) {
-      error = 'Please enter a path to an existing vault';
+      error = 'Please enter or select a path to an existing vault';
       return;
     }
     opening = true;
     try {
-      // Step 1: Open the vault
       const openErr = await App.OpenVault(openVaultPath.trim());
       if (openErr) {
         error = 'Open vault: ' + openErr;
         opening = false;
         return;
       }
-      // Step 2: Save to app settings
       const setErr = await App.SetCurrentVault(openVaultPath.trim());
       if (setErr) {
         console.warn('[VaultSelection] SetCurrentVault:', setErr);
@@ -141,9 +147,14 @@
           <input
             type="text"
             bind:value={newVaultPath}
-            placeholder="~/Documents/MyVault"
+            placeholder="Select or type a path..."
             disabled={creating}
           />
+          <button class="btn-secondary" on:click={browseNewVault} type="button" disabled={creating}>
+            Browse…
+          </button>
+        </div>
+        <div class="button-row">
           <button class="btn-primary" on:click={createVault} type="button" disabled={creating}>
             {creating ? 'Creating...' : 'Create & Open'}
           </button>
@@ -157,9 +168,14 @@
           <input
             type="text"
             bind:value={openVaultPath}
-            placeholder="~/Documents/ExistingVault"
+            placeholder="Select or type a path..."
             disabled={opening}
           />
+          <button class="btn-secondary" on:click={browseOpenVault} type="button" disabled={opening}>
+            Browse…
+          </button>
+        </div>
+        <div class="button-row">
           <button class="btn-primary" on:click={openExistingVault} type="button" disabled={opening}>
             {opening ? 'Opening...' : 'Open'}
           </button>
@@ -196,7 +212,7 @@
     padding: 2rem;
   }
   .vault-selection-inner {
-    max-width: 520px;
+    max-width: 560px;
     width: 100%;
   }
   .loading-text {
@@ -257,6 +273,7 @@
   .input-row {
     display: flex;
     gap: 0.5rem;
+    margin-bottom: 0.5rem;
   }
   .input-row input {
     flex: 1;
@@ -274,21 +291,42 @@
   .input-row input::placeholder {
     color: #666;
   }
+  .button-row {
+    display: flex;
+    justify-content: flex-end;
+  }
   .btn-primary {
     background: #4ecca3;
     color: #1a1a2e;
     border: none;
-    padding: 0.5rem 1rem;
+    padding: 0.5rem 1.25rem;
     border-radius: 6px;
     cursor: pointer;
     font-size: 0.85rem;
     font-weight: 600;
-    white-space: nowrap;
   }
   .btn-primary:hover:not(:disabled) {
     background: #3dbb92;
   }
   .btn-primary:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+  .btn-secondary {
+    background: #0f3460;
+    color: #a0a0b8;
+    border: 1px solid #1a3a5c;
+    padding: 0.5rem 0.75rem;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.85rem;
+    white-space: nowrap;
+  }
+  .btn-secondary:hover:not(:disabled) {
+    background: #1a3a5c;
+    color: #e0e0f0;
+  }
+  .btn-secondary:disabled {
     opacity: 0.5;
     cursor: not-allowed;
   }

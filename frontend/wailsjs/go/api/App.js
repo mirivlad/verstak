@@ -70,12 +70,20 @@ export function ReloadPlugins() {
   return window['go']['api']['App']['ReloadPlugins']();
 }
 
+export function SelectDirectory() {
+  return window['go']['api']['App']['SelectDirectory']();
+}
+
+export function SelectVaultForOpen() {
+  return window['go']['api']['App']['SelectVaultForOpen']();
+}
+
 export function SetCurrentVault(arg1) {
   return window['go']['api']['App']['SetCurrentVault'](arg1);
 }
 
-export function Startup() {
-  return window['go']['api']['App']['Startup']();
+export function Startup(arg1) {
+  return window['go']['api']['App']['Startup'](arg1);
 }
 
 export function UpdateAppSettings(arg1) {

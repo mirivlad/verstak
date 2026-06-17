@@ -2,11 +2,14 @@
 package api
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/wailsapp/wails/v2/pkg/runtime"
 
 	"github.com/verstak/verstak-desktop/internal/core/appsettings"
 	"github.com/verstak/verstak-desktop/internal/core/capability"
@@ -21,6 +24,7 @@ import (
 
 // App is the main application struct exposed to the Wails frontend.
 type App struct {
+	ctx             context.Context
 	capRegistry     *capability.Registry
 	contribRegistry *contribution.Registry
 	permRegistry    *permissions.Registry
@@ -57,10 +61,10 @@ func NewApp(
 	}
 }
 
-// Startup is called when the app starts.
-func (a *App) Startup() error {
+// Startup is called when the app starts. Sets the Wails context for dialogs.
+func (a *App) Startup(ctx context.Context) {
+	a.ctx = ctx
 	log.Printf("[api] App.Startup: initialized with %d plugins", len(a.plugins))
-	return nil
 }
 
 // ─── Plugin Manager API ─────────────────────────────────────
@@ -475,6 +479,39 @@ func (a *App) RecordDesiredPlugin(pluginID, version, source string) string {
 		return err.Error()
 	}
 	return ""
+}
+
+// ─── Dialog API ─────────────────────────────────────────────
+
+// SelectDirectory opens a native directory picker dialog.
+// Returns the selected path or empty string if cancelled.
+func (a *App) SelectDirectory() string {
+	home, _ := os.UserHomeDir()
+
+	selected, err := runtime.OpenDirectoryDialog(a.ctx, runtime.OpenDialogOptions{
+		Title:            "Select Vault Directory",
+		DefaultDirectory: home,
+	})
+	if err != nil {
+		log.Printf("[api] SelectDirectory: %v", err)
+		return ""
+	}
+	return selected
+}
+
+// SelectVaultForOpen opens a directory picker for opening an existing vault.
+func (a *App) SelectVaultForOpen() string {
+	home, _ := os.UserHomeDir()
+
+	selected, err := runtime.OpenDirectoryDialog(a.ctx, runtime.OpenDialogOptions{
+		Title:            "Open Existing Vault",
+		DefaultDirectory: home,
+	})
+	if err != nil {
+		log.Printf("[api] SelectVaultForOpen: %v", err)
+		return ""
+	}
+	return selected
 }
 
 // ContributionSummary aggregates all contribution types for the frontend.
