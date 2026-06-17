@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import * as App from '../../../wailsjs/go/api/App';
   import WorkspaceTree from './WorkspaceTree.svelte';
+  import Icon from '../ui/Icon.svelte';
 
   let plugins = [];
   let vaultStatus = { status: 'unknown', path: '', vaultId: '' };
@@ -9,7 +10,7 @@
   let errorMessage = '';
 
   let navItems = [
-    { id: 'plugin-manager', label: 'Plugin Manager', icon: '🧩' },
+    { id: 'plugin-manager', label: 'Plugin Manager', icon: 'puzzle' },
   ];
 
   $: vaultOpen = vaultStatus.status === 'open';
@@ -50,7 +51,7 @@
 
 <aside class="sidebar">
   <div class="sidebar-header">
-    <span class="sidebar-logo">📦</span>
+    <Icon name="logo" size={20} className="sidebar-logo" />
     <span class="sidebar-title">Verstak</span>
   </div>
 
@@ -61,7 +62,7 @@
         on:click={() => handleNav(item.id)}
         type="button"
       >
-        <span class="nav-icon">{item.icon}</span>
+        <Icon name={item.icon} size={16} className="nav-icon" />
         <span class="nav-label">{item.label}</span>
       </button>
     {/each}
@@ -76,7 +77,7 @@
           on:click={() => handleSidebarItem(item)}
           type="button"
         >
-          <span class="nav-icon">{item.icon || '📌'}</span>
+          <Icon name={item.icon || 'plugin'} size={16} className="nav-icon icon-plugin" />
           <span class="nav-label">{item.title || item.id}</span>
         </button>
       {/each}
@@ -89,7 +90,10 @@
 
   <div class="sidebar-footer">
     {#if errorMessage}
-      <span class="sidebar-error">⚠️ Plugin UI error</span>
+      <span class="sidebar-error">
+        <Icon name="warning" size={10} className="sidebar-error-icon" />
+        Plugin UI error
+      </span>
     {/if}
     {#if vaultStatus.status !== 'unknown'}
       <span class="vault-indicator" class:vault-open={vaultStatus.status === 'open'} class:vault-closed={vaultStatus.status !== 'open'}>
@@ -119,7 +123,10 @@
   }
 
   .sidebar-logo {
-    font-size: 1.2rem;
+    width: 1.2rem;
+    height: 1.2rem;
+    color: #4ecca3;
+    flex-shrink: 0;
   }
 
   .sidebar-title {
@@ -181,10 +188,13 @@
   }
 
   .nav-icon {
-    font-size: 1rem;
-    flex-shrink: 0;
     width: 1.2rem;
-    text-align: center;
+    height: 1.2rem;
+    flex-shrink: 0;
+    color: currentColor;
+  }
+  .nav-icon.icon-plugin {
+    color: #a78bfa;
   }
 
   .nav-label {
@@ -213,9 +223,14 @@
   }
 
   .sidebar-error {
-    display: block;
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
     font-size: 0.7rem;
     color: #e94560;
     margin-bottom: 0.25rem;
+  }
+  .sidebar-error-icon {
+    color: #e94560;
   }
 </style>

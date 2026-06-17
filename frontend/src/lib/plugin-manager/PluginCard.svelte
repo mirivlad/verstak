@@ -1,4 +1,5 @@
 <script>
+  import Icon from '../ui/Icon.svelte';
   export let p = {};
   export let capabilities = [];
   export let permissions = [];
@@ -127,7 +128,7 @@
         {/each}
       </div>
       {#if missingRequired.length > 0}
-        <p class="warning">⚠ Missing required capabilities: {missingRequired.join(', ')}</p>
+        <p class="warning"><Icon name="warning" size={12} /> Missing required capabilities: {missingRequired.join(', ')}</p>
       {/if}
     </div>
   {/if}
@@ -145,7 +146,7 @@
         {/each}
       </div>
       {#if missingOptional.length > 0}
-        <p class="info">ℹ Optional capabilities not available — plugin running in degraded mode</p>
+        <p class="info"><Icon name="warning" size={12} /> Optional capabilities not available — plugin running in degraded mode</p>
       {/if}
     </div>
   {/if}
@@ -159,7 +160,7 @@
           {@const isDangerous = dangerousPermissions.includes(perm)}
           <span class="tag" class:dangerous={isDangerous}>
             {perm}
-            {#if isDangerous}<span class="danger-icon">⚠</span>{/if}
+            {#if isDangerous}<Icon name="warning" size={12} className="danger-icon" />{/if}
           </span>
         {/each}
       </div>
@@ -175,7 +176,7 @@
   <div class="card-actions">
     {#if hasSettingsPanel}
       <button class="btn-settings" on:click={() => window.dispatchEvent(new CustomEvent('verstak:open-settings', { detail: { pluginId: m.id, panelId: settingsPanels[0]?.id } }))} type="button" disabled={isDisabled || p.status === 'failed'}>
-        ⚙ Settings
+        <Icon name="gear" size={14} /> Settings
       </button>
     {/if}
     {#if vaultOpen && canToggle}
@@ -196,7 +197,7 @@
 
   <!-- Permission warnings -->
   {#if !hasUIPermission && (m.contributes && (m.contributes.views || m.contributes.sidebarItems || m.contributes.settingsPanels).length > 0)}
-    <p class="warning">⚠ Plugin has UI contributions but lacks ui.register permission</p>
+    <p class="warning"><Icon name="warning" size={12} /> Plugin has UI contributions but lacks ui.register permission</p>
   {/if}
 </div>
 
@@ -341,7 +342,7 @@
   }
 
   .check { color: #4ecca3; margin-left: 2px; }
-  .danger-icon { color: #e94560; margin-left: 2px; }
+  .danger-icon { color: #e94560; margin-left: 2px; vertical-align: middle; }
 
   .info {
     color: #ffc857;
@@ -376,6 +377,9 @@
   }
 
   .btn-settings {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
     background: #0f3460;
     border: 1px solid #1a3a5c;
     color: #e0e0f0;

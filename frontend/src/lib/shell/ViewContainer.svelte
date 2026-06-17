@@ -2,6 +2,7 @@
   import PluginBundleHost from '../plugin-host/PluginBundleHost.svelte';
   import { onMount } from 'svelte';
   import * as App from '../../../wailsjs/go/api/App';
+  import Icon from '../ui/Icon.svelte';
 
   export let activeView = null;
   export let activeViewPluginId = null;
@@ -47,7 +48,7 @@
     <div class="view-container">
       <div class="error-boundary">
         <div class="error-fallback">
-          <span class="error-icon">⚠</span>
+          <Icon name="warning" size={24} className="error-icon" />
           <p class="error-title">Plugin UI failed</p>
           <p class="error-text">{renderError}</p>
         </div>
@@ -57,7 +58,7 @@
     <div class="view-container">
       <div class="view" class:degraded={pluginStatus === 'degraded'}>
         <div class="view-header">
-          <span class="view-icon">{currentView.icon || '📦'}</span>
+          <Icon name={currentView.icon || 'logo'} size={20} className="view-icon" />
           <h2>{currentView.title}</h2>
           {#if hasFrontend}
             <span class="frontend-badge">frontend bundle</span>
@@ -126,7 +127,12 @@
     color: #e0e0f0;
     flex: 1;
   }
-  .view-icon { font-size: 1.3rem; }
+  .view-icon {
+    width: 1.3rem;
+    height: 1.3rem;
+    color: #a78bfa;
+    flex-shrink: 0;
+  }
   .frontend-badge {
     font-size: 0.7rem;
     padding: 0.15rem 0.5rem;
@@ -206,7 +212,6 @@
     padding: 2rem;
   }
   .error-icon {
-    font-size: 2rem;
     color: #e94560;
   }
   .error-title {

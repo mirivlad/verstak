@@ -1,4 +1,5 @@
 <script>
+  import Icon from '../ui/Icon.svelte';
   import PluginCard from './PluginCard.svelte';
   import PluginBundleHost from '../plugin-host/PluginBundleHost.svelte';
   import { onMount } from 'svelte';
@@ -151,7 +152,7 @@
     <div class="loading">Scanning plugin directories...</div>
   {:else if error}
     <div class="error">
-      <div class="error-icon">⚠</div>
+      <Icon name="warning" size={24} className="error-icon" />
       <div class="error-message">{error}</div>
       <button class="retry-btn" on:click={loadAll} type="button">⟳ Retry</button>
     </div>
@@ -329,7 +330,7 @@
     padding: 2rem; text-align: center; color: #a0a0b8;
   }
   .error { color: #e94560; }
-  .error-icon { font-size: 2rem; margin-bottom: 0.5rem; }
+  .error-icon { color: #e94560; margin-bottom: 0.5rem; }
   .error-message {
     font-family: monospace; font-size: 0.85rem; margin-bottom: 1rem; word-break: break-word;
   }

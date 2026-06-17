@@ -1,6 +1,7 @@
 <script>
   import { onMount, onDestroy } from 'svelte';
   import * as App from '../../../wailsjs/go/api/App';
+  import Icon from '../ui/Icon.svelte';
 
   // Import the VerstakPluginAPI contract
   import './VerstakPluginAPI.js';
@@ -168,7 +169,7 @@
 
   {:else if loadState === 'error'}
     <div class="host-state error">
-      <div class="error-icon">⚠️</div>
+      <Icon name="warning" size={24} className="error-icon" />
       <p class="error-title">Plugin View Error</p>
       <div class="error-details">
         <p><strong>Plugin:</strong> {currentPluginId || 'unknown'}</p>
@@ -238,7 +239,7 @@
     color: #e94560;
   }
 
-  .error-icon {
+  .host-state.error :global(.error-icon) {
     font-size: 2rem;
     margin-bottom: 0.5rem;
   }

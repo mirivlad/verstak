@@ -1,6 +1,7 @@
 <script>
   import { onMount } from 'svelte';
   import * as App from '../../../wailsjs/go/api/App';
+  import Icon from '../ui/Icon.svelte';
 
   let appSettings = {};
   let recentVaults = [];
@@ -134,7 +135,7 @@
 
     {#if error}
       <div class="error-box">
-        <span class="error-icon">⚠</span>
+        <Icon name="warning" size={14} className="error-icon" />
         <span class="error-text">{error}</span>
       </div>
     {/if}
@@ -190,7 +191,7 @@
           {#each recentVaults as path}
             <li>
               <button class="recent-item" on:click={() => openRecent(path)} type="button" disabled={opening}>
-                <span class="recent-icon">📁</span>
+                <Icon name="vault" size={16} className="recent-icon" />
                 <span class="recent-path">{path}</span>
               </button>
             </li>
