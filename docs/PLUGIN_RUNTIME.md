@@ -439,6 +439,7 @@ Workspace — центральная модель Верстака вокруг 
 
 ### Lifecycle Events
 
+**Planned (not yet implemented in runtime):**
 - `workspace.node.created`
 - `workspace.node.renamed`
 - `workspace.node.moved`

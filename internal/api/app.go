@@ -159,6 +159,13 @@ func (a *App) ReloadPlugins() (int, string) {
 		}
 	}
 
+	// Re-register workspace capability if workspace is initialized
+	if a.workspace != nil && a.workspace.IsInitialized() {
+		if err := a.capRegistry.Register("verstak-desktop", []string{"verstak/core/workspace/v1"}); err != nil {
+			log.Printf("[api] ReloadPlugins: failed to re-register workspace capability: %v", err)
+		}
+	}
+
 	plugins, errs := plugin.DiscoverPlugins(discoveryDirs)
 
 	// Plugin lifecycle: register capabilities + contributions
@@ -407,6 +414,7 @@ func (a *App) UpdateAppSettings(patch map[string]interface{}) string {
 }
 
 // SetCurrentVault sets the current vault path in app settings and re-opens the vault.
+// Loads workspace and registers vault + workspace capabilities.
 func (a *App) SetCurrentVault(path string) string {
 	if a.appSettings == nil {
 		return "app settings not initialized"
@@ -418,8 +426,9 @@ func (a *App) SetCurrentVault(path string) string {
 	if err := a.vault.OpenVault(path); err != nil {
 		return fmt.Sprintf("failed to open vault: %v", err)
 	}
-	// Save to app settings
-	if err := a.appSettings.SetCurrentVault(path); err != nil {
+	// Save the actual vault path (normalized by OpenVault, includes VerstakVault/)
+	vaultPath := a.vault.GetVaultPath()
+	if err := a.appSettings.SetCurrentVault(vaultPath); err != nil {
 		return fmt.Sprintf("failed to save app settings: %v", err)
 	}
 	// Load plugin state for the vault
@@ -428,9 +437,23 @@ func (a *App) SetCurrentVault(path string) string {
 			log.Printf("[api] SetCurrentVault: warning loading plugin state: %v", err)
 		}
 	}
+	// Load workspace for the vault
+	if a.workspace != nil {
+		// Replace workspace manager with one pointing to the new vault
+		a.workspace = workspace.NewManager(vaultPath)
+		if err := a.workspace.Load(); err != nil {
+			log.Printf("[api] SetCurrentVault: warning loading workspace: %v", err)
+		}
+	}
 	// Register vault capability
 	if err := a.capRegistry.Register("verstak-desktop", []string{"verstak/core/vault/v1"}); err != nil {
 		log.Printf("[api] SetCurrentVault: failed to register vault capability: %v", err)
+	}
+	// Register workspace capability
+	if a.workspace != nil && a.workspace.IsInitialized() {
+		if err := a.capRegistry.Register("verstak-desktop", []string{"verstak/core/workspace/v1"}); err != nil {
+			log.Printf("[api] SetCurrentVault: failed to register workspace capability: %v", err)
+		}
 	}
 	return ""
 }

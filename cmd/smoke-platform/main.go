@@ -192,6 +192,14 @@ func main() {
 		fmt.Printf("  ✅ registered vault capability\n")
 	}
 
+	// Register workspace capability (core service — always present when vault is open)
+	if err := reg.Register("verstak-desktop", []string{"verstak/core/workspace/v1"}); err != nil {
+		fmt.Printf("  ❌ register workspace capability: %v\n", err)
+		allGood = false
+	} else {
+		fmt.Printf("  ✅ registered workspace capability\n")
+	}
+
 	// Register plugin capabilities
 	for _, p := range m.Provides {
 		if err := reg.Register(m.ID, []string{p}); err != nil {
@@ -257,10 +265,10 @@ func main() {
 	fmt.Printf("\n[capability count]\n")
 	totalCaps := len(reg.List())
 	fmt.Printf("  total capabilities: %d\n", totalCaps)
-	if totalCaps >= 8 {
-		fmt.Printf("  ✅ total capabilities >= 8 (%d)\n", totalCaps)
+	if totalCaps >= 9 {
+		fmt.Printf("  ✅ total capabilities >= 9 (%d)\n", totalCaps)
 	} else {
-		fmt.Printf("  ❌ total capabilities < 8 (got %d, expected >= 8)\n", totalCaps)
+		fmt.Printf("  ❌ total capabilities < 9 (got %d, expected >= 9)\n", totalCaps)
 		allGood = false
 	}
 
@@ -648,6 +656,50 @@ func runWorkspaceTest(root string) {
 	}
 	fmt.Printf("  ✅ workspace.json exists on disk\n")
 	fmt.Printf("  content:\n%s\n", string(wsData))
+
+	// ── Test 4-level deep tree ──
+	fmt.Printf("\n[4-level deep tree]\n")
+	// Create: root → folder1 → folder2 → case (4 levels)
+	folder1, err := ws.CreateNode(rootID, workspace.TypeFolder, "Level 1 Folder")
+	if err != nil {
+		fmt.Printf("  ❌ create folder1: %v\n", err)
+		exitCode = 1
+		return
+	}
+	fmt.Printf("  ✅ created: %s\n", folder1.Title)
+
+	folder2, err := ws.CreateNode(folder1.ID, workspace.TypeFolder, "Level 2 Folder")
+	if err != nil {
+		fmt.Printf("  ❌ create folder2: %v\n", err)
+		exitCode = 1
+		return
+	}
+	fmt.Printf("  ✅ created: %s\n", folder2.Title)
+
+	deepCase, err := ws.CreateNode(folder2.ID, workspace.TypeCase, "Deep Case")
+	if err != nil {
+		fmt.Printf("  ❌ create deep case: %v\n", err)
+		exitCode = 1
+		return
+	}
+	fmt.Printf("  ✅ created: %s (depth 4)\n", deepCase.Title)
+
+	tree = ws.GetTree()
+	if len(tree.Nodes) != 7 { // root + case + folder + nested + folder1 + folder2 + deepCase
+		fmt.Printf("  ❌ expected 7 nodes, got %d\n", len(tree.Nodes))
+		exitCode = 1
+		return
+	}
+	fmt.Printf("  ✅ tree has 7 nodes (4 levels deep)\n")
+
+	// Verify deep case parent chain
+	deepNode, _ := ws.GetNode(deepCase.ID)
+	if deepNode.ParentID != folder2.ID {
+		fmt.Printf("  ❌ deep case parent mismatch\n")
+		exitCode = 1
+		return
+	}
+	fmt.Printf("  ✅ deep case parent chain correct\n")
 
 	fmt.Printf("\n=== summary ===\n")
 	fmt.Printf("✅ workspace test passed\n")

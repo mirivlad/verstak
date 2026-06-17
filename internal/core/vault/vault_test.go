@@ -247,3 +247,113 @@ func TestVaultEvents_Published(t *testing.T) {
 		}
 	}
 }
+
+func TestCreateVault_CreatesWorkspace(t *testing.T) {
+	dir := t.TempDir()
+	vaultPath := filepath.Join(dir, "testvault")
+
+	bus := events.NewBus()
+	v := NewVault(bus)
+
+	if err := v.CreateVault(vaultPath); err != nil {
+		t.Fatalf("CreateVault: %v", err)
+	}
+
+	wsPath := filepath.Join(v.GetVaultPath(), ".verstak", "workspace.json")
+	data, err := os.ReadFile(wsPath)
+	if err != nil {
+		t.Fatalf("workspace.json not found: %v", err)
+	}
+
+	var ws struct {
+		SchemaVersion int `json:"schemaVersion"`
+		Nodes         []struct {
+			ID       string `json:"id"`
+			Type     string `json:"type"`
+			Title    string `json:"title"`
+			Status   string `json:"status"`
+			ParentID string `json:"parentId"`
+		} `json:"nodes"`
+		CurrentNodeID string `json:"currentNodeId"`
+	}
+	if err := json.Unmarshal(data, &ws); err != nil {
+		t.Fatalf("failed to parse workspace.json: %v", err)
+	}
+
+	if ws.SchemaVersion != 1 {
+		t.Errorf("schemaVersion: got %d, want 1", ws.SchemaVersion)
+	}
+	if len(ws.Nodes) != 1 {
+		t.Fatalf("expected 1 root node, got %d", len(ws.Nodes))
+	}
+	if ws.Nodes[0].Type != "space" {
+		t.Errorf("root type: got %q, want %q", ws.Nodes[0].Type, "space")
+	}
+	if ws.Nodes[0].Title != "My Workspace" {
+		t.Errorf("root title: got %q, want %q", ws.Nodes[0].Title, "My Workspace")
+	}
+	if ws.Nodes[0].Status != "active" {
+		t.Errorf("root status: got %q, want %q", ws.Nodes[0].Status, "active")
+	}
+	if ws.CurrentNodeID != ws.Nodes[0].ID {
+		t.Errorf("currentNodeId should be root node id")
+	}
+}
+
+func TestOpenVault_WorkspaceLoads(t *testing.T) {
+	dir := t.TempDir()
+	vaultPath := filepath.Join(dir, "testvault")
+
+	bus := events.NewBus()
+	v := NewVault(bus)
+
+	if err := v.CreateVault(vaultPath); err != nil {
+		t.Fatalf("CreateVault: %v", err)
+	}
+
+	v.CloseVault()
+
+	if err := v.OpenVault(vaultPath); err != nil {
+		t.Fatalf("OpenVault: %v", err)
+	}
+
+	wsPath := filepath.Join(v.GetVaultPath(), ".verstak", "workspace.json")
+	data, err := os.ReadFile(wsPath)
+	if err != nil {
+		t.Fatalf("workspace.json not found after reopen: %v", err)
+	}
+
+	var ws struct {
+		Nodes []struct {
+			ID    string `json:"id"`
+			Type  string `json:"type"`
+			Title string `json:"title"`
+		} `json:"nodes"`
+	}
+	if err := json.Unmarshal(data, &ws); err != nil {
+		t.Fatalf("failed to parse workspace.json: %v", err)
+	}
+	if len(ws.Nodes) != 1 {
+		t.Fatalf("expected 1 node after reopen, got %d", len(ws.Nodes))
+	}
+	if ws.Nodes[0].Type != "space" {
+		t.Errorf("root type after reopen: got %q, want %q", ws.Nodes[0].Type, "space")
+	}
+}
+
+func TestCreateVault_VaultPathNormalized(t *testing.T) {
+	dir := t.TempDir()
+	vaultPath := filepath.Join(dir, "testvault")
+
+	bus := events.NewBus()
+	v := NewVault(bus)
+
+	if err := v.CreateVault(vaultPath); err != nil {
+		t.Fatalf("CreateVault: %v", err)
+	}
+
+	expectedPath := filepath.Join(vaultPath, "VerstakVault")
+	if v.GetVaultPath() != expectedPath {
+		t.Errorf("GetVaultPath: got %q, want %q", v.GetVaultPath(), expectedPath)
+	}
+}

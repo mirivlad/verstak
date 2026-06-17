@@ -15,6 +15,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/verstak/verstak-desktop/internal/core/events"
+	"github.com/verstak/verstak-desktop/internal/core/workspace"
 )
 
 // VaultStatus represents the current state of a vault.
@@ -112,6 +113,12 @@ func (v *Vault) CreateVault(path string) error {
 	}
 	if err := os.WriteFile(metaPath, data, 0o644); err != nil {
 		return fmt.Errorf("failed to write vault.json: %w", err)
+	}
+
+	// Create workspace.json with root node
+	wsMgr := workspace.NewManager(vaultDir)
+	if err := wsMgr.Load(); err != nil {
+		return fmt.Errorf("failed to create workspace: %w", err)
 	}
 
 	v.mu.Lock()
