@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/verstak/verstak-desktop/internal/core/capability"
 	"github.com/verstak/verstak-desktop/internal/core/contribution"
@@ -556,6 +557,71 @@ func runContributionsTest(root string) {
 		for _, cmd := range c.Commands {
 			fmt.Printf("    - id=%q title=%q\n", cmd.ID, cmd.Title)
 		}
+	}
+
+	// ── Step 2b: Frontend bundle verification ──
+	fmt.Printf("\n[frontend bundle verification]\n")
+	frontendOk := true
+
+	// 2b.1 — Check manifest declares frontend.entry
+	if target.Manifest.Frontend == nil {
+		fmt.Printf("  ❌ manifest.frontend is nil — plugin has no frontend config\n")
+		frontendOk = false
+	} else {
+		expectedEntry := "frontend/dist/index.js"
+		if target.Manifest.Frontend.Entry != expectedEntry {
+			fmt.Printf("  ❌ frontend.entry: expected %q, got %q\n", expectedEntry, target.Manifest.Frontend.Entry)
+			frontendOk = false
+		} else {
+			fmt.Printf("  ✅ frontend.entry: %s\n", target.Manifest.Frontend.Entry)
+		}
+
+		// 2b.2 — Resolve entry path and check file exists on disk
+		resolvedEntry := filepath.Join(target.RootPath, target.Manifest.Frontend.Entry)
+		if _, err := os.Stat(resolvedEntry); os.IsNotExist(err) {
+			fmt.Printf("  ❌ frontend bundle NOT FOUND at resolved path: %s\n", resolvedEntry)
+			frontendOk = false
+		} else if err != nil {
+			fmt.Printf("  ❌ frontend bundle stat error: %v\n", err)
+			frontendOk = false
+		} else {
+			fmt.Printf("  ✅ frontend bundle exists: %s\n", resolvedEntry)
+
+			// 2b.3 — Read file and check for "VerstakPluginRegister"
+			data, err := os.ReadFile(resolvedEntry)
+			if err != nil {
+				fmt.Printf("  ❌ failed to read frontend bundle: %v\n", err)
+				frontendOk = false
+			} else {
+				content := string(data)
+
+				if strings.Contains(content, "VerstakPluginRegister") {
+					fmt.Printf("  ✅ bundle contains VerstakPluginRegister contract\n")
+				} else {
+					fmt.Printf("  ❌ bundle MISSING VerstakPluginRegister contract\n")
+					frontendOk = false
+				}
+
+				// 2b.4 — Check for expected component names
+				expectedComponents := []string{"DiagnosticsPanel", "PlatformTestSettings"}
+				for _, comp := range expectedComponents {
+					if strings.Contains(content, comp) {
+						fmt.Printf("  ✅ component registered: %s\n", comp)
+					} else {
+						fmt.Printf("  ❌ component MISSING from bundle: %s\n", comp)
+						frontendOk = false
+					}
+				}
+			}
+		}
+	}
+
+	if frontendOk {
+		fmt.Printf("  ✅ frontend bundle checks passed\n")
+	} else {
+		fmt.Printf("  ❌ frontend bundle checks FAILED\n")
+		exitCode = 1
+		return
 	}
 
 	// ── Step 3: Register capabilities (simulates main.go + ReloadPlugins) ──

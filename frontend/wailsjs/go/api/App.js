@@ -46,6 +46,14 @@ export function GetPermissions() {
   return window['go']['api']['App']['GetPermissions']();
 }
 
+export function GetPluginAssetContent(arg1, arg2) {
+  return window['go']['api']['App']['GetPluginAssetContent'](arg1, arg2);
+}
+
+export function GetPluginFrontendInfo(arg1) {
+  return window['go']['api']['App']['GetPluginFrontendInfo'](arg1);
+}
+
 export function GetPlugins() {
   return window['go']['api']['App']['GetPlugins']();
 }

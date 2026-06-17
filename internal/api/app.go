@@ -711,3 +711,69 @@ func (a *App) SelectVaultForOpen() string {
 	}
 	return selected
 }
+
+// ─── Plugin Frontend Asset API ───────────────────────────
+
+// GetPluginFrontendInfo returns frontend metadata for a plugin.
+// Returns empty map if plugin has no frontend bundle or is not found.
+func (a *App) GetPluginFrontendInfo(pluginID string) map[string]interface{} {
+	for _, p := range a.plugins {
+		if p.Manifest.ID != pluginID {
+			continue
+		}
+		if p.Manifest.Frontend == nil {
+			return map[string]interface{}{"status": "no-frontend"}
+		}
+		return map[string]interface{}{
+			"pluginId": p.Manifest.ID,
+			"name":     p.Manifest.Name,
+			"icon":     p.Manifest.Icon,
+			"version":  p.Manifest.Version,
+			"entry":    p.Manifest.Frontend.Entry,
+			"style":    p.Manifest.Frontend.Style,
+			"rootPath": p.RootPath,
+		}
+	}
+	return map[string]interface{}{"status": "not-found"}
+}
+
+// GetPluginAssetContent reads a frontend asset file from a plugin directory.
+// Security: validates that the assetPath is relative and does not escape the plugin root.
+func (a *App) GetPluginAssetContent(pluginID, assetPath string) (string, string) {
+	// Validate asset path — reject absolute paths and path traversal
+	if strings.HasPrefix(assetPath, "/") || strings.HasPrefix(assetPath, "\\") {
+		return "", "absolute paths not allowed"
+	}
+	if strings.Contains(assetPath, "..") {
+		return "", "path traversal not allowed"
+	}
+
+	// Find the plugin
+	var pluginRoot string
+	found := false
+	for _, p := range a.plugins {
+		if p.Manifest.ID == pluginID && p.Manifest.Frontend != nil {
+			pluginRoot = p.RootPath
+			found = true
+			break
+		}
+	}
+	if !found {
+		return "", "plugin not found or has no frontend"
+	}
+
+	// Resolve path relative to plugin root
+	fullPath := filepath.Join(pluginRoot, assetPath)
+	// Verify we haven't escaped plugin root
+	absRoot, _ := filepath.Abs(pluginRoot)
+	absPath, _ := filepath.Abs(fullPath)
+	if !strings.HasPrefix(absPath, absRoot+string(filepath.Separator)) && absPath != absRoot {
+		return "", "path escapes plugin root"
+	}
+
+	data, err := os.ReadFile(absPath)
+	if err != nil {
+		return "", fmt.Sprintf("failed to read asset: %v", err)
+	}
+	return string(data), ""
+}

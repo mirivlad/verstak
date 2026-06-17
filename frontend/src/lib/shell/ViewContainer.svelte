@@ -1,4 +1,5 @@
 <script>
+  import PluginBundleHost from '../plugin-host/PluginBundleHost.svelte';
   import { onMount } from 'svelte';
   import * as App from '../../../wailsjs/go/api/App';
 
@@ -27,10 +28,17 @@
     ? plugins.find(p => p.manifest?.id === currentView.pluginId)
     : null;
   $: pluginStatus = currentPlugin ? currentPlugin.status : 'unknown';
+  $: hasFrontend = currentPlugin?.manifest?.frontend?.entry != null;
+  $: hostPluginId = currentView?.pluginId || activeViewPluginId;
+  $: hostComponentId = currentView?.component || null;
 
   // Reset render error when view changes
   $: if (activeView) {
     renderError = null;
+  }
+
+  function onHostError(e) {
+    renderError = e.detail?.message || 'Plugin view error';
   }
 </script>
 
@@ -51,17 +59,27 @@
         <div class="view-header">
           <span class="view-icon">{currentView.icon || '📦'}</span>
           <h2>{currentView.title}</h2>
+          {#if hasFrontend}
+            <span class="frontend-badge">frontend bundle</span>
+          {:else}
+            <span class="no-frontend-badge">no frontend bundle</span>
+          {/if}
         </div>
         <div class="view-content">
-          <div class="plugin-view-host" data-view-id={currentView.id} data-component={currentView.component}>
+          {#if hasFrontend}
+            <PluginBundleHost
+              pluginId={hostPluginId}
+              componentId={hostComponentId}
+            />
+          {:else}
             <div class="placeholder">
               <p class="placeholder-label">Plugin View Host</p>
               <p class="placeholder-info"><span class="placeholder-key">Plugin:</span> <strong>{currentView.pluginId}</strong></p>
               <p class="placeholder-info"><span class="placeholder-key">View ID:</span> <code>{currentView.id}</code></p>
               <p class="placeholder-info"><span class="placeholder-key">Component:</span> <code>{currentView.component}</code></p>
-              <p class="placeholder-badge">frontend bundle host not implemented yet</p>
+              <p class="placeholder-badge">frontend bundle not available</p>
             </div>
-          </div>
+          {/if}
         </div>
       </div>
     </div>
@@ -109,13 +127,29 @@
     flex: 1;
   }
   .view-icon { font-size: 1.3rem; }
+  .frontend-badge {
+    font-size: 0.7rem;
+    padding: 0.15rem 0.5rem;
+    background: rgba(78, 204, 163, 0.15);
+    color: #4ecca3;
+    border-radius: 8px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+  }
+  .no-frontend-badge {
+    font-size: 0.7rem;
+    padding: 0.15rem 0.5rem;
+    background: rgba(233, 69, 96, 0.1);
+    color: #e94560;
+    border-radius: 8px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+  }
   .view-content {
     flex: 1;
     overflow: auto;
-  }
-  .plugin-view-host {
-    width: 100%;
-    min-height: 200px;
   }
   .placeholder {
     color: #666;

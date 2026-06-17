@@ -27,6 +27,10 @@ export function GetCurrentWorkspaceNode():Promise<Record<string, any>>;
 
 export function GetPermissions():Promise<Array<permissions.Entry>>;
 
+export function GetPluginAssetContent(arg1:string,arg2:string):Promise<string|string>;
+
+export function GetPluginFrontendInfo(arg1:string):Promise<Record<string, any>>;
+
 export function GetPlugins():Promise<Array<plugin.Plugin>>;
 
 export function GetVaultPluginState():Promise<Record<string, any>>;

@@ -1,7 +1,8 @@
 <script>
   import PluginCard from './PluginCard.svelte';
+  import PluginBundleHost from '../plugin-host/PluginBundleHost.svelte';
   import { onMount } from 'svelte';
-  import { GetPlugins, GetCapabilities, GetPermissions, GetContributions, ReloadPlugins, GetVaultStatus, GetVaultPluginState, EnablePlugin, DisablePlugin, ReadPluginSettings, WritePluginSettings } from '../../../wailsjs/go/api/App';
+  import { GetPlugins, GetCapabilities, GetPermissions, GetContributions, ReloadPlugins, GetVaultStatus, GetVaultPluginState, EnablePlugin, DisablePlugin, ReadPluginSettings, WritePluginSettings, GetPluginFrontendInfo } from '../../../wailsjs/go/api/App';
 
   let plugins = [];
   let capabilities = [];
@@ -15,6 +16,7 @@
   let settingsData = {};
   let settingsPluginId = '';
   let settingsError = null;
+  let settingsPluginInfo = null;
   let lastOpenedKey = '';
 
   export let activeSettingsPluginId = '';
@@ -28,12 +30,17 @@
     }
   }
 
-  function openSettingsFromProps(pluginId, panelId) {
+  async function openSettingsFromProps(pluginId, panelId) {
     const panel = (contributions.settingsPanels || []).find(sp => sp.pluginId === pluginId && (!panelId || sp.id === panelId));
     if (panel) {
       settingsPanel = panel;
       settingsPluginId = pluginId;
       settingsError = null;
+      // Get plugin frontend info
+      try {
+        const info = await GetPluginFrontendInfo(pluginId);
+        settingsPluginInfo = info;
+      } catch { settingsPluginInfo = null; }
       ReadPluginSettings(pluginId).then(data => {
         settingsData = data || {};
       }).catch(() => { settingsData = {}; });
@@ -245,31 +252,19 @@
   <div class="modal-overlay" on:click|self={closeSettings} on:keydown|self={(e) => e.key === 'Escape' && closeSettings()} role="presentation">
   <div class="modal" role="dialog" aria-modal="true" aria-label="Plugin Settings">
     <div class="modal-header">
-      <h3>{settingsPanel.item.title}</h3>
+      <h3>{settingsPanel.title}</h3>
       <button class="modal-close" on:click={closeSettings} type="button">✕</button>
     </div>
     <div class="modal-body">
       <p class="settings-hint">Plugin: <code>{settingsPluginId}</code></p>
-      <p class="settings-hint">Component: <code>{settingsPanel.item.component}</code></p>
-
-      {#if settingsPanel.item.id === 'verstak.platform-test.settings'}
-        <div class="settings-form">
-          <h4>Test Settings</h4>
-          <div class="form-row">
-            <label for="test-name">Test Name</label>
-            <input id="test-name" type="text" bind:value={settingsData.testName} placeholder="Enter test name" />
-          </div>
-          <div class="form-row">
-            <label for="test-interval">Test Interval (seconds)</label>
-            <input id="test-interval" type="number" bind:value={settingsData.testInterval} min="1" max="300" />
-          </div>
-          <div class="form-row">
-            <label><input type="checkbox" bind:checked={settingsData.autoRun} /> Auto-run on startup</label>
-          </div>
-          <button class="btn-save" on:click={() => saveSettings()} type="button">Save Settings</button>
-        </div>
+      {#if settingsPluginInfo && settingsPluginInfo.entry}
+        <PluginBundleHost
+          pluginId={settingsPluginId}
+          componentId={settingsPanel.component || settingsPanel.id}
+        />
       {:else}
-        <p class="placeholder">Settings component: {settingsPanel.item.component}</p>
+        <p class="settings-hint">Component: <code>{settingsPanel.component}</code></p>
+        <p class="placeholder">Settings panel frontend bundle not available</p>
       {/if}
     </div>
   </div>

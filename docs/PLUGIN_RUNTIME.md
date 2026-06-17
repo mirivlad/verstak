@@ -168,7 +168,7 @@ foreach plugin:
 | Тип | Поле manifest | Описание | Frontend host |
 |---|---|---|---|
 | Боковая панель | `sidebarItems` | Элементы в sidebar слева | ✅ Sidebar.svelte (из ContributionRegistry) |
-| Основные панели | `views` | Полноценные страницы/панели | ✅ ViewContainer.svelte (placeholder — frontend bundle host not implemented) |
+| Основные панели | `views` | Полноценные страницы/панели | ✅ ViewContainer.svelte (PluginBundleHost — real frontend bundle) |
 | Панели настроек | `settingsPanels` | Панели в Plugin Manager | ✅ PluginManager.svelte (кнопка Settings, открывает modal) |
 | Команды | `commands` | Команды для command palette | ✅ ContributionRegistry (UI command palette не реализован) |
 
@@ -238,6 +238,73 @@ foreach plugin:
 - Ошибка в plugin view/settings placeholder не роняет shell
 - ViewContainer показывает "⚠️ Plugin UI failed" fallback
 - Error канал: `console.error` + видимый fallback в UI
+
+## Frontend Bundle Contract
+
+### Регистрация компонентов
+
+Плагин регистрирует frontend компоненты через глобальную функцию `window.VerstakPluginRegister`:
+
+```javascript
+window.VerstakPluginRegister('plugin.id', {
+  components: {
+    'ComponentName': {
+      mount: function(containerEl, props, api) {
+        // containerEl — div, созданный PluginBundleHost
+        // api — ограниченный VerstakPluginAPI
+        containerEl.innerHTML = '<h1>Hello from plugin!</h1>';
+      },
+      unmount: function(containerEl) {
+        // Очистка при смене view
+        containerEl.innerHTML = '';
+      }
+    }
+  }
+});
+```
+
+### VerstakPluginAPI
+
+API объект передаётся в `mount()` и содержит только ограниченный набор методов:
+
+| Свойство | Статус | Описание |
+|---|---|---|
+| `api.pluginId` | ✅ Работает | ID плагина |
+| `api.capabilities.has(id)` | 🔧 Stub | Запрос capability registry (planned) |
+| `api.events.publish(type, payload)` | 🔧 Stub | Публикация события (planned) |
+| `api.events.subscribe(type, handler)` | 🔧 Stub | Подписка на события (planned) |
+| `api.settings.read(key)` | 🔧 Stub | Чтение настроек плагина (planned) |
+| `api.settings.write(key, value)` | 🔧 Stub | Запись настроек плагина (planned) |
+| `api.commands.execute(id, args)` | 🔧 Stub | Выполнение команды (planned) |
+
+### Загрузка бандла
+
+1. `PluginBundleHost` получает pluginId и componentId
+2. Вызывает `App.GetPluginFrontendInfo(pluginId)` — получает entry/style/rootPath
+3. Вызывает `App.GetPluginAssetContent(pluginId, entry)` — получает JS контент
+4. Выполняет контент через `new Function(content)` — bundle вызывает `VerstakPluginRegister`
+5. Находит компонент по componentId и вызывает `mount(container, props, api)`
+6. При смене view — вызывает `unmount(container)` для старого компонента
+
+### Безопасность asset path
+
+| Правило | Проверка |
+|---|---|
+| Нет абсолютных путей | Пути, начинающиеся с `/` или `\`, отклоняются |
+| Нет path traversal | Пути, содержащие `..`, отклоняются |
+| Нет выхода за root | После `filepath.Join` проверяется, что путь внутри plugin root |
+| Только существующие файлы | `os.ReadFile` возвращает ошибку если файл не существует |
+
+### manifest frontend config
+
+```json
+{
+  "frontend": {
+    "entry": "frontend/dist/index.js",
+    "style": "frontend/style.css"
+  }
+}
+```
 
 ## Reload
 
