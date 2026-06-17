@@ -132,16 +132,26 @@ func (v *Vault) CreateVault(path string) error {
 }
 
 // OpenVault opens an existing vault at the given path.
+// The path can be either the vault root (containing .verstak/vault.json)
+// or the parent directory (containing VerstakVault/.verstak/vault.json).
 func (v *Vault) OpenVault(path string) error {
 	absPath, err := filepath.Abs(path)
 	if err != nil {
 		return fmt.Errorf("failed to resolve path: %w", err)
 	}
 
+	// Try direct path first: <path>/.verstak/vault.json
 	metaPath := filepath.Join(absPath, ".verstak", "vault.json")
 	data, err := os.ReadFile(metaPath)
 	if err != nil {
-		return fmt.Errorf("failed to read vault.json: %w", err)
+		// Try VerstakVault subdirectory: <path>/VerstakVault/.verstak/vault.json
+		vaultDir := filepath.Join(absPath, "VerstakVault")
+		metaPath = filepath.Join(vaultDir, ".verstak", "vault.json")
+		data, err = os.ReadFile(metaPath)
+		if err != nil {
+			return fmt.Errorf("failed to read vault.json: %w (looked in %s and %s)", err, filepath.Join(absPath, ".verstak"), filepath.Join(vaultDir, ".verstak"))
+		}
+		absPath = vaultDir
 	}
 
 	var meta VaultMeta
