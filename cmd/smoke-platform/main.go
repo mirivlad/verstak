@@ -221,7 +221,16 @@ func main() {
 		}
 	}
 
-	// ── 9. Verify required capabilities resolved ──
+	// ── 9. Verify workspace capability by name ──
+	fmt.Printf("\n[workspace capability verification]\n")
+	if reg.Has("verstak/core/workspace/v1") {
+		fmt.Printf("  ✅ workspace capability present: verstak/core/workspace/v1\n")
+	} else {
+		fmt.Printf("  ❌ workspace capability MISSING: verstak/core/workspace/v1\n")
+		allGood = false
+	}
+
+	// ── 10. Verify required capabilities resolved ──
 	fmt.Printf("\n[required capability resolution]\n")
 	missingRequired := reg.CheckRequired(m.Requires)
 	if len(missingRequired) > 0 {

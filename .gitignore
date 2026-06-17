@@ -1,4 +1,6 @@
+# .gitignore
 frontend/node_modules/
 frontend/dist/
 build/bin/verstak-desktop
+smoke-platform
 plugins/
