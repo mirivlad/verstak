@@ -75,3 +75,16 @@ fi
 
 echo ""
 echo "✅ smoke-platform done"
+
+# ── test workspace via Go smoke ──
+echo ""
+echo "[go smoke: workspace]"
+(cd "$ROOT" && go run -mod=mod ./cmd/smoke-platform/ -test-workspace 2>&1)
+SMOKE_WS_EXIT=$?
+if [ "$SMOKE_WS_EXIT" -ne 0 ]; then
+  echo "  ❌ smoke-platform: workspace test failed"
+  exit 1
+fi
+
+echo ""
+echo "✅ smoke-platform all tests done"

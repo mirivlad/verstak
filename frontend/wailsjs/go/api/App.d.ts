@@ -5,9 +5,13 @@ import {api} from '../models';
 import {permissions} from '../models';
 import {plugin} from '../models';
 
+export function ArchiveWorkspaceNode(arg1:string):Promise<string>;
+
 export function CloseVault():Promise<void>;
 
 export function CreateVault(arg1:string):Promise<void>;
+
+export function CreateWorkspaceNode(arg1:string,arg2:string,arg3:string):Promise<Record<string, any>>;
 
 export function DisablePlugin(arg1:string):Promise<string>;
 
@@ -19,6 +23,8 @@ export function GetCapabilities():Promise<Array<capability.Entry>>;
 
 export function GetContributions():Promise<api.ContributionSummary>;
 
+export function GetCurrentWorkspaceNode():Promise<Record<string, any>>;
+
 export function GetPermissions():Promise<Array<permissions.Entry>>;
 
 export function GetPlugins():Promise<Array<plugin.Plugin>>;
@@ -26,6 +32,10 @@ export function GetPlugins():Promise<Array<plugin.Plugin>>;
 export function GetVaultPluginState():Promise<Record<string, any>>;
 
 export function GetVaultStatus():Promise<Record<string, string>>;
+
+export function GetWorkspaceTree():Promise<Record<string, any>>;
+
+export function MoveWorkspaceNode(arg1:string,arg2:string):Promise<string>;
 
 export function OpenVault(arg1:string):Promise<void>;
 
@@ -39,11 +49,15 @@ export function RecordDesiredPlugin(arg1:string,arg2:string,arg3:string):Promise
 
 export function ReloadPlugins():Promise<number|string>;
 
+export function RenameWorkspaceNode(arg1:string,arg2:string):Promise<string>;
+
 export function SelectDirectory():Promise<string>;
 
 export function SelectVaultForOpen():Promise<string>;
 
 export function SetCurrentVault(arg1:string):Promise<string>;
+
+export function SetCurrentWorkspaceNode(arg1:string):Promise<string>;
 
 export function UpdateAppSettings(arg1:Record<string, any>):Promise<string>;
 

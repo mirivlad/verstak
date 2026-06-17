@@ -12,10 +12,12 @@ import (
 	"github.com/verstak/verstak-desktop/internal/core/plugin"
 	"github.com/verstak/verstak-desktop/internal/core/pluginstate"
 	"github.com/verstak/verstak-desktop/internal/core/vault"
+	"github.com/verstak/verstak-desktop/internal/core/workspace"
 )
 
 func main() {
 	testEnableDisable := flag.Bool("test-enable-disable", false, "Test enable/disable lifecycle")
+	testWorkspace := flag.Bool("test-workspace", false, "Test workspace/cases lifecycle")
 	flag.Parse()
 	exitCode := 0
 	defer func() {
@@ -24,6 +26,11 @@ func main() {
 
 	root, _ := os.Getwd()
 	pluginDir := filepath.Join(root, "plugins")
+
+	if *testWorkspace {
+		runWorkspaceTest(root)
+		return
+	}
 
 	if *testEnableDisable {
 		runEnableDisableTest(root)
@@ -433,4 +440,215 @@ func runEnableDisableTest(root string) {
 	// ── Summary ──
 	fmt.Printf("\n=== summary ===\n")
 	fmt.Printf("✅ enable/disable test passed\n")
+}
+
+// runWorkspaceTest tests the workspace/cases lifecycle.
+func runWorkspaceTest(root string) {
+	exitCode := 0
+	defer func() {
+		os.Exit(exitCode)
+	}()
+
+	fmt.Printf("=== smoke-platform: workspace test ===\n\n")
+
+	tmpDir, err := os.MkdirTemp("", "verstak-ws-smoke-*")
+	if err != nil {
+		fmt.Printf("  ❌ failed to create temp dir: %v\n", err)
+		exitCode = 1
+		return
+	}
+	defer os.RemoveAll(tmpDir)
+
+	vaultPath := filepath.Join(tmpDir, "testvault")
+	fmt.Printf("  vault path: %s\n", vaultPath)
+
+	v := vault.NewVault(nil)
+	if err := v.CreateVault(vaultPath); err != nil {
+		fmt.Printf("  ❌ create vault: %v\n", err)
+		exitCode = 1
+		return
+	}
+	fmt.Printf("  ✅ vault created\n")
+
+	openedPath := v.GetVaultPath()
+	if err := v.OpenVault(openedPath); err != nil {
+		fmt.Printf("  ❌ open vault: %v\n", err)
+		exitCode = 1
+		return
+	}
+	fmt.Printf("  ✅ vault opened at %s\n", openedPath)
+
+	fmt.Printf("\n[workspace init]\n")
+	ws := workspace.NewManager(openedPath)
+	if err := ws.Load(); err != nil {
+		fmt.Printf("  ❌ load workspace: %v\n", err)
+		exitCode = 1
+		return
+	}
+	fmt.Printf("  ✅ workspace loaded\n")
+
+	tree := ws.GetTree()
+	if len(tree.Nodes) != 1 {
+		fmt.Printf("  ❌ expected 1 root node, got %d\n", len(tree.Nodes))
+		exitCode = 1
+		return
+	}
+	fmt.Printf("  ✅ root node exists (id=%s)\n", tree.Nodes[0].ID)
+	rootID := tree.Nodes[0].ID
+
+	fmt.Printf("\n[workspace capability]\n")
+	reg := capability.NewRegistry()
+	reg.Register("verstak-desktop", []string{
+		"verstak/core/plugin-manager/v1",
+		"verstak/core/capability-registry/v1",
+		"verstak/core/contribution-registry/v1",
+		"verstak/core/permissions/v1",
+		"verstak/core/events/v1",
+	})
+	reg.Register("verstak-desktop", []string{"verstak/core/vault/v1"})
+	reg.Register("verstak-desktop", []string{"verstak/core/workspace/v1"})
+	if !reg.Has("verstak/core/workspace/v1") {
+		fmt.Printf("  ❌ workspace capability not registered\n")
+		exitCode = 1
+		return
+	}
+	fmt.Printf("  ✅ workspace capability registered\n")
+	totalCaps := len(reg.List())
+	if totalCaps < 7 {
+		fmt.Printf("  ❌ expected >= 7 capabilities, got %d\n", totalCaps)
+		exitCode = 1
+		return
+	}
+	fmt.Printf("  ✅ total capabilities >= 7 (%d)\n", totalCaps)
+
+	fmt.Printf("\n[create case]\n")
+	caseNode, err := ws.CreateNode(rootID, workspace.TypeCase, "Test Case")
+	if err != nil {
+		fmt.Printf("  ❌ create case: %v\n", err)
+		exitCode = 1
+		return
+	}
+	fmt.Printf("  ✅ case created: %s\n", caseNode.Title)
+
+	fmt.Printf("\n[create folder]\n")
+	folderNode, err := ws.CreateNode(rootID, workspace.TypeFolder, "Test Folder")
+	if err != nil {
+		fmt.Printf("  ❌ create folder: %v\n", err)
+		exitCode = 1
+		return
+	}
+	fmt.Printf("  ✅ folder created: %s\n", folderNode.Title)
+
+	fmt.Printf("\n[create nested case]\n")
+	nestedCase, err := ws.CreateNode(folderNode.ID, workspace.TypeCase, "Nested Case")
+	if err != nil {
+		fmt.Printf("  ❌ create nested case: %v\n", err)
+		exitCode = 1
+		return
+	}
+	fmt.Printf("  ✅ nested case created: %s\n", nestedCase.Title)
+
+	fmt.Printf("\n[tree structure]\n")
+	tree = ws.GetTree()
+	if len(tree.Nodes) != 4 {
+		fmt.Printf("  ❌ expected 4 nodes, got %d\n", len(tree.Nodes))
+		exitCode = 1
+		return
+	}
+	fmt.Printf("  ✅ tree has 4 nodes\n")
+	children := ws.ListChildren(rootID)
+	if len(children) != 2 {
+		fmt.Printf("  ❌ expected 2 root children, got %d\n", len(children))
+		exitCode = 1
+		return
+	}
+	fmt.Printf("  ✅ root has 2 children\n")
+
+	fmt.Printf("\n[rename]\n")
+	if err := ws.RenameNode(caseNode.ID, "Renamed Case"); err != nil {
+		fmt.Printf("  ❌ rename: %v\n", err)
+		exitCode = 1
+		return
+	}
+	renamed, _ := ws.GetNode(caseNode.ID)
+	if renamed.Title != "Renamed Case" {
+		fmt.Printf("  ❌ rename failed: got %q\n", renamed.Title)
+		exitCode = 1
+		return
+	}
+	fmt.Printf("  ✅ renamed to %q\n", renamed.Title)
+
+	fmt.Printf("\n[set current node]\n")
+	if err := ws.SetCurrentNode(caseNode.ID); err != nil {
+		fmt.Printf("  ❌ set current: %v\n", err)
+		exitCode = 1
+		return
+	}
+	current, err := ws.GetCurrentNode()
+	if err != nil {
+		fmt.Printf("  ❌ get current: %v\n", err)
+		exitCode = 1
+		return
+	}
+	if current.ID != caseNode.ID {
+		fmt.Printf("  ❌ current node mismatch\n")
+		exitCode = 1
+		return
+	}
+	fmt.Printf("  ✅ current node: %s\n", current.Title)
+
+	fmt.Printf("\n[archive]\n")
+	if err := ws.ArchiveNode(folderNode.ID); err != nil {
+		fmt.Printf("  ❌ archive: %v\n", err)
+		exitCode = 1
+		return
+	}
+	archived, _ := ws.GetNode(folderNode.ID)
+	if archived.Status != workspace.StatusArchived {
+		fmt.Printf("  ❌ archive failed: status=%s\n", archived.Status)
+		exitCode = 1
+		return
+	}
+	fmt.Printf("  ✅ archived %s\n", archived.Title)
+
+	fmt.Printf("\n[reopen persistence]\n")
+	ws2 := workspace.NewManager(openedPath)
+	if err := ws2.Load(); err != nil {
+		fmt.Printf("  ❌ reopen: %v\n", err)
+		exitCode = 1
+		return
+	}
+	tree2 := ws2.GetTree()
+	if len(tree2.Nodes) != 4 {
+		fmt.Printf("  ❌ expected 4 nodes after reopen, got %d\n", len(tree2.Nodes))
+		exitCode = 1
+		return
+	}
+	fmt.Printf("  ✅ tree persisted: %d nodes\n", len(tree2.Nodes))
+	current2, err := ws2.GetCurrentNode()
+	if err != nil {
+		fmt.Printf("  ❌ get current after reopen: %v\n", err)
+		exitCode = 1
+		return
+	}
+	if current2.ID != caseNode.ID {
+		fmt.Printf("  ❌ current node not persisted\n")
+		exitCode = 1
+		return
+	}
+	fmt.Printf("  ✅ current node persisted\n")
+
+	fmt.Printf("\n[workspace.json verification]\n")
+	wsPath := filepath.Join(openedPath, ".verstak", "workspace.json")
+	wsData, err := os.ReadFile(wsPath)
+	if err != nil {
+		fmt.Printf("  ❌ read workspace.json: %v\n", err)
+		exitCode = 1
+		return
+	}
+	fmt.Printf("  ✅ workspace.json exists on disk\n")
+	fmt.Printf("  content:\n%s\n", string(wsData))
+
+	fmt.Printf("\n=== summary ===\n")
+	fmt.Printf("✅ workspace test passed\n")
 }

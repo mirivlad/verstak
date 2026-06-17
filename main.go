@@ -22,6 +22,7 @@ import (
 	"github.com/verstak/verstak-desktop/internal/core/pluginstate"
 	"github.com/verstak/verstak-desktop/internal/core/storage"
 	"github.com/verstak/verstak-desktop/internal/core/vault"
+	"github.com/verstak/verstak-desktop/internal/core/workspace"
 )
 
 //go:embed frontend/dist
@@ -50,29 +51,6 @@ func main() {
 	// ─── Initialize Vault ────────────────────────────────────
 	vaultService := vault.NewVault(eventBus)
 
-	// ─── Register Core Capabilities ─────────────────────────
-	// These are provided by the desktop core itself, not by plugins.
-	// Registered before plugin discovery so that plugins can resolve
-	// required capabilities (e.g. verstak/core/plugin-manager/v1) at load time.
-	corePluginID := "verstak-desktop"
-	coreCaps := []string{
-		"verstak/core/plugin-manager/v1",
-		"verstak/core/capability-registry/v1",
-		"verstak/core/contribution-registry/v1",
-		"verstak/core/permissions/v1",
-		"verstak/core/events/v1",
-	}
-	if err := capRegistry.Register(corePluginID, coreCaps); err != nil {
-		log.Fatalf("[main] failed to register core capabilities: %v", err)
-	}
-	log.Printf("[main] registered %d core capabilities", len(coreCaps))
-
-	// Register vault capability (vault is available as a core service)
-	if err := capRegistry.Register(corePluginID, []string{"verstak/core/vault/v1"}); err != nil {
-		log.Fatalf("[main] failed to register vault capability: %v", err)
-	}
-	log.Printf("[main] registered vault capability")
-
 	// ─── Initialize App Settings ─────────────────────────────
 	appSettingsMgr := appsettings.NewDefaultManager()
 	if err := appSettingsMgr.Load(); err != nil {
@@ -80,7 +58,6 @@ func main() {
 	}
 
 	// ─── Vault Auto-Open ─────────────────────────────────────
-	// If currentVaultPath is set in app settings, try to open it.
 	cfg := appSettingsMgr.Get()
 	if cfg.CurrentVaultPath != "" {
 		if err := vaultService.OpenVault(cfg.CurrentVaultPath); err != nil {
@@ -96,6 +73,46 @@ func main() {
 		if err := pluginStateMgr.Load(); err != nil {
 			log.Printf("[main] vault plugin state: %v", err)
 		}
+	}
+
+	// ─── Initialize Workspace ────────────────────────────────
+	var workspaceMgr *workspace.Manager
+	if vaultService.GetVaultStatus() == vault.StatusOpen {
+		workspaceMgr = workspace.NewManager(vaultService.GetVaultPath())
+		if err := workspaceMgr.Load(); err != nil {
+			log.Printf("[main] workspace: %v", err)
+			workspaceMgr = nil
+		} else {
+			log.Printf("[main] workspace loaded: %d nodes", len(workspaceMgr.GetTree().Nodes))
+		}
+	}
+
+	// ─── Register Core Capabilities ─────────────────────────
+	corePluginID := "verstak-desktop"
+	coreCaps := []string{
+		"verstak/core/plugin-manager/v1",
+		"verstak/core/capability-registry/v1",
+		"verstak/core/contribution-registry/v1",
+		"verstak/core/permissions/v1",
+		"verstak/core/events/v1",
+	}
+	if err := capRegistry.Register(corePluginID, coreCaps); err != nil {
+		log.Fatalf("[main] failed to register core capabilities: %v", err)
+	}
+	log.Printf("[main] registered %d core capabilities", len(coreCaps))
+
+	// Register vault capability
+	if err := capRegistry.Register(corePluginID, []string{"verstak/core/vault/v1"}); err != nil {
+		log.Fatalf("[main] failed to register vault capability: %v", err)
+	}
+	log.Printf("[main] registered vault capability")
+
+	// Register workspace capability (only when vault is open and workspace initialized)
+	if workspaceMgr != nil && workspaceMgr.IsInitialized() {
+		if err := capRegistry.Register(corePluginID, []string{"verstak/core/workspace/v1"}); err != nil {
+			log.Fatalf("[main] failed to register workspace capability: %v", err)
+		}
+		log.Printf("[main] registered workspace capability")
 	}
 
 	// ─── Plugin Discovery ───────────────────────────────────
@@ -203,7 +220,7 @@ func main() {
 
 	// Create the App struct
 	storageService := storage.New(vaultService)
-	app := api.NewApp(capRegistry, contribRegistry, permRegistry, eventBus, plugins, vaultService, storageService, appSettingsMgr, pluginStateMgr)
+	app := api.NewApp(capRegistry, contribRegistry, permRegistry, eventBus, plugins, vaultService, storageService, appSettingsMgr, pluginStateMgr, workspaceMgr)
 
 	// ─── Wails App ───────────────────────────────────────────
 	err := wails.Run(&options.App{

@@ -1,6 +1,7 @@
 <script>
   import { onMount } from 'svelte';
   import * as App from '../../../wailsjs/go/api/App';
+  import WorkspaceTree from './WorkspaceTree.svelte';
 
   let plugins = [];
   let vaultStatus = { status: 'unknown', path: '', vaultId: '' };
@@ -75,6 +76,10 @@
     </div>
   {/if}
 
+  {#if vaultOpen}
+    <WorkspaceTree />
+  {/if}
+
   <div class="sidebar-footer">
     {#if vaultStatus.status !== 'unknown'}
       <span class="vault-indicator" class:vault-open={vaultStatus.status === 'open'} class:vault-closed={vaultStatus.status !== 'open'}>
@@ -127,6 +132,13 @@
     gap: 0.15rem;
     border-top: 1px solid #0f3460;
     margin-top: 0.25rem;
+  }
+
+  :global(workspace-tree) {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
   }
 
   .section-label {

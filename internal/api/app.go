@@ -20,6 +20,7 @@ import (
 	"github.com/verstak/verstak-desktop/internal/core/pluginstate"
 	"github.com/verstak/verstak-desktop/internal/core/storage"
 	"github.com/verstak/verstak-desktop/internal/core/vault"
+	"github.com/verstak/verstak-desktop/internal/core/workspace"
 )
 
 // App is the main application struct exposed to the Wails frontend.
@@ -34,6 +35,7 @@ type App struct {
 	storage         *storage.Storage
 	appSettings     *appsettings.Manager
 	pluginState     *pluginstate.Manager
+	workspace       *workspace.Manager
 }
 
 // NewApp creates a new App instance.
@@ -47,6 +49,7 @@ func NewApp(
 	storageService *storage.Storage,
 	appSettingsMgr *appsettings.Manager,
 	pluginStateMgr *pluginstate.Manager,
+	workspaceMgr *workspace.Manager,
 ) *App {
 	return &App{
 		capRegistry:     capReg,
@@ -58,6 +61,7 @@ func NewApp(
 		storage:         storageService,
 		appSettings:     appSettingsMgr,
 		pluginState:     pluginStateMgr,
+		workspace:       workspaceMgr,
 	}
 }
 
@@ -427,6 +431,104 @@ func (a *App) SetCurrentVault(path string) string {
 	// Register vault capability
 	if err := a.capRegistry.Register("verstak-desktop", []string{"verstak/core/vault/v1"}); err != nil {
 		log.Printf("[api] SetCurrentVault: failed to register vault capability: %v", err)
+	}
+	return ""
+}
+
+// ─── Workspace API ─────────────────────────────────────────
+
+// GetWorkspaceTree returns the full workspace tree.
+func (a *App) GetWorkspaceTree() map[string]interface{} {
+	if a.workspace == nil || !a.workspace.IsInitialized() {
+		return map[string]interface{}{"status": "not initialized"}
+	}
+	tree := a.workspace.GetTree()
+	return map[string]interface{}{
+		"schemaVersion": tree.SchemaVersion,
+		"nodes":         tree.Nodes,
+		"currentNodeId": tree.CurrentNodeID,
+		"updatedAt":     tree.UpdatedAt,
+	}
+}
+
+// CreateWorkspaceNode creates a new workspace node.
+func (a *App) CreateWorkspaceNode(parentID, nodeType, title string) map[string]interface{} {
+	if a.workspace == nil {
+		return map[string]interface{}{"error": "workspace not initialized"}
+	}
+	node, err := a.workspace.CreateNode(parentID, workspace.NodeType(nodeType), title)
+	if err != nil {
+		return map[string]interface{}{"error": err.Error()}
+	}
+	return map[string]interface{}{
+		"id":        node.ID,
+		"parentId":  node.ParentID,
+		"type":      string(node.Type),
+		"title":     node.Title,
+		"status":    string(node.Status),
+		"order":     node.Order,
+		"createdAt": node.CreatedAt,
+		"updatedAt": node.UpdatedAt,
+	}
+}
+
+// RenameWorkspaceNode renames a workspace node.
+func (a *App) RenameWorkspaceNode(id, title string) string {
+	if a.workspace == nil {
+		return "workspace not initialized"
+	}
+	if err := a.workspace.RenameNode(id, title); err != nil {
+		return err.Error()
+	}
+	return ""
+}
+
+// MoveWorkspaceNode moves a node to a new parent.
+func (a *App) MoveWorkspaceNode(id, newParentID string) string {
+	if a.workspace == nil {
+		return "workspace not initialized"
+	}
+	if err := a.workspace.MoveNode(id, newParentID); err != nil {
+		return err.Error()
+	}
+	return ""
+}
+
+// ArchiveWorkspaceNode archives a workspace node.
+func (a *App) ArchiveWorkspaceNode(id string) string {
+	if a.workspace == nil {
+		return "workspace not initialized"
+	}
+	if err := a.workspace.ArchiveNode(id); err != nil {
+		return err.Error()
+	}
+	return ""
+}
+
+// GetCurrentWorkspaceNode returns the currently selected node.
+func (a *App) GetCurrentWorkspaceNode() map[string]interface{} {
+	if a.workspace == nil {
+		return map[string]interface{}{"status": "not initialized"}
+	}
+	node, err := a.workspace.GetCurrentNode()
+	if err != nil {
+		return map[string]interface{}{"error": err.Error()}
+	}
+	return map[string]interface{}{
+		"id":     node.ID,
+		"type":   string(node.Type),
+		"title":  node.Title,
+		"status": string(node.Status),
+	}
+}
+
+// SetCurrentWorkspaceNode sets the currently selected node.
+func (a *App) SetCurrentWorkspaceNode(id string) string {
+	if a.workspace == nil {
+		return "workspace not initialized"
+	}
+	if err := a.workspace.SetCurrentNode(id); err != nil {
+		return err.Error()
 	}
 	return ""
 }
