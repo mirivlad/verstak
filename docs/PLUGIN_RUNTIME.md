@@ -382,3 +382,74 @@ Vault plugin state хранится **внутри vault** в `.verstak/plugins.
 - `./scripts/check.sh` — ✅
 - `./scripts/smoke-platform.sh` — ✅ (enable/disable/plugins.json)
 - `./scripts/build.sh` — ✅
+
+## Workspace / Cases Core Capability
+
+Workspace — центральная модель Верстака вокруг "дел". Это НЕ notes/files — это фундамент.
+
+### Ноды
+
+| Поле | Тип | Описание |
+|------|-----|----------|
+| `id` | UUID | Стабильный идентификатор |
+| `parentId` | string | ID родителя (пусто для root) |
+| `type` | space/case/folder | Тип ноды |
+| `title` | string | Название |
+| `status` | active/sleeping/archived | Жизненный цикл |
+| `tags` | string[] | Теги |
+| `order` | int | Порядок среди siblings |
+| `createdAt` | RFC3339Nano | Создан |
+| `updatedAt` | RFC3339Nano | Обновлён |
+
+### Хранение
+
+`<vault>/.verstak/workspace.json` — атомарная запись (temp + rename).
+
+### API
+
+- `GetWorkspaceTree()` — полное дерево
+- `CreateWorkspaceNode(parentID, type, title)` — создать
+- `RenameWorkspaceNode(id, title)` — переименовать
+- `MoveWorkspaceNode(id, newParentID)` — переместить
+- `ArchiveWorkspaceNode(id)` — архивировать
+- `SetCurrentWorkspaceNode(id)` — выбрать текущую
+- `GetCurrentWorkspaceNode()` — получить текущую
+
+### Capability
+
+`verstak/core/workspace/v1` — регистрируется только когда vault открыт и workspace инициализирован.
+
+### Правила
+
+- Root node создаётся при создании vault
+- Порядок children стабилен (sort by order)
+- Нельзя переместить ноду в себя или в своего потомка
+- Архивирование — soft delete (status = archived)
+- Corrupt JSON → backup + defaults
+
+### Типы нод
+
+| Тип | Назначение |
+|-----|-----------|
+| `space` | Рабочее пространство (root) |
+| `case` | Дело |
+| `folder` | Папка |
+
+НЕ добавляются: note, file, action, secret, worklog, link — это плагины.
+
+### Lifecycle Events
+
+- `workspace.node.created`
+- `workspace.node.renamed`
+- `workspace.node.moved`
+- `workspace.node.archived`
+- `workspace.node.selected`
+- `workspace.error`
+
+### UI
+
+WorkspaceTree в sidebar:
+- Дерево с expand/collapse
+- Создание case/folder
+- Выбор текущей ноды
+- Индикатор статуса (active/archived/sleeping)
