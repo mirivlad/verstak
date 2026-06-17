@@ -131,3 +131,35 @@ func TestAppSettings_NotInsideVault(t *testing.T) {
 		t.Errorf("app settings path should be under .config/verstak, got %s", path)
 	}
 }
+
+func TestLoad_LegacyMigration(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.json")
+
+	// Write a legacy v1 config
+	legacy := `{
+  "version": 1,
+  "vault_path": "/home/user/Documents/MyVault",
+  "theme": "light",
+  "first_run_completed": true
+}`
+	if err := os.WriteFile(path, []byte(legacy), 0o600); err != nil {
+		t.Fatalf("write legacy config: %v", err)
+	}
+
+	m := NewManager(path)
+	if err := m.Load(); err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+
+	cfg := m.Get()
+	if cfg.CurrentVaultPath != "/home/user/Documents/MyVault" {
+		t.Errorf("CurrentVaultPath: got %q, want %q", cfg.CurrentVaultPath, "/home/user/Documents/MyVault")
+	}
+	if cfg.Theme != "light" {
+		t.Errorf("Theme: got %q, want %q", cfg.Theme, "light")
+	}
+	if cfg.SchemaVersion != 1 {
+		t.Errorf("SchemaVersion: got %d, want 1", cfg.SchemaVersion)
+	}
+}

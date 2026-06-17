@@ -61,6 +61,7 @@ func NewDefaultManager() *Manager {
 }
 
 // Load reads app settings from disk, creating defaults if missing.
+// Supports migration from legacy v1 config format (vault_path field).
 func (m *Manager) Load() error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -72,6 +73,26 @@ func (m *Manager) Load() error {
 			return m.saveLocked()
 		}
 		return fmt.Errorf("failed to read app settings: %w", err)
+	}
+
+	// Try to detect legacy format (has "vault_path" instead of "currentVaultPath")
+	var raw map[string]interface{}
+	if err := json.Unmarshal(data, &raw); err == nil {
+		if _, hasLegacy := raw["vault_path"]; hasLegacy {
+			// Legacy v1 config — migrate
+			m.config = defaultConfig()
+			if vp, ok := raw["vault_path"].(string); ok && vp != "" {
+				m.config.CurrentVaultPath = vp
+			}
+			if theme, ok := raw["theme"].(string); ok && theme != "" {
+				m.config.Theme = theme
+			}
+			// Save migrated config
+			if err := m.saveLocked(); err != nil {
+				return fmt.Errorf("failed to save migrated config: %w", err)
+			}
+			return nil
+		}
 	}
 
 	var cfg Config
