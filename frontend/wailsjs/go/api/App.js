@@ -82,10 +82,6 @@ export function SetCurrentVault(arg1) {
   return window['go']['api']['App']['SetCurrentVault'](arg1);
 }
 
-export function Startup(arg1) {
-  return window['go']['api']['App']['Startup'](arg1);
-}
-
 export function UpdateAppSettings(arg1) {
   return window['go']['api']['App']['UpdateAppSettings'](arg1);
 }

@@ -213,6 +213,7 @@ func main() {
 		MinWidth:         800,
 		MinHeight:        600,
 		WindowStartState: options.Normal,
+		OnStartup:        app.Startup,
 		AssetServer: &assetserver.Options{
 			Assets: assets,
 		},

@@ -4,7 +4,6 @@ import {capability} from '../models';
 import {api} from '../models';
 import {permissions} from '../models';
 import {plugin} from '../models';
-import {context} from '../models';
 
 export function CloseVault():Promise<void>;
 
@@ -45,8 +44,6 @@ export function SelectDirectory():Promise<string>;
 export function SelectVaultForOpen():Promise<string>;
 
 export function SetCurrentVault(arg1:string):Promise<string>;
-
-export function Startup(arg1:context.Context):Promise<void>;
 
 export function UpdateAppSettings(arg1:Record<string, any>):Promise<string>;
 
