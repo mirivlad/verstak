@@ -519,3 +519,27 @@ WorkspaceTree в sidebar:
 - Создание case/folder
 - Выбор текущей ноды
 - Индикатор статуса (active/archived/sleeping)
+
+---
+
+## Build Scripts
+
+В `verstak-desktop/scripts/` есть два скрипта:
+
+### `build.sh` — локальная детерминированная сборка
+
+- Собирает **только** `verstak-desktop` (core platform).
+- Не трогает другие репозитории.
+- **Fail-fast**: любая ошибка (go vet, go test, frontend build, wails build) прерывает сборку.
+- Проверяет: deps → frontend build → go mod download → go vet → go build → go test → wails build + plugin copy.
+- Используется в CI и для повседневной работы над core.
+
+### `update-and-build-all.sh` — dev helper для полной пересборки связки
+
+- **Не для CI.** Только для разработки, когда нужно быстро собрать всё вместе.
+- Шаги:
+  1. `git pull --ff-only` во всех 6 репозиториях
+  2. Сборка official plugins (frontend npm build + backend go build для каждого плагина)
+  3. Копирование собранных плагинов в `verstak-desktop/plugins/`
+  4. Запуск `build.sh` для сборки desktop
+- Ошибки pull и сборки плагинов не прерывают скрипт (best-effort), но ошибка build.sh прерывает (fail-fast).

@@ -1,13 +1,92 @@
 export namespace api {
 	
+	export class FlatSidebarItem {
+	    pluginId: string;
+	    id: string;
+	    title: string;
+	    icon?: string;
+	    view: string;
+	    position?: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new FlatSidebarItem(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.pluginId = source["pluginId"];
+	        this.id = source["id"];
+	        this.title = source["title"];
+	        this.icon = source["icon"];
+	        this.view = source["view"];
+	        this.position = source["position"];
+	    }
+	}
+	export class FlatSettingsPanel {
+	    pluginId: string;
+	    id: string;
+	    title: string;
+	    icon?: string;
+	    component: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new FlatSettingsPanel(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.pluginId = source["pluginId"];
+	        this.id = source["id"];
+	        this.title = source["title"];
+	        this.icon = source["icon"];
+	        this.component = source["component"];
+	    }
+	}
+	export class FlatCommand {
+	    pluginId: string;
+	    id: string;
+	    title: string;
+	    icon?: string;
+	    handler?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new FlatCommand(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.pluginId = source["pluginId"];
+	        this.id = source["id"];
+	        this.title = source["title"];
+	        this.icon = source["icon"];
+	        this.handler = source["handler"];
+	    }
+	}
+	export class FlatView {
+	    pluginId: string;
+	    id: string;
+	    title: string;
+	    icon?: string;
+	    component: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new FlatView(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.pluginId = source["pluginId"];
+	        this.id = source["id"];
+	        this.title = source["title"];
+	        this.icon = source["icon"];
+	        this.component = source["component"];
+	    }
+	}
 	export class ContributionSummary {
-	    views: contribution.ContributionView[];
-	    commands: contribution.ContributionCommand[];
-	    settingsPanels: contribution.ContributionSettingsPanel[];
-	    sidebarItems: contribution.ContributionSidebarItem[];
-	    fileActions: contribution.ContributionAction[];
-	    noteActions: contribution.ContributionAction[];
-	    searchProviders: contribution.ContributionSearchProvider[];
+	    views: FlatView[];
+	    commands: FlatCommand[];
+	    settingsPanels: FlatSettingsPanel[];
+	    sidebarItems: FlatSidebarItem[];
 	
 	    static createFrom(source: any = {}) {
 	        return new ContributionSummary(source);
@@ -15,13 +94,10 @@ export namespace api {
 	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.views = this.convertValues(source["views"], contribution.ContributionView);
-	        this.commands = this.convertValues(source["commands"], contribution.ContributionCommand);
-	        this.settingsPanels = this.convertValues(source["settingsPanels"], contribution.ContributionSettingsPanel);
-	        this.sidebarItems = this.convertValues(source["sidebarItems"], contribution.ContributionSidebarItem);
-	        this.fileActions = this.convertValues(source["fileActions"], contribution.ContributionAction);
-	        this.noteActions = this.convertValues(source["noteActions"], contribution.ContributionAction);
-	        this.searchProviders = this.convertValues(source["searchProviders"], contribution.ContributionSearchProvider);
+	        this.views = this.convertValues(source["views"], FlatView);
+	        this.commands = this.convertValues(source["commands"], FlatCommand);
+	        this.settingsPanels = this.convertValues(source["settingsPanels"], FlatSettingsPanel);
+	        this.sidebarItems = this.convertValues(source["sidebarItems"], FlatSidebarItem);
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -42,6 +118,9 @@ export namespace api {
 		    return a;
 		}
 	}
+	
+	
+	
 
 }
 
@@ -64,203 +143,6 @@ export namespace capability {
 	        this.pluginId = source["pluginId"];
 	        this.status = source["status"];
 	    }
-	}
-
-}
-
-export namespace contribution {
-	
-	export class ContributionAction {
-	    pluginId: string;
-	    item: plugin.ContributionAction;
-	
-	    static createFrom(source: any = {}) {
-	        return new ContributionAction(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.pluginId = source["pluginId"];
-	        this.item = this.convertValues(source["item"], plugin.ContributionAction);
-	    }
-	
-		convertValues(a: any, classs: any, asMap: boolean = false): any {
-		    if (!a) {
-		        return a;
-		    }
-		    if (a.slice && a.map) {
-		        return (a as any[]).map(elem => this.convertValues(elem, classs));
-		    } else if ("object" === typeof a) {
-		        if (asMap) {
-		            for (const key of Object.keys(a)) {
-		                a[key] = new classs(a[key]);
-		            }
-		            return a;
-		        }
-		        return new classs(a);
-		    }
-		    return a;
-		}
-	}
-	export class ContributionCommand {
-	    pluginId: string;
-	    item: plugin.ContributionCommand;
-	
-	    static createFrom(source: any = {}) {
-	        return new ContributionCommand(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.pluginId = source["pluginId"];
-	        this.item = this.convertValues(source["item"], plugin.ContributionCommand);
-	    }
-	
-		convertValues(a: any, classs: any, asMap: boolean = false): any {
-		    if (!a) {
-		        return a;
-		    }
-		    if (a.slice && a.map) {
-		        return (a as any[]).map(elem => this.convertValues(elem, classs));
-		    } else if ("object" === typeof a) {
-		        if (asMap) {
-		            for (const key of Object.keys(a)) {
-		                a[key] = new classs(a[key]);
-		            }
-		            return a;
-		        }
-		        return new classs(a);
-		    }
-		    return a;
-		}
-	}
-	export class ContributionSearchProvider {
-	    pluginId: string;
-	    item: plugin.ContributionSearchProvider;
-	
-	    static createFrom(source: any = {}) {
-	        return new ContributionSearchProvider(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.pluginId = source["pluginId"];
-	        this.item = this.convertValues(source["item"], plugin.ContributionSearchProvider);
-	    }
-	
-		convertValues(a: any, classs: any, asMap: boolean = false): any {
-		    if (!a) {
-		        return a;
-		    }
-		    if (a.slice && a.map) {
-		        return (a as any[]).map(elem => this.convertValues(elem, classs));
-		    } else if ("object" === typeof a) {
-		        if (asMap) {
-		            for (const key of Object.keys(a)) {
-		                a[key] = new classs(a[key]);
-		            }
-		            return a;
-		        }
-		        return new classs(a);
-		    }
-		    return a;
-		}
-	}
-	export class ContributionSettingsPanel {
-	    pluginId: string;
-	    item: plugin.ContributionSettingsPanel;
-	
-	    static createFrom(source: any = {}) {
-	        return new ContributionSettingsPanel(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.pluginId = source["pluginId"];
-	        this.item = this.convertValues(source["item"], plugin.ContributionSettingsPanel);
-	    }
-	
-		convertValues(a: any, classs: any, asMap: boolean = false): any {
-		    if (!a) {
-		        return a;
-		    }
-		    if (a.slice && a.map) {
-		        return (a as any[]).map(elem => this.convertValues(elem, classs));
-		    } else if ("object" === typeof a) {
-		        if (asMap) {
-		            for (const key of Object.keys(a)) {
-		                a[key] = new classs(a[key]);
-		            }
-		            return a;
-		        }
-		        return new classs(a);
-		    }
-		    return a;
-		}
-	}
-	export class ContributionSidebarItem {
-	    pluginId: string;
-	    item: plugin.ContributionSidebarItem;
-	
-	    static createFrom(source: any = {}) {
-	        return new ContributionSidebarItem(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.pluginId = source["pluginId"];
-	        this.item = this.convertValues(source["item"], plugin.ContributionSidebarItem);
-	    }
-	
-		convertValues(a: any, classs: any, asMap: boolean = false): any {
-		    if (!a) {
-		        return a;
-		    }
-		    if (a.slice && a.map) {
-		        return (a as any[]).map(elem => this.convertValues(elem, classs));
-		    } else if ("object" === typeof a) {
-		        if (asMap) {
-		            for (const key of Object.keys(a)) {
-		                a[key] = new classs(a[key]);
-		            }
-		            return a;
-		        }
-		        return new classs(a);
-		    }
-		    return a;
-		}
-	}
-	export class ContributionView {
-	    pluginId: string;
-	    item: plugin.ContributionView;
-	
-	    static createFrom(source: any = {}) {
-	        return new ContributionView(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.pluginId = source["pluginId"];
-	        this.item = this.convertValues(source["item"], plugin.ContributionView);
-	    }
-	
-		convertValues(a: any, classs: any, asMap: boolean = false): any {
-		    if (!a) {
-		        return a;
-		    }
-		    if (a.slice && a.map) {
-		        return (a as any[]).map(elem => this.convertValues(elem, classs));
-		    } else if ("object" === typeof a) {
-		        if (asMap) {
-		            for (const key of Object.keys(a)) {
-		                a[key] = new classs(a[key]);
-		            }
-		            return a;
-		        }
-		        return new classs(a);
-		    }
-		    return a;
-		}
 	}
 
 }
