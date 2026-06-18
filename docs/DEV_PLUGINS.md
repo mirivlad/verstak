@@ -59,12 +59,51 @@ This validates:
 
 ## Desktop Runtime Scanning Paths
 
-The desktop scans two directories for plugins:
+The desktop resolves plugin directories in one shared backend resolver. Priority:
 
 | Path | Purpose |
 |------|---------|
+| `VERSTAK_PLUGIN_DIR` | Dev/test override. Multiple paths can be separated with the OS path separator |
+| `./plugins/` | Bundled/dev plugins relative to the current working directory |
+| `<binary-dir>/plugins/` | Packaged plugins shipped next to the desktop executable |
 | `~/.config/verstak/plugins/` | User-installed plugins |
-| `./plugins/` | Bundled/dev plugins (project-local) |
+
+The resolver normalizes paths and removes duplicates before scanning. Missing
+directories are ignored by discovery.
+
+Discovery scans all resolved directories in order. If two plugin packages declare
+the same `id`, the first package wins and later duplicates are skipped. The
+warning includes both package paths, so during development check the log if an
+updated plugin appears to be ignored.
+
+## Bundled Plugin API During Development
+
+Frontend bundles are mounted with a plugin-scoped API created by
+`createPluginAPI(pluginId)`. The current API supports:
+
+- `settings.read/write/writeAll`
+- `capabilities.list/get/has`
+- `commands.register/execute` for handlers declared in `contributes.commands`
+- `events.publish/subscribe` using the bundled frontend event bus
+- `files.list/metadata/readText/writeText/createFolder/move/trash` for
+  canonical vault-relative slash paths guarded by `files.read`, `files.write`,
+  and `files.delete`. Backslashes, Windows absolute paths, UNC paths,
+  traversal, `.verstak` variants, and symlink read/write/move/trash operations
+  are rejected. Text read/write is UTF-8 only and limited to 2 MB for reads.
+- `workbench.openResource/editResource` for routing vault resources to
+  contributed `openProviders`. Plugins must declare `workbench.open`; this is a
+  policy/contract check. Files and Notes plugins call this API and do not import
+  a concrete editor plugin.
+
+Editor/viewer plugins contribute providers with `contributes.openProviders`.
+Workbench selects by resource kind, extension/mime, context (`generic-text`,
+`generic-markdown`, `notes-markdown`), user preference, priority, then
+deterministic `pluginId/providerId` tie-break. If nothing matches, Workbench
+shows `no-provider` fallback instead of a core editor.
+
+This is a cooperative contract, not a sandbox. Bundled plugins run in the same JS
+context as the desktop frontend; real isolation is deferred to the sidecar/sandbox
+milestone.
 
 ## Important Rules
 

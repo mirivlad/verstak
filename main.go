@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/wailsapp/wails/v2"
@@ -17,31 +16,26 @@ import (
 	"github.com/verstak/verstak-desktop/internal/core/capability"
 	"github.com/verstak/verstak-desktop/internal/core/contribution"
 	"github.com/verstak/verstak-desktop/internal/core/events"
+	corefiles "github.com/verstak/verstak-desktop/internal/core/files"
 	"github.com/verstak/verstak-desktop/internal/core/permissions"
 	"github.com/verstak/verstak-desktop/internal/core/plugin"
 	"github.com/verstak/verstak-desktop/internal/core/pluginstate"
 	"github.com/verstak/verstak-desktop/internal/core/storage"
 	"github.com/verstak/verstak-desktop/internal/core/vault"
 	"github.com/verstak/verstak-desktop/internal/core/workspace"
+	"github.com/verstak/verstak-desktop/internal/shell/debug"
 )
 
 //go:embed frontend/dist
 var assets embed.FS
 
-// expandPath resolves "~" to the user's home directory.
-func expandPath(path string) string {
-	if strings.HasPrefix(path, "~/") {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			log.Printf("[main] expandPath: cannot get home dir: %v", err)
-			return path
-		}
-		return filepath.Join(home, path[2:])
-	}
-	return path
-}
-
 func main() {
+	// ─── Debug Logging ───────────────────────────────────────
+	debugEnabled := debug.Init(os.Args)
+	if debugEnabled {
+		log.Printf("[main] debug mode enabled — logging to file")
+	}
+
 	// ─── Initialize Core Registries ──────────────────────────
 	capRegistry := capability.NewRegistry()
 	contribRegistry := contribution.NewRegistry()
@@ -95,6 +89,8 @@ func main() {
 		"verstak/core/contribution-registry/v1",
 		"verstak/core/permissions/v1",
 		"verstak/core/events/v1",
+		"verstak/core/files/v1",
+		"verstak/core/workbench/v1",
 	}
 	if err := capRegistry.Register(corePluginID, coreCaps); err != nil {
 		log.Fatalf("[main] failed to register core capabilities: %v", err)
@@ -116,37 +112,45 @@ func main() {
 	}
 
 	// ─── Plugin Discovery ───────────────────────────────────
-	// Resolve plugin directories relative to the binary location,
-	// not CWD (Wails may launch from a different directory).
-	binDir := filepath.Dir(os.Args[0])
-	pluginDir := filepath.Join(binDir, "plugins")
-
-	discoveryDirs := []string{
-		"~/.config/verstak/plugins",
-		pluginDir,
-	}
-
-	// Expand tilde in all paths
-	for i, d := range discoveryDirs {
-		discoveryDirs[i] = expandPath(d)
-	}
-
+	discoveryDirs := plugin.DefaultDiscoveryDirs()
 	log.Printf("[main] plugin dirs: %v", discoveryDirs)
+	if debugEnabled {
+		debug.Logf("[main] plugin dirs: %v", discoveryDirs)
+	}
 
 	plugins, discErrors := plugin.DiscoverPlugins(discoveryDirs)
 	for _, err := range discErrors {
 		log.Printf("[plugin] discovery warning: %v", err)
+		if debugEnabled {
+			debug.Logf("[plugin] discovery warning: %v", err)
+		}
 	}
 
 	log.Printf("[plugin] discovered %d plugins", len(plugins))
+	if debugEnabled {
+		for i, p := range plugins {
+			debug.Logf("[plugin] discovered[%d]: id=%s name=%s version=%s source=%s root=%s",
+				i, p.Manifest.ID, p.Manifest.Name, p.Manifest.Version, p.Manifest.Source, p.RootPath)
+		}
+	}
 
 	// ─── Plugin Lifecycle: Register Capabilities + Contributions ──
+	if debugEnabled {
+		debug.Logf("[main] starting plugin lifecycle for %d plugins", len(plugins))
+	}
 	for i := range plugins {
 		p := &plugins[i]
+
+		if debugEnabled {
+			debug.Logf("[main] lifecycle[%d]: id=%s status=%s enabled=%v", i, p.Manifest.ID, p.Status, p.Enabled)
+		}
 
 		// Check if plugin is disabled in vault plugin state
 		if pluginStateMgr != nil && pluginStateMgr.IsDisabled(p.Manifest.ID) {
 			log.Printf("[plugin] %s: disabled in vault plugin state — skipping", p.Manifest.ID)
+			if debugEnabled {
+				debug.Logf("[main] lifecycle: %s disabled in vault state, skipping", p.Manifest.ID)
+			}
 			p.Status = plugin.StatusDisabled
 			p.Enabled = false
 			continue
@@ -156,6 +160,9 @@ func main() {
 		if len(p.Manifest.Provides) > 0 {
 			if err := capRegistry.Register(p.Manifest.ID, p.Manifest.Provides); err != nil {
 				log.Printf("[plugin] %s: capability registration failed: %v", p.Manifest.ID, err)
+				if debugEnabled {
+					debug.Logf("[main] lifecycle: %s capability registration failed: %v", p.Manifest.ID, err)
+				}
 				p.Status = plugin.StatusFailed
 				p.Error = err.Error()
 				continue
@@ -167,6 +174,9 @@ func main() {
 		missingRequired := capRegistry.CheckRequired(p.Manifest.Requires)
 		if len(missingRequired) > 0 {
 			log.Printf("[plugin] %s: missing required capabilities: %v", p.Manifest.ID, missingRequired)
+			if debugEnabled {
+				debug.Logf("[main] lifecycle: %s missing required: %v", p.Manifest.ID, missingRequired)
+			}
 			p.Status = plugin.StatusMissingRequiredCapability
 			p.Error = fmt.Sprintf("missing required: %s", strings.Join(missingRequired, ", "))
 			continue
@@ -176,6 +186,9 @@ func main() {
 		missingOptional := capRegistry.CheckRequired(p.Manifest.OptionalRequires)
 		if len(missingOptional) > 0 {
 			log.Printf("[plugin] %s: missing optional capabilities (degraded): %v", p.Manifest.ID, missingOptional)
+			if debugEnabled {
+				debug.Logf("[main] lifecycle: %s missing optional (degraded): %v", p.Manifest.ID, missingOptional)
+			}
 			p.Status = plugin.StatusDegraded
 		} else {
 			p.Status = plugin.StatusLoaded
@@ -185,6 +198,11 @@ func main() {
 		if p.Manifest.Contributes != nil {
 			contribRegistry.Register(p.Manifest.ID, p.Manifest.Contributes)
 			log.Printf("[plugin] %s: contributions registered", p.Manifest.ID)
+			if debugEnabled {
+				c := p.Manifest.Contributes
+				debug.Logf("[main] lifecycle: %s contributions: views=%d commands=%d sidebar=%d settings=%d statusbar=%d",
+					p.Manifest.ID, len(c.Views), len(c.Commands), len(c.SidebarItems), len(c.SettingsPanels), len(c.StatusBarItems))
+			}
 		}
 
 		// Record as desired plugin in vault state (only if vault is open)
@@ -195,10 +213,16 @@ func main() {
 			}
 			if err := pluginStateMgr.RecordDesiredPlugin(p.Manifest.ID, p.Manifest.Version, source); err != nil {
 				log.Printf("[plugin] %s: failed to record desired: %v", p.Manifest.ID, err)
+				if debugEnabled {
+					debug.Logf("[main] lifecycle: %s failed to record desired: %v", p.Manifest.ID, err)
+				}
 			}
 		}
 
 		log.Printf("[plugin] %s: status=%s", p.Manifest.ID, p.Status)
+		if debugEnabled {
+			debug.Logf("[main] lifecycle: %s final status=%s enabled=%v", p.Manifest.ID, p.Status, p.Enabled)
+		}
 	}
 
 	// ─── Log Summary ───────────────────────────────────────
@@ -220,7 +244,8 @@ func main() {
 
 	// Create the App struct
 	storageService := storage.New(vaultService)
-	app := api.NewApp(capRegistry, contribRegistry, permRegistry, eventBus, plugins, vaultService, storageService, appSettingsMgr, pluginStateMgr, workspaceMgr)
+	filesService := corefiles.NewService(vaultService)
+	app := api.NewApp(capRegistry, contribRegistry, permRegistry, eventBus, plugins, vaultService, storageService, filesService, appSettingsMgr, pluginStateMgr, workspaceMgr, debugEnabled)
 
 	// ─── Wails App ───────────────────────────────────────────
 	err := wails.Run(&options.App{

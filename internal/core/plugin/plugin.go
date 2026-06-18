@@ -67,6 +67,7 @@ type Contributions struct {
 	SearchProviders    []ContributionSearchProvider   `json:"searchProviders,omitempty"`
 	ActivityProviders  []ContributionActivityProvider `json:"activityProviders,omitempty"`
 	StatusBarItems     []ContributionStatusBarItem    `json:"statusBarItems,omitempty"`
+	OpenProviders      []ContributionOpenProvider     `json:"openProviders,omitempty"`
 }
 
 // ContributionView represents a view contribution.
@@ -144,6 +145,23 @@ type ContributionStatusBarItem struct {
 	Handler  string `json:"handler,omitempty"`
 }
 
+// OpenProviderSupport describes a resource shape an open provider can handle.
+type OpenProviderSupport struct {
+	Kind       string   `json:"kind"`
+	Mime       []string `json:"mime,omitempty"`
+	Extensions []string `json:"extensions,omitempty"`
+	Contexts   []string `json:"contexts,omitempty"`
+}
+
+// ContributionOpenProvider represents an editor/viewer provider contribution.
+type ContributionOpenProvider struct {
+	ID        string                `json:"id"`
+	Title     string                `json:"title"`
+	Priority  int                   `json:"priority,omitempty"`
+	Component string                `json:"component"`
+	Supports  []OpenProviderSupport `json:"supports"`
+}
+
 // SyncConfig describes plugin sync configuration.
 type SyncConfig struct {
 	Namespaces  []string `json:"namespaces,omitempty"`
@@ -209,6 +227,27 @@ func ValidateManifest(m *Manifest) []string {
 	if len(m.Permissions) == 0 {
 		errs.add("permissions must have at least one permission")
 	}
+	if m.Contributes != nil {
+		for i, provider := range m.Contributes.OpenProviders {
+			if provider.ID == "" {
+				errs.add("contributes.openProviders[%d].id is required", i)
+			}
+			if provider.Title == "" {
+				errs.add("contributes.openProviders[%d].title is required", i)
+			}
+			if provider.Component == "" {
+				errs.add("contributes.openProviders[%d].component is required", i)
+			}
+			if len(provider.Supports) == 0 {
+				errs.add("contributes.openProviders[%d].supports must have at least one entry", i)
+			}
+			for j, support := range provider.Supports {
+				if support.Kind == "" {
+					errs.add("contributes.openProviders[%d].supports[%d].kind is required", i, j)
+				}
+			}
+		}
+	}
 
 	return errs.errors
 }
@@ -249,7 +288,7 @@ func DiscoverPlugins(dirs []string) ([]Plugin, []error) {
 	var plugins []Plugin
 	var errs []error
 
-	seen := make(map[string]bool)
+	seen := make(map[string]string)
 
 	log.Printf("[discovery] start: %d dir(s): %v", len(dirs), dirs)
 
@@ -287,12 +326,12 @@ func DiscoverPlugins(dirs []string) ([]Plugin, []error) {
 				continue
 			}
 
-			if seen[plugin.Manifest.ID] {
-				errs = append(errs, fmt.Errorf("duplicate plugin ID %q in %s", plugin.Manifest.ID, pluginDir))
-				log.Printf("[discovery]     %s: duplicate ID %q (skip)", entry.Name(), plugin.Manifest.ID)
+			if existingPath, ok := seen[plugin.Manifest.ID]; ok {
+				errs = append(errs, fmt.Errorf("duplicate plugin ID %q in %s (already loaded from %s); first plugin wins", plugin.Manifest.ID, pluginDir, existingPath))
+				log.Printf("[discovery]     %s: duplicate ID %q in %s (already loaded from %s; skip)", entry.Name(), plugin.Manifest.ID, pluginDir, existingPath)
 				continue
 			}
-			seen[plugin.Manifest.ID] = true
+			seen[plugin.Manifest.ID] = pluginDir
 			plugins = append(plugins, plugin)
 			log.Printf("[discovery]     %s: ✅ %s@%s", entry.Name(), plugin.Manifest.ID, plugin.Manifest.Version)
 		}

@@ -184,6 +184,17 @@ func TestListByPoint(t *testing.T) {
 		SearchProviders:    []plugin.ContributionSearchProvider{{ID: "sp1", Label: "SP1", Handler: "h"}},
 		ActivityProviders:  []plugin.ContributionActivityProvider{{ID: "ap1", Events: []string{"test"}, Handler: "h"}},
 		StatusBarItems:     []plugin.ContributionStatusBarItem{{ID: "sb1", Label: "SB1"}},
+		OpenProviders: []plugin.ContributionOpenProvider{{
+			ID:        "op1",
+			Title:     "Open Provider 1",
+			Priority:  100,
+			Component: "OpenProvider",
+			Supports: []plugin.OpenProviderSupport{{
+				Kind:       "vault-file",
+				Extensions: []string{".md"},
+				Contexts:   []string{"generic-markdown", "notes-markdown"},
+			}},
+		}},
 	}
 
 	r.Register("test.plugin", contrib)
@@ -202,6 +213,7 @@ func TestListByPoint(t *testing.T) {
 		{PointSearchProviders, 1},
 		{PointActivity, 1},
 		{PointStatusBar, 1},
+		{PointOpenProviders, 1},
 	}
 
 	for _, tt := range tests {
@@ -209,6 +221,55 @@ func TestListByPoint(t *testing.T) {
 		if len(got) != tt.want {
 			t.Errorf("ListByPoint(%q): got %d items, want %d", tt.point, len(got), tt.want)
 		}
+	}
+}
+
+func TestOpenProviders_RegisterReplaceUnregister(t *testing.T) {
+	r := NewRegistry()
+
+	r.Register("editor.plugin", &plugin.Contributions{
+		OpenProviders: []plugin.ContributionOpenProvider{{
+			ID:        "editor.markdown",
+			Title:     "Markdown",
+			Priority:  50,
+			Component: "MarkdownEditor",
+			Supports: []plugin.OpenProviderSupport{{
+				Kind:       "vault-file",
+				Extensions: []string{".md", ".markdown"},
+				Contexts:   []string{"generic-markdown", "notes-markdown"},
+			}},
+		}},
+	})
+
+	providers := r.OpenProviders()
+	if len(providers) != 1 {
+		t.Fatalf("OpenProviders count = %d, want 1", len(providers))
+	}
+	if providers[0].PluginID != "editor.plugin" || providers[0].Item.Component != "MarkdownEditor" {
+		t.Fatalf("provider = %+v", providers[0])
+	}
+
+	r.Register("editor.plugin", &plugin.Contributions{
+		OpenProviders: []plugin.ContributionOpenProvider{{
+			ID:        "editor.text",
+			Title:     "Text",
+			Priority:  10,
+			Component: "TextEditor",
+			Supports: []plugin.OpenProviderSupport{{
+				Kind:       "vault-file",
+				Extensions: []string{".txt"},
+			}},
+		}},
+	})
+
+	providers = r.OpenProviders()
+	if len(providers) != 1 || providers[0].Item.ID != "editor.text" {
+		t.Fatalf("providers after replace = %+v", providers)
+	}
+
+	r.Unregister("editor.plugin")
+	if got := len(r.OpenProviders()); got != 0 {
+		t.Fatalf("OpenProviders after unregister = %d, want 0", got)
 	}
 }
 

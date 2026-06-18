@@ -124,6 +124,37 @@ func TestUpdate_Patch(t *testing.T) {
 	}
 }
 
+func TestUpdate_WorkbenchPreferences(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.json")
+
+	m := NewManager(path)
+	if err := m.Load(); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := m.Update(&Config{
+		Workbench: WorkbenchPreferences{
+			DefaultTextEditorProvider:          "editor.text",
+			DefaultMarkdownEditorProvider:      "editor.markdown",
+			DefaultNotesMarkdownEditorProvider: "editor.notes",
+		},
+	}); err != nil {
+		t.Fatalf("Update: %v", err)
+	}
+
+	reloaded := NewManager(path)
+	if err := reloaded.Load(); err != nil {
+		t.Fatal(err)
+	}
+	cfg := reloaded.Get()
+	if cfg.Workbench.DefaultTextEditorProvider != "editor.text" ||
+		cfg.Workbench.DefaultMarkdownEditorProvider != "editor.markdown" ||
+		cfg.Workbench.DefaultNotesMarkdownEditorProvider != "editor.notes" {
+		t.Fatalf("workbench preferences = %+v", cfg.Workbench)
+	}
+}
+
 func TestAppSettings_NotInsideVault(t *testing.T) {
 	// App settings path should be under ~/.config/verstak/, not inside vault
 	path := DefaultConfigPath()

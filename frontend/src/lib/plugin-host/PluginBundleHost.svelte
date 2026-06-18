@@ -3,12 +3,12 @@
   import * as App from '../../../wailsjs/go/api/App';
   import Icon from '../ui/Icon.svelte';
 
-  // Import the VerstakPluginAPI contract
-  import './VerstakPluginAPI.js';
+  import { createPluginAPI } from './VerstakPluginAPI.js';
 
   export let pluginId = null;
   export let componentId = null;
   export let viewPluginId = null;
+  export let componentProps = {};
 
   let loadState = 'idle'; // idle | loading | loaded | error
   let pluginInfo = null;
@@ -16,6 +16,7 @@
   let mountContainer = null;
   let currentPluginId = null;
   let currentComponent = null;
+  let currentAPI = null;
 
   $: activePluginId = pluginId || viewPluginId;
   $: activeComponent = componentId;
@@ -33,6 +34,13 @@
   });
 
   function cleanup() {
+    if (currentAPI && typeof currentAPI.dispose === 'function') {
+      try {
+        currentAPI.dispose();
+      } catch (e) {
+        console.error('[PluginBundleHost] API dispose error:', e);
+      }
+    }
     const reg = window.__VERSTAK_PLUGIN_REGISTRY__;
     if (currentPluginId && currentComponent && reg && reg[currentPluginId]) {
       const comp = reg[currentPluginId][currentComponent];
@@ -49,6 +57,14 @@
     }
     currentPluginId = null;
     currentComponent = null;
+    currentAPI = null;
+  }
+
+  function unpackBackendResult(result) {
+    if (Array.isArray(result) && result.length === 2 && (typeof result[1] === 'string' || result[1] == null)) {
+      return { value: result[0], error: result[1] || '' };
+    }
+    return { value: result, error: '' };
   }
 
   async function loadAndMount(pId, compId) {
@@ -82,10 +98,11 @@
       const reg = window.__VERSTAK_PLUGIN_REGISTRY__ || {};
       if (!reg[pId]) {
         // Load the bundle JS content via backend API
-        const [content, err] = await App.GetPluginAssetContent(pId, info.entry);
-        if (err || !content) {
+        const assetResult = unpackBackendResult(await App.GetPluginAssetContent(pId, info.entry));
+        const content = assetResult.value;
+        if (assetResult.error || !content) {
           loadState = 'error';
-          errorText = 'Failed to load bundle: ' + (err || 'empty content');
+          errorText = 'Failed to load bundle: ' + (assetResult.error || 'empty content');
           return;
         }
 
@@ -120,7 +137,8 @@
       }
 
       // Create API
-      const api = window.VerstakPluginAPI(pId);
+      const api = createPluginAPI(pId);
+      currentAPI = api;
 
       // Mount component
       if (!mountContainer) {
@@ -129,7 +147,7 @@
       }
       if (mountContainer) {
         try {
-          comp.mount(mountContainer, { componentId: compId }, api);
+          comp.mount(mountContainer, Object.assign({ componentId: compId }, componentProps || {}), api);
           loadState = 'loaded';
           errorText = '';
         } catch (e) {
@@ -161,12 +179,6 @@
       <p>Select a plugin view from the sidebar</p>
     </div>
 
-  {:else if loadState === 'loading'}
-    <div class="host-state loading">
-      <div class="spinner"></div>
-      <p>Loading plugin bundle...</p>
-    </div>
-
   {:else if loadState === 'error'}
     <div class="host-state error">
       <Icon name="warning" size={24} className="error-icon" />
@@ -184,9 +196,16 @@
       </div>
     </div>
 
-  {:else if loadState === 'loaded'}
+  {:else}
+    {#if loadState === 'loading'}
+      <div class="host-state loading">
+        <div class="spinner"></div>
+        <p>Loading plugin bundle...</p>
+      </div>
+    {/if}
     <div
       class="plugin-mount-container"
+      class:mount-hidden={loadState !== 'loaded'}
       bind:this={mountContainer}
       data-plugin-id={currentPluginId}
       data-component={currentComponent}
@@ -197,10 +216,10 @@
 <style>
   .plugin-bundle-host {
     width: 100%;
-    height: 100%;
     min-height: 200px;
     display: flex;
     flex-direction: column;
+    min-width: 0;
   }
 
   .host-state {
@@ -286,8 +305,14 @@
   }
 
   .plugin-mount-container {
-    flex: 1;
-    overflow: auto;
+    min-width: 0;
     position: relative;
+  }
+
+  .plugin-mount-container.mount-hidden {
+    height: 0;
+    min-height: 0;
+    overflow: hidden;
+    visibility: hidden;
   }
 </style>

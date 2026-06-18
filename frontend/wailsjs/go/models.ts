@@ -1,105 +1,45 @@
 export namespace api {
-	
-	export class FlatSidebarItem {
-	    pluginId: string;
-	    id: string;
-	    title: string;
-	    icon?: string;
-	    view: string;
-	    position?: number;
-	
+
+	export class FlatOpenProviderSupport {
+	    kind: string;
+	    mime?: string[];
+	    extensions?: string[];
+	    contexts?: string[];
+
 	    static createFrom(source: any = {}) {
-	        return new FlatSidebarItem(source);
+	        return new FlatOpenProviderSupport(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.pluginId = source["pluginId"];
-	        this.id = source["id"];
-	        this.title = source["title"];
-	        this.icon = source["icon"];
-	        this.view = source["view"];
-	        this.position = source["position"];
+	        this.kind = source["kind"];
+	        this.mime = source["mime"];
+	        this.extensions = source["extensions"];
+	        this.contexts = source["contexts"];
 	    }
 	}
-	export class FlatSettingsPanel {
+	export class FlatOpenProvider {
 	    pluginId: string;
 	    id: string;
 	    title: string;
-	    icon?: string;
+	    priority?: number;
 	    component: string;
-	
+	    supports: FlatOpenProviderSupport[];
+
 	    static createFrom(source: any = {}) {
-	        return new FlatSettingsPanel(source);
+	        return new FlatOpenProvider(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.pluginId = source["pluginId"];
 	        this.id = source["id"];
 	        this.title = source["title"];
-	        this.icon = source["icon"];
+	        this.priority = source["priority"];
 	        this.component = source["component"];
+	        this.supports = this.convertValues(source["supports"], FlatOpenProviderSupport);
 	    }
-	}
-	export class FlatCommand {
-	    pluginId: string;
-	    id: string;
-	    title: string;
-	    icon?: string;
-	    handler?: string;
-	
-	    static createFrom(source: any = {}) {
-	        return new FlatCommand(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.pluginId = source["pluginId"];
-	        this.id = source["id"];
-	        this.title = source["title"];
-	        this.icon = source["icon"];
-	        this.handler = source["handler"];
-	    }
-	}
-	export class FlatView {
-	    pluginId: string;
-	    id: string;
-	    title: string;
-	    icon?: string;
-	    component: string;
-	
-	    static createFrom(source: any = {}) {
-	        return new FlatView(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.pluginId = source["pluginId"];
-	        this.id = source["id"];
-	        this.title = source["title"];
-	        this.icon = source["icon"];
-	        this.component = source["component"];
-	    }
-	}
-	export class ContributionSummary {
-	    views: FlatView[];
-	    commands: FlatCommand[];
-	    settingsPanels: FlatSettingsPanel[];
-	    sidebarItems: FlatSidebarItem[];
-	
-	    static createFrom(source: any = {}) {
-	        return new ContributionSummary(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.views = this.convertValues(source["views"], FlatView);
-	        this.commands = this.convertValues(source["commands"], FlatCommand);
-	        this.settingsPanels = this.convertValues(source["settingsPanels"], FlatSettingsPanel);
-	        this.sidebarItems = this.convertValues(source["sidebarItems"], FlatSidebarItem);
-	    }
-	
+
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -118,24 +58,305 @@ export namespace api {
 		    return a;
 		}
 	}
-	
-	
-	
+	export class FlatSidebarItem {
+	    pluginId: string;
+	    id: string;
+	    title: string;
+	    icon?: string;
+	    view: string;
+	    position?: number;
+
+	    static createFrom(source: any = {}) {
+	        return new FlatSidebarItem(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.pluginId = source["pluginId"];
+	        this.id = source["id"];
+	        this.title = source["title"];
+	        this.icon = source["icon"];
+	        this.view = source["view"];
+	        this.position = source["position"];
+	    }
+	}
+	export class FlatSettingsPanel {
+	    pluginId: string;
+	    id: string;
+	    title: string;
+	    icon?: string;
+	    component: string;
+
+	    static createFrom(source: any = {}) {
+	        return new FlatSettingsPanel(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.pluginId = source["pluginId"];
+	        this.id = source["id"];
+	        this.title = source["title"];
+	        this.icon = source["icon"];
+	        this.component = source["component"];
+	    }
+	}
+	export class FlatCommand {
+	    pluginId: string;
+	    id: string;
+	    title: string;
+	    icon?: string;
+	    handler?: string;
+
+	    static createFrom(source: any = {}) {
+	        return new FlatCommand(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.pluginId = source["pluginId"];
+	        this.id = source["id"];
+	        this.title = source["title"];
+	        this.icon = source["icon"];
+	        this.handler = source["handler"];
+	    }
+	}
+	export class FlatView {
+	    pluginId: string;
+	    id: string;
+	    title: string;
+	    icon?: string;
+	    component: string;
+
+	    static createFrom(source: any = {}) {
+	        return new FlatView(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.pluginId = source["pluginId"];
+	        this.id = source["id"];
+	        this.title = source["title"];
+	        this.icon = source["icon"];
+	        this.component = source["component"];
+	    }
+	}
+	export class ContributionSummary {
+	    views: FlatView[];
+	    commands: FlatCommand[];
+	    settingsPanels: FlatSettingsPanel[];
+	    sidebarItems: FlatSidebarItem[];
+	    openProviders: FlatOpenProvider[];
+
+	    static createFrom(source: any = {}) {
+	        return new ContributionSummary(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.views = this.convertValues(source["views"], FlatView);
+	        this.commands = this.convertValues(source["commands"], FlatCommand);
+	        this.settingsPanels = this.convertValues(source["settingsPanels"], FlatSettingsPanel);
+	        this.sidebarItems = this.convertValues(source["sidebarItems"], FlatSidebarItem);
+	        this.openProviders = this.convertValues(source["openProviders"], FlatOpenProvider);
+	    }
+
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+
+
+
+
+}
+
+export namespace workbench {
+
+	export class OpenResourceContext {
+	    sourcePluginId?: string;
+	    sourceView?: string;
+	    isInsideNotesFolder?: boolean;
+	    notesScopePath?: string;
+	    notesMode?: boolean;
+
+	    static createFrom(source: any = {}) {
+	        return new OpenResourceContext(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.sourcePluginId = source["sourcePluginId"];
+	        this.sourceView = source["sourceView"];
+	        this.isInsideNotesFolder = source["isInsideNotesFolder"];
+	        this.notesScopePath = source["notesScopePath"];
+	        this.notesMode = source["notesMode"];
+	    }
+	}
+	export class OpenResourceRequest {
+	    kind: string;
+	    path: string;
+	    mode?: string;
+	    mime?: string;
+	    extension?: string;
+	    context?: OpenResourceContext;
+
+	    static createFrom(source: any = {}) {
+	        return new OpenResourceRequest(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.kind = source["kind"];
+	        this.path = source["path"];
+	        this.mode = source["mode"];
+	        this.mime = source["mime"];
+	        this.extension = source["extension"];
+	        this.context = this.convertValues(source["context"], OpenResourceContext);
+	    }
+
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class OpenResourceResult {
+	    status: string;
+	    providerId?: string;
+	    providerPluginId?: string;
+	    providerComponent?: string;
+	    request: OpenResourceRequest;
+	    message?: string;
+
+	    static createFrom(source: any = {}) {
+	        return new OpenResourceResult(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.status = source["status"];
+	        this.providerId = source["providerId"];
+	        this.providerPluginId = source["providerPluginId"];
+	        this.providerComponent = source["providerComponent"];
+	        this.request = this.convertValues(source["request"], OpenResourceRequest);
+	        this.message = source["message"];
+	    }
+
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class OpenedResource {
+	    id: string;
+	    providerId: string;
+	    providerPluginId: string;
+	    providerComponent: string;
+	    request: OpenResourceRequest;
+	    openedAt: string;
+
+	    static createFrom(source: any = {}) {
+	        return new OpenedResource(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.providerId = source["providerId"];
+	        this.providerPluginId = source["providerPluginId"];
+	        this.providerComponent = source["providerComponent"];
+	        this.request = this.convertValues(source["request"], OpenResourceRequest);
+	        this.openedAt = source["openedAt"];
+	    }
+
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class Preferences {
+	    defaultTextEditorProvider?: string;
+	    defaultMarkdownEditorProvider?: string;
+	    defaultNotesMarkdownEditorProvider?: string;
+
+	    static createFrom(source: any = {}) {
+	        return new Preferences(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.defaultTextEditorProvider = source["defaultTextEditorProvider"];
+	        this.defaultMarkdownEditorProvider = source["defaultMarkdownEditorProvider"];
+	        this.defaultNotesMarkdownEditorProvider = source["defaultNotesMarkdownEditorProvider"];
+	    }
+	}
 
 }
 
 export namespace capability {
-	
+
 	export class Entry {
 	    name: string;
 	    description?: string;
 	    pluginId: string;
 	    status: string;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new Entry(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.name = source["name"];
@@ -147,17 +368,130 @@ export namespace capability {
 
 }
 
+export namespace files {
+
+	export class FileEntry {
+	    name: string;
+	    relativePath: string;
+	    type: string;
+	    size: number;
+	    modifiedAt: string;
+	    extension: string;
+	    isHidden: boolean;
+	    isReserved: boolean;
+	    canRead: boolean;
+	    canWrite: boolean;
+
+	    static createFrom(source: any = {}) {
+	        return new FileEntry(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.relativePath = source["relativePath"];
+	        this.type = source["type"];
+	        this.size = source["size"];
+	        this.modifiedAt = source["modifiedAt"];
+	        this.extension = source["extension"];
+	        this.isHidden = source["isHidden"];
+	        this.isReserved = source["isReserved"];
+	        this.canRead = source["canRead"];
+	        this.canWrite = source["canWrite"];
+	    }
+	}
+	export class FileMetadata {
+	    relativePath: string;
+	    type: string;
+	    size: number;
+	    modifiedAt: string;
+	    createdAt?: string;
+	    extension: string;
+	    mimeHint: string;
+	    isText: boolean;
+	    isHidden: boolean;
+	    isReserved: boolean;
+	    canRead: boolean;
+	    canWrite: boolean;
+
+	    static createFrom(source: any = {}) {
+	        return new FileMetadata(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.relativePath = source["relativePath"];
+	        this.type = source["type"];
+	        this.size = source["size"];
+	        this.modifiedAt = source["modifiedAt"];
+	        this.createdAt = source["createdAt"];
+	        this.extension = source["extension"];
+	        this.mimeHint = source["mimeHint"];
+	        this.isText = source["isText"];
+	        this.isHidden = source["isHidden"];
+	        this.isReserved = source["isReserved"];
+	        this.canRead = source["canRead"];
+	        this.canWrite = source["canWrite"];
+	    }
+	}
+	export class MoveOptions {
+	    overwrite: boolean;
+
+	    static createFrom(source: any = {}) {
+	        return new MoveOptions(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.overwrite = source["overwrite"];
+	    }
+	}
+	export class TrashResult {
+	    originalPath: string;
+	    trashPath: string;
+	    trashId: string;
+	    deletedAt: string;
+
+	    static createFrom(source: any = {}) {
+	        return new TrashResult(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.originalPath = source["originalPath"];
+	        this.trashPath = source["trashPath"];
+	        this.trashId = source["trashId"];
+	        this.deletedAt = source["deletedAt"];
+	    }
+	}
+	export class WriteOptions {
+	    createIfMissing: boolean;
+	    overwrite: boolean;
+
+	    static createFrom(source: any = {}) {
+	        return new WriteOptions(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.createIfMissing = source["createIfMissing"];
+	        this.overwrite = source["overwrite"];
+	    }
+	}
+
+}
+
 export namespace permissions {
-	
+
 	export class Entry {
 	    name: string;
 	    description: string;
 	    dangerous: boolean;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new Entry(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.name = source["name"];
@@ -169,15 +503,15 @@ export namespace permissions {
 }
 
 export namespace plugin {
-	
+
 	export class HealthCheckConfig {
 	    type?: string;
 	    timeout?: number;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new HealthCheckConfig(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.type = source["type"];
@@ -188,18 +522,18 @@ export namespace plugin {
 	    type: string;
 	    entry: Record<string, string>;
 	    healthCheck?: HealthCheckConfig;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new BackendConfig(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.type = source["type"];
 	        this.entry = source["entry"];
 	        this.healthCheck = this.convertValues(source["healthCheck"], HealthCheckConfig);
 	    }
-	
+
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -224,11 +558,11 @@ export namespace plugin {
 	    icon?: string;
 	    capability?: string;
 	    handler?: string;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new ContributionAction(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.id = source["id"];
@@ -242,11 +576,11 @@ export namespace plugin {
 	    id: string;
 	    events?: string[];
 	    handler: string;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new ContributionActivityProvider(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.id = source["id"];
@@ -260,11 +594,11 @@ export namespace plugin {
 	    keybinding?: string;
 	    icon?: string;
 	    handler?: string;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new ContributionCommand(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.id = source["id"];
@@ -281,11 +615,11 @@ export namespace plugin {
 	    group?: string;
 	    capability?: string;
 	    handler?: string;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new ContributionContextMenuEntry(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.id = source["id"];
@@ -300,11 +634,11 @@ export namespace plugin {
 	    id: string;
 	    label: string;
 	    handler: string;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new ContributionSearchProvider(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.id = source["id"];
@@ -317,11 +651,11 @@ export namespace plugin {
 	    title: string;
 	    component: string;
 	    icon?: string;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new ContributionSettingsPanel(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.id = source["id"];
@@ -336,11 +670,11 @@ export namespace plugin {
 	    icon?: string;
 	    view: string;
 	    position?: number;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new ContributionSidebarItem(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.id = source["id"];
@@ -355,11 +689,11 @@ export namespace plugin {
 	    label: string;
 	    position?: string;
 	    handler?: string;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new ContributionStatusBarItem(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.id = source["id"];
@@ -373,11 +707,11 @@ export namespace plugin {
 	    title: string;
 	    icon?: string;
 	    component: string;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new ContributionView(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.id = source["id"];
@@ -397,11 +731,11 @@ export namespace plugin {
 	    searchProviders?: ContributionSearchProvider[];
 	    activityProviders?: ContributionActivityProvider[];
 	    statusBarItems?: ContributionStatusBarItem[];
-	
+
 	    static createFrom(source: any = {}) {
 	        return new Contributions(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.views = this.convertValues(source["views"], ContributionView);
@@ -415,7 +749,7 @@ export namespace plugin {
 	        this.activityProviders = this.convertValues(source["activityProviders"], ContributionActivityProvider);
 	        this.statusBarItems = this.convertValues(source["statusBarItems"], ContributionStatusBarItem);
 	    }
-	
+
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -437,26 +771,26 @@ export namespace plugin {
 	export class FrontendConfig {
 	    entry: string;
 	    style?: string;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new FrontendConfig(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.entry = source["entry"];
 	        this.style = source["style"];
 	    }
 	}
-	
+
 	export class SyncConfig {
 	    namespaces?: string[];
 	    participate?: boolean;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new SyncConfig(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.namespaces = source["namespaces"];
@@ -465,11 +799,11 @@ export namespace plugin {
 	}
 	export class MigrationConfig {
 	    path?: string;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new MigrationConfig(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.path = source["path"];
@@ -493,11 +827,11 @@ export namespace plugin {
 	    migrations?: MigrationConfig;
 	    contributes?: Contributions;
 	    sync?: SyncConfig;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new Manifest(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.schemaVersion = source["schemaVersion"];
@@ -518,7 +852,7 @@ export namespace plugin {
 	        this.contributes = this.convertValues(source["contributes"], Contributions);
 	        this.sync = this.convertValues(source["sync"], SyncConfig);
 	    }
-	
+
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -537,18 +871,18 @@ export namespace plugin {
 		    return a;
 		}
 	}
-	
+
 	export class Plugin {
 	    manifest: Manifest;
 	    status: string;
 	    error?: string;
 	    enabled: boolean;
 	    rootPath: string;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new Plugin(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.manifest = this.convertValues(source["manifest"], Manifest);
@@ -557,7 +891,7 @@ export namespace plugin {
 	        this.enabled = source["enabled"];
 	        this.rootPath = source["rootPath"];
 	    }
-	
+
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -578,4 +912,3 @@ export namespace plugin {
 	}
 
 }
-

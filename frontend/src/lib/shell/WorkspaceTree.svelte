@@ -1,8 +1,15 @@
+<script context="module">
+  import { writable } from 'svelte/store';
+
+  const activeWorkspaceNodeId = writable('');
+</script>
+
 <script>
   import { onMount } from 'svelte';
   import * as App from '../../../wailsjs/go/api/App';
 
   export let nodes = [];
+  export let node = null;
   export let currentNodeId = '';
   export let expandedNodes = {};
   export let depth = 0;
@@ -32,6 +39,7 @@
       } else {
         nodes = result.nodes || [];
         currentNodeId = result.currentNodeId || '';
+        activeWorkspaceNodeId.set(currentNodeId);
         const root = nodes.find(n => !n.parentId);
         if (root) expandedNodes[root.id] = true;
       }
@@ -69,6 +77,7 @@
     const err = await App.SetCurrentWorkspaceNode(id);
     if (err) { localError = err; return; }
     currentNodeId = id;
+    activeWorkspaceNodeId.set(id);
   }
 
   function openCreate(parentId, type) {
@@ -128,7 +137,7 @@
     {/if}
   </div>
 {:else}
-  <div class="wt-node" class:selected={node.id === currentNodeId} class:archived={node.status === 'archived'} class:sleeping={node.status === 'sleeping'}>
+  <div class="wt-node" class:selected={node.id === $activeWorkspaceNodeId} class:archived={node.status === 'archived'} class:sleeping={node.status === 'sleeping'}>
     <div class="wt-row" style="padding-left: {depth * 1.0 + 0.4}rem;">
       {#if hasKids(node.id)}
         <button class="wt-expand" on:click={() => toggle(node.id)} type="button">{expandedNodes[node.id] ? '\u25BE' : '\u25B8'}</button>
@@ -153,7 +162,7 @@
   .wt { display: flex; flex-direction: column; flex: 1; overflow: hidden; position: relative; }
   .wt-header { display: flex; align-items: center; justify-content: space-between; padding: 0.4rem 0.6rem; border-bottom: 1px solid #0f3460; flex-shrink: 0; }
   .wt-title { color: #a0a0b8; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600; }
-  .wt-btn { background: none; border: none; color: #666; cursor: pointer; font-size: 0.85rem; padding: 0.1rem 0.3rem; border-radius: 3px; }
+  .wt-btn { min-height: 0; background: none; border: none; color: #666; cursor: pointer; font-size: 0.85rem; padding: 0.1rem 0.3rem; border-radius: 3px; }
   .wt-btn:hover { color: #4ecca3; background: rgba(78,204,163,0.1); }
   .wt-btn-small { font-size: 0.7rem; opacity: 0; }
   .wt-row:hover .wt-btn-small { opacity: 1; }
@@ -162,12 +171,12 @@
   .wt-node { }
   .wt-row { display: flex; align-items: center; gap: 0.2rem; padding: 0.15rem 0; }
   .wt-row:hover { background: rgba(15,52,96,0.4); }
-  .wt-row.selected { background: rgba(78,204,163,0.1); }
-  .wt-expand { width: 1rem; height: 1rem; display: flex; align-items: center; justify-content: center; font-size: 0.65rem; color: #666; background: none; border: none; cursor: pointer; padding: 0; flex-shrink: 0; }
+  .wt-node.selected > .wt-row { background: rgba(78,204,163,0.1); }
+  .wt-expand { width: 1rem; height: 1rem; min-height: 0; display: flex; align-items: center; justify-content: center; font-size: 0.65rem; color: #666; background: none; border: none; cursor: pointer; padding: 0; flex-shrink: 0; }
   .wt-expand:hover { color: #e0e0f0; }
   .wt-expand-spacer { width: 1rem; flex-shrink: 0; }
   .wt-icon { font-size: 0.8rem; flex-shrink: 0; }
-  .wt-label { flex: 1; background: none; border: none; color: #e0e0f0; font-size: 0.78rem; text-align: left; cursor: pointer; padding: 0.1rem 0.2rem; border-radius: 3px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .wt-label { flex: 1; min-height: 0; justify-content: flex-start; background: none; border: none; color: #e0e0f0; font-size: 0.78rem; text-align: left; cursor: pointer; padding: 0.1rem 0.2rem; border-radius: 3px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .wt-label:hover { color: #4ecca3; }
   .wt-node.archived .wt-label { text-decoration: line-through; opacity: 0.5; }
   .wt-node.sleeping .wt-label { opacity: 0.6; }

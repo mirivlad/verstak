@@ -22,6 +22,7 @@ type Registry struct {
 	searchProviders   []ContributionSearchProvider
 	activityProviders []ContributionActivityProvider
 	statusBarItems    []ContributionStatusBarItem
+	openProviders     []ContributionOpenProvider
 }
 
 // ContributionPointType defines the type of contribution point.
@@ -38,6 +39,7 @@ const (
 	PointSearchProviders ContributionPointType = "searchProviders"
 	PointActivity        ContributionPointType = "activityProviders"
 	PointStatusBar       ContributionPointType = "statusBarItems"
+	PointOpenProviders   ContributionPointType = "openProviders"
 )
 
 // ListByPoint returns all contributions for a given point type.
@@ -85,6 +87,10 @@ func (r *Registry) ListByPoint(point ContributionPointType) []interface{} {
 		}
 	case PointStatusBar:
 		for _, v := range r.statusBarItems {
+			result = append(result, v)
+		}
+	case PointOpenProviders:
+		for _, v := range r.openProviders {
 			result = append(result, v)
 		}
 	}
@@ -136,6 +142,11 @@ type ContributionStatusBarItem struct {
 	Item     plugin.ContributionStatusBarItem `json:"item"`
 }
 
+type ContributionOpenProvider struct {
+	PluginID string                          `json:"pluginId"`
+	Item     plugin.ContributionOpenProvider `json:"item"`
+}
+
 // NewRegistry creates a new contribution registry.
 func NewRegistry() *Registry {
 	return &Registry{}
@@ -159,6 +170,7 @@ func (r *Registry) Register(pluginID string, c *plugin.Contributions) {
 	r.searchProviders = removeSearchProviders(r.searchProviders, pluginID)
 	r.activityProviders = removeActivityProviders(r.activityProviders, pluginID)
 	r.statusBarItems = removeStatusBarItems(r.statusBarItems, pluginID)
+	r.openProviders = removeOpenProviders(r.openProviders, pluginID)
 
 	for _, item := range c.Views {
 		r.views = append(r.views, ContributionView{PluginID: pluginID, Item: item})
@@ -190,6 +202,9 @@ func (r *Registry) Register(pluginID string, c *plugin.Contributions) {
 	for _, item := range c.StatusBarItems {
 		r.statusBarItems = append(r.statusBarItems, ContributionStatusBarItem{PluginID: pluginID, Item: item})
 	}
+	for _, item := range c.OpenProviders {
+		r.openProviders = append(r.openProviders, ContributionOpenProvider{PluginID: pluginID, Item: item})
+	}
 }
 
 // Unregister removes all contributions from a plugin.
@@ -207,6 +222,7 @@ func (r *Registry) Unregister(pluginID string) {
 	r.searchProviders = removeSearchProviders(r.searchProviders, pluginID)
 	r.activityProviders = removeActivityProviders(r.activityProviders, pluginID)
 	r.statusBarItems = removeStatusBarItems(r.statusBarItems, pluginID)
+	r.openProviders = removeOpenProviders(r.openProviders, pluginID)
 }
 
 // Getters — sorted for deterministic display.
@@ -271,6 +287,20 @@ func (r *Registry) SearchProviders() []ContributionSearchProvider {
 	result := make([]ContributionSearchProvider, len(r.searchProviders))
 	copy(result, r.searchProviders)
 	sort.Slice(result, func(i, j int) bool { return result[i].Item.ID < result[j].Item.ID })
+	return result
+}
+
+func (r *Registry) OpenProviders() []ContributionOpenProvider {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	result := make([]ContributionOpenProvider, len(r.openProviders))
+	copy(result, r.openProviders)
+	sort.Slice(result, func(i, j int) bool {
+		if result[i].PluginID != result[j].PluginID {
+			return result[i].PluginID < result[j].PluginID
+		}
+		return result[i].Item.ID < result[j].Item.ID
+	})
 	return result
 }
 
@@ -358,6 +388,16 @@ func removeActivityProviders(items []ContributionActivityProvider, pluginID stri
 
 func removeStatusBarItems(items []ContributionStatusBarItem, pluginID string) []ContributionStatusBarItem {
 	var result []ContributionStatusBarItem
+	for _, item := range items {
+		if item.PluginID != pluginID {
+			result = append(result, item)
+		}
+	}
+	return result
+}
+
+func removeOpenProviders(items []ContributionOpenProvider, pluginID string) []ContributionOpenProvider {
+	var result []ContributionOpenProvider
 	for _, item := range items {
 		if item.PluginID != pluginID {
 			result = append(result, item)

@@ -1,8 +1,13 @@
 <script>
-  import { onMount } from 'svelte';
+  import { onDestroy, onMount } from 'svelte';
   import * as App from '../../../wailsjs/go/api/App';
   import WorkspaceTree from './WorkspaceTree.svelte';
   import Icon from '../ui/Icon.svelte';
+  import { debug } from '../log/debug.js';
+
+  function flog(msg) {
+    App.WriteFrontendLog('Sidebar', msg);
+  }
 
   let plugins = [];
   let vaultStatus = { status: 'unknown', path: '', vaultId: '' };
@@ -15,9 +20,13 @@
 
   $: vaultOpen = vaultStatus.status === 'open';
 
-  onMount(async () => {
+  async function loadSidebar() {
+    debug.log('[Sidebar] onMount: START');
+    flog('onMount: START');
     let contribErr = false;
     try {
+      debug.log('[Sidebar] onMount: loading plugins/vault/contributions...');
+      flog('onMount: loading plugins/vault/contributions...');
       const [p, v, contribs] = await Promise.all([
         App.GetPlugins().catch(() => []),
         App.GetVaultStatus().catch(() => ({ status: 'unknown', path: '', vaultId: '' })),
@@ -25,6 +34,8 @@
       ]);
       plugins = p || [];
       vaultStatus = v;
+      debug.log('[Sidebar] onMount: plugins=' + plugins.length + ' vault=' + vaultStatus.status);
+      flog('onMount: plugins=' + plugins.length + ' vault=' + vaultStatus.status);
       if (contribErr) {
         errorMessage = 'Failed to load plugin contributions';
       }
@@ -34,17 +45,34 @@
         return plugin.status !== 'disabled' && plugin.status !== 'failed' && plugin.status !== 'incompatible' && plugin.status !== 'missing-required-capability';
       });
       sidebarItems.sort((a, b) => (a.position || 100) - (b.position || 100));
+      debug.log('[Sidebar] onMount: sidebarItems=' + sidebarItems.length);
+      flog('onMount: sidebarItems=' + sidebarItems.length);
     } catch (e) {
+      debug.log('[Sidebar] onMount: ERROR:', String(e));
+      flog('onMount: ERROR: ' + String(e));
       console.error('[Sidebar] load error:', e);
       errorMessage = 'Failed to load sidebar';
     }
+    debug.log('[Sidebar] onMount: END');
+    flog('onMount: END');
+  }
+
+  onMount(() => {
+    loadSidebar();
+    window.addEventListener('verstak:plugins-changed', loadSidebar);
+  });
+
+  onDestroy(() => {
+    window.removeEventListener('verstak:plugins-changed', loadSidebar);
   });
 
   function handleNav(id) {
+    debug.log('[Sidebar] handleNav:', id);
     window.dispatchEvent(new CustomEvent('verstak:nav', { detail: { viewId: id } }));
   }
 
   function handleSidebarItem(item) {
+    debug.log('[Sidebar] handleSidebarItem:', item.id, '-> view:', item.view);
     // Use item.view (the view contribution ID) if available, fall back to item.id
     const viewId = item.view || item.id;
     window.dispatchEvent(new CustomEvent('verstak:open-view', { detail: { viewId, pluginId: item.pluginId } }));
@@ -171,6 +199,7 @@
   .nav-item {
     display: flex;
     align-items: center;
+    justify-content: flex-start;
     gap: 0.6rem;
     padding: 0.45rem 0.75rem;
     background: none;

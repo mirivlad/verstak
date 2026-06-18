@@ -16,6 +16,15 @@
 </head>
 <body>
   <div id="app"></div>
-  <script type="module" src="/src/main.js"></script>
+  <script type="module">
+    // In test mode (no Wails runtime), load mock bridge first
+    if (!window['go'] || !window['go']['api']) {
+      import('/src/lib/test/wails-mock.js').then(function() {
+        import('/src/main.js');
+      });
+    } else {
+      import('/src/main.js');
+    }
+  </script>
 </body>
 </html>

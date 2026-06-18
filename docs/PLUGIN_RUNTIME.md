@@ -6,19 +6,34 @@
 
 ### Discovery Directories
 
-Plugins ищутся в двух директориях (порядок приоритета):
+Plugins ищутся через единый resolver `internal/core/plugin.ResolveDiscoveryDirs`.
+Порядок приоритета:
 
 | Путь | Назначение | Коммитится |
 |---|---|---|
+| `VERSTAK_PLUGIN_DIR` | Override для тестов/dev; можно передать несколько путей через OS path separator | Нет |
+| `./plugins/` | Dev plugins относительно текущей рабочей директории/repo | Нет (`.gitignore`) |
+| `<binary-dir>/plugins/` | Packaged plugins рядом с desktop binary | Зависит от дистрибутива |
 | `~/.config/verstak/plugins/` | User-installed plugins | Нет (user home) |
-| `./plugins/` | Bundled / dev plugins | Нет (`.gitignore`) |
+
+Resolver нормализует пути, удаляет дубликаты и передает discovery только канонический
+список директорий. Отсутствующие директории просто пропускаются на этапе scanning.
+
+Discovery сканирует **все** resolved директории в указанном порядке. Если один и тот
+же `plugin.id` найден несколько раз, применяется правило **first plugin wins**:
+первый найденный plugin загружается, последующие plugins с тем же id пропускаются.
+Конфликт логируется и возвращается как discovery warning с двумя путями: путь
+пропущенного duplicate и путь уже загруженного winner.
 
 ### ./plugins/ как Dev/Install Target
 
-Директория `./plugins/` в корне `verstak-desktop` используется как:
+Директория `./plugins/` от текущей рабочей директории используется как:
 
 - **Dev target** — `install-dev-plugins.sh` коприрует сюда собранные пакеты из `verstak-official-plugins/dist/`.
-- **Bundled plugins** — при дистрибутиве core может поставлять плагины здесь.
+- **Local override** — при запуске desktop из repo позволяет быстро проверять packaged bundles.
+
+В packaged-сборке bundled plugins должны лежать в `plugins/` рядом с executable.
+Для тестов и локальных сценариев можно задать `VERSTAK_PLUGIN_DIR=/path/to/plugins`.
 
 Директория **не коммитится**. Каждый разработчик устанавливает плагины через `install-dev-plugins.sh`.
 
@@ -83,6 +98,8 @@ coreCaps := []string{
     "verstak/core/contribution-registry/v1",
     "verstak/core/permissions/v1",
     "verstak/core/events/v1",
+    "verstak/core/files/v1",
+    "verstak/core/workbench/v1",
 }
 capRegistry.Register("verstak-desktop", coreCaps)
 
@@ -150,7 +167,7 @@ foreach plugin:
   "provides": ["verstak/platform-test/v1"],
   "requires": ["verstak/core/plugin-manager/v1"],
   "optionalRequires": ["verstak/core/vault/v1", "verstak/core/sync/v1"],
-  "permissions": ["vault.read", "events.publish", "ui.register"],
+  "permissions": ["vault.read", "events.publish", "ui.register", "workbench.open"],
   "frontend": { "entry": "frontend/dist/index.js" },
   "contributes": {
     "views": [{ "id": "my.view", "title": "My View", "component": "MyPanel" }],
@@ -171,6 +188,7 @@ foreach plugin:
 | Основные панели | `views` | Полноценные страницы/панели | ✅ ViewContainer.svelte (PluginBundleHost — real frontend bundle) |
 | Панели настроек | `settingsPanels` | Панели в Plugin Manager | ✅ PluginManager.svelte (кнопка Settings, открывает modal) |
 | Команды | `commands` | Команды для command palette | ✅ ContributionRegistry (UI command palette не реализован) |
+| Open/edit providers | `openProviders` | Провайдеры viewer/editor для Workbench routing | ✅ ContributionRegistry + минимальный Workbench host |
 
 ### Планируемые contribution points
 
@@ -233,6 +251,176 @@ foreach plugin:
 5. Enable plugin → `Register` при следующем Reload
 6. Registry idempotent: Register удаляет старые записи перед добавлением новых
 
+## Bundled Frontend Plugin API
+
+Bundled frontend plugins получают API от host через `createPluginAPI(pluginId)`.
+Обычный plugin code не передает `pluginId` в методы API: scope закрепляется в
+host при mount компонента. Это защищает нормальный cooperative path от случайного
+доступа к чужому namespace.
+
+Текущая модель безопасности честно ограничена:
+
+- bundled frontend plugins исполняются в общем JS-контексте приложения;
+- проверки permissions/capabilities сейчас являются contract/policy checks, а не
+  полноценной security boundary;
+- malicious JS в общем контексте теоретически может обойти frontend wrapper;
+- настоящая изоляция будет только после отдельного sidecar/sandbox milestone.
+
+## Workbench Open/Edit Routing
+
+Files and Notes plugins do not import or embed a concrete editor plugin. They
+call `api.workbench.openResource(request)` or `api.workbench.editResource(request)`.
+The backend requires the source plugin to be enabled, loaded/degraded, and to
+declare `workbench.open`. This is a policy/contract check, not a security
+boundary.
+
+`OpenResourceRequest`:
+
+```ts
+type OpenResourceRequest = {
+  kind: "vault-file";
+  path: string;
+  mode?: "view" | "edit";
+  mime?: string;
+  extension?: string;
+  context?: {
+    sourcePluginId?: string;
+    sourceView?: "files" | "notes" | string;
+    isInsideNotesFolder?: boolean;
+    notesScopePath?: string;
+    notesMode?: boolean;
+  };
+};
+```
+
+Routing contexts are fixed as `generic-text`, `generic-markdown`, and
+`notes-markdown`. `.md`/`.markdown` inside canonical `Notes/` folders uses
+`notes-markdown`; markdown outside Notes uses `generic-markdown`; ordinary text
+uses `generic-text`. Milestone 6b derives context from request fields; future
+Files/Notes integrations can centralize canonical Notes folder auto-detection in
+the Workbench helper.
+
+`contributes.openProviders` extends the existing contribution registry:
+
+```json
+{
+  "contributes": {
+    "openProviders": [
+      {
+        "id": "verstak.platform-test.markdown-diagnostic",
+        "title": "Platform Test Markdown Diagnostic",
+        "priority": 100,
+        "component": "MarkdownDiagnosticProvider",
+        "supports": [
+          {
+            "kind": "vault-file",
+            "extensions": [".md", ".markdown"],
+            "contexts": ["generic-markdown", "notes-markdown"]
+          },
+          {
+            "kind": "vault-file",
+            "mime": ["text/plain"],
+            "extensions": [".txt", ".log"],
+            "contexts": ["generic-text"]
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+Selection uses enabled loaded/degraded provider plugins, resource kind,
+extension/mime, context, user preference, priority, then deterministic
+`pluginId/providerId` fallback. If nothing matches, Workbench returns
+`status: "no-provider"` and shows the fallback view instead of a core editor.
+
+Draft app-global preferences are `defaultTextEditorProvider`,
+`defaultMarkdownEditorProvider`, and `defaultNotesMarkdownEditorProvider`.
+Vault-scoped and per-extension overrides are deferred.
+
+### API methods
+
+`settings`
+
+- `settings.read()` — читает весь settings namespace текущего plugin.
+- `settings.read(key)` — читает один ключ.
+- `settings.write(key, value)` — обновляет один ключ и пишет namespace обратно.
+- `settings.writeAll(settings)` — заменяет settings namespace.
+- Backend требует plugin exists, enabled, status `loaded`/`degraded` и permission
+  `storage.namespace`.
+
+`capabilities`
+
+- `capabilities.list()` — возвращает текущий capability registry.
+- `capabilities.get(name)` — возвращает `{ available, name, pluginId, status }`.
+- `capabilities.has(name)` — boolean wrapper над `get`.
+- Backend требует, чтобы plugin был enabled/loaded и декларировал dependency на
+  `verstak/core/capability-registry/v1` в `requires` или `optionalRequires`.
+
+`commands`
+
+- `commands.register(commandId, handler)` — регистрирует bundled frontend handler.
+  Возвращает `Promise<unsubscribe>`.
+- `commands.execute(commandId, args)` — backend сначала проверяет plugin status,
+  permission `commands.register` и что command объявлен в `contributes.commands`
+  именно этим plugin. Затем frontend registry вызывает зарегистрированный handler.
+- Если command объявлен в manifest, но handler не зарегистрирован, API возвращает
+  понятную ошибку `declared-but-unhandled`.
+- Handler registry очищается при component unmount, reload/disable flow и
+  `api.dispose()`.
+
+`events`
+
+- `events.subscribe(eventName, handler)` — frontend-local subscription с backend
+  validation permission `events.subscribe`. Возвращает `Promise<unsubscribe>`.
+- `events.publish(eventName, payload)` — backend проверяет `events.publish`, затем
+  событие dispatch'ится в bundled frontend event bus.
+- Handler получает envelope `{ name, pluginId, payload, timestamp }`.
+- Subscriptions очищаются при component unmount, reload/disable flow и
+  `api.dispose()`.
+
+`files`
+
+- `files.list(relativeDir)` — list directory using a vault-relative path.
+- `files.metadata(relativePath)` — returns file/folder/symlink metadata.
+- `files.readText(relativePath)` — reads a UTF-8 regular file, with a size limit.
+- `files.writeText(relativePath, content, options)` — atomically writes text via
+  temp-file-and-rename. `options.createIfMissing` and `options.overwrite`
+  control conflicts.
+- `files.createFolder(relativePath)` — creates one folder when the parent exists.
+- `files.move(from, to, options)` — moves a file or folder; rejects moving a
+  folder into itself and conflicts unless `options.overwrite` is true.
+- `files.trash(relativePath)` — moves a file/folder into internal
+  `.verstak/trash/files/<trashId>/...` and returns trash metadata.
+- Backend requires plugin exists, enabled, status `loaded`/`degraded`, open
+  vault, and `files.read`, `files.write`, or `files.delete`.
+- All paths are canonical vault-relative slash paths. Backslashes, POSIX
+  absolute paths, Windows drive paths, UNC/network paths, `..`, null bytes,
+  symlink traversal, and public access to `.verstak/` are rejected.
+- `.verstak` is reserved case-insensitively: `.verstak`, `.Verstak`, and any
+  first path segment with that spelling are internal-only.
+- `files.metadata` may report a final symlink as `type: "symlink"`, but
+  `files.list` through a symlink directory and all read/write/move/trash
+  operations through symlinks are forbidden in Milestone 6a.
+- Files API is text-only for read/write in Milestone 6a. `readText` is limited
+  to UTF-8 regular files up to 2 MB. Binary streaming, watcher, restore,
+  external editor integration, and Files UI plugin are deferred.
+
+`dispose`
+
+- `dispose()` вызывается host'ом при cleanup. Plugin code обычно не вызывает его
+  напрямую. Он удаляет зарегистрированные command handlers и event subscriptions.
+
+### Runtime boundaries
+
+| Layer | Current status |
+|---|---|
+| Bundled frontend runtime | Functional for settings, capabilities, commands, events and text Files API |
+| Backend validation | Checks plugin exists, enabled/loaded state, permissions and declarations |
+| Security boundary | Not implemented; bundled plugins share the desktop frontend JS context |
+| Sidecar/RPC/sandbox | Not implemented |
+
 ### Error boundary
 
 - Ошибка в plugin view/settings placeholder не роняет shell
@@ -265,17 +453,44 @@ window.VerstakPluginRegister('plugin.id', {
 
 ### VerstakPluginAPI
 
-API объект передаётся в `mount()` и содержит только ограниченный набор методов:
+API объект передаётся в `mount()` и содержит plugin-scoped методы текущего
+bundled runtime. Это реальный runtime contract для cooperative bundled plugins,
+но не sandbox/security boundary.
 
 | Свойство | Статус | Описание |
 |---|---|---|
 | `api.pluginId` | ✅ Работает | ID плагина |
-| `api.capabilities.has(id)` | 🔧 Stub | Запрос capability registry (planned) |
-| `api.events.publish(type, payload)` | 🔧 Stub | Публикация события (planned) |
-| `api.events.subscribe(type, handler)` | 🔧 Stub | Подписка на события (planned) |
-| `api.settings.read(key)` | 🔧 Stub | Чтение настроек плагина (planned) |
-| `api.settings.write(key, value)` | 🔧 Stub | Запись настроек плагина (planned) |
-| `api.commands.execute(id, args)` | 🔧 Stub | Выполнение команды (planned) |
+| `api.settings.read(key?)` | ✅ Работает | Читает plugin-scoped settings через backend bridge |
+| `api.settings.write(key, value)` | ✅ Работает | Пишет один settings key через backend bridge |
+| `api.settings.writeAll(settings)` | ✅ Работает | Заменяет settings namespace плагина |
+| `api.capabilities.list()` | ✅ Работает | Возвращает capability registry |
+| `api.capabilities.get(id)` | ✅ Работает | Возвращает capability entry/status |
+| `api.capabilities.has(id)` | ✅ Работает | Boolean wrapper над `get` |
+| `api.commands.register(id, handler)` | ✅ Работает | Регистрирует bundled frontend handler для объявленной command |
+| `api.commands.execute(id, args)` | ✅ Работает | Валидирует declaration/permission/backend state и вызывает bundled handler |
+| `api.events.publish(type, payload)` | ✅ Работает | Валидирует permission и публикует во frontend event bus |
+| `api.events.subscribe(type, handler)` | ✅ Работает | Валидирует permission и подписывает handler на frontend event bus |
+| `api.files.list(relativeDir)` | ✅ Работает | Список vault-relative директории, `.verstak` скрыта |
+| `api.files.metadata(relativePath)` | ✅ Работает | Metadata для файла/папки/symlink без чтения содержимого |
+| `api.files.readText(relativePath)` | ✅ Работает | Читает UTF-8 regular file до 2 MB |
+| `api.files.writeText(relativePath, content, options)` | ✅ Работает | Atomic text write с явным create/overwrite policy |
+| `api.files.createFolder(relativePath)` | ✅ Работает | Создаёт vault-relative folder |
+| `api.files.move(from, to, options)` | ✅ Работает | Move file/folder с conflict и path-policy checks |
+| `api.files.trash(relativePath)` | ✅ Работает | Перемещает в internal trash, permanent delete нет |
+| `api.workbench.openResource(request)` | ✅ Работает | Routes vault resources to `openProviders` |
+| `api.workbench.editResource(request)` | ✅ Работает | Same routing, forcing `mode: "edit"` |
+| `api.dispose()` | ✅ Работает | Очищает command handlers и event subscriptions текущего API instance |
+
+Ограничения:
+
+- permissions/capabilities checks являются contract/policy checks;
+- bundled frontend plugins исполняются в общем JS-контексте;
+- malicious JS не изолирован;
+- sidecar process lifecycle, RPC transport и sandbox enforcement ещё не
+  реализованы.
+- Files paths are slash-only vault-relative contract paths; backslashes,
+  Windows absolute paths, UNC paths, `.verstak` variants, traversal and symlink
+  operations are rejected by backend policy checks.
 
 ### Загрузка бандла
 

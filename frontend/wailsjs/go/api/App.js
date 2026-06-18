@@ -14,6 +14,10 @@ export function CreateVault(arg1) {
   return window['go']['api']['App']['CreateVault'](arg1);
 }
 
+export function CreateVaultFolder(arg1, arg2) {
+  return window['go']['api']['App']['CreateVaultFolder'](arg1, arg2);
+}
+
 export function CreateWorkspaceNode(arg1, arg2, arg3) {
   return window['go']['api']['App']['CreateWorkspaceNode'](arg1, arg2, arg3);
 }
@@ -24,6 +28,14 @@ export function DisablePlugin(arg1) {
 
 export function EnablePlugin(arg1) {
   return window['go']['api']['App']['EnablePlugin'](arg1);
+}
+
+export function ExecutePluginCommand(arg1, arg2, arg3) {
+  return window['go']['api']['App']['ExecutePluginCommand'](arg1, arg2, arg3);
+}
+
+export function EditWorkbenchResource(arg1, arg2) {
+  return window['go']['api']['App']['EditWorkbenchResource'](arg1, arg2);
 }
 
 export function GetAppSettings() {
@@ -50,12 +62,20 @@ export function GetPluginAssetContent(arg1, arg2) {
   return window['go']['api']['App']['GetPluginAssetContent'](arg1, arg2);
 }
 
+export function GetPluginCapability(arg1, arg2) {
+  return window['go']['api']['App']['GetPluginCapability'](arg1, arg2);
+}
+
 export function GetPluginFrontendInfo(arg1) {
   return window['go']['api']['App']['GetPluginFrontendInfo'](arg1);
 }
 
 export function GetPlugins() {
   return window['go']['api']['App']['GetPlugins']();
+}
+
+export function GetVaultFileMetadata(arg1, arg2) {
+  return window['go']['api']['App']['GetVaultFileMetadata'](arg1, arg2);
 }
 
 export function GetVaultPluginState() {
@@ -70,12 +90,40 @@ export function GetWorkspaceTree() {
   return window['go']['api']['App']['GetWorkspaceTree']();
 }
 
+export function GetWorkbenchOpenedResources() {
+  return window['go']['api']['App']['GetWorkbenchOpenedResources']();
+}
+
+export function GetWorkbenchPreferences() {
+  return window['go']['api']['App']['GetWorkbenchPreferences']();
+}
+
+export function ListPluginCapabilities(arg1) {
+  return window['go']['api']['App']['ListPluginCapabilities'](arg1);
+}
+
+export function ListVaultFiles(arg1, arg2) {
+  return window['go']['api']['App']['ListVaultFiles'](arg1, arg2);
+}
+
+export function MoveVaultPath(arg1, arg2, arg3, arg4) {
+  return window['go']['api']['App']['MoveVaultPath'](arg1, arg2, arg3, arg4);
+}
+
 export function MoveWorkspaceNode(arg1, arg2) {
   return window['go']['api']['App']['MoveWorkspaceNode'](arg1, arg2);
 }
 
 export function OpenVault(arg1) {
   return window['go']['api']['App']['OpenVault'](arg1);
+}
+
+export function OpenWorkbenchResource(arg1, arg2) {
+  return window['go']['api']['App']['OpenWorkbenchResource'](arg1, arg2);
+}
+
+export function PublishPluginEvent(arg1, arg2, arg3) {
+  return window['go']['api']['App']['PublishPluginEvent'](arg1, arg2, arg3);
 }
 
 export function ReadPluginDataJSON(arg1, arg2) {
@@ -88,6 +136,10 @@ export function ReadPluginSetting(arg1, arg2) {
 
 export function ReadPluginSettings(arg1) {
   return window['go']['api']['App']['ReadPluginSettings'](arg1);
+}
+
+export function ReadVaultTextFile(arg1, arg2) {
+  return window['go']['api']['App']['ReadVaultTextFile'](arg1, arg2);
 }
 
 export function RecordDesiredPlugin(arg1, arg2, arg3) {
@@ -118,8 +170,24 @@ export function SetCurrentWorkspaceNode(arg1) {
   return window['go']['api']['App']['SetCurrentWorkspaceNode'](arg1);
 }
 
+export function SubscribePluginEvent(arg1, arg2) {
+  return window['go']['api']['App']['SubscribePluginEvent'](arg1, arg2);
+}
+
+export function TrashVaultPath(arg1, arg2) {
+  return window['go']['api']['App']['TrashVaultPath'](arg1, arg2);
+}
+
 export function UpdateAppSettings(arg1) {
   return window['go']['api']['App']['UpdateAppSettings'](arg1);
+}
+
+export function UpdateWorkbenchPreferences(arg1) {
+  return window['go']['api']['App']['UpdateWorkbenchPreferences'](arg1);
+}
+
+export function WriteFrontendLog(arg1, arg2) {
+  return window['go']['api']['App']['WriteFrontendLog'](arg1, arg2);
 }
 
 export function WritePluginDataJSON(arg1, arg2, arg3) {
@@ -132,4 +200,8 @@ export function WritePluginSetting(arg1, arg2, arg3) {
 
 export function WritePluginSettings(arg1, arg2) {
   return window['go']['api']['App']['WritePluginSettings'](arg1, arg2);
+}
+
+export function WriteVaultTextFile(arg1, arg2, arg3, arg4) {
+  return window['go']['api']['App']['WriteVaultTextFile'](arg1, arg2, arg3, arg4);
 }

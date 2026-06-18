@@ -101,13 +101,14 @@
     flex: 1;
     display: flex;
     flex-direction: column;
-    overflow: hidden;
+    min-width: 0;
     background: #1a1a2e;
   }
   .view {
     flex: 1;
     display: flex;
     flex-direction: column;
+    min-width: 0;
     padding: 1.5rem;
   }
   .view.degraded {
@@ -155,7 +156,7 @@
   }
   .view-content {
     flex: 1;
-    overflow: auto;
+    min-width: 0;
   }
   .placeholder {
     color: #666;

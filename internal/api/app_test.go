@@ -6,7 +6,15 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/verstak/verstak-desktop/internal/core/appsettings"
+	"github.com/verstak/verstak-desktop/internal/core/capability"
+	"github.com/verstak/verstak-desktop/internal/core/contribution"
+	"github.com/verstak/verstak-desktop/internal/core/events"
+	corefiles "github.com/verstak/verstak-desktop/internal/core/files"
 	"github.com/verstak/verstak-desktop/internal/core/plugin"
+	"github.com/verstak/verstak-desktop/internal/core/storage"
+	"github.com/verstak/verstak-desktop/internal/core/vault"
+	"github.com/verstak/verstak-desktop/internal/core/workspace"
 )
 
 // newTestApp creates an App with a mocked plugin list for testing.
@@ -43,6 +51,31 @@ func newTestApp(tmpRoot string) *App {
 			},
 		},
 	}
+}
+
+func newFilesTestApp(t *testing.T, perms []string) (*App, string) {
+	t.Helper()
+	v := vault.NewVault(nil)
+	if err := v.CreateVault(t.TempDir()); err != nil {
+		t.Fatalf("CreateVault: %v", err)
+	}
+	return &App{
+		files: corefiles.NewService(v),
+		vault: v,
+		plugins: []plugin.Plugin{
+			{
+				Manifest: plugin.Manifest{
+					ID:          "files.plugin",
+					Name:        "Files Plugin",
+					Version:     "1.0.0",
+					Provides:    []string{"files/plugin/v1"},
+					Permissions: perms,
+				},
+				Status:  plugin.StatusLoaded,
+				Enabled: true,
+			},
+		},
+	}, v.GetVaultPath()
 }
 
 // TestGetPluginFrontendInfo_KnownPluginWithFrontend verifies that
@@ -253,5 +286,445 @@ func TestGetPluginAssetContent_NonexistentFile(t *testing.T) {
 	}
 	if !strings.Contains(strings.ToLower(errStr), "failed to read") {
 		t.Errorf("error should mention 'failed to read', got: %s", errStr)
+	}
+}
+
+func TestFilesBridgeReadWriteListMoveTrash(t *testing.T) {
+	app, root := newFilesTestApp(t, []string{"files.read", "files.write", "files.delete"})
+
+	if errStr := app.CreateVaultFolder("files.plugin", "Docs"); errStr != "" {
+		t.Fatalf("CreateVaultFolder: %s", errStr)
+	}
+	if errStr := app.WriteVaultTextFile("files.plugin", "Docs/one.txt", "hello", corefiles.WriteOptions{CreateIfMissing: true}); errStr != "" {
+		t.Fatalf("WriteVaultTextFile: %s", errStr)
+	}
+
+	text, errStr := app.ReadVaultTextFile("files.plugin", "Docs/one.txt")
+	if errStr != "" {
+		t.Fatalf("ReadVaultTextFile: %s", errStr)
+	}
+	if text != "hello" {
+		t.Fatalf("text = %q", text)
+	}
+
+	entries, errStr := app.ListVaultFiles("files.plugin", "Docs")
+	if errStr != "" {
+		t.Fatalf("ListVaultFiles: %s", errStr)
+	}
+	if len(entries) != 1 || entries[0].RelativePath != "Docs/one.txt" {
+		t.Fatalf("entries = %+v", entries)
+	}
+
+	meta, errStr := app.GetVaultFileMetadata("files.plugin", "Docs/one.txt")
+	if errStr != "" {
+		t.Fatalf("GetVaultFileMetadata: %s", errStr)
+	}
+	if meta.Type != corefiles.FileTypeFile || !meta.IsText {
+		t.Fatalf("metadata = %+v", meta)
+	}
+
+	if errStr := app.MoveVaultPath("files.plugin", "Docs/one.txt", "Docs/two.txt", corefiles.MoveOptions{}); errStr != "" {
+		t.Fatalf("MoveVaultPath: %s", errStr)
+	}
+	trash, errStr := app.TrashVaultPath("files.plugin", "Docs/two.txt")
+	if errStr != "" {
+		t.Fatalf("TrashVaultPath: %s", errStr)
+	}
+	if trash.OriginalPath != "Docs/two.txt" || trash.TrashID == "" {
+		t.Fatalf("trash result = %+v", trash)
+	}
+	if _, err := os.Stat(filepath.Join(root, trash.TrashPath)); err != nil {
+		t.Fatalf("trash path missing: %v", err)
+	}
+}
+
+func TestFilesBridgePermissions(t *testing.T) {
+	cases := []struct {
+		name       string
+		perms      []string
+		call       func(*App) string
+		wantPhrase string
+	}{
+		{
+			name:       "list requires read",
+			perms:      []string{"files.write", "files.delete"},
+			call:       func(app *App) string { _, errStr := app.ListVaultFiles("files.plugin", ""); return errStr },
+			wantPhrase: "files.read",
+		},
+		{
+			name:       "metadata requires read",
+			perms:      []string{"files.write", "files.delete"},
+			call:       func(app *App) string { _, errStr := app.GetVaultFileMetadata("files.plugin", "one.txt"); return errStr },
+			wantPhrase: "files.read",
+		},
+		{
+			name:       "read requires read",
+			perms:      []string{"files.write", "files.delete"},
+			call:       func(app *App) string { _, errStr := app.ReadVaultTextFile("files.plugin", "one.txt"); return errStr },
+			wantPhrase: "files.read",
+		},
+		{
+			name:  "write requires write",
+			perms: []string{"files.read", "files.delete"},
+			call: func(app *App) string {
+				return app.WriteVaultTextFile("files.plugin", "one.txt", "x", corefiles.WriteOptions{CreateIfMissing: true})
+			},
+			wantPhrase: "files.write",
+		},
+		{
+			name:       "create folder requires write",
+			perms:      []string{"files.read", "files.delete"},
+			call:       func(app *App) string { return app.CreateVaultFolder("files.plugin", "Folder") },
+			wantPhrase: "files.write",
+		},
+		{
+			name:  "move requires write",
+			perms: []string{"files.read", "files.delete"},
+			call: func(app *App) string {
+				return app.MoveVaultPath("files.plugin", "one.txt", "two.txt", corefiles.MoveOptions{})
+			},
+			wantPhrase: "files.write",
+		},
+		{
+			name:       "trash requires delete",
+			perms:      []string{"files.read", "files.write"},
+			call:       func(app *App) string { _, errStr := app.TrashVaultPath("files.plugin", "one.txt"); return errStr },
+			wantPhrase: "files.delete",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			app, _ := newFilesTestApp(t, tc.perms)
+			errStr := tc.call(app)
+			if errStr == "" {
+				t.Fatal("expected permission error")
+			}
+			if !strings.Contains(errStr, tc.wantPhrase) {
+				t.Fatalf("error = %q, want %q", errStr, tc.wantPhrase)
+			}
+		})
+	}
+}
+
+func TestFilesBridgeRequiresLoadedPluginAndOpenVault(t *testing.T) {
+	app, _ := newFilesTestApp(t, []string{"files.read"})
+	app.plugins[0].Enabled = false
+	if _, errStr := app.ListVaultFiles("files.plugin", ""); errStr == "" || !strings.Contains(errStr, "not enabled") {
+		t.Fatalf("disabled plugin error = %q", errStr)
+	}
+
+	app, _ = newFilesTestApp(t, []string{"files.read"})
+	app.plugins[0].Status = plugin.StatusFailed
+	if _, errStr := app.ListVaultFiles("files.plugin", ""); errStr == "" || !strings.Contains(errStr, "not enabled") {
+		t.Fatalf("failed plugin error = %q", errStr)
+	}
+
+	app, _ = newFilesTestApp(t, []string{"files.read"})
+	app.plugins[0].Status = plugin.StatusDegraded
+	if _, errStr := app.ListVaultFiles("files.plugin", ""); errStr != "" {
+		t.Fatalf("degraded plugin should be allowed, got %q", errStr)
+	}
+
+	app, _ = newFilesTestApp(t, []string{"files.read"})
+	if _, errStr := app.ListVaultFiles("missing.plugin", ""); errStr == "" || !strings.Contains(errStr, "not found") {
+		t.Fatalf("missing plugin error = %q", errStr)
+	}
+
+	app, _ = newFilesTestApp(t, []string{"files.read"})
+	app.vault.CloseVault()
+	if _, errStr := app.ListVaultFiles("files.plugin", ""); errStr == "" || !strings.Contains(errStr, "vault-not-open") {
+		t.Fatalf("closed vault error = %q", errStr)
+	}
+}
+
+func TestSetCurrentVaultInitializesWorkspaceWhenMissingAtStartup(t *testing.T) {
+	tmpDir := t.TempDir()
+	vaultParent := filepath.Join(tmpDir, "vault-parent")
+	if err := os.MkdirAll(vaultParent, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	bus := events.NewBus()
+	vaultService := vault.NewVault(bus)
+	if err := vaultService.CreateVault(vaultParent); err != nil {
+		t.Fatalf("CreateVault: %v", err)
+	}
+	vaultService.CloseVault()
+
+	settings := appsettings.NewManager(filepath.Join(tmpDir, "config.json"))
+	if err := settings.Load(); err != nil {
+		t.Fatalf("settings Load: %v", err)
+	}
+
+	app := &App{
+		capRegistry: capability.NewRegistry(),
+		vault:       vaultService,
+		appSettings: settings,
+		workspace:   nil,
+	}
+
+	if errStr := app.SetCurrentVault(vaultParent); errStr != "" {
+		t.Fatalf("SetCurrentVault: %s", errStr)
+	}
+
+	tree := app.GetWorkspaceTree()
+	if tree["status"] == "not initialized" {
+		t.Fatal("workspace should be initialized after SetCurrentVault")
+	}
+	nodes, ok := tree["nodes"].([]workspace.WorkspaceNode)
+	if !ok {
+		t.Fatalf("workspace nodes type: got %T", tree["nodes"])
+	}
+	if len(nodes) == 0 {
+		t.Fatal("workspace nodes should not be empty")
+	}
+	if !app.capRegistry.Has("verstak/core/workspace/v1") {
+		t.Fatal("workspace capability should be registered after SetCurrentVault")
+	}
+}
+
+func newBridgeTestApp(t *testing.T) *App {
+	t.Helper()
+	tmpDir := t.TempDir()
+	vaultParent := filepath.Join(tmpDir, "vault-parent")
+	if err := os.MkdirAll(vaultParent, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	bus := events.NewBus()
+	vaultService := vault.NewVault(bus)
+	if err := vaultService.CreateVault(vaultParent); err != nil {
+		t.Fatalf("CreateVault: %v", err)
+	}
+
+	capReg := capability.NewRegistry()
+	if err := capReg.Register("verstak-desktop", []string{"verstak/core/vault/v1"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := capReg.Register("bridge.plugin", []string{"bridge/cap/v1"}); err != nil {
+		t.Fatal(err)
+	}
+
+	contribReg := contribution.NewRegistry()
+	contribReg.Register("bridge.plugin", &plugin.Contributions{
+		Commands: []plugin.ContributionCommand{
+			{ID: "bridge.command", Title: "Bridge Command", Handler: "runBridgeCommand"},
+		},
+		OpenProviders: []plugin.ContributionOpenProvider{
+			{
+				ID:        "bridge.markdown",
+				Title:     "Bridge Markdown",
+				Priority:  100,
+				Component: "BridgeMarkdown",
+				Supports: []plugin.OpenProviderSupport{
+					{Kind: "vault-file", Extensions: []string{".md"}, Contexts: []string{"generic-markdown", "notes-markdown"}},
+				},
+			},
+		},
+	})
+
+	return &App{
+		capRegistry:     capReg,
+		contribRegistry: contribReg,
+		eventBus:        bus,
+		vault:           vaultService,
+		storage:         storage.New(vaultService),
+		plugins: []plugin.Plugin{
+			{
+				Manifest: plugin.Manifest{
+					ID:          "bridge.plugin",
+					Name:        "Bridge Plugin",
+					Version:     "1.0.0",
+					Provides:    []string{"bridge/cap/v1"},
+					Requires:    []string{"verstak/core/capability-registry/v1"},
+					Permissions: []string{"storage.namespace", "commands.register", "events.publish", "events.subscribe", "workbench.open"},
+				},
+				Status:  plugin.StatusLoaded,
+				Enabled: true,
+			},
+			{
+				Manifest: plugin.Manifest{
+					ID:          "no.storage",
+					Name:        "No Storage",
+					Version:     "1.0.0",
+					Provides:    []string{"no/storage/v1"},
+					Permissions: []string{"events.publish"},
+				},
+				Status:  plugin.StatusLoaded,
+				Enabled: true,
+			},
+			{
+				Manifest: plugin.Manifest{
+					ID:          "disabled.plugin",
+					Name:        "Disabled",
+					Version:     "1.0.0",
+					Provides:    []string{"disabled/cap/v1"},
+					Permissions: []string{"storage.namespace"},
+				},
+				Status:  plugin.StatusDisabled,
+				Enabled: false,
+			},
+		},
+	}
+}
+
+func TestContributionSummaryIncludesOpenProviders(t *testing.T) {
+	app := newBridgeTestApp(t)
+
+	summary := app.GetContributions()
+	if len(summary.OpenProviders) != 1 {
+		t.Fatalf("OpenProviders count = %d, want 1", len(summary.OpenProviders))
+	}
+	provider := summary.OpenProviders[0]
+	if provider.PluginID != "bridge.plugin" || provider.ID != "bridge.markdown" || provider.Component != "BridgeMarkdown" {
+		t.Fatalf("provider = %+v", provider)
+	}
+	if len(provider.Supports) != 1 || provider.Supports[0].Contexts[1] != "notes-markdown" {
+		t.Fatalf("supports = %+v", provider.Supports)
+	}
+}
+
+func TestWorkbenchOpenAndEditResourceRouteToProvider(t *testing.T) {
+	app := newBridgeTestApp(t)
+	app.contribRegistry.Register("disabled.plugin", &plugin.Contributions{
+		OpenProviders: []plugin.ContributionOpenProvider{
+			{
+				ID:        "disabled.markdown",
+				Title:     "Disabled Markdown",
+				Priority:  1000,
+				Component: "DisabledMarkdown",
+				Supports: []plugin.OpenProviderSupport{
+					{Kind: "vault-file", Extensions: []string{".md"}, Contexts: []string{"generic-markdown", "notes-markdown"}},
+				},
+			},
+		},
+	})
+
+	result, errStr := app.OpenWorkbenchResource("bridge.plugin", map[string]interface{}{
+		"kind":      "vault-file",
+		"path":      "Notes/Overview.md",
+		"extension": ".md",
+		"context": map[string]interface{}{
+			"sourceView":          "notes",
+			"isInsideNotesFolder": true,
+			"notesMode":           true,
+		},
+	})
+	if errStr != "" {
+		t.Fatalf("OpenWorkbenchResource: %s", errStr)
+	}
+	if result.ProviderID != "bridge.markdown" || result.ProviderComponent != "BridgeMarkdown" || result.Request.Mode != "view" {
+		t.Fatalf("open result = %+v", result)
+	}
+
+	editResult, errStr := app.EditWorkbenchResource("bridge.plugin", map[string]interface{}{
+		"kind":      "vault-file",
+		"path":      "Notes/Overview.md",
+		"extension": ".md",
+		"context": map[string]interface{}{
+			"sourceView":          "notes",
+			"isInsideNotesFolder": true,
+			"notesMode":           true,
+		},
+	})
+	if errStr != "" {
+		t.Fatalf("EditWorkbenchResource: %s", errStr)
+	}
+	if editResult.Request.Mode != "edit" {
+		t.Fatalf("edit mode = %q", editResult.Request.Mode)
+	}
+
+	opened := app.GetWorkbenchOpenedResources()
+	if len(opened) != 2 {
+		t.Fatalf("opened resources = %+v", opened)
+	}
+}
+
+func TestWorkbenchOpenResourceReturnsNoProviderFallback(t *testing.T) {
+	app := newBridgeTestApp(t)
+
+	result, errStr := app.OpenWorkbenchResource("bridge.plugin", map[string]interface{}{
+		"kind": "vault-file",
+		"path": "Images/logo.png",
+	})
+	if errStr != "" {
+		t.Fatalf("OpenWorkbenchResource: %s", errStr)
+	}
+	if result.Status != "no-provider" || result.Request.Path != "Images/logo.png" {
+		t.Fatalf("result = %+v", result)
+	}
+}
+
+func TestWorkbenchOpenResourceRequiresPermission(t *testing.T) {
+	app := newBridgeTestApp(t)
+
+	_, errStr := app.OpenWorkbenchResource("no.storage", map[string]interface{}{
+		"kind": "vault-file",
+		"path": "Docs/readme.md",
+	})
+	if !strings.Contains(errStr, "workbench.open") {
+		t.Fatalf("err = %q, want workbench.open permission error", errStr)
+	}
+}
+
+func TestPluginBridgeSettingsRequireLoadedPluginAndStoragePermission(t *testing.T) {
+	app := newBridgeTestApp(t)
+
+	if errStr := app.WritePluginSettings("bridge.plugin", map[string]interface{}{"savedText": "hello"}); errStr != "" {
+		t.Fatalf("WritePluginSettings: %s", errStr)
+	}
+	settings, errStr := app.ReadPluginSettings("bridge.plugin")
+	if errStr != "" {
+		t.Fatalf("ReadPluginSettings: %s", errStr)
+	}
+	if settings["savedText"] != "hello" {
+		t.Fatalf("savedText = %v, want hello", settings["savedText"])
+	}
+
+	if _, errStr := app.ReadPluginSettings("missing.plugin"); errStr == "" {
+		t.Fatal("expected error for missing plugin")
+	}
+	if _, errStr := app.ReadPluginSettings("disabled.plugin"); errStr == "" {
+		t.Fatal("expected error for disabled plugin")
+	}
+	if _, errStr := app.ReadPluginSettings("no.storage"); errStr == "" {
+		t.Fatal("expected error for plugin without storage.namespace")
+	}
+}
+
+func TestPluginBridgeCapabilitiesCommandsAndEventsAreChecked(t *testing.T) {
+	app := newBridgeTestApp(t)
+
+	capInfo, errStr := app.GetPluginCapability("bridge.plugin", "bridge/cap/v1")
+	if errStr != "" {
+		t.Fatalf("GetPluginCapability: %s", errStr)
+	}
+	if capInfo["available"] != true {
+		t.Fatalf("capability should be available: %#v", capInfo)
+	}
+	if _, errStr := app.GetPluginCapability("no.storage", "bridge/cap/v1"); errStr == "" {
+		t.Fatal("expected capability dependency error")
+	}
+
+	commandResult, errStr := app.ExecutePluginCommand("bridge.plugin", "bridge.command", map[string]interface{}{"value": "x"})
+	if errStr != "" {
+		t.Fatalf("ExecutePluginCommand: %s", errStr)
+	}
+	if commandResult["status"] != "declared" {
+		t.Fatalf("command status = %v, want declared", commandResult["status"])
+	}
+
+	if errStr := app.PublishPluginEvent("bridge.plugin", "bridge.event", map[string]interface{}{"ok": true}); errStr != "" {
+		t.Fatalf("PublishPluginEvent: %s", errStr)
+	}
+	if errStr := app.SubscribePluginEvent("bridge.plugin", "bridge.event"); errStr != "" {
+		t.Fatalf("SubscribePluginEvent: %s", errStr)
+	}
+	if errStr := app.SubscribePluginEvent("no.storage", "bridge.event"); errStr == "" {
+		t.Fatal("expected subscribe permission error")
+	}
+	if _, errStr := app.ExecutePluginCommand("no.storage", "bridge.command", nil); errStr == "" {
+		t.Fatal("expected command permission/ownership error")
 	}
 }

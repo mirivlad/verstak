@@ -2,8 +2,9 @@
   import Icon from '../ui/Icon.svelte';
   import PluginCard from './PluginCard.svelte';
   import PluginBundleHost from '../plugin-host/PluginBundleHost.svelte';
-  import { onMount } from 'svelte';
-  import { GetPlugins, GetCapabilities, GetPermissions, GetContributions, ReloadPlugins, GetVaultStatus, GetVaultPluginState, EnablePlugin, DisablePlugin, ReadPluginSettings, WritePluginSettings, GetPluginFrontendInfo } from '../../../wailsjs/go/api/App';
+  import { onMount, tick } from 'svelte';
+  import { GetPlugins, GetCapabilities, GetPermissions, GetContributions, ReloadPlugins, GetVaultStatus, GetVaultPluginState, EnablePlugin, DisablePlugin, ReadPluginSettings, WritePluginSettings, GetPluginFrontendInfo, WriteFrontendLog } from '../../../wailsjs/go/api/App';
+  import { debug } from '../log/debug.js';
 
   let plugins = [];
   let capabilities = [];
@@ -45,6 +46,28 @@
     }, 4000);
   }
 
+  function notifyPluginsChanged() {
+    window.dispatchEvent(new CustomEvent('verstak:plugins-changed'));
+  }
+
+  function unpackBackendResult(result) {
+    if (Array.isArray(result) && result.length === 2 && (typeof result[1] === 'string' || result[1] == null)) {
+      return { value: result[0], error: result[1] || '' };
+    }
+    return { value: result, error: '' };
+  }
+
+  function unpackReloadResult(result) {
+    if (Array.isArray(result)) {
+      return {
+        count: Number(result[0] || 0),
+        summary: result[1] || `Reloaded ${Number(result[0] || 0)} plugin(s).`,
+      };
+    }
+    const count = Number(result || 0);
+    return { count, summary: `Reloaded ${count} plugin(s).` };
+  }
+
   async function openSettingsFromProps(pluginId, panelId) {
     const panel = (contributions.settingsPanels || []).find(sp => sp.pluginId === pluginId && (!panelId || sp.id === panelId));
     if (panel) {
@@ -55,8 +78,14 @@
         const info = await GetPluginFrontendInfo(pluginId);
         settingsPluginInfo = info;
       } catch { settingsPluginInfo = null; }
-      ReadPluginSettings(pluginId).then(data => {
-        settingsData = data || {};
+      ReadPluginSettings(pluginId).then(result => {
+        const unpacked = unpackBackendResult(result);
+        if (unpacked.error) {
+          settingsError = unpacked.error;
+          settingsData = {};
+          return;
+        }
+        settingsData = unpacked.value || {};
       }).catch(() => { settingsData = {}; });
     } else {
       settingsError = `Settings panel not found for plugin "${pluginId}". Check that the plugin is enabled and has settingsPanels in its manifest.`;
@@ -73,18 +102,27 @@
   }
 
   async function loadAll() {
+    debug.log('[PluginManager] loadAll: START');
     error = '';
     loading = true;
     try {
+      debug.log('[PluginManager] loadAll: calling GetPlugins...');
       const p = await GetPlugins();
       plugins = p || [];
+      debug.log('[PluginManager] loadAll: GetPlugins returned', plugins.length, 'plugins');
+      for (var i = 0; i < plugins.length; i++) {
+        debug.log('[PluginManager] loadAll: plugin[' + i + ']:', plugins[i].manifest?.id, 'status:', plugins[i].status, 'enabled:', plugins[i].enabled);
+      }
     } catch (e) {
+      debug.log('[PluginManager] loadAll: GetPlugins ERROR:', String(e));
+      WriteFrontendLog('PluginManager', 'loadAll: GetPlugins ERROR: ' + String(e));
       error = 'GetPlugins: ' + String(e);
       loading = false;
       return;
     }
     // Collect all async loads but await them so loading stays true until all are done
     try {
+      debug.log('[PluginManager] loadAll: loading vault/capabilities/permissions/contributions...');
       const [v, caps, perms, contribs] = await Promise.all([
         GetVaultStatus().catch(() => ({ status: 'unknown', path: '', vaultId: '' })),
         GetCapabilities().catch(() => []),
@@ -95,66 +133,93 @@
       capabilities = caps || [];
       permissions = perms || [];
       contributions = contribs || {};
+      debug.log('[PluginManager] loadAll: vault=' + vaultStatus.status + ' caps=' + capabilities.length + ' perms=' + permissions.length);
+      WriteFrontendLog('PluginManager', 'loadAll: vault=' + vaultStatus.status + ' caps=' + capabilities.length + ' perms=' + permissions.length);
     } catch (e) {
-      // Non-critical — log but don't fail
+      debug.log('[PluginManager] loadAll: non-critical load ERROR:', String(e));
+      WriteFrontendLog('PluginManager', 'loadAll: non-critical ERROR: ' + String(e));
       console.error('[PluginManager] non-critical load error:', e);
     }
     if (vaultStatus.status === 'open') {
       try {
+        debug.log('[PluginManager] loadAll: calling GetVaultPluginState...');
         vaultPluginState = await GetVaultPluginState() || { enabledPlugins: [], disabledPlugins: [], desiredPlugins: [] };
-      } catch { /* non-critical */ }
+        WriteFrontendLog('PluginManager', 'loadAll: GetVaultPluginState returned');
+      } catch (e) {
+        WriteFrontendLog('PluginManager', 'loadAll: GetVaultPluginState ERROR: ' + String(e));
+      }
     }
     loading = false;
+    await tick();
+    debug.log('[PluginManager] loadAll: END, loading=false');
+    WriteFrontendLog('PluginManager', 'loadAll: END, loading=false');
   }
 
   onMount(() => { loadAll(); });
 
   async function reload() {
+    debug.log('[PluginManager] reload: START');
     reloading = true;
     error = '';
     let resultMsg = '';
     try {
-      const [count, summary] = await ReloadPlugins();
+      debug.log('[PluginManager] reload: calling ReloadPlugins...');
+      const { count, summary } = unpackReloadResult(await ReloadPlugins());
+      debug.log('[PluginManager] reload: ReloadPlugins returned count=' + count + ' summary=' + summary);
       resultMsg = `Reloaded ${count} plugin(s). ${summary}`;
     } catch (e) {
+      debug.log('[PluginManager] reload: ReloadPlugins ERROR:', String(e));
       error = 'Reload: ' + String(e);
       reloading = false;
       return;
     }
+    debug.log('[PluginManager] reload: calling loadAll after reload...');
     await loadAll();
+    notifyPluginsChanged();
     reloading = false;
+    debug.log('[PluginManager] reload: END');
     showToast(resultMsg, 'success');
   }
 
   async function enablePlugin(pluginId) {
+    debug.log('[PluginManager] enablePlugin:', pluginId);
     actionFeedback = { ...actionFeedback, [pluginId]: 'enabling' };
     error = '';
     const err = await EnablePlugin(pluginId);
     if (err) {
+      debug.log('[PluginManager] enablePlugin: ERROR:', err);
       actionFeedback = { ...actionFeedback, [pluginId]: null };
       error = 'Enable: ' + err;
       return;
     }
+    debug.log('[PluginManager] enablePlugin: success, reloading...');
     // Reload to get updated state
     try { await ReloadPlugins(); } catch (e) { /* ignore */ }
     await loadAll();
+    notifyPluginsChanged();
     actionFeedback = { ...actionFeedback, [pluginId]: null };
+    debug.log('[PluginManager] enablePlugin: done');
     showToast(`Plugin "${pluginId}" enabled`, 'success');
   }
 
   async function disablePlugin(pluginId) {
+    debug.log('[PluginManager] disablePlugin:', pluginId);
     actionFeedback = { ...actionFeedback, [pluginId]: 'disabling' };
     error = '';
     const err = await DisablePlugin(pluginId);
     if (err) {
+      debug.log('[PluginManager] disablePlugin: ERROR:', err);
       actionFeedback = { ...actionFeedback, [pluginId]: null };
       error = 'Disable: ' + err;
       return;
     }
+    debug.log('[PluginManager] disablePlugin: success, reloading...');
     // Reload to get updated state
     try { await ReloadPlugins(); } catch (e) { /* ignore */ }
     await loadAll();
+    notifyPluginsChanged();
     actionFeedback = { ...actionFeedback, [pluginId]: null };
+    debug.log('[PluginManager] disablePlugin: done');
     showToast(`Plugin "${pluginId}" disabled`, 'info');
   }
 
@@ -327,14 +392,18 @@
 
 <style>
   .plugin-manager {
-    max-width: 900px;
-    padding-top: 0.5rem;
+    flex: 1;
+    width: min(100%, 1100px);
+    min-height: 0;
+    padding: 0.5rem 0.5rem 1.5rem 0;
     position: relative;
   }
   header {
     display: flex;
     align-items: center;
     justify-content: space-between;
+    gap: 0.75rem;
+    flex-wrap: wrap;
     margin-bottom: 1.25rem;
     padding-bottom: 0.75rem;
     border-bottom: 1px solid #0f3460;
@@ -343,14 +412,20 @@
     display: flex;
     align-items: center;
     gap: 0.75rem;
+    min-width: 0;
+    flex-wrap: wrap;
   }
   h2 { color: #e0e0e0; font-size: 1.3rem; margin: 0; }
   .vault-badge {
+    max-width: 100%;
     font-size: 0.75rem;
     padding: 0.2rem 0.6rem;
     border-radius: 12px;
     font-weight: 600;
     border: 1px solid;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
   .vault-open { background: rgba(78, 204, 163, 0.15); color: #4ecca3; border-color: #4ecca3; }
   .vault-not-created { background: rgba(255, 200, 87, 0.15); color: #ffc857; border-color: #ffc857; }
@@ -404,7 +479,7 @@
   .hint-list { list-style: none; padding: 0; margin: 0.5rem 0; font-size: 0.8rem; opacity: 0.7; }
   .hint-list li { margin: 0.25rem 0; }
   .hint code { background: #0f3460; padding: 0.1rem 0.3rem; border-radius: 3px; }
-  .plugin-list { display: flex; flex-direction: column; gap: 0.75rem; margin-bottom: 1.5rem; }
+  .plugin-list { display: flex; flex-direction: column; gap: 0.75rem; margin-bottom: 1.5rem; min-width: 0; }
 
   .missing-section { margin-bottom: 1.5rem; }
   .missing-section h3 { color: #e94560; font-size: 1rem; margin: 0 0 0.25rem; }
@@ -450,4 +525,24 @@
   .modal-body { padding: 1rem; overflow-y: auto; }
   .settings-hint { color: #666; font-size: 0.8rem; margin: 0.25rem 0; }
   .settings-hint code { color: #4ecca3; }
+
+  @media (max-width: 760px) {
+    .plugin-manager {
+      width: 100%;
+      padding-right: 0;
+    }
+
+    header {
+      align-items: flex-start;
+    }
+
+    .reload-btn {
+      width: 100%;
+    }
+
+    .modal {
+      width: min(480px, calc(100vw - 2rem));
+      max-height: calc(100vh - 2rem);
+    }
+  }
 </style>

@@ -3,11 +3,13 @@ package api
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 
@@ -15,12 +17,15 @@ import (
 	"github.com/verstak/verstak-desktop/internal/core/capability"
 	"github.com/verstak/verstak-desktop/internal/core/contribution"
 	"github.com/verstak/verstak-desktop/internal/core/events"
+	corefiles "github.com/verstak/verstak-desktop/internal/core/files"
 	"github.com/verstak/verstak-desktop/internal/core/permissions"
 	"github.com/verstak/verstak-desktop/internal/core/plugin"
 	"github.com/verstak/verstak-desktop/internal/core/pluginstate"
 	"github.com/verstak/verstak-desktop/internal/core/storage"
 	"github.com/verstak/verstak-desktop/internal/core/vault"
+	coreworkbench "github.com/verstak/verstak-desktop/internal/core/workbench"
 	"github.com/verstak/verstak-desktop/internal/core/workspace"
+	"github.com/verstak/verstak-desktop/internal/shell/debug"
 )
 
 // App is the main application struct exposed to the Wails frontend.
@@ -33,9 +38,12 @@ type App struct {
 	plugins         []plugin.Plugin
 	vault           *vault.Vault
 	storage         *storage.Storage
+	files           *corefiles.Service
 	appSettings     *appsettings.Manager
 	pluginState     *pluginstate.Manager
+	workbench       *coreworkbench.Router
 	workspace       *workspace.Manager
+	debug           bool
 }
 
 // NewApp creates a new App instance.
@@ -47,9 +55,11 @@ func NewApp(
 	plugins []plugin.Plugin,
 	vaultService *vault.Vault,
 	storageService *storage.Storage,
+	filesService *corefiles.Service,
 	appSettingsMgr *appsettings.Manager,
 	pluginStateMgr *pluginstate.Manager,
 	workspaceMgr *workspace.Manager,
+	debugEnabled bool,
 ) *App {
 	return &App{
 		capRegistry:     capReg,
@@ -59,10 +69,40 @@ func NewApp(
 		plugins:         plugins,
 		vault:           vaultService,
 		storage:         storageService,
+		files:           filesService,
 		appSettings:     appSettingsMgr,
 		pluginState:     pluginStateMgr,
+		workbench:       coreworkbench.NewRouter(workbenchPrefsFromSettings(appSettingsMgr)),
 		workspace:       workspaceMgr,
+		debug:           debugEnabled,
 	}
+}
+
+func workbenchPrefsFromSettings(m *appsettings.Manager) coreworkbench.Preferences {
+	if m == nil {
+		return coreworkbench.Preferences{}
+	}
+	cfg := m.Get()
+	return coreworkbench.Preferences{
+		DefaultTextEditorProvider:          cfg.Workbench.DefaultTextEditorProvider,
+		DefaultMarkdownEditorProvider:      cfg.Workbench.DefaultMarkdownEditorProvider,
+		DefaultNotesMarkdownEditorProvider: cfg.Workbench.DefaultNotesMarkdownEditorProvider,
+	}
+}
+
+func appSettingsWorkbenchPrefs(p coreworkbench.Preferences) appsettings.WorkbenchPreferences {
+	return appsettings.WorkbenchPreferences{
+		DefaultTextEditorProvider:          p.DefaultTextEditorProvider,
+		DefaultMarkdownEditorProvider:      p.DefaultMarkdownEditorProvider,
+		DefaultNotesMarkdownEditorProvider: p.DefaultNotesMarkdownEditorProvider,
+	}
+}
+
+func (a *App) ensureWorkbench() *coreworkbench.Router {
+	if a.workbench == nil {
+		a.workbench = coreworkbench.NewRouter(workbenchPrefsFromSettings(a.appSettings))
+	}
+	return a.workbench
 }
 
 // Startup is called when the app starts. Sets the Wails context for dialogs.
@@ -71,25 +111,77 @@ func (a *App) Startup(ctx context.Context) {
 	log.Printf("[api] App.Startup: initialized with %d plugins", len(a.plugins))
 }
 
+func (a *App) findPlugin(pluginID string) (*plugin.Plugin, error) {
+	for i := range a.plugins {
+		if a.plugins[i].Manifest.ID == pluginID {
+			return &a.plugins[i], nil
+		}
+	}
+	return nil, fmt.Errorf("plugin %q not found", pluginID)
+}
+
+func (a *App) requirePluginAccess(pluginID, permission string) (*plugin.Plugin, error) {
+	p, err := a.findPlugin(pluginID)
+	if err != nil {
+		return nil, err
+	}
+	if !p.Enabled || (p.Status != plugin.StatusLoaded && p.Status != plugin.StatusDegraded) {
+		return nil, fmt.Errorf("plugin %q is not enabled and loaded: status=%s enabled=%v", pluginID, p.Status, p.Enabled)
+	}
+	if permission != "" && !hasString(p.Manifest.Permissions, permission) {
+		return nil, fmt.Errorf("plugin %q lacks required permission %q", pluginID, permission)
+	}
+	return p, nil
+}
+
+func (a *App) requirePluginCapabilityAccess(pluginID, capabilityName string) (*plugin.Plugin, error) {
+	p, err := a.requirePluginAccess(pluginID, "")
+	if err != nil {
+		return nil, err
+	}
+	if !hasString(p.Manifest.Requires, capabilityName) && !hasString(p.Manifest.OptionalRequires, capabilityName) {
+		return nil, fmt.Errorf("plugin %q does not declare capability dependency %q", pluginID, capabilityName)
+	}
+	return p, nil
+}
+
+func hasString(items []string, want string) bool {
+	for _, item := range items {
+		if item == want {
+			return true
+		}
+	}
+	return false
+}
+
 // ─── Plugin Manager API ─────────────────────────────────────
 
 // GetPlugins returns all discovered plugins.
 func (a *App) GetPlugins() []plugin.Plugin {
-	log.Printf("[api] GetPlugins: returning %d plugins", len(a.plugins))
+	if a.debug {
+		debug.Logf("[api] GetPlugins: returning %d plugins", len(a.plugins))
+		for i, p := range a.plugins {
+			debug.Logf("[api]   plugin[%d]: id=%s status=%s enabled=%v root=%s", i, p.Manifest.ID, p.Status, p.Enabled, p.RootPath)
+		}
+	}
 	return a.plugins
 }
 
 // GetCapabilities returns all registered capabilities.
 func (a *App) GetCapabilities() []capability.Entry {
 	entries := a.capRegistry.List()
-	log.Printf("[api] GetCapabilities: returning %d entries", len(entries))
+	if a.debug {
+		debug.Logf("[api] GetCapabilities: returning %d entries", len(entries))
+	}
 	return entries
 }
 
 // GetPermissions returns all known permissions.
 func (a *App) GetPermissions() []permissions.Entry {
 	entries := a.permRegistry.List()
-	log.Printf("[api] GetPermissions: returning %d entries", len(entries))
+	if a.debug {
+		debug.Logf("[api] GetPermissions: returning %d entries", len(entries))
+	}
 	return entries
 }
 
@@ -132,12 +224,29 @@ type FlatCommand struct {
 	Handler  string `json:"handler,omitempty"`
 }
 
+type FlatOpenProviderSupport struct {
+	Kind       string   `json:"kind"`
+	Mime       []string `json:"mime,omitempty"`
+	Extensions []string `json:"extensions,omitempty"`
+	Contexts   []string `json:"contexts,omitempty"`
+}
+
+type FlatOpenProvider struct {
+	PluginID  string                    `json:"pluginId"`
+	ID        string                    `json:"id"`
+	Title     string                    `json:"title"`
+	Priority  int                       `json:"priority,omitempty"`
+	Component string                    `json:"component"`
+	Supports  []FlatOpenProviderSupport `json:"supports"`
+}
+
 // ContributionSummary aggregates all contribution types for the frontend.
 type ContributionSummary struct {
 	Views          []FlatView          `json:"views"`
 	Commands       []FlatCommand       `json:"commands"`
 	SettingsPanels []FlatSettingsPanel `json:"settingsPanels"`
 	SidebarItems   []FlatSidebarItem   `json:"sidebarItems"`
+	OpenProviders  []FlatOpenProvider  `json:"openProviders"`
 }
 
 // buildContributionSummary creates a ContributionSummary from the registry.
@@ -149,6 +258,7 @@ func buildContributionSummary(r *contribution.Registry) ContributionSummary {
 	regCmds := r.Commands()
 	regPanels := r.SettingsPanels()
 	regSidebar := r.SidebarItems()
+	regOpenProviders := r.OpenProviders()
 
 	views := make([]FlatView, len(regViews))
 	for i, v := range regViews {
@@ -166,46 +276,43 @@ func buildContributionSummary(r *contribution.Registry) ContributionSummary {
 	for i, v := range regSidebar {
 		sidebar[i] = FlatSidebarItem{PluginID: v.PluginID, ID: v.Item.ID, Title: v.Item.Title, Icon: v.Item.Icon, View: v.Item.View, Position: v.Item.Position}
 	}
-	return ContributionSummary{Views: views, Commands: cmds, SettingsPanels: panels, SidebarItems: sidebar}
+	openProviders := make([]FlatOpenProvider, len(regOpenProviders))
+	for i, v := range regOpenProviders {
+		supports := make([]FlatOpenProviderSupport, len(v.Item.Supports))
+		for j, s := range v.Item.Supports {
+			supports[j] = FlatOpenProviderSupport{Kind: s.Kind, Mime: s.Mime, Extensions: s.Extensions, Contexts: s.Contexts}
+		}
+		openProviders[i] = FlatOpenProvider{
+			PluginID:  v.PluginID,
+			ID:        v.Item.ID,
+			Title:     v.Item.Title,
+			Priority:  v.Item.Priority,
+			Component: v.Item.Component,
+			Supports:  supports,
+		}
+	}
+	return ContributionSummary{Views: views, Commands: cmds, SettingsPanels: panels, SidebarItems: sidebar, OpenProviders: openProviders}
 }
 
 // GetContributions returns all registered contributions flattened for the frontend.
 func (a *App) GetContributions() ContributionSummary {
 	if a.contribRegistry == nil {
+		if a.debug {
+			debug.Logf("[api] GetContributions: contribRegistry is nil")
+		}
 		return ContributionSummary{}
 	}
-	return buildContributionSummary(a.contribRegistry)
-}
-
-// expandPath resolves "~" to the user's home directory.
-func expandPath(path string) string {
-	if strings.HasPrefix(path, "~/") {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			log.Printf("[api] expandPath: cannot get home dir: %v", err)
-			return path
-		}
-		return filepath.Join(home, path[2:])
+	summary := buildContributionSummary(a.contribRegistry)
+	if a.debug {
+		debug.Logf("[api] GetContributions: returning views=%d commands=%d sidebar=%d settings=%d openProviders=%d",
+			len(summary.Views), len(summary.Commands), len(summary.SidebarItems), len(summary.SettingsPanels), len(summary.OpenProviders))
 	}
-	return path
+	return summary
 }
 
 // ReloadPlugins re-discovers plugins from disk and returns a summary.
 func (a *App) ReloadPlugins() (int, string) {
-	// Resolve plugin directories relative to the binary location
-	binDir := filepath.Dir(os.Args[0])
-	pluginDir := filepath.Join(binDir, "plugins")
-
-	discoveryDirs := []string{
-		"~/.config/verstak/plugins",
-		pluginDir,
-	}
-
-	// Expand tilde in all paths
-	for i, d := range discoveryDirs {
-		discoveryDirs[i] = expandPath(d)
-	}
-
+	discoveryDirs := plugin.DefaultDiscoveryDirs()
 	log.Printf("[api] ReloadPlugins: scanning dirs: %v", discoveryDirs)
 
 	// Unregister all non-core capabilities
@@ -218,6 +325,8 @@ func (a *App) ReloadPlugins() (int, string) {
 		"verstak/core/contribution-registry/v1",
 		"verstak/core/permissions/v1",
 		"verstak/core/events/v1",
+		"verstak/core/files/v1",
+		"verstak/core/workbench/v1",
 	}
 	if err := a.capRegistry.Register("verstak-desktop", coreCaps); err != nil {
 		log.Printf("[api] ReloadPlugins: failed to re-register core capabilities: %v", err)
@@ -335,6 +444,10 @@ func (a *App) GetVaultStatus() map[string]string {
 		}
 	}
 
+	if a.debug {
+		debug.Logf("[api] GetVaultStatus: status=%s path=%s vaultId=%s", status, path, vaultID)
+	}
+
 	return map[string]string{
 		"status":  status,
 		"path":    path,
@@ -370,20 +483,26 @@ func (a *App) CloseVault() error {
 // ─── Storage API ────────────────────────────────────────────
 
 // ReadPluginSettings returns all settings for a plugin.
-func (a *App) ReadPluginSettings(pluginID string) map[string]interface{} {
+func (a *App) ReadPluginSettings(pluginID string) (map[string]interface{}, string) {
+	if _, err := a.requirePluginAccess(pluginID, "storage.namespace"); err != nil {
+		return make(map[string]interface{}), err.Error()
+	}
 	if a.storage == nil {
-		return make(map[string]interface{})
+		return make(map[string]interface{}), "storage not initialized"
 	}
 	data, err := a.storage.ReadPluginSettings(pluginID)
 	if err != nil {
 		log.Printf("[api] ReadPluginSettings(%s): %v", pluginID, err)
-		return make(map[string]interface{})
+		return make(map[string]interface{}), err.Error()
 	}
-	return data
+	return data, ""
 }
 
 // WritePluginSettings writes all settings for a plugin.
 func (a *App) WritePluginSettings(pluginID string, data map[string]interface{}) string {
+	if _, err := a.requirePluginAccess(pluginID, "storage.namespace"); err != nil {
+		return err.Error()
+	}
 	if a.storage == nil {
 		return "storage not initialized"
 	}
@@ -396,6 +515,10 @@ func (a *App) WritePluginSettings(pluginID string, data map[string]interface{}) 
 
 // ReadPluginSetting returns a single setting value.
 func (a *App) ReadPluginSetting(pluginID, key string) interface{} {
+	if _, err := a.requirePluginAccess(pluginID, "storage.namespace"); err != nil {
+		log.Printf("[api] ReadPluginSetting(%s, %s): %v", pluginID, key, err)
+		return nil
+	}
 	if a.storage == nil {
 		return nil
 	}
@@ -409,6 +532,9 @@ func (a *App) ReadPluginSetting(pluginID, key string) interface{} {
 
 // WritePluginSetting writes a single setting value.
 func (a *App) WritePluginSetting(pluginID, key string, value interface{}) string {
+	if _, err := a.requirePluginAccess(pluginID, "storage.namespace"); err != nil {
+		return err.Error()
+	}
 	if a.storage == nil {
 		return "storage not initialized"
 	}
@@ -421,6 +547,10 @@ func (a *App) WritePluginSetting(pluginID, key string, value interface{}) string
 
 // ReadPluginDataJSON reads a named JSON data file for a plugin.
 func (a *App) ReadPluginDataJSON(pluginID, name string) map[string]interface{} {
+	if _, err := a.requirePluginAccess(pluginID, "storage.namespace"); err != nil {
+		log.Printf("[api] ReadPluginDataJSON(%s, %s): %v", pluginID, name, err)
+		return make(map[string]interface{})
+	}
 	if a.storage == nil {
 		return make(map[string]interface{})
 	}
@@ -434,12 +564,287 @@ func (a *App) ReadPluginDataJSON(pluginID, name string) map[string]interface{} {
 
 // WritePluginDataJSON writes a named JSON data file for a plugin.
 func (a *App) WritePluginDataJSON(pluginID, name string, data map[string]interface{}) string {
+	if _, err := a.requirePluginAccess(pluginID, "storage.namespace"); err != nil {
+		return err.Error()
+	}
 	if a.storage == nil {
 		return "storage not initialized"
 	}
 	if err := a.storage.WritePluginDataJSON(pluginID, name, data); err != nil {
 		log.Printf("[api] WritePluginDataJSON(%s, %s): %v", pluginID, name, err)
 		return err.Error()
+	}
+	return ""
+}
+
+// ListVaultFiles lists a vault-relative directory for a plugin with files.read.
+func (a *App) ListVaultFiles(pluginID, relativeDir string) ([]corefiles.FileEntry, string) {
+	if _, err := a.requirePluginAccess(pluginID, "files.read"); err != nil {
+		return nil, err.Error()
+	}
+	if a.files == nil {
+		return nil, "files service not initialized"
+	}
+	entries, err := a.files.ListVaultFiles(relativeDir)
+	if err != nil {
+		return nil, err.Error()
+	}
+	return entries, ""
+}
+
+// GetVaultFileMetadata returns metadata for a vault-relative path for a plugin with files.read.
+func (a *App) GetVaultFileMetadata(pluginID, relativePath string) (corefiles.FileMetadata, string) {
+	if _, err := a.requirePluginAccess(pluginID, "files.read"); err != nil {
+		return corefiles.FileMetadata{}, err.Error()
+	}
+	if a.files == nil {
+		return corefiles.FileMetadata{}, "files service not initialized"
+	}
+	meta, err := a.files.GetVaultFileMetadata(relativePath)
+	if err != nil {
+		return corefiles.FileMetadata{}, err.Error()
+	}
+	return meta, ""
+}
+
+// ReadVaultTextFile reads a UTF-8 text file for a plugin with files.read.
+func (a *App) ReadVaultTextFile(pluginID, relativePath string) (string, string) {
+	if _, err := a.requirePluginAccess(pluginID, "files.read"); err != nil {
+		return "", err.Error()
+	}
+	if a.files == nil {
+		return "", "files service not initialized"
+	}
+	text, err := a.files.ReadVaultTextFile(relativePath)
+	if err != nil {
+		return "", err.Error()
+	}
+	return text, ""
+}
+
+// WriteVaultTextFile atomically writes a UTF-8 text file for a plugin with files.write.
+func (a *App) WriteVaultTextFile(pluginID, relativePath string, content string, options corefiles.WriteOptions) string {
+	if _, err := a.requirePluginAccess(pluginID, "files.write"); err != nil {
+		return err.Error()
+	}
+	if a.files == nil {
+		return "files service not initialized"
+	}
+	if err := a.files.WriteVaultTextFile(relativePath, content, options); err != nil {
+		return err.Error()
+	}
+	return ""
+}
+
+// CreateVaultFolder creates a vault-relative folder for a plugin with files.write.
+func (a *App) CreateVaultFolder(pluginID, relativePath string) string {
+	if _, err := a.requirePluginAccess(pluginID, "files.write"); err != nil {
+		return err.Error()
+	}
+	if a.files == nil {
+		return "files service not initialized"
+	}
+	if err := a.files.CreateVaultFolder(relativePath); err != nil {
+		return err.Error()
+	}
+	return ""
+}
+
+// MoveVaultPath moves a vault-relative file or folder for a plugin with files.write.
+func (a *App) MoveVaultPath(pluginID, fromRelativePath string, toRelativePath string, options corefiles.MoveOptions) string {
+	if _, err := a.requirePluginAccess(pluginID, "files.write"); err != nil {
+		return err.Error()
+	}
+	if a.files == nil {
+		return "files service not initialized"
+	}
+	if err := a.files.MoveVaultPath(fromRelativePath, toRelativePath, options); err != nil {
+		return err.Error()
+	}
+	return ""
+}
+
+// TrashVaultPath moves a vault-relative file or folder to internal trash for a plugin with files.delete.
+func (a *App) TrashVaultPath(pluginID, relativePath string) (corefiles.TrashResult, string) {
+	if _, err := a.requirePluginAccess(pluginID, "files.delete"); err != nil {
+		return corefiles.TrashResult{}, err.Error()
+	}
+	if a.files == nil {
+		return corefiles.TrashResult{}, "files service not initialized"
+	}
+	result, err := a.files.TrashVaultPath(relativePath)
+	if err != nil {
+		return corefiles.TrashResult{}, err.Error()
+	}
+	return result, ""
+}
+
+func (a *App) activeOpenProviders() []contribution.ContributionOpenProvider {
+	if a.contribRegistry == nil {
+		return nil
+	}
+	providers := a.contribRegistry.OpenProviders()
+	active := make([]contribution.ContributionOpenProvider, 0, len(providers))
+	for _, provider := range providers {
+		p, err := a.findPlugin(provider.PluginID)
+		if err != nil {
+			continue
+		}
+		if !p.Enabled || (p.Status != plugin.StatusLoaded && p.Status != plugin.StatusDegraded) {
+			continue
+		}
+		active = append(active, provider)
+	}
+	return active
+}
+
+func decodeOpenResourceRequest(raw map[string]interface{}) (coreworkbench.OpenResourceRequest, error) {
+	data, err := json.Marshal(raw)
+	if err != nil {
+		return coreworkbench.OpenResourceRequest{}, err
+	}
+	var request coreworkbench.OpenResourceRequest
+	if err := json.Unmarshal(data, &request); err != nil {
+		return coreworkbench.OpenResourceRequest{}, err
+	}
+	if request.Kind == "" {
+		return request, fmt.Errorf("resource kind is empty")
+	}
+	if request.Path == "" {
+		return request, fmt.Errorf("resource path is empty")
+	}
+	return request, nil
+}
+
+func (a *App) OpenWorkbenchResource(pluginID string, rawRequest map[string]interface{}) (coreworkbench.OpenResourceResult, string) {
+	if _, err := a.requirePluginAccess(pluginID, "workbench.open"); err != nil {
+		return coreworkbench.OpenResourceResult{}, err.Error()
+	}
+	request, err := decodeOpenResourceRequest(rawRequest)
+	if err != nil {
+		return coreworkbench.OpenResourceResult{}, err.Error()
+	}
+	if request.Context.SourcePluginID == "" {
+		request.Context.SourcePluginID = pluginID
+	}
+	result, err := a.ensureWorkbench().OpenResource(request, a.activeOpenProviders())
+	if err != nil {
+		return coreworkbench.OpenResourceResult{}, err.Error()
+	}
+	return result, ""
+}
+
+func (a *App) EditWorkbenchResource(pluginID string, rawRequest map[string]interface{}) (coreworkbench.OpenResourceResult, string) {
+	if rawRequest == nil {
+		rawRequest = map[string]interface{}{}
+	}
+	rawRequest["mode"] = "edit"
+	return a.OpenWorkbenchResource(pluginID, rawRequest)
+}
+
+func (a *App) GetWorkbenchOpenedResources() []coreworkbench.OpenedResource {
+	return a.ensureWorkbench().OpenedResources()
+}
+
+func (a *App) GetWorkbenchPreferences() coreworkbench.Preferences {
+	return a.ensureWorkbench().Preferences()
+}
+
+func (a *App) UpdateWorkbenchPreferences(preferences coreworkbench.Preferences) string {
+	a.ensureWorkbench().SetPreferences(preferences)
+	if a.appSettings == nil {
+		return ""
+	}
+	if err := a.appSettings.Update(&appsettings.Config{Workbench: appSettingsWorkbenchPrefs(preferences)}); err != nil {
+		return err.Error()
+	}
+	return ""
+}
+
+// ListPluginCapabilities returns the current capability registry for an enabled plugin.
+func (a *App) ListPluginCapabilities(pluginID string) ([]capability.Entry, string) {
+	if _, err := a.requirePluginCapabilityAccess(pluginID, "verstak/core/capability-registry/v1"); err != nil {
+		return nil, err.Error()
+	}
+	if a.capRegistry == nil {
+		return nil, "capability registry not initialized"
+	}
+	return a.capRegistry.List(), ""
+}
+
+// GetPluginCapability returns a single capability lookup for an enabled plugin.
+func (a *App) GetPluginCapability(pluginID, capabilityName string) (map[string]interface{}, string) {
+	if _, err := a.requirePluginCapabilityAccess(pluginID, "verstak/core/capability-registry/v1"); err != nil {
+		return map[string]interface{}{"available": false}, err.Error()
+	}
+	if a.capRegistry == nil {
+		return map[string]interface{}{"available": false}, "capability registry not initialized"
+	}
+	entry := a.capRegistry.Get(capabilityName)
+	if entry == nil {
+		return map[string]interface{}{"available": false, "name": capabilityName}, ""
+	}
+	return map[string]interface{}{
+		"available": true,
+		"name":      entry.Name,
+		"pluginId":  entry.PluginID,
+		"status":    entry.Status,
+	}, ""
+}
+
+// ExecutePluginCommand validates that a command is declared by the plugin.
+// Actual handler execution is intentionally deferred until sidecar/RPC exists.
+func (a *App) ExecutePluginCommand(pluginID, commandID string, args map[string]interface{}) (map[string]interface{}, string) {
+	if _, err := a.requirePluginAccess(pluginID, "commands.register"); err != nil {
+		return nil, err.Error()
+	}
+	if a.contribRegistry == nil {
+		return nil, "contribution registry not initialized"
+	}
+	for _, command := range a.contribRegistry.Commands() {
+		if command.PluginID == pluginID && command.Item.ID == commandID {
+			return map[string]interface{}{
+				"status":    "declared",
+				"pluginId":  pluginID,
+				"commandId": commandID,
+				"handler":   command.Item.Handler,
+				"args":      args,
+			}, ""
+		}
+	}
+	return nil, fmt.Sprintf("command %q is not declared by plugin %q", commandID, pluginID)
+}
+
+// PublishPluginEvent validates publish permission and emits to the in-process bus.
+func (a *App) PublishPluginEvent(pluginID, eventName string, payload map[string]interface{}) string {
+	if _, err := a.requirePluginAccess(pluginID, "events.publish"); err != nil {
+		return err.Error()
+	}
+	if eventName == "" {
+		return "event name is empty"
+	}
+	if payload == nil {
+		payload = make(map[string]interface{})
+	}
+	payload["pluginId"] = pluginID
+	if a.eventBus != nil {
+		a.eventBus.Publish(events.Event{
+			Name:      eventName,
+			Timestamp: time.Now().UTC().Format(time.RFC3339Nano),
+			Payload:   payload,
+		})
+	}
+	return ""
+}
+
+// SubscribePluginEvent validates subscribe permission for a bundled frontend plugin.
+// Actual bundled event dispatch is handled by the frontend plugin host event bus.
+func (a *App) SubscribePluginEvent(pluginID, eventName string) string {
+	if _, err := a.requirePluginAccess(pluginID, "events.subscribe"); err != nil {
+		return err.Error()
+	}
+	if eventName == "" {
+		return "event name is empty"
 	}
 	return ""
 }
@@ -510,13 +915,11 @@ func (a *App) SetCurrentVault(path string) string {
 			log.Printf("[api] SetCurrentVault: warning loading plugin state: %v", err)
 		}
 	}
-	// Load workspace for the vault
-	if a.workspace != nil {
-		// Replace workspace manager with one pointing to the new vault
-		a.workspace = workspace.NewManager(vaultPath)
-		if err := a.workspace.Load(); err != nil {
-			log.Printf("[api] SetCurrentVault: warning loading workspace: %v", err)
-		}
+	// Load workspace for the vault. This also handles first-run startup,
+	// where no workspace manager exists until a vault is selected.
+	a.workspace = workspace.NewManager(vaultPath)
+	if err := a.workspace.Load(); err != nil {
+		log.Printf("[api] SetCurrentVault: warning loading workspace: %v", err)
 	}
 	// Register vault capability
 	if err := a.capRegistry.Register("verstak-desktop", []string{"verstak/core/vault/v1"}); err != nil {
@@ -677,6 +1080,13 @@ func (a *App) RecordDesiredPlugin(pluginID, version, source string) string {
 		return err.Error()
 	}
 	return ""
+}
+
+// WriteFrontendLog writes a frontend debug message to the backend debug log.
+func (a *App) WriteFrontendLog(component, message string) {
+	if a.debug {
+		debug.Logf("[frontend][%s] %s", component, message)
+	}
 }
 
 // ─── Dialog API ─────────────────────────────────────────────

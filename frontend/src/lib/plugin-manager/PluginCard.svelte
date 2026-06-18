@@ -211,6 +211,7 @@
     border: 1px solid #0f3460;
     border-radius: 8px;
     padding: 1rem;
+    min-width: 0;
   }
 
   .plugin-card.disabled {
@@ -225,6 +226,8 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
+    gap: 0.75rem;
+    flex-wrap: wrap;
     margin-bottom: 0.5rem;
   }
 
@@ -232,6 +235,12 @@
     display: flex;
     align-items: center;
     gap: 0.5rem;
+    min-width: 0;
+    flex-wrap: wrap;
+  }
+
+  .plugin-id strong {
+    overflow-wrap: anywhere;
   }
 
   .status-dot {
@@ -268,7 +277,7 @@
 
   .card-meta {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 0.3rem;
     margin-bottom: 0.75rem;
     font-size: 0.8rem;
@@ -277,6 +286,7 @@
   .meta-row {
     display: flex;
     gap: 0.5rem;
+    min-width: 0;
   }
 
   .label {
@@ -288,6 +298,8 @@
     font-family: monospace;
     font-size: 0.75rem;
     color: #a0a0b8;
+    min-width: 0;
+    overflow-wrap: anywhere;
   }
 
   .section {
@@ -316,6 +328,8 @@
     font-size: 0.75rem;
     font-family: monospace;
     color: #e0e0e0;
+    max-width: 100%;
+    overflow-wrap: anywhere;
   }
 
   .tag.provides {
@@ -375,6 +389,7 @@
     display: flex;
     align-items: center;
     gap: 0.5rem;
+    flex-wrap: wrap;
     margin-top: 0.75rem;
     padding-top: 0.5rem;
     border-top: 1px solid #0f3460;
@@ -431,5 +446,20 @@
     color: #666;
     font-size: 0.75rem;
     font-style: italic;
+  }
+
+  @media (max-width: 760px) {
+    .card-meta {
+      grid-template-columns: 1fr;
+    }
+
+    .meta-row {
+      flex-direction: column;
+      gap: 0.15rem;
+    }
+
+    .label {
+      min-width: 0;
+    }
   }
 </style>

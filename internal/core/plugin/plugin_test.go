@@ -149,6 +149,90 @@ func TestDiscoverPlugins_DuplicateID(t *testing.T) {
 	}
 }
 
+func TestDiscoverPlugins_DuplicateIDAcrossDirs_FirstWinsAndReportsBothPaths(t *testing.T) {
+	dir1 := t.TempDir()
+	dir2 := t.TempDir()
+	firstPath := createTempPlugin(t, dir1, "shared.plugin", "First")
+
+	secondPath := filepath.Join(dir2, "other-name")
+	if err := os.MkdirAll(secondPath, 0755); err != nil {
+		t.Fatal(err)
+	}
+	manifest := `{
+		"schemaVersion": 1,
+		"id": "shared.plugin",
+		"name": "Second",
+		"version": "2.0.0",
+		"apiVersion": "1.0",
+		"provides": ["shared.plugin.second.cap"],
+		"permissions": ["vault.read"]
+	}`
+	if err := os.WriteFile(filepath.Join(secondPath, "plugin.json"), []byte(manifest), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	plugins, errs := DiscoverPlugins([]string{dir1, dir2})
+	if len(plugins) != 1 {
+		t.Fatalf("expected first plugin only, got %d", len(plugins))
+	}
+	if plugins[0].RootPath != firstPath {
+		t.Fatalf("winner path = %q, want %q", plugins[0].RootPath, firstPath)
+	}
+
+	combined := ""
+	for _, err := range errs {
+		combined += err.Error()
+	}
+	if !strings.Contains(combined, "duplicate plugin ID") {
+		t.Fatalf("expected duplicate error, got %v", errs)
+	}
+	if !strings.Contains(combined, firstPath) || !strings.Contains(combined, secondPath) {
+		t.Fatalf("duplicate error should include both paths; got %q", combined)
+	}
+}
+
+func TestValidateManifest_OpenProviders(t *testing.T) {
+	valid := &Manifest{
+		SchemaVersion: 1,
+		ID:            "editor.plugin",
+		Name:          "Editor",
+		Version:       "1.0.0",
+		APIVersion:    "1.0",
+		Provides:      []string{"editor.text"},
+		Permissions:   []string{"workbench.open"},
+		Contributes: &Contributions{
+			OpenProviders: []ContributionOpenProvider{{
+				ID:        "editor.text",
+				Title:     "Text Editor",
+				Component: "TextEditor",
+				Supports: []OpenProviderSupport{{
+					Kind:       "vault-file",
+					Extensions: []string{".txt"},
+					Contexts:   []string{"generic-text"},
+				}},
+			}},
+		},
+	}
+	if errs := ValidateManifest(valid); len(errs) != 0 {
+		t.Fatalf("valid manifest errors = %v", errs)
+	}
+
+	invalid := *valid
+	invalid.Contributes = &Contributions{
+		OpenProviders: []ContributionOpenProvider{{
+			ID:        "broken",
+			Title:     "Broken",
+			Component: "",
+			Supports:  []OpenProviderSupport{{}},
+		}},
+	}
+	errs := ValidateManifest(&invalid)
+	combined := strings.Join(errs, "\n")
+	if !strings.Contains(combined, "component is required") || !strings.Contains(combined, "kind is required") {
+		t.Fatalf("expected open provider validation errors, got %v", errs)
+	}
+}
+
 // TestDiscoverPlugins_MultipleDirs ensures discovery scans multiple directories.
 func TestDiscoverPlugins_MultipleDirs(t *testing.T) {
 	dir1 := t.TempDir()

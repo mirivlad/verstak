@@ -14,14 +14,21 @@ import (
 
 // Config represents the application settings stored in ~/.config/verstak/config.json.
 type Config struct {
-	SchemaVersion    int          `json:"schemaVersion"`
-	CurrentVaultPath string       `json:"currentVaultPath"`
-	RecentVaults     []string     `json:"recentVaults"`
-	Theme            string       `json:"theme"`
-	DevMode          bool         `json:"devMode"`
-	UserPluginsDir   string       `json:"userPluginsDir"`
-	WindowState      *WindowState `json:"windowState,omitempty"`
-	LastOpenedAt     string       `json:"lastOpenedAt"`
+	SchemaVersion    int                  `json:"schemaVersion"`
+	CurrentVaultPath string               `json:"currentVaultPath"`
+	RecentVaults     []string             `json:"recentVaults"`
+	Theme            string               `json:"theme"`
+	DevMode          bool                 `json:"devMode"`
+	UserPluginsDir   string               `json:"userPluginsDir"`
+	Workbench        WorkbenchPreferences `json:"workbench,omitempty"`
+	WindowState      *WindowState         `json:"windowState,omitempty"`
+	LastOpenedAt     string               `json:"lastOpenedAt"`
+}
+
+type WorkbenchPreferences struct {
+	DefaultTextEditorProvider          string `json:"defaultTextEditorProvider,omitempty"`
+	DefaultMarkdownEditorProvider      string `json:"defaultMarkdownEditorProvider,omitempty"`
+	DefaultNotesMarkdownEditorProvider string `json:"defaultNotesMarkdownEditorProvider,omitempty"`
 }
 
 // WindowState stores the last window position and size.
@@ -156,6 +163,15 @@ func (m *Manager) Update(patch *Config) error {
 	if patch.WindowState != nil {
 		m.config.WindowState = patch.WindowState
 	}
+	if patch.Workbench.DefaultTextEditorProvider != "" {
+		m.config.Workbench.DefaultTextEditorProvider = patch.Workbench.DefaultTextEditorProvider
+	}
+	if patch.Workbench.DefaultMarkdownEditorProvider != "" {
+		m.config.Workbench.DefaultMarkdownEditorProvider = patch.Workbench.DefaultMarkdownEditorProvider
+	}
+	if patch.Workbench.DefaultNotesMarkdownEditorProvider != "" {
+		m.config.Workbench.DefaultNotesMarkdownEditorProvider = patch.Workbench.DefaultNotesMarkdownEditorProvider
+	}
 	m.config.DevMode = patch.DevMode
 
 	m.config.LastOpenedAt = time.Now().UTC().Format(time.RFC3339)
@@ -201,6 +217,7 @@ func defaultConfig() *Config {
 		Theme:            "dark",
 		DevMode:          false,
 		UserPluginsDir:   filepath.Join(os.Getenv("HOME"), ".config", "verstak", "plugins"),
+		Workbench:        WorkbenchPreferences{},
 		WindowState:      &WindowState{Width: 1200, Height: 800},
 		LastOpenedAt:     time.Now().UTC().Format(time.RFC3339),
 	}
@@ -216,6 +233,7 @@ func copyConfig(c *Config) *Config {
 		Theme:            c.Theme,
 		DevMode:          c.DevMode,
 		UserPluginsDir:   c.UserPluginsDir,
+		Workbench:        c.Workbench,
 		LastOpenedAt:     c.LastOpenedAt,
 	}
 	if c.WindowState != nil {

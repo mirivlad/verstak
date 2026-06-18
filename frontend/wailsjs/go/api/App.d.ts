@@ -4,6 +4,8 @@ import {capability} from '../models';
 import {api} from '../models';
 import {permissions} from '../models';
 import {plugin} from '../models';
+import {files} from '../models';
+import {workbench} from '../models';
 
 export function ArchiveWorkspaceNode(arg1:string):Promise<string>;
 
@@ -11,11 +13,17 @@ export function CloseVault():Promise<void>;
 
 export function CreateVault(arg1:string):Promise<void>;
 
+export function CreateVaultFolder(arg1:string,arg2:string):Promise<string>;
+
 export function CreateWorkspaceNode(arg1:string,arg2:string,arg3:string):Promise<Record<string, any>>;
 
 export function DisablePlugin(arg1:string):Promise<string>;
 
 export function EnablePlugin(arg1:string):Promise<string>;
+
+export function ExecutePluginCommand(arg1:string,arg2:string,arg3:Record<string, any>):Promise<Record<string, any>|string>;
+
+export function EditWorkbenchResource(arg1:string,arg2:Record<string, any>):Promise<workbench.OpenResourceResult|string>;
 
 export function GetAppSettings():Promise<Record<string, any>>;
 
@@ -29,9 +37,13 @@ export function GetPermissions():Promise<Array<permissions.Entry>>;
 
 export function GetPluginAssetContent(arg1:string,arg2:string):Promise<string|string>;
 
+export function GetPluginCapability(arg1:string,arg2:string):Promise<Record<string, any>|string>;
+
 export function GetPluginFrontendInfo(arg1:string):Promise<Record<string, any>>;
 
 export function GetPlugins():Promise<Array<plugin.Plugin>>;
+
+export function GetVaultFileMetadata(arg1:string,arg2:string):Promise<files.FileMetadata|string>;
 
 export function GetVaultPluginState():Promise<Record<string, any>>;
 
@@ -39,15 +51,31 @@ export function GetVaultStatus():Promise<Record<string, string>>;
 
 export function GetWorkspaceTree():Promise<Record<string, any>>;
 
+export function GetWorkbenchOpenedResources():Promise<Array<workbench.OpenedResource>>;
+
+export function GetWorkbenchPreferences():Promise<workbench.Preferences>;
+
+export function ListPluginCapabilities(arg1:string):Promise<Array<capability.Entry>|string>;
+
+export function ListVaultFiles(arg1:string,arg2:string):Promise<Array<files.FileEntry>|string>;
+
+export function MoveVaultPath(arg1:string,arg2:string,arg3:string,arg4:files.MoveOptions):Promise<string>;
+
 export function MoveWorkspaceNode(arg1:string,arg2:string):Promise<string>;
 
 export function OpenVault(arg1:string):Promise<void>;
+
+export function OpenWorkbenchResource(arg1:string,arg2:Record<string, any>):Promise<workbench.OpenResourceResult|string>;
+
+export function PublishPluginEvent(arg1:string,arg2:string,arg3:Record<string, any>):Promise<string>;
 
 export function ReadPluginDataJSON(arg1:string,arg2:string):Promise<Record<string, any>>;
 
 export function ReadPluginSetting(arg1:string,arg2:string):Promise<any>;
 
-export function ReadPluginSettings(arg1:string):Promise<Record<string, any>>;
+export function ReadPluginSettings(arg1:string):Promise<Record<string, any>|string>;
+
+export function ReadVaultTextFile(arg1:string,arg2:string):Promise<string|string>;
 
 export function RecordDesiredPlugin(arg1:string,arg2:string,arg3:string):Promise<string>;
 
@@ -63,10 +91,20 @@ export function SetCurrentVault(arg1:string):Promise<string>;
 
 export function SetCurrentWorkspaceNode(arg1:string):Promise<string>;
 
+export function SubscribePluginEvent(arg1:string,arg2:string):Promise<string>;
+
+export function TrashVaultPath(arg1:string,arg2:string):Promise<files.TrashResult|string>;
+
 export function UpdateAppSettings(arg1:Record<string, any>):Promise<string>;
+
+export function UpdateWorkbenchPreferences(arg1:workbench.Preferences):Promise<string>;
+
+export function WriteFrontendLog(arg1:string,arg2:string):Promise<void>;
 
 export function WritePluginDataJSON(arg1:string,arg2:string,arg3:Record<string, any>):Promise<string>;
 
 export function WritePluginSetting(arg1:string,arg2:string,arg3:any):Promise<string>;
 
 export function WritePluginSettings(arg1:string,arg2:Record<string, any>):Promise<string>;
+
+export function WriteVaultTextFile(arg1:string,arg2:string,arg3:string,arg4:files.WriteOptions):Promise<string>;
