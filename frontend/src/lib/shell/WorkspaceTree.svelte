@@ -78,6 +78,9 @@
     if (err) { localError = err; return; }
     currentNodeId = id;
     activeWorkspaceNodeId.set(id);
+    window.dispatchEvent(new CustomEvent('verstak:workspace-node-selected', {
+      detail: { nodeId: id, nodes: nodes }
+    }));
   }
 
   function openCreate(parentId, type) {

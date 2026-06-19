@@ -335,9 +335,26 @@ extension/mime, context, user preference, priority, then deterministic
 `pluginId/providerId` fallback. If nothing matches, Workbench returns
 `status: "no-provider"` and shows the fallback view instead of a core editor.
 
+Disabled/failed/missing-required-capability plugins are excluded from provider
+selection at request time by `activeOpenProviders()`. Their contributions may
+remain in the registry until the next `ReloadPlugins()` cycle, but they never
+match during routing.
+
 Draft app-global preferences are `defaultTextEditorProvider`,
 `defaultMarkdownEditorProvider`, and `defaultNotesMarkdownEditorProvider`.
 Vault-scoped and per-extension overrides are deferred.
+
+### Default Editor Plugin
+
+The official `verstak.default-editor` plugin (`verstak-official-plugins/plugins/default-editor/`)
+provides openProviders for text, generic markdown, and notes-context markdown files.
+It uses `api.files.readText` / `api.files.writeText` for file I/O and mounts through
+the standard `PluginBundleHost` / provider host mechanism. Core does not import or
+reference this plugin directly.
+
+Provider plugins may have no sidebar item — openProviders are contribution points
+for workbench routing, not navigation. Plugin Manager displays openProviders in the
+contributions summary.
 
 ### API methods
 

@@ -23,6 +23,7 @@ type Registry struct {
 	activityProviders []ContributionActivityProvider
 	statusBarItems    []ContributionStatusBarItem
 	openProviders     []ContributionOpenProvider
+	workspaceItems    []ContributionWorkspaceItem
 }
 
 // ContributionPointType defines the type of contribution point.
@@ -40,6 +41,7 @@ const (
 	PointActivity        ContributionPointType = "activityProviders"
 	PointStatusBar       ContributionPointType = "statusBarItems"
 	PointOpenProviders   ContributionPointType = "openProviders"
+	PointWorkspaceItems  ContributionPointType = "workspaceItems"
 )
 
 // ListByPoint returns all contributions for a given point type.
@@ -91,6 +93,10 @@ func (r *Registry) ListByPoint(point ContributionPointType) []interface{} {
 		}
 	case PointOpenProviders:
 		for _, v := range r.openProviders {
+			result = append(result, v)
+		}
+	case PointWorkspaceItems:
+		for _, v := range r.workspaceItems {
 			result = append(result, v)
 		}
 	}
@@ -147,6 +153,12 @@ type ContributionOpenProvider struct {
 	Item     plugin.ContributionOpenProvider `json:"item"`
 }
 
+// ContributionWorkspaceItem is a workspace tool contribution.
+type ContributionWorkspaceItem struct {
+	PluginID string                           `json:"pluginId"`
+	Item     plugin.ContributionWorkspaceItem `json:"item"`
+}
+
 // NewRegistry creates a new contribution registry.
 func NewRegistry() *Registry {
 	return &Registry{}
@@ -171,6 +183,7 @@ func (r *Registry) Register(pluginID string, c *plugin.Contributions) {
 	r.activityProviders = removeActivityProviders(r.activityProviders, pluginID)
 	r.statusBarItems = removeStatusBarItems(r.statusBarItems, pluginID)
 	r.openProviders = removeOpenProviders(r.openProviders, pluginID)
+	r.workspaceItems = removeWorkspaceItems(r.workspaceItems, pluginID)
 
 	for _, item := range c.Views {
 		r.views = append(r.views, ContributionView{PluginID: pluginID, Item: item})
@@ -205,6 +218,9 @@ func (r *Registry) Register(pluginID string, c *plugin.Contributions) {
 	for _, item := range c.OpenProviders {
 		r.openProviders = append(r.openProviders, ContributionOpenProvider{PluginID: pluginID, Item: item})
 	}
+	for _, item := range c.WorkspaceItems {
+		r.workspaceItems = append(r.workspaceItems, ContributionWorkspaceItem{PluginID: pluginID, Item: item})
+	}
 }
 
 // Unregister removes all contributions from a plugin.
@@ -223,6 +239,7 @@ func (r *Registry) Unregister(pluginID string) {
 	r.activityProviders = removeActivityProviders(r.activityProviders, pluginID)
 	r.statusBarItems = removeStatusBarItems(r.statusBarItems, pluginID)
 	r.openProviders = removeOpenProviders(r.openProviders, pluginID)
+	r.workspaceItems = removeWorkspaceItems(r.workspaceItems, pluginID)
 }
 
 // Getters — sorted for deterministic display.
@@ -295,6 +312,20 @@ func (r *Registry) OpenProviders() []ContributionOpenProvider {
 	defer r.mu.RUnlock()
 	result := make([]ContributionOpenProvider, len(r.openProviders))
 	copy(result, r.openProviders)
+	sort.Slice(result, func(i, j int) bool {
+		if result[i].PluginID != result[j].PluginID {
+			return result[i].PluginID < result[j].PluginID
+		}
+		return result[i].Item.ID < result[j].Item.ID
+	})
+	return result
+}
+
+func (r *Registry) WorkspaceItems() []ContributionWorkspaceItem {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	result := make([]ContributionWorkspaceItem, len(r.workspaceItems))
+	copy(result, r.workspaceItems)
 	sort.Slice(result, func(i, j int) bool {
 		if result[i].PluginID != result[j].PluginID {
 			return result[i].PluginID < result[j].PluginID
@@ -398,6 +429,16 @@ func removeStatusBarItems(items []ContributionStatusBarItem, pluginID string) []
 
 func removeOpenProviders(items []ContributionOpenProvider, pluginID string) []ContributionOpenProvider {
 	var result []ContributionOpenProvider
+	for _, item := range items {
+		if item.PluginID != pluginID {
+			result = append(result, item)
+		}
+	}
+	return result
+}
+
+func removeWorkspaceItems(items []ContributionWorkspaceItem, pluginID string) []ContributionWorkspaceItem {
+	var result []ContributionWorkspaceItem
 	for _, item := range items {
 		if item.PluginID != pluginID {
 			result = append(result, item)

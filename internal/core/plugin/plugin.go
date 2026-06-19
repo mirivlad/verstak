@@ -68,6 +68,7 @@ type Contributions struct {
 	ActivityProviders  []ContributionActivityProvider `json:"activityProviders,omitempty"`
 	StatusBarItems     []ContributionStatusBarItem    `json:"statusBarItems,omitempty"`
 	OpenProviders      []ContributionOpenProvider     `json:"openProviders,omitempty"`
+	WorkspaceItems     []ContributionWorkspaceItem    `json:"workspaceItems,omitempty"`
 }
 
 // ContributionView represents a view contribution.
@@ -160,6 +161,14 @@ type ContributionOpenProvider struct {
 	Priority  int                   `json:"priority,omitempty"`
 	Component string                `json:"component"`
 	Supports  []OpenProviderSupport `json:"supports"`
+}
+
+// ContributionWorkspaceItem represents a workspace tool contribution.
+type ContributionWorkspaceItem struct {
+	ID        string `json:"id"`
+	Title     string `json:"title"`
+	Icon      string `json:"icon,omitempty"`
+	Component string `json:"component"`
 }
 
 // SyncConfig describes plugin sync configuration.

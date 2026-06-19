@@ -26,16 +26,16 @@ export function DisablePlugin(arg1) {
   return window['go']['api']['App']['DisablePlugin'](arg1);
 }
 
+export function EditWorkbenchResource(arg1, arg2) {
+  return window['go']['api']['App']['EditWorkbenchResource'](arg1, arg2);
+}
+
 export function EnablePlugin(arg1) {
   return window['go']['api']['App']['EnablePlugin'](arg1);
 }
 
 export function ExecutePluginCommand(arg1, arg2, arg3) {
   return window['go']['api']['App']['ExecutePluginCommand'](arg1, arg2, arg3);
-}
-
-export function EditWorkbenchResource(arg1, arg2) {
-  return window['go']['api']['App']['EditWorkbenchResource'](arg1, arg2);
 }
 
 export function GetAppSettings() {
@@ -86,16 +86,16 @@ export function GetVaultStatus() {
   return window['go']['api']['App']['GetVaultStatus']();
 }
 
-export function GetWorkspaceTree() {
-  return window['go']['api']['App']['GetWorkspaceTree']();
-}
-
 export function GetWorkbenchOpenedResources() {
   return window['go']['api']['App']['GetWorkbenchOpenedResources']();
 }
 
 export function GetWorkbenchPreferences() {
   return window['go']['api']['App']['GetWorkbenchPreferences']();
+}
+
+export function GetWorkspaceTree() {
+  return window['go']['api']['App']['GetWorkspaceTree']();
 }
 
 export function ListPluginCapabilities(arg1) {

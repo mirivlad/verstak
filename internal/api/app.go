@@ -240,6 +240,14 @@ type FlatOpenProvider struct {
 	Supports  []FlatOpenProviderSupport `json:"supports"`
 }
 
+type FlatWorkspaceItem struct {
+	PluginID  string `json:"pluginId"`
+	ID        string `json:"id"`
+	Title     string `json:"title"`
+	Icon      string `json:"icon,omitempty"`
+	Component string `json:"component"`
+}
+
 // ContributionSummary aggregates all contribution types for the frontend.
 type ContributionSummary struct {
 	Views          []FlatView          `json:"views"`
@@ -247,6 +255,7 @@ type ContributionSummary struct {
 	SettingsPanels []FlatSettingsPanel `json:"settingsPanels"`
 	SidebarItems   []FlatSidebarItem   `json:"sidebarItems"`
 	OpenProviders  []FlatOpenProvider  `json:"openProviders"`
+	WorkspaceItems []FlatWorkspaceItem `json:"workspaceItems"`
 }
 
 // buildContributionSummary creates a ContributionSummary from the registry.
@@ -259,6 +268,7 @@ func buildContributionSummary(r *contribution.Registry) ContributionSummary {
 	regPanels := r.SettingsPanels()
 	regSidebar := r.SidebarItems()
 	regOpenProviders := r.OpenProviders()
+	regWorkspaceItems := r.WorkspaceItems()
 
 	views := make([]FlatView, len(regViews))
 	for i, v := range regViews {
@@ -291,7 +301,11 @@ func buildContributionSummary(r *contribution.Registry) ContributionSummary {
 			Supports:  supports,
 		}
 	}
-	return ContributionSummary{Views: views, Commands: cmds, SettingsPanels: panels, SidebarItems: sidebar, OpenProviders: openProviders}
+	workspaceItems := make([]FlatWorkspaceItem, len(regWorkspaceItems))
+	for i, v := range regWorkspaceItems {
+		workspaceItems[i] = FlatWorkspaceItem{PluginID: v.PluginID, ID: v.Item.ID, Title: v.Item.Title, Icon: v.Item.Icon, Component: v.Item.Component}
+	}
+	return ContributionSummary{Views: views, Commands: cmds, SettingsPanels: panels, SidebarItems: sidebar, OpenProviders: openProviders, WorkspaceItems: workspaceItems}
 }
 
 // GetContributions returns all registered contributions flattened for the frontend.

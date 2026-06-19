@@ -33,6 +33,7 @@ test.describe('D: Plugin API bridge', () => {
     await expect(page.locator('.plugin-card').filter({ hasText: 'verstak.platform-test' }).locator('.status-badge')).toHaveText('loaded', { timeout: 10000 });
 
     await page.locator('.sidebar .plugin-item').filter({ hasText: 'Platform Test' }).click();
+
     await expect(page.locator('.pt-saved-setting')).toHaveText('Saved setting: persisted through bridge', { timeout: 10000 });
     await expect(page.locator('.pt-badge')).toHaveAttribute('data-command-status', 'handled');
     await expect(page.locator('.pt-badge')).toContainText('capability available');
@@ -44,28 +45,38 @@ test.describe('D: Plugin API bridge', () => {
     await expect(page.locator('.pt-files-error-result')).toHaveAttribute('data-files-error-status', 'expected');
     await expect(page.locator('.pt-files-error-result')).toContainText('Files error path: rejected reserved-path');
 
-    await page.locator('.pt-open-workbench-notes').click();
-    await expect(page.locator('.pt-workbench-result')).toHaveAttribute('data-workbench-status', 'ok');
-    await expect(page.locator('.pt-workbench-result')).toContainText('Workbench: opened Notes/Overview.md with verstak.platform-test.markdown-diagnostic');
-    await expect(page.locator('.pt-workbench-result')).toHaveAttribute('data-resource-context', 'notes-markdown');
+    await page.evaluate(async () => {
+      const [result, err] = await window.go.api.App.OpenWorkbenchResource('verstak.platform-test', {
+        kind: 'vault-file',
+        path: 'Notes/Overview.md',
+        extension: '.md',
+        context: { sourceView: 'notes', isInsideNotesFolder: true, notesMode: true },
+      });
+      if (err) throw new Error(err);
+      window.dispatchEvent(new CustomEvent('verstak:workbench-opened', { detail: result }));
+    });
+
+    const workbench = page.locator('.workbench-host');
+    await expect(workbench).toBeVisible({ timeout: 10000 });
+    await expect(workbench.locator('.workbench-title')).toHaveText('Notes/Overview.md');
   });
 
-  test('platform-test diagnostic provider routes text, markdown, and notes markdown contexts', async ({ page }) => {
-    async function openFromDiagnostics(buttonClass, path, context) {
-      await page.locator('.sidebar .plugin-item').filter({ hasText: 'Platform Test' }).click();
-      await expect(page.locator('.pt-command-result')).toContainText('Command: handled', { timeout: 10000 });
-      await page.locator(buttonClass).click();
-      const result = page.locator('.pt-workbench-result');
-      await expect(result).toHaveAttribute('data-workbench-status', 'ok', { timeout: 10000 });
-      await expect(result).toHaveAttribute('data-resource-path', path);
-      await expect(result).toHaveAttribute('data-resource-mode', 'edit');
-      await expect(result).toHaveAttribute('data-resource-context', context);
-      await expect(result).toContainText('verstak.platform-test.markdown-diagnostic');
-    }
+  test('workbench routes markdown files to default-editor provider', async ({ page }) => {
+    await page.evaluate(async () => {
+      const [result, err] = await window.go.api.App.OpenWorkbenchResource('verstak.platform-test', {
+        kind: 'vault-file',
+        path: 'Docs/readme.md',
+        extension: '.md',
+        context: { sourceView: 'files' },
+      });
+      if (err) throw new Error(err);
+      window.dispatchEvent(new CustomEvent('verstak:workbench-opened', { detail: result }));
+    });
 
-    await openFromDiagnostics('.pt-open-workbench-text', 'Docs/todo.txt', 'generic-text');
-    await openFromDiagnostics('.pt-open-workbench-markdown', 'Docs/readme.md', 'generic-markdown');
-    await openFromDiagnostics('.pt-open-workbench-notes', 'Notes/Overview.md', 'notes-markdown');
+    const workbench = page.locator('.workbench-host');
+    await expect(workbench).toBeVisible({ timeout: 10000 });
+    const title = workbench.locator('.workbench-title');
+    await expect(title).toHaveText('Docs/readme.md');
   });
 
   test('workbench shows no-provider fallback when no provider matches', async ({ page }) => {

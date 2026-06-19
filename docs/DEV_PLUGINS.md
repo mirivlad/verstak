@@ -101,6 +101,12 @@ Workbench selects by resource kind, extension/mime, context (`generic-text`,
 deterministic `pluginId/providerId` tie-break. If nothing matches, Workbench
 shows `no-provider` fallback instead of a core editor.
 
+The official `verstak.default-editor` plugin provides three openProviders:
+`verstak.default-editor.text` (generic-text), `verstak.default-editor.markdown`
+(generic-markdown), and `verstak.default-editor.notes-markdown` (notes-context).
+It uses a single unified `DefaultEditor` component with textarea-based editing,
+simple markdown preview, dirty state tracking, and Ctrl+S save.
+
 This is a cooperative contract, not a sandbox. Bundled plugins run in the same JS
 context as the desktop frontend; real isolation is deferred to the sidecar/sandbox
 milestone.

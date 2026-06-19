@@ -47,11 +47,10 @@
             {
               id: 'verstak.platform-test.markdown-diagnostic',
               title: 'Platform Test Markdown Diagnostic',
-              priority: 100,
+              priority: 10,
               component: 'MarkdownDiagnosticProvider',
               supports: [
-                { kind: 'vault-file', extensions: ['.md', '.markdown'], contexts: ['generic-markdown', 'notes-markdown'] },
-                { kind: 'vault-file', extensions: ['.txt', '.log'], mime: ['text/plain'], contexts: ['generic-text'] }
+                { kind: 'vault-file', extensions: ['.md', '.markdown'], contexts: ['generic-markdown', 'notes-markdown'] }
               ]
             }
           ]
@@ -59,11 +58,86 @@
       },
       rootPath: '/tmp/verstak-test/plugins/platform-test',
       error: ''
+    },
+    'verstak.default-editor': {
+      status: 'loaded',
+      enabled: true,
+      manifest: {
+        schemaVersion: 1,
+        id: 'verstak.default-editor',
+        name: 'Default Editor',
+        version: '0.1.0',
+        apiVersion: '0.1.0',
+        description: 'Built-in text and markdown editor/viewer.',
+        source: 'official',
+        icon: 'edit',
+        provides: ['verstak/default-editor/v1'],
+        requires: ['verstak/core/files/v1', 'verstak/core/workbench/v1'],
+        permissions: ['files.read', 'files.write', 'workbench.open'],
+        frontend: { entry: 'frontend/dist/index.js' },
+        contributes: {
+          openProviders: [
+            {
+              id: 'verstak.default-editor.text',
+              title: 'Default Text Editor',
+              priority: 50,
+              component: 'DefaultEditor',
+              supports: [
+                { kind: 'vault-file', extensions: ['.txt', '.log', '.conf', '.ini', '.toml', '.yaml', '.yml', '.json', '.csv'], mime: ['text/plain', 'application/json'], contexts: ['generic-text'] }
+              ]
+            },
+            {
+              id: 'verstak.default-editor.markdown',
+              title: 'Default Markdown Editor',
+              priority: 50,
+              component: 'DefaultEditor',
+              supports: [
+                { kind: 'vault-file', extensions: ['.md', '.markdown'], contexts: ['generic-markdown'] }
+              ]
+            },
+            {
+              id: 'verstak.default-editor.notes-markdown',
+              title: 'Default Notes Markdown Editor',
+              priority: 50,
+              component: 'DefaultEditor',
+              supports: [
+                { kind: 'vault-file', extensions: ['.md', '.markdown'], contexts: ['notes-markdown'] }
+              ]
+            }
+          ]
+        }
+      },
+      rootPath: '/tmp/verstak-test/plugins/default-editor',
+      error: ''
+    },
+    'verstak.files': {
+      status: 'loaded',
+      enabled: true,
+      manifest: {
+        schemaVersion: 1,
+        id: 'verstak.files',
+        name: 'Files',
+        version: '0.1.0',
+        apiVersion: '0.1.0',
+        description: 'Minimal vault file navigator.',
+        source: 'official',
+        icon: 'folder',
+        provides: ['verstak/files/v1'],
+        requires: ['verstak/core/files/v1', 'verstak/core/workbench/v1'],
+        permissions: ['files.read', 'files.write', 'workbench.open', 'ui.register'],
+        frontend: { entry: 'frontend/dist/index.js' },
+    contributes: {
+      views: [{ id: 'verstak.files.view', title: 'Files', icon: 'folder', component: 'FilesView' }],
+      workspaceItems: [{ id: 'verstak.files.workspace', title: 'Files', icon: 'folder', component: 'FilesView' }]
+    }
+      },
+      rootPath: '/tmp/verstak-test/plugins/files',
+      error: ''
     }
   };
 
   var vaultStatus = { status: 'open', path: '/tmp/verstak-test/vault', vaultId: 'test-vault-001' };
-  var vaultPluginState = { enabledPlugins: ['verstak.platform-test'], disabledPlugins: [], desiredPlugins: [{ id: 'verstak.platform-test', version: '0.1.0', source: 'official' }] };
+  var vaultPluginState = { enabledPlugins: ['verstak.platform-test', 'verstak.default-editor', 'verstak.files'], disabledPlugins: [], desiredPlugins: [{ id: 'verstak.platform-test', version: '0.1.0', source: 'official' }, { id: 'verstak.default-editor', version: '0.1.0', source: 'official' }, { id: 'verstak.files', version: '0.1.0', source: 'official' }] };
   var appSettings = { currentVaultPath: '/tmp/verstak-test/vault', recentVaults: [] };
   var workbenchPreferences = {};
   var openedResources = [];
@@ -97,7 +171,12 @@
 
   function makeDefaultVaultFiles() {
     return {
-      '': { type: 'folder', modifiedAt: new Date().toISOString() }
+      '': { type: 'folder', modifiedAt: new Date().toISOString() },
+      'Docs': { type: 'folder', modifiedAt: new Date().toISOString() },
+      'Docs/todo.txt': { type: 'file', content: 'Buy groceries\nWrite tests', modifiedAt: new Date().toISOString() },
+      'Docs/readme.md': { type: 'file', content: '# Hello World\n\nThis is a **test** document.\n\n- item 1\n- item 2', modifiedAt: new Date().toISOString() },
+      'Notes': { type: 'folder', modifiedAt: new Date().toISOString() },
+      'Notes/Overview.md': { type: 'file', content: '# Notes Overview\n\nMy notes content here.', modifiedAt: new Date().toISOString() }
     };
   }
 
@@ -204,7 +283,7 @@
   }
 
   function allContributions() {
-    var views = [], commands = [], sidebarItems = [], statusBarItems = [], settingsPanels = [], openProviders = [];
+    var views = [], commands = [], sidebarItems = [], statusBarItems = [], settingsPanels = [], openProviders = [], workspaceItems = [];
     for (var id in pluginStates) {
       var s = pluginStates[id];
       var c = (s.manifest && s.manifest.contributes) || {};
@@ -214,8 +293,9 @@
       if (c.statusBarItems) c.statusBarItems.forEach(function (st) { statusBarItems.push(Object.assign({}, st, { pluginId: id })); });
       if (c.settingsPanels) c.settingsPanels.forEach(function (sp) { settingsPanels.push(Object.assign({}, sp, { pluginId: id })); });
       if (c.openProviders) c.openProviders.forEach(function (op) { openProviders.push(Object.assign({}, op, { pluginId: id })); });
+      if (c.workspaceItems) c.workspaceItems.forEach(function (wi) { workspaceItems.push(Object.assign({}, wi, { pluginId: id })); });
     }
-    return { views: views, commands: commands, sidebarItems: sidebarItems, statusBarItems: statusBarItems, settingsPanels: settingsPanels, openProviders: openProviders };
+    return { views: views, commands: commands, sidebarItems: sidebarItems, statusBarItems: statusBarItems, settingsPanels: settingsPanels, openProviders: openProviders, workspaceItems: workspaceItems };
   }
 
   function requestExtension(request) {
@@ -292,6 +372,118 @@
     };
     openedResources.push(Object.assign({ id: provider.id + ':' + openedResources.length, openedAt: new Date().toISOString() }, result));
     return Promise.resolve([result, '']);
+  }
+
+  function defaultEditorBundle() {
+    return [
+      '(function(){',
+      'var DefaultEditor={',
+      'mount:function(c,p,api){',
+      'c.innerHTML="";',
+      'c.className="de-root";',
+      'var req=p.request||{};',
+      'var path=req.path||"";',
+      'var mode=req.mode||"view";',
+      'var ctx=req.context||{};',
+      'var isNotes=ctx.notesMode||ctx.isInsideNotesFolder;',
+      'var ext=(req.extension||"").toLowerCase();',
+      'var isMd=ext===".md"||ext===".markdown";',
+      'var editorMode=isNotes?"notes-markdown":isMd?"generic-markdown":"text";',
+      'c.setAttribute("data-editor-mode",editorMode);',
+      'c.setAttribute("data-resource-path",path);',
+      'c.setAttribute("data-request-mode",mode);',
+      'var toolbar=document.createElement("div");',
+      'toolbar.className="de-toolbar";',
+      'var modeLabel=document.createElement("span");',
+      'modeLabel.className="de-toolbar-mode";',
+      'modeLabel.textContent=editorMode;',
+      'toolbar.appendChild(modeLabel);',
+      'var pathLabel=document.createElement("span");',
+      'pathLabel.className="de-toolbar-context";',
+      'pathLabel.textContent=path;',
+      'toolbar.appendChild(pathLabel);',
+      'if(isNotes){var badge=document.createElement("span");badge.className="de-notes-badge";badge.textContent="notes context";badge.setAttribute("data-notes-badge","");toolbar.appendChild(badge);}',
+      'c.appendChild(toolbar);',
+      'var content=document.createElement("div");',
+      'content.className="de-editor-wrap";',
+      'content.textContent="Loading...";',
+      'c.appendChild(content);',
+      'api.files.readText(path).then(function(text){',
+      'content.textContent="";',
+      'if(isMd){',
+      'var preview=document.createElement("div");',
+      'preview.className="de-preview";',
+      'preview.setAttribute("data-preview","");',
+      'preview.textContent=text;',
+      'content.appendChild(preview);',
+      '}else{',
+      'var ta=document.createElement("textarea");',
+      'ta.className="de-textarea";',
+      'ta.value=text;',
+      'ta.setAttribute("data-editor-textarea","");',
+      'content.appendChild(ta);',
+      '}',
+      '}).catch(function(err){',
+      'content.textContent="Error: "+(err.message||err);',
+      '});',
+      '},',
+      'unmount:function(c){c.innerHTML="";}',
+      '};',
+      'window.VerstakPluginRegister("verstak.default-editor",{components:{DefaultEditor:DefaultEditor}});',
+      '})();'
+    ].join('\n');
+  }
+
+  function filesPluginBundle() {
+    return [
+      "(function(){",
+      "var FilesView={",
+      "mount:function(c,p,api){",
+      "c.innerHTML='';",
+      "c.className='files-root';",
+      "c.setAttribute('data-plugin-id','verstak.files');",
+      "var list=document.createElement('div');",
+      "list.className='files-list';",
+      "list.setAttribute('data-files-list','');",
+      "c.appendChild(list);",
+      "function load(){",
+      "list.textContent='Loading...';",
+      "api.files.list('').then(function(entries){",
+      "list.innerHTML='';",
+      "if(!entries||!entries.length){list.textContent='Empty folder';return;}",
+      "entries.forEach(function(e){",
+      "if(e.isHidden||e.isReserved)return;",
+      "var item=document.createElement('div');",
+      "item.className='files-item';",
+      "item.setAttribute('data-file-name',e.name);",
+      "item.setAttribute('data-file-type',e.type);",
+      "item.setAttribute('data-file-path',e.relativePath);",
+      "var icon=document.createElement('span');",
+      "icon.className='files-item-icon';",
+      "icon.textContent=e.type==='folder'?'[D]':'[F]';",
+      "var name=document.createElement('span');",
+      "name.className='files-item-name';",
+      "name.textContent=e.name;",
+      "item.appendChild(icon);",
+      "item.appendChild(name);",
+      "if(e.type!=='folder'){",
+      "item.addEventListener('dblclick',function(){",
+      "var ext=e.extension?'.'+e.extension:'';",
+      "var ctx={sourcePluginId:'verstak.files',sourceView:'files'};",
+      "api.workbench.openResource({kind:'vault-file',path:e.relativePath,mode:'view',extension:ext,context:ctx});",
+      "});",
+      "}",
+      "list.appendChild(item);",
+      "});",
+      "}).catch(function(err){list.textContent='Error: '+(err.message||err);});",
+      "}",
+      "load();",
+      "},",
+      "unmount:function(c){c.innerHTML='';}",
+      "};",
+      "window.VerstakPluginRegister('verstak.files',{components:{FilesView:FilesView}});",
+      "})();"
+    ].join('\n');
   }
 
   function platformTestBundle() {
@@ -447,6 +639,12 @@
     GetPluginAssetContent: function (pluginId, assetPath) {
       if (pluginId === 'verstak.platform-test' && assetPath === 'frontend/dist/index.js') {
         return Promise.resolve(platformTestBundle());
+      }
+      if (pluginId === 'verstak.default-editor' && assetPath === 'frontend/dist/index.js') {
+        return Promise.resolve(defaultEditorBundle());
+      }
+      if (pluginId === 'verstak.files' && assetPath === 'frontend/dist/index.js') {
+        return Promise.resolve(filesPluginBundle());
       }
       return Promise.resolve('');
     },
@@ -675,11 +873,10 @@
                 {
                   id: 'verstak.platform-test.markdown-diagnostic',
                   title: 'Platform Test Markdown Diagnostic',
-                  priority: 100,
+                  priority: 10,
                   component: 'MarkdownDiagnosticProvider',
                   supports: [
-                    { kind: 'vault-file', extensions: ['.md', '.markdown'], contexts: ['generic-markdown', 'notes-markdown'] },
-                    { kind: 'vault-file', extensions: ['.txt', '.log'], mime: ['text/plain'], contexts: ['generic-text'] }
+                    { kind: 'vault-file', extensions: ['.md', '.markdown'], contexts: ['generic-markdown', 'notes-markdown'] }
                   ]
                 }
               ]
@@ -687,10 +884,85 @@
           },
           rootPath: '/tmp/verstak-test/plugins/platform-test',
           error: ''
+        },
+        'verstak.default-editor': {
+          status: 'loaded',
+          enabled: true,
+          manifest: {
+            schemaVersion: 1,
+            id: 'verstak.default-editor',
+            name: 'Default Editor',
+            version: '0.1.0',
+            apiVersion: '0.1.0',
+            description: 'Built-in text and markdown editor/viewer.',
+            source: 'official',
+            icon: 'edit',
+            provides: ['verstak/default-editor/v1'],
+            requires: ['verstak/core/files/v1', 'verstak/core/workbench/v1'],
+            permissions: ['files.read', 'files.write', 'workbench.open'],
+            frontend: { entry: 'frontend/dist/index.js' },
+            contributes: {
+              openProviders: [
+                {
+                  id: 'verstak.default-editor.text',
+                  title: 'Default Text Editor',
+                  priority: 50,
+                  component: 'DefaultEditor',
+                  supports: [
+                    { kind: 'vault-file', extensions: ['.txt', '.log', '.conf', '.ini', '.toml', '.yaml', '.yml', '.json', '.csv'], mime: ['text/plain', 'application/json'], contexts: ['generic-text'] }
+                  ]
+                },
+                {
+                  id: 'verstak.default-editor.markdown',
+                  title: 'Default Markdown Editor',
+                  priority: 50,
+                  component: 'DefaultEditor',
+                  supports: [
+                    { kind: 'vault-file', extensions: ['.md', '.markdown'], contexts: ['generic-markdown'] }
+                  ]
+                },
+                {
+                  id: 'verstak.default-editor.notes-markdown',
+                  title: 'Default Notes Markdown Editor',
+                  priority: 50,
+                  component: 'DefaultEditor',
+                  supports: [
+                    { kind: 'vault-file', extensions: ['.md', '.markdown'], contexts: ['notes-markdown'] }
+                  ]
+                }
+              ]
+            }
+          },
+          rootPath: '/tmp/verstak-test/plugins/default-editor',
+          error: ''
+        },
+        'verstak.files': {
+          status: 'loaded',
+          enabled: true,
+          manifest: {
+            schemaVersion: 1,
+            id: 'verstak.files',
+            name: 'Files',
+            version: '0.1.0',
+            apiVersion: '0.1.0',
+            description: 'Minimal vault file navigator.',
+            source: 'official',
+            icon: 'folder',
+            provides: ['verstak/files/v1'],
+            requires: ['verstak/core/files/v1', 'verstak/core/workbench/v1'],
+            permissions: ['files.read', 'files.write', 'workbench.open', 'ui.register'],
+            frontend: { entry: 'frontend/dist/index.js' },
+            contributes: {
+              views: [{ id: 'verstak.files.view', title: 'Files', icon: 'folder', component: 'FilesView' }],
+              workspaceItems: [{ id: 'verstak.files.workspace', title: 'Files', icon: 'folder', component: 'FilesView' }]
+            }
+          },
+          rootPath: '/tmp/verstak-test/plugins/files',
+          error: ''
         }
       };
       vaultStatus = { status: 'open', path: '/tmp/verstak-test/vault', vaultId: 'test-vault-001' };
-      vaultPluginState = { enabledPlugins: ['verstak.platform-test'], disabledPlugins: [], desiredPlugins: [{ id: 'verstak.platform-test', version: '0.1.0', source: 'official' }] };
+      vaultPluginState = { enabledPlugins: ['verstak.platform-test', 'verstak.default-editor', 'verstak.files'], disabledPlugins: [], desiredPlugins: [{ id: 'verstak.platform-test', version: '0.1.0', source: 'official' }, { id: 'verstak.default-editor', version: '0.1.0', source: 'official' }, { id: 'verstak.files', version: '0.1.0', source: 'official' }] };
       appSettings = { currentVaultPath: '/tmp/verstak-test/vault', recentVaults: [] };
       workbenchPreferences = {};
       openedResources = [];

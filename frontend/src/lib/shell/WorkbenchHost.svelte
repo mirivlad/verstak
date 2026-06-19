@@ -89,8 +89,11 @@
   .workbench-content {
     min-width: 0;
     min-height: 0;
+    height: 100%;
     flex: 1;
-    padding: 1rem;
+    display: flex;
+    flex-direction: column;
+    padding: 0;
   }
 
   .workbench-empty {

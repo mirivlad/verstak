@@ -4,6 +4,7 @@
   import ViewContainer from './lib/shell/ViewContainer.svelte';
   import VaultSelection from './lib/shell/VaultSelection.svelte';
   import WorkbenchHost from './lib/shell/WorkbenchHost.svelte';
+  import WorkspaceHost from './lib/shell/WorkspaceHost.svelte';
   import * as App from '../wailsjs/go/api/App';
   import { debug } from './lib/log/debug.js';
   import { onMount } from 'svelte';
@@ -19,6 +20,9 @@
   let activeSettingsPluginId = '';
   let activeSettingsPanelId = '';
   let openedResource = null;
+
+  let workspaceNodes = [];
+  let currentWorkspaceNodeId = '';
 
   function flog(msg) {
     App.WriteFrontendLog('App', msg);
@@ -91,6 +95,15 @@
     currentView = 'workbench';
   }
 
+  function onWorkspaceNodeSelected(e) {
+    debug.log('[App] onWorkspaceNodeSelected:', e.detail?.nodeId);
+    currentWorkspaceNodeId = e.detail?.nodeId || '';
+    workspaceNodes = e.detail?.nodes || workspaceNodes;
+    if (currentWorkspaceNodeId) {
+      currentView = 'workspace';
+    }
+  }
+
   function onCloseSettings() {
     debug.log('[App] onCloseSettings');
     activeSettingsPluginId = '';
@@ -105,6 +118,7 @@
     window.addEventListener('verstak:open-settings', onOpenSettings);
     window.addEventListener('verstak:close-settings', onCloseSettings);
     window.addEventListener('verstak:workbench-opened', onWorkbenchOpened);
+    window.addEventListener('verstak:workspace-node-selected', onWorkspaceNodeSelected);
   }
 
   onMount(() => { checkVault(); });
@@ -125,6 +139,8 @@
         <PluginManager {activeSettingsPluginId} {activeSettingsPanelId} />
       {:else if currentView === 'workbench'}
         <WorkbenchHost {openedResource} />
+      {:else if currentView === 'workspace'}
+        <WorkspaceHost currentNodeId={currentWorkspaceNodeId} nodes={workspaceNodes} />
       {:else}
         <ViewContainer {activeView} {activeViewPluginId} />
       {/if}

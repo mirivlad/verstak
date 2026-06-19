@@ -668,6 +668,25 @@ func TestWorkbenchOpenResourceRequiresPermission(t *testing.T) {
 	}
 }
 
+func TestWorkbenchDisabledPluginProviderExcluded(t *testing.T) {
+	app := newBridgeTestApp(t)
+
+	result, errStr := app.OpenWorkbenchResource("bridge.plugin", map[string]interface{}{
+		"kind":      "vault-file",
+		"path":      "Docs/readme.md",
+		"extension": ".md",
+	})
+	if errStr != "" {
+		t.Fatalf("OpenWorkbenchResource: %s", errStr)
+	}
+	if result.ProviderPluginID != "bridge.plugin" {
+		t.Fatalf("expected bridge.plugin provider, got providerPluginId=%q", result.ProviderPluginID)
+	}
+	if result.ProviderID == "disabled.markdown" {
+		t.Fatal("disabled plugin provider should be excluded from selection")
+	}
+}
+
 func TestPluginBridgeSettingsRequireLoadedPluginAndStoragePermission(t *testing.T) {
 	app := newBridgeTestApp(t)
 

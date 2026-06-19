@@ -205,6 +205,187 @@ func TestOpenResourceReturnsNoProviderFallback(t *testing.T) {
 	}
 }
 
+func TestSelectProviderUsesTextPreference(t *testing.T) {
+	r := NewRouter(Preferences{
+		DefaultTextEditorProvider: "custom.text-editor",
+	})
+	providers := []contribution.ContributionOpenProvider{
+		provider("official.editor", "builtin.text", 100, "BuiltinText", plugin.OpenProviderSupport{
+			Kind:       "vault-file",
+			Extensions: []string{".txt"},
+			Contexts:   []string{ContextGenericText},
+		}),
+		provider("custom.editor", "custom.text-editor", 10, "CustomText", plugin.OpenProviderSupport{
+			Kind:       "vault-file",
+			Extensions: []string{".txt"},
+			Contexts:   []string{ContextGenericText},
+		}),
+	}
+
+	selected, err := r.SelectProvider(OpenResourceRequest{
+		Kind: "vault-file",
+		Path: "Docs/todo.txt",
+		Mode: "view",
+	}, providers)
+	if err != nil {
+		t.Fatalf("SelectProvider: %v", err)
+	}
+	if selected.Item.ID != "custom.text-editor" {
+		t.Fatalf("provider = %q, want custom.text-editor", selected.Item.ID)
+	}
+}
+
+func TestSelectProviderUsesMarkdownPreference(t *testing.T) {
+	r := NewRouter(Preferences{
+		DefaultMarkdownEditorProvider: "community.markdown-editor",
+	})
+	providers := []contribution.ContributionOpenProvider{
+		provider("official.editor", "builtin.markdown", 100, "BuiltinMarkdown", plugin.OpenProviderSupport{
+			Kind:       "vault-file",
+			Extensions: []string{".md"},
+			Contexts:   []string{ContextGenericMarkdown},
+		}),
+		provider("community.editor", "community.markdown-editor", 10, "CommunityMarkdown", plugin.OpenProviderSupport{
+			Kind:       "vault-file",
+			Extensions: []string{".md"},
+			Contexts:   []string{ContextGenericMarkdown},
+		}),
+	}
+
+	selected, err := r.SelectProvider(OpenResourceRequest{
+		Kind: "vault-file",
+		Path: "Docs/readme.md",
+		Mode: "view",
+	}, providers)
+	if err != nil {
+		t.Fatalf("SelectProvider: %v", err)
+	}
+	if selected.Item.ID != "community.markdown-editor" {
+		t.Fatalf("provider = %q, want community.markdown-editor", selected.Item.ID)
+	}
+}
+
+func TestSelectProviderMatchesMime(t *testing.T) {
+	r := NewRouter(Preferences{})
+	providers := []contribution.ContributionOpenProvider{
+		provider("image.plugin", "image.viewer", 10, "ImageViewer", plugin.OpenProviderSupport{
+			Kind: "vault-file",
+			Mime: []string{"image/png", "image/jpeg"},
+		}),
+	}
+
+	selected, err := r.SelectProvider(OpenResourceRequest{
+		Kind:      "vault-file",
+		Path:      "Photos/screenshot.png",
+		Extension: ".png",
+		Mime:      "image/png",
+		Mode:      "view",
+	}, providers)
+	if err != nil {
+		t.Fatalf("SelectProvider: %v", err)
+	}
+	if selected.Item.ID != "image.viewer" {
+		t.Fatalf("provider = %q, want image.viewer", selected.Item.ID)
+	}
+}
+
+func TestSelectProviderExtensionCaseInsensitive(t *testing.T) {
+	r := NewRouter(Preferences{})
+	providers := []contribution.ContributionOpenProvider{
+		provider("editor.plugin", "md.editor", 10, "MDEditor", plugin.OpenProviderSupport{
+			Kind:       "vault-file",
+			Extensions: []string{".md"},
+		}),
+	}
+
+	tests := []struct {
+		name string
+		ext  string
+		path string
+	}{
+		{"uppercase .MD", ".MD", "Docs/README.MD"},
+		{"mixed case .Md", ".Md", "Docs/Notes.Md"},
+		{"lowercase .md", ".md", "Docs/readme.md"},
+		{"markdown extension uppercase", ".MD", "Docs/guide.MD"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			selected, err := r.SelectProvider(OpenResourceRequest{
+				Kind:      "vault-file",
+				Path:      tt.path,
+				Extension: tt.ext,
+				Mode:      "view",
+			}, providers)
+			if err != nil {
+				t.Fatalf("SelectProvider: %v", err)
+			}
+			if selected.Item.ID != "md.editor" {
+				t.Fatalf("provider = %q, want md.editor for ext %s", selected.Item.ID, tt.ext)
+			}
+		})
+	}
+}
+
+func TestSelectProviderMultipleSupportsEntries(t *testing.T) {
+	r := NewRouter(Preferences{})
+	providers := []contribution.ContributionOpenProvider{
+		provider("editor.plugin", "multi.editor", 10, "MultiEditor", plugin.OpenProviderSupport{
+			Kind:       "vault-file",
+			Extensions: []string{".md"},
+			Contexts:   []string{ContextGenericMarkdown},
+		}, plugin.OpenProviderSupport{
+			Kind:       "vault-file",
+			Extensions: []string{".txt"},
+			Contexts:   []string{ContextGenericText},
+		}),
+	}
+
+	t.Run("matches markdown entry", func(t *testing.T) {
+		selected, err := r.SelectProvider(OpenResourceRequest{
+			Kind: "vault-file",
+			Path: "Docs/readme.md",
+			Mode: "view",
+		}, providers)
+		if err != nil {
+			t.Fatalf("SelectProvider: %v", err)
+		}
+		if selected.Item.ID != "multi.editor" {
+			t.Fatalf("provider = %q, want multi.editor", selected.Item.ID)
+		}
+	})
+
+	t.Run("matches text entry", func(t *testing.T) {
+		selected, err := r.SelectProvider(OpenResourceRequest{
+			Kind: "vault-file",
+			Path: "Docs/todo.txt",
+			Mode: "view",
+		}, providers)
+		if err != nil {
+			t.Fatalf("SelectProvider: %v", err)
+		}
+		if selected.Item.ID != "multi.editor" {
+			t.Fatalf("provider = %q, want multi.editor", selected.Item.ID)
+		}
+	})
+}
+
+func TestSelectProviderKindMismatch(t *testing.T) {
+	r := NewRouter(Preferences{})
+	_, err := r.SelectProvider(OpenResourceRequest{
+		Kind: "http-url",
+		Path: "https://example.com/file.md",
+		Mode: "view",
+	}, []contribution.ContributionOpenProvider{
+		provider("editor.plugin", "vault.editor", 10, "VaultEditor", plugin.OpenProviderSupport{
+			Kind:       "vault-file",
+			Extensions: []string{".md"},
+		}),
+	})
+	if err == nil {
+		t.Fatal("expected no provider for http-url kind with vault-file provider")
+	}
+}
+
 func TestDetermineContextName(t *testing.T) {
 	tests := []struct {
 		name    string

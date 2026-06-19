@@ -133,3 +133,16 @@ Out of scope:
 - Watcher/sync/binary streaming/external editor.
 - Sidecar/security boundary.
 - Large rewrite.
+
+## 6b-fix: Infrastructure Gaps Closed
+
+Post-review fixes before Milestone 6c:
+
+- Added `openProviders` to `verstak-sdk/schemas/contributions.json` contribution points.
+- Added provider matching tests: text/markdown preference, MIME matching, extension
+  case-insensitivity, multiple supports entries, kind mismatch.
+- Added disabled provider exclusion test in `api/app_test.go`.
+- Fixed SDK `build.sh`/`test.sh` to detect incomplete `node_modules`.
+- Documented disabled provider lifecycle: contributions remain in registry until
+  ReloadPlugins; `activeOpenProviders()` filters disabled/unloaded at request time.
+- Installed Playwright browsers for E2E tests.
