@@ -22,6 +22,7 @@ import (
 	"github.com/verstak/verstak-desktop/internal/core/plugin"
 	"github.com/verstak/verstak-desktop/internal/core/pluginstate"
 	"github.com/verstak/verstak-desktop/internal/core/storage"
+	syncsvc "github.com/verstak/verstak-desktop/internal/core/sync"
 	"github.com/verstak/verstak-desktop/internal/core/vault"
 	coreworkbench "github.com/verstak/verstak-desktop/internal/core/workbench"
 	"github.com/verstak/verstak-desktop/internal/core/workspace"
@@ -43,6 +44,7 @@ type App struct {
 	pluginState     *pluginstate.Manager
 	workbench       *coreworkbench.Router
 	workspace       *workspace.Manager
+	syncSvc         *syncsvc.Service
 	debug           bool
 }
 
@@ -59,6 +61,7 @@ func NewApp(
 	appSettingsMgr *appsettings.Manager,
 	pluginStateMgr *pluginstate.Manager,
 	workspaceMgr *workspace.Manager,
+	syncService *syncsvc.Service,
 	debugEnabled bool,
 ) *App {
 	return &App{
@@ -74,6 +77,7 @@ func NewApp(
 		pluginState:     pluginStateMgr,
 		workbench:       coreworkbench.NewRouter(workbenchPrefsFromSettings(appSettingsMgr)),
 		workspace:       workspaceMgr,
+		syncSvc:         syncService,
 		debug:           debugEnabled,
 	}
 }
@@ -950,7 +954,105 @@ func (a *App) SetCurrentVault(path string) string {
 
 // ─── Workspace API ─────────────────────────────────────────
 
-// GetWorkspaceTree returns the full workspace tree.
+// ListWorkspaces returns top-level physical workspace folders.
+func (a *App) ListWorkspaces() ([]workspace.Workspace, string) {
+	if a.workspace == nil {
+		return nil, "workspace not initialized"
+	}
+	workspaces, err := a.workspace.ListWorkspaces()
+	if err != nil {
+		return nil, err.Error()
+	}
+	return workspaces, ""
+}
+
+// CreateWorkspace creates a top-level physical workspace folder.
+func (a *App) CreateWorkspace(name, templateID string) (workspace.Workspace, string) {
+	if a.workspace == nil {
+		return workspace.Workspace{}, "workspace not initialized"
+	}
+	ws, err := a.workspace.CreateWorkspace(name, templateID)
+	if err != nil {
+		return workspace.Workspace{}, err.Error()
+	}
+	return ws, ""
+}
+
+// RenameWorkspace physically renames a top-level workspace folder.
+func (a *App) RenameWorkspace(oldName, newName string) string {
+	if a.workspace == nil {
+		return "workspace not initialized"
+	}
+	if err := a.workspace.RenameWorkspace(oldName, newName); err != nil {
+		return err.Error()
+	}
+	return ""
+}
+
+// TrashWorkspace moves a top-level workspace folder to internal trash.
+func (a *App) TrashWorkspace(name string) (workspace.TrashResult, string) {
+	if a.workspace == nil {
+		return workspace.TrashResult{}, "workspace not initialized"
+	}
+	result, err := a.workspace.TrashWorkspace(name)
+	if err != nil {
+		return workspace.TrashResult{}, err.Error()
+	}
+	return result, ""
+}
+
+// GetWorkspaceMetadata returns metadata or a generic fallback for a workspace.
+func (a *App) GetWorkspaceMetadata(name string) (workspace.Metadata, string) {
+	if a.workspace == nil {
+		return workspace.Metadata{}, "workspace not initialized"
+	}
+	meta, err := a.workspace.GetWorkspaceMetadata(name)
+	if err != nil {
+		return workspace.Metadata{}, err.Error()
+	}
+	return meta, ""
+}
+
+// UpdateWorkspaceMetadata merges metadata for an existing workspace.
+func (a *App) UpdateWorkspaceMetadata(name string, patch workspace.MetadataPatch) (workspace.Metadata, string) {
+	if a.workspace == nil {
+		return workspace.Metadata{}, "workspace not initialized"
+	}
+	meta, err := a.workspace.UpdateWorkspaceMetadata(name, patch)
+	if err != nil {
+		return workspace.Metadata{}, err.Error()
+	}
+	return meta, ""
+}
+
+// GetCurrentWorkspace returns the currently selected top-level workspace.
+func (a *App) GetCurrentWorkspace() map[string]interface{} {
+	if a.workspace == nil {
+		return map[string]interface{}{"status": "not initialized"}
+	}
+	node, err := a.workspace.GetCurrentNode()
+	if err != nil {
+		return map[string]interface{}{"error": err.Error()}
+	}
+	return map[string]interface{}{
+		"name":     node.Name,
+		"rootPath": node.RootPath,
+	}
+}
+
+// SetCurrentWorkspace stores the selected top-level workspace name as UI state.
+func (a *App) SetCurrentWorkspace(name string) string {
+	if a.workspace == nil {
+		return "workspace not initialized"
+	}
+	if err := a.workspace.SetCurrentNode(name); err != nil {
+		return err.Error()
+	}
+	return ""
+}
+
+// Deprecated: compatibility wrapper over the flat top-level folder workspace
+// model. Prefer ListWorkspaces.
 func (a *App) GetWorkspaceTree() map[string]interface{} {
 	if a.workspace == nil || !a.workspace.IsInitialized() {
 		return map[string]interface{}{"status": "not initialized"}
@@ -964,7 +1066,8 @@ func (a *App) GetWorkspaceTree() map[string]interface{} {
 	}
 }
 
-// CreateWorkspaceNode creates a new workspace node.
+// Deprecated: compatibility wrapper over the flat top-level folder workspace
+// model. Prefer CreateWorkspace.
 func (a *App) CreateWorkspaceNode(parentID, nodeType, title string) map[string]interface{} {
 	if a.workspace == nil {
 		return map[string]interface{}{"error": "workspace not initialized"}
@@ -978,6 +1081,8 @@ func (a *App) CreateWorkspaceNode(parentID, nodeType, title string) map[string]i
 		"parentId":  node.ParentID,
 		"type":      string(node.Type),
 		"title":     node.Title,
+		"name":      node.Name,
+		"rootPath":  node.RootPath,
 		"status":    string(node.Status),
 		"order":     node.Order,
 		"createdAt": node.CreatedAt,
@@ -985,7 +1090,8 @@ func (a *App) CreateWorkspaceNode(parentID, nodeType, title string) map[string]i
 	}
 }
 
-// RenameWorkspaceNode renames a workspace node.
+// Deprecated: compatibility wrapper over the flat top-level folder workspace
+// model. Prefer RenameWorkspace.
 func (a *App) RenameWorkspaceNode(id, title string) string {
 	if a.workspace == nil {
 		return "workspace not initialized"
@@ -996,7 +1102,8 @@ func (a *App) RenameWorkspaceNode(id, title string) string {
 	return ""
 }
 
-// MoveWorkspaceNode moves a node to a new parent.
+// Deprecated: compatibility wrapper retained only to reject old nested tree
+// moves. The corrected workspace model is top-level folders only.
 func (a *App) MoveWorkspaceNode(id, newParentID string) string {
 	if a.workspace == nil {
 		return "workspace not initialized"
@@ -1007,7 +1114,8 @@ func (a *App) MoveWorkspaceNode(id, newParentID string) string {
 	return ""
 }
 
-// ArchiveWorkspaceNode archives a workspace node.
+// Deprecated: compatibility wrapper over the flat top-level folder workspace
+// model. Prefer TrashWorkspace.
 func (a *App) ArchiveWorkspaceNode(id string) string {
 	if a.workspace == nil {
 		return "workspace not initialized"
@@ -1018,7 +1126,8 @@ func (a *App) ArchiveWorkspaceNode(id string) string {
 	return ""
 }
 
-// GetCurrentWorkspaceNode returns the currently selected node.
+// Deprecated: compatibility wrapper over the flat top-level folder workspace
+// model. Prefer GetCurrentWorkspace.
 func (a *App) GetCurrentWorkspaceNode() map[string]interface{} {
 	if a.workspace == nil {
 		return map[string]interface{}{"status": "not initialized"}
@@ -1028,14 +1137,17 @@ func (a *App) GetCurrentWorkspaceNode() map[string]interface{} {
 		return map[string]interface{}{"error": err.Error()}
 	}
 	return map[string]interface{}{
-		"id":     node.ID,
-		"type":   string(node.Type),
-		"title":  node.Title,
-		"status": string(node.Status),
+		"id":       node.ID,
+		"type":     string(node.Type),
+		"title":    node.Title,
+		"name":     node.Name,
+		"rootPath": node.RootPath,
+		"status":   string(node.Status),
 	}
 }
 
-// SetCurrentWorkspaceNode sets the currently selected node.
+// Deprecated: compatibility wrapper over the flat top-level folder workspace
+// model. Prefer SetCurrentWorkspace.
 func (a *App) SetCurrentWorkspaceNode(id string) string {
 	if a.workspace == nil {
 		return "workspace not initialized"
@@ -1200,4 +1312,319 @@ func (a *App) GetPluginAssetContent(pluginID, assetPath string) (string, string)
 		return "", fmt.Sprintf("failed to read asset: %v", err)
 	}
 	return string(data), ""
+}
+
+// ─── Sync API ──────────────────────────────────────────────
+
+func (a *App) requireVault() error {
+	if a.vault == nil || a.vault.GetVaultStatus() != vault.StatusOpen {
+		return fmt.Errorf("vault not open")
+	}
+	return nil
+}
+
+func (a *App) vaultPath() string {
+	if a.vault == nil {
+		return ""
+	}
+	return a.vault.GetVaultPath()
+}
+
+// SyncStatusDTO holds sync status information for the frontend.
+type SyncStatusDTO struct {
+	Configured   bool   `json:"configured"`
+	ServerURL    string `json:"serverUrl"`
+	DeviceID     string `json:"deviceId"`
+	DeviceName   string `json:"deviceName"`
+	Connected    bool   `json:"connected"`
+	Revoked      bool   `json:"revoked"`
+	TokenStored  bool   `json:"tokenStored"`
+	UnpushedOps  int    `json:"unpushedOps"`
+	LastSyncAt   string `json:"lastSyncAt"`
+	SyncInterval int    `json:"syncInterval"`
+	LastError    string `json:"lastError"`
+	StatusLabel  string `json:"statusLabel"`
+}
+
+// SyncStatus returns the current sync status.
+func (a *App) SyncStatus() (*SyncStatusDTO, error) {
+	if a.vault == nil || a.vault.GetVaultStatus() != vault.StatusOpen {
+		return &SyncStatusDTO{}, nil
+	}
+
+	vaultPath := a.vaultPath()
+	if a.syncSvc == nil {
+		return &SyncStatusDTO{}, nil
+	}
+
+	serverURL, apiKey, _, lastSyncAt, err := a.syncSvc.GetState()
+	if err != nil {
+		return &SyncStatusDTO{}, nil
+	}
+
+	cfg := a.appSettings.Get()
+	deviceToken := syncsvc.LoadDeviceToken(vaultPath)
+
+	dto := &SyncStatusDTO{
+		Configured:   serverURL != "" && (apiKey != "" || deviceToken != ""),
+		ServerURL:    serverURL,
+		LastSyncAt:   lastSyncAt,
+		UnpushedOps:  0,
+		TokenStored:  deviceToken != "",
+		SyncInterval: cfg.Sync.SyncInterval,
+		LastError:    cfg.Sync.LastError,
+	}
+
+	if cfg.Sync.DeviceID != "" {
+		dto.DeviceID = cfg.Sync.DeviceID
+	}
+
+	unpushed, _ := a.syncSvc.GetUnpushedOps()
+	dto.UnpushedOps = len(unpushed)
+
+	if deviceToken != "" {
+		client := syncsvc.NewClient(serverURL, "", "", vaultPath)
+		client.DeviceToken = deviceToken
+		if cfg.Sync.DeviceID != "" {
+			client.DeviceID = cfg.Sync.DeviceID
+		}
+		if info, err := client.GetMe(); err == nil {
+			dto.DeviceName = info.DeviceName
+			dto.DeviceID = info.DeviceID
+			dto.Connected = true
+			if info.RevokedAt != "" {
+				dto.Revoked = true
+				dto.Connected = false
+			}
+		}
+	}
+
+	switch {
+	case dto.Revoked:
+		dto.StatusLabel = "revoked"
+	case dto.Connected:
+		dto.StatusLabel = "connected"
+	case dto.Configured:
+		dto.StatusLabel = "disconnected"
+	default:
+		dto.StatusLabel = "disabled"
+	}
+
+	if cfg.Sync.LastSyncAt != lastSyncAt || cfg.Sync.LastStatus != dto.StatusLabel {
+		cfg.Sync.LastSyncAt = lastSyncAt
+		cfg.Sync.LastStatus = dto.StatusLabel
+		_ = a.appSettings.Update(&appsettings.Config{Sync: cfg.Sync})
+	}
+
+	return dto, nil
+}
+
+// SyncConfigure pairs the device with a sync server.
+func (a *App) SyncConfigure(serverURL, username, password string) error {
+	if err := a.requireVault(); err != nil {
+		return err
+	}
+	vaultPath := a.vaultPath()
+	hostname, _ := os.Hostname()
+	if hostname == "" {
+		hostname = "unknown"
+	}
+	client := syncsvc.NewClient(serverURL, "", "", vaultPath)
+	deviceID, deviceToken, err := client.PairDevice(serverURL, username, password, hostname, "verstak-desktop/v2")
+	if err != nil {
+		return fmt.Errorf("pair: %w", err)
+	}
+	if err := syncsvc.SaveDeviceToken(vaultPath, deviceToken); err != nil {
+		return fmt.Errorf("save token: %w", err)
+	}
+	if err := a.syncSvc.SetState(serverURL, ""); err != nil {
+		return err
+	}
+
+	cfg := a.appSettings.Get()
+	cfg.Sync.Enabled = true
+	cfg.Sync.ServerURL = serverURL
+	cfg.Sync.DeviceID = deviceID
+	cfg.Sync.DeviceName = hostname
+	cfg.Sync.LastStatus = "connected"
+	_ = a.appSettings.Update(&appsettings.Config{Sync: cfg.Sync})
+
+	return nil
+}
+
+// SyncDisconnect disconnects from the sync server and revokes the device token.
+func (a *App) SyncDisconnect() error {
+	if err := a.requireVault(); err != nil {
+		return err
+	}
+	vaultPath := a.vaultPath()
+	deviceToken := syncsvc.LoadDeviceToken(vaultPath)
+	cfg := a.appSettings.Get()
+
+	if deviceToken != "" {
+		client := syncsvc.NewClient(cfg.Sync.ServerURL, "", "", vaultPath)
+		client.DeviceToken = deviceToken
+		_ = client.RevokeCurrent()
+	}
+	_ = syncsvc.RemoveDeviceToken(vaultPath)
+
+	cfg.Sync.Enabled = false
+	cfg.Sync.ServerURL = ""
+	cfg.Sync.DeviceID = ""
+	cfg.Sync.DeviceName = ""
+	cfg.Sync.LastStatus = "disabled"
+	cfg.Sync.LastError = ""
+	if err := a.appSettings.Update(&appsettings.Config{Sync: cfg.Sync}); err != nil {
+		return err
+	}
+	return a.syncSvc.SetState("", "")
+}
+
+// SyncTestConnection tests the connection to a sync server with the given credentials.
+func (a *App) SyncTestConnection(serverURL, username, password string) error {
+	vaultPath := a.vaultPath()
+	if vaultPath == "" {
+		vaultPath = "/tmp"
+	}
+	client := syncsvc.NewClient(serverURL, "", "", vaultPath)
+	return client.TestAuth(serverURL, username, password)
+}
+
+// SyncSetInterval sets the auto-sync interval in minutes.
+func (a *App) SyncSetInterval(minutes int) error {
+	if err := a.requireVault(); err != nil {
+		return err
+	}
+	cfg := a.appSettings.Get()
+	cfg.Sync.SyncInterval = minutes
+	if cfg.Sync.DeviceID == "" && a.syncSvc != nil {
+		cfg.Sync.DeviceID = a.syncSvc.GetDeviceID()
+	}
+	return a.appSettings.Update(&appsettings.Config{Sync: cfg.Sync})
+}
+
+// SyncNow triggers an immediate sync cycle (push local ops, pull remote ops).
+func (a *App) SyncNow() (map[string]interface{}, error) {
+	if err := a.requireVault(); err != nil {
+		return nil, err
+	}
+	vaultPath := a.vaultPath()
+
+	serverURL, apiKey, lastPullSeq, _, err := a.syncSvc.GetState()
+	deviceToken := syncsvc.LoadDeviceToken(vaultPath)
+	if err != nil || serverURL == "" || (apiKey == "" && deviceToken == "") {
+		return nil, fmt.Errorf("sync not configured")
+	}
+
+	deviceID := ""
+	cfg := a.appSettings.Get()
+	if cfg.Sync.DeviceID != "" {
+		deviceID = cfg.Sync.DeviceID
+	}
+
+	client := syncsvc.NewClient(serverURL, apiKey, deviceID, vaultPath)
+	client.DeviceToken = deviceToken
+
+	unpushed, err := a.syncSvc.GetUnpushedOps()
+	if err != nil {
+		return nil, fmt.Errorf("get ops: %w", err)
+	}
+	for i := range unpushed {
+		unpushed[i].LastSeenServerSeq = lastPullSeq
+	}
+	pushResult := &syncsvc.PushResponse{}
+	if len(unpushed) > 0 {
+		pushResult, err = client.Push(unpushed)
+		if err != nil {
+			_ = a.updateSyncError(fmt.Sprintf("push: %v", err))
+			return nil, fmt.Errorf("push: %w", err)
+		}
+		if err := a.syncSvc.MarkPushed(pushResult.Accepted); err != nil {
+			return nil, fmt.Errorf("mark pushed: %w", err)
+		}
+	}
+
+	pullResult, err := client.Pull(lastPullSeq)
+	if err != nil {
+		_ = a.updateSyncError(fmt.Sprintf("pull: %v", err))
+		return nil, fmt.Errorf("pull: %w", err)
+	}
+
+	var applyErrors []string
+	for _, op := range pullResult.Ops {
+		if err := a.applyRemoteOp(op); err != nil {
+			applyErrors = append(applyErrors, fmt.Sprintf("%s/%s: %v", op.EntityType, op.OpID, err))
+		}
+		_ = a.syncSvc.RecordRemoteOp(op)
+	}
+	if len(pullResult.Ops) > 0 {
+		opIDs := make([]string, len(pullResult.Ops))
+		for i, op := range pullResult.Ops {
+			opIDs[i] = op.OpID
+		}
+		_ = a.syncSvc.MarkApplied(opIDs)
+	}
+
+	if len(pushResult.Conflicts) > 0 {
+		log.Printf("[sync] %d conflict(s) detected on push", len(pushResult.Conflicts))
+		for _, c := range pushResult.Conflicts {
+			log.Printf("[sync] conflict: op=%v entity=%v/%v",
+				c["op_id"], c["entity_type"], c["entity_id"])
+		}
+	}
+
+	if pullResult.ServerSequence > lastPullSeq {
+		_ = a.syncSvc.SetLastPullSeq(pullResult.ServerSequence)
+	}
+	_ = a.syncSvc.SetLastSyncAt(time.Now().UTC().Format(time.RFC3339))
+
+	now := time.Now().UTC().Format(time.RFC3339)
+	a.updateSyncSuccess(now)
+
+	result := map[string]interface{}{
+		"pushed":         len(pushResult.Accepted),
+		"pulled":         len(pullResult.Ops),
+		"serverSequence": pullResult.ServerSequence,
+	}
+	if len(applyErrors) > 0 {
+		result["applyErrors"] = applyErrors
+	}
+	if len(pushResult.Conflicts) > 0 {
+		result["conflicts"] = pushResult.Conflicts
+	}
+	return result, nil
+}
+
+// ResetSyncKey clears the device token and resets sync state.
+func (a *App) ResetSyncKey() error {
+	if err := a.requireVault(); err != nil {
+		return err
+	}
+	_ = syncsvc.RemoveDeviceToken(a.vaultPath())
+	cfg := a.appSettings.Get()
+	cfg.Sync.LastStatus = "disabled"
+	cfg.Sync.LastError = ""
+	return a.appSettings.Update(&appsettings.Config{Sync: cfg.Sync})
+}
+
+func (a *App) updateSyncError(errMsg string) error {
+	cfg := a.appSettings.Get()
+	cfg.Sync.LastError = errMsg
+	cfg.Sync.LastStatus = "error"
+	return a.appSettings.Update(&appsettings.Config{Sync: cfg.Sync})
+}
+
+func (a *App) updateSyncSuccess(lastSyncAt string) error {
+	cfg := a.appSettings.Get()
+	cfg.Sync.LastError = ""
+	cfg.Sync.LastStatus = "connected"
+	cfg.Sync.LastSyncAt = lastSyncAt
+	return a.appSettings.Update(&appsettings.Config{Sync: cfg.Sync})
+}
+
+func (a *App) applyRemoteOp(op syncsvc.Op) error {
+	if a.debug {
+		log.Printf("[sync] applyRemoteOp: type=%s entity=%s/%s", op.OpType, op.EntityType, op.EntityID)
+	}
+	return nil
 }

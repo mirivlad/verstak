@@ -21,6 +21,7 @@ type Config struct {
 	DevMode          bool                 `json:"devMode"`
 	UserPluginsDir   string               `json:"userPluginsDir"`
 	Workbench        WorkbenchPreferences `json:"workbench,omitempty"`
+	Sync             SyncSettings         `json:"sync,omitempty"`
 	WindowState      *WindowState         `json:"windowState,omitempty"`
 	LastOpenedAt     string               `json:"lastOpenedAt"`
 }
@@ -29,6 +30,18 @@ type WorkbenchPreferences struct {
 	DefaultTextEditorProvider          string `json:"defaultTextEditorProvider,omitempty"`
 	DefaultMarkdownEditorProvider      string `json:"defaultMarkdownEditorProvider,omitempty"`
 	DefaultNotesMarkdownEditorProvider string `json:"defaultNotesMarkdownEditorProvider,omitempty"`
+}
+
+// SyncSettings holds sync configuration for the current vault.
+type SyncSettings struct {
+	Enabled      bool   `json:"enabled"`
+	ServerURL    string `json:"serverUrl"`
+	DeviceID     string `json:"deviceId"`
+	DeviceName   string `json:"deviceName"`
+	SyncInterval int    `json:"syncInterval"`
+	LastStatus   string `json:"lastStatus"`
+	LastSyncAt   string `json:"lastSyncAt"`
+	LastError    string `json:"lastError,omitempty"`
 }
 
 // WindowState stores the last window position and size.
@@ -234,6 +247,7 @@ func copyConfig(c *Config) *Config {
 		DevMode:          c.DevMode,
 		UserPluginsDir:   c.UserPluginsDir,
 		Workbench:        c.Workbench,
+		Sync:             c.Sync,
 		LastOpenedAt:     c.LastOpenedAt,
 	}
 	if c.WindowState != nil {

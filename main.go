@@ -21,6 +21,7 @@ import (
 	"github.com/verstak/verstak-desktop/internal/core/plugin"
 	"github.com/verstak/verstak-desktop/internal/core/pluginstate"
 	"github.com/verstak/verstak-desktop/internal/core/storage"
+	syncsvc "github.com/verstak/verstak-desktop/internal/core/sync"
 	"github.com/verstak/verstak-desktop/internal/core/vault"
 	"github.com/verstak/verstak-desktop/internal/core/workspace"
 	"github.com/verstak/verstak-desktop/internal/shell/debug"
@@ -245,7 +246,11 @@ func main() {
 	// Create the App struct
 	storageService := storage.New(vaultService)
 	filesService := corefiles.NewService(vaultService)
-	app := api.NewApp(capRegistry, contribRegistry, permRegistry, eventBus, plugins, vaultService, storageService, filesService, appSettingsMgr, pluginStateMgr, workspaceMgr, debugEnabled)
+	var syncService *syncsvc.Service
+	if vaultService.GetVaultStatus() == vault.StatusOpen {
+		syncService = syncsvc.NewService(vaultService.GetVaultPath(), "")
+	}
+	app := api.NewApp(capRegistry, contribRegistry, permRegistry, eventBus, plugins, vaultService, storageService, filesService, appSettingsMgr, pluginStateMgr, workspaceMgr, syncService, debugEnabled)
 
 	// ─── Wails App ───────────────────────────────────────────
 	err := wails.Run(&options.App{
