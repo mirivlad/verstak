@@ -225,6 +225,23 @@ export function createPluginAPI(pluginId) {
       }
     },
 
+    backend: {
+      call: async function(method, ...args) {
+        assertActive('backend.call(' + method + ')');
+        try {
+          const App = window['go']?.['api']?.['App'];
+          if (!App || typeof App[method] !== 'function') {
+            throw new Error('Backend method not found: ' + method);
+          }
+          const result = await App[method](...args);
+          return result;
+        } catch (e) {
+          const message = e && e.message ? e.message : String(e);
+          throw new Error('[plugin:' + pluginId + '] backend.call(' + method + ') failed: ' + message);
+        }
+      }
+    },
+
     workbench: {
       openResource: async function(request) {
         assertActive('workbench.openResource');
