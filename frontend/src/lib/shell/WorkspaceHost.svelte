@@ -51,7 +51,7 @@
               <PluginBundleHost
                 pluginId={tool.pluginId}
                 componentId={tool.component}
-                componentProps={{ workspaceNodeId: currentNodeId, workspaceNode: currentNode }}
+                componentProps={{ workspaceNodeId: currentNodeId, workspaceNode: currentNode, workspaceRootPath: currentNode.path || '' }}
               />
             </div>
           </div>

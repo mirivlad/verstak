@@ -29,49 +29,21 @@ OFFICIAL="$VERSTAK_ROOT/verstak-official-plugins"
 if [ ! -d "$OFFICIAL" ]; then
   echo "  ⚠️  verstak-official-plugins not found — skipping"
 else
-  # npm deps
-  if [ ! -d "$OFFICIAL/node_modules" ] && [ -f "$OFFICIAL/package.json" ]; then
-    echo "  📦 installing npm deps..."
-    (cd "$OFFICIAL" && npm install --no-audit --no-fund)
-  fi
-  # Build each plugin that has a frontend or backend
-  for plugin_dir in "$OFFICIAL"/plugins/*/; do
-    [ -d "$plugin_dir" ] || continue
-    plugin_name="$(basename "$plugin_dir")"
-
-    # Frontend build
-    fe_dir="$plugin_dir/frontend"
-    if [ -d "$fe_dir" ] && [ -f "$fe_dir/package.json" ]; then
-      echo "[$plugin_name] building frontend..."
-      if [ ! -d "$fe_dir/node_modules" ]; then
-        (cd "$fe_dir" && npm install --no-audit --no-fund)
-      fi
-      (cd "$fe_dir" && npm run build)
-      echo "  ✅ $plugin_name frontend"
-    fi
-
-    # Backend build
-    backend_dir="$plugin_dir/backend"
-    if [ -f "$backend_dir/main.go" ]; then
-      echo "[$plugin_name] building backend..."
-      (cd "$backend_dir" && go build -o "$(basename "$backend_dir")" .)
-      echo "  ✅ $plugin_name backend"
-    fi
-  done
+  (cd "$OFFICIAL" && ./scripts/build.sh)
   echo "  ✅ official plugins built"
 fi
 
-# ── 3. Copy plugins to desktop ──
+# ── 3. Copy plugin packages to desktop ──
 echo ""
 echo "=== install plugins to desktop ==="
 DEST="$ROOT/plugins"
 rm -rf "$DEST"
 mkdir -p "$DEST"
-if [ -d "$OFFICIAL/plugins" ]; then
-  cp -r "$OFFICIAL/plugins/"* "$DEST/" 2>/dev/null
+if [ -d "$OFFICIAL/dist" ] && [ -n "$(find "$OFFICIAL/dist" -mindepth 1 -maxdepth 1 -type d 2>/dev/null)" ]; then
+  cp -r "$OFFICIAL/dist/"* "$DEST/" 2>/dev/null
   echo "  ✅ plugins copied to $DEST"
 else
-  echo "  ℹ️  no plugins to copy"
+  echo "  ℹ️  no plugin packages to copy"
 fi
 
 # ── 4. Build desktop ──

@@ -54,8 +54,10 @@
 
 <style>
   .workbench-host {
+    flex: 1;
     min-width: 0;
     min-height: 0;
+    height: 100%;
     display: flex;
     flex-direction: column;
     background: #1a1a2e;

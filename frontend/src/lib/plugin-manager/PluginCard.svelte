@@ -166,7 +166,7 @@
           {@const isDangerous = dangerousPermissions.includes(perm)}
           <span class="tag" class:dangerous={isDangerous}>
             {perm}
-            {#if isDangerous}<Icon name="warning" size={12} className="danger-icon" />{/if}
+            {#if isDangerous}<Icon name="warning" size={12} class="danger-icon" />{/if}
           </span>
         {/each}
       </div>
@@ -362,7 +362,7 @@
   }
 
   .check { color: #4ecca3; margin-left: 2px; }
-  .danger-icon { color: #e94560; margin-left: 2px; vertical-align: middle; }
+  :global(.danger-icon) { color: #e94560; margin-left: 2px; vertical-align: middle; }
 
   .info {
     color: #ffc857;

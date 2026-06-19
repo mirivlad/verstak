@@ -54,9 +54,11 @@ Canonical rules:
 
 Canonical scoped paths:
 
-- Workspace/root overview notes live under `Notes/`.
-- Case/project/folder scoped notes live under `<case-or-parent>/Notes/`.
-- The default overview note is `<case-or-parent>/Notes/Overview.md`.
+- Workspace/root overview notes live under `<workspace-node-path>/Notes/`.
+- Case/project/folder scoped notes live under `<workspace-node-path>/Notes/`.
+- The default overview note is `<workspace-node-path>/Notes/Overview.md`.
+- `workspace-node-path` is a normal vault-relative folder path stored on the
+  workspace node. Files plugin workspace views are scoped to this path.
 
 Visibility requirements:
 

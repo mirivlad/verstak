@@ -48,7 +48,7 @@
     <div class="view-container">
       <div class="error-boundary">
         <div class="error-fallback">
-          <Icon name="warning" size={24} className="error-icon" />
+          <Icon name="warning" size={24} class="error-icon" />
           <p class="error-title">Plugin UI failed</p>
           <p class="error-text">{renderError}</p>
         </div>
@@ -58,7 +58,7 @@
     <div class="view-container">
       <div class="view" class:degraded={pluginStatus === 'degraded'}>
         <div class="view-header">
-          <Icon name={currentView.icon || 'logo'} size={20} className="view-icon" />
+          <Icon name={currentView.icon || 'logo'} size={20} class="view-icon" />
           <h2>{currentView.title}</h2>
           {#if hasFrontend}
             <span class="frontend-badge">frontend bundle</span>
@@ -128,7 +128,7 @@
     color: #e0e0f0;
     flex: 1;
   }
-  .view-icon {
+  :global(.view-icon) {
     width: 1.3rem;
     height: 1.3rem;
     color: #a78bfa;
@@ -212,7 +212,7 @@
     text-align: center;
     padding: 2rem;
   }
-  .error-icon {
+  :global(.error-icon) {
     color: #e94560;
   }
   .error-title {

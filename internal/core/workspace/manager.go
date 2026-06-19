@@ -10,11 +10,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path"
 	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 
 	"github.com/google/uuid"
 )
@@ -43,6 +45,7 @@ type WorkspaceNode struct {
 	ParentID  string     `json:"parentId,omitempty"`
 	Type      NodeType   `json:"type"`
 	Title     string     `json:"title"`
+	Path      string     `json:"path,omitempty"`
 	Status    NodeStatus `json:"status"`
 	Tags      []string   `json:"tags,omitempty"`
 	Order     int        `json:"order"`
@@ -88,6 +91,9 @@ func (m *Manager) Load() error {
 	if err != nil {
 		if os.IsNotExist(err) {
 			m.tree = m.defaultTree()
+			if _, err := m.ensureWorkspacePathsLocked(); err != nil {
+				return err
+			}
 			return m.saveLocked()
 		}
 		return fmt.Errorf("failed to read workspace.json: %w", err)
@@ -113,6 +119,13 @@ func (m *Manager) Load() error {
 	}
 
 	m.tree = &tree
+	changed, err := m.ensureWorkspacePathsLocked()
+	if err != nil {
+		return err
+	}
+	if changed {
+		return m.saveLocked()
+	}
 	return nil
 }
 
@@ -159,6 +172,7 @@ func (m *Manager) defaultTree() *WorkspaceTree {
 		ID:        uuid.New().String(),
 		Type:      TypeSpace,
 		Title:     "My Workspace",
+		Path:      safePathSegment("My Workspace"),
 		Status:    StatusActive,
 		Order:     0,
 		CreatedAt: now,
@@ -261,20 +275,146 @@ func (m *Manager) CreateNode(parentID string, nodeType NodeType, title string) (
 		ParentID:  parentID,
 		Type:      nodeType,
 		Title:     title,
+		Path:      m.uniqueWorkspacePathLocked(parentID, title, ""),
 		Status:    StatusActive,
 		Order:     maxOrder + 1,
 		CreatedAt: now,
 		UpdatedAt: now,
 	}
 
+	if err := os.MkdirAll(filepath.Join(m.vaultDir, filepath.FromSlash(node.Path)), 0o755); err != nil {
+		return WorkspaceNode{}, fmt.Errorf("failed to create workspace folder: %w", err)
+	}
+
 	m.tree.Nodes = append(m.tree.Nodes, node)
 	if err := m.saveLocked(); err != nil {
 		// Rollback: remove the node we just added
 		m.tree.Nodes = m.tree.Nodes[:len(m.tree.Nodes)-1]
+		_ = os.Remove(filepath.Join(m.vaultDir, filepath.FromSlash(node.Path)))
 		return WorkspaceNode{}, fmt.Errorf("failed to save after create: %w", err)
 	}
 
 	return node, nil
+}
+
+func (m *Manager) ensureWorkspacePathsLocked() (bool, error) {
+	if m.tree == nil {
+		return false, fmt.Errorf("workspace tree is nil")
+	}
+
+	changed := false
+	resolved := make(map[string]string, len(m.tree.Nodes))
+	used := make(map[string]string, len(m.tree.Nodes))
+
+	for {
+		progress := false
+		for i := range m.tree.Nodes {
+			node := &m.tree.Nodes[i]
+			if _, ok := resolved[node.ID]; ok {
+				continue
+			}
+			parentPath := ""
+			if node.ParentID != "" {
+				var ok bool
+				parentPath, ok = resolved[node.ParentID]
+				if !ok {
+					continue
+				}
+			}
+			if node.Path == "" {
+				node.Path = m.uniqueWorkspacePathWithUsedLocked(parentPath, node.Title, node.ID, used)
+				node.UpdatedAt = time.Now().UTC().Format(time.RFC3339Nano)
+				changed = true
+			}
+			resolved[node.ID] = node.Path
+			used[node.Path] = node.ID
+			if err := os.MkdirAll(filepath.Join(m.vaultDir, filepath.FromSlash(node.Path)), 0o755); err != nil {
+				return false, fmt.Errorf("failed to create workspace folder %q: %w", node.Path, err)
+			}
+			progress = true
+		}
+		if len(resolved) == len(m.tree.Nodes) {
+			return changed, nil
+		}
+		if !progress {
+			return changed, fmt.Errorf("workspace tree has nodes with missing parents")
+		}
+	}
+}
+
+func (m *Manager) uniqueWorkspacePathLocked(parentID, title, excludeID string) string {
+	excluded := map[string]bool{}
+	if excludeID != "" {
+		excluded[excludeID] = true
+	}
+	return m.uniqueWorkspacePathExcludingLocked(parentID, title, excluded)
+}
+
+func (m *Manager) uniqueWorkspacePathExcludingLocked(parentID, title string, excluded map[string]bool) string {
+	parentPath := ""
+	if parentID != "" {
+		for _, n := range m.tree.Nodes {
+			if n.ID == parentID {
+				parentPath = n.Path
+				break
+			}
+		}
+	}
+	used := make(map[string]string, len(m.tree.Nodes))
+	for _, n := range m.tree.Nodes {
+		if !excluded[n.ID] && n.Path != "" {
+			used[n.Path] = n.ID
+		}
+	}
+	return m.uniqueWorkspacePathWithUsedLocked(parentPath, title, "", used)
+}
+
+func (m *Manager) uniqueWorkspacePathWithUsedLocked(parentPath, title, excludeID string, used map[string]string) string {
+	segment := safePathSegment(title)
+	for i := 1; i < 1000; i++ {
+		candidateSegment := segment
+		if i > 1 {
+			candidateSegment = fmt.Sprintf("%s (%d)", segment, i)
+		}
+		candidate := path.Join(parentPath, candidateSegment)
+		if owner, ok := used[candidate]; ok && owner != excludeID {
+			continue
+		}
+		if _, err := os.Stat(filepath.Join(m.vaultDir, filepath.FromSlash(candidate))); err == nil {
+			continue
+		}
+		return candidate
+	}
+	return path.Join(parentPath, fmt.Sprintf("%s_%d", segment, time.Now().UnixNano()))
+}
+
+func safePathSegment(title string) string {
+	title = strings.TrimSpace(title)
+	if title == "" {
+		return "Untitled"
+	}
+	var b strings.Builder
+	for _, r := range title {
+		switch {
+		case r == '/' || r == '\\':
+			b.WriteRune('_')
+		case r == ':' || r == '*' || r == '?' || r == '"' || r == '<' || r == '>' || r == '|':
+			b.WriteRune(' ')
+		case unicode.IsControl(r):
+		case r == '.' && b.Len() == 0:
+			b.WriteRune('_')
+		default:
+			b.WriteRune(r)
+		}
+	}
+	segment := strings.TrimSpace(b.String())
+	if segment == "" {
+		return "Untitled"
+	}
+	if len(segment) > 200 {
+		segment = segment[:200]
+	}
+	return segment
 }
 
 // RenameNode updates a node's title.
@@ -353,11 +493,48 @@ func (m *Manager) MoveNode(id, newParentID string) error {
 		}
 	}
 
+	oldNodes := append([]WorkspaceNode(nil), m.tree.Nodes...)
+	oldParentID := m.tree.Nodes[nodeIdx].ParentID
+	oldPath := m.tree.Nodes[nodeIdx].Path
+	subtree := m.subtreeIDsLocked(id)
+	newPath := oldPath
+	if newParentID != oldParentID {
+		newPath = m.uniqueWorkspacePathExcludingLocked(newParentID, m.tree.Nodes[nodeIdx].Title, subtree)
+	}
+
+	if oldPath != newPath {
+		oldFull := filepath.Join(m.vaultDir, filepath.FromSlash(oldPath))
+		newFull := filepath.Join(m.vaultDir, filepath.FromSlash(newPath))
+		if err := os.MkdirAll(filepath.Dir(newFull), 0o755); err != nil {
+			return fmt.Errorf("failed to create destination parent folder: %w", err)
+		}
+		if _, err := os.Stat(oldFull); err == nil {
+			if err := os.Rename(oldFull, newFull); err != nil {
+				return fmt.Errorf("failed to move workspace folder: %w", err)
+			}
+		} else if os.IsNotExist(err) {
+			if err := os.MkdirAll(newFull, 0o755); err != nil {
+				return fmt.Errorf("failed to create moved workspace folder: %w", err)
+			}
+		} else {
+			return err
+		}
+	}
+
 	m.tree.Nodes[nodeIdx].ParentID = newParentID
 	m.tree.Nodes[nodeIdx].Order = maxOrder + 1
+	m.tree.Nodes[nodeIdx].Path = newPath
 	m.tree.Nodes[nodeIdx].UpdatedAt = time.Now().UTC().Format(time.RFC3339Nano)
+	m.rewriteDescendantPathsLocked(id, oldPath, newPath)
 
-	return m.saveLocked()
+	if err := m.saveLocked(); err != nil {
+		m.tree.Nodes = oldNodes
+		if oldPath != newPath {
+			_ = os.Rename(filepath.Join(m.vaultDir, filepath.FromSlash(newPath)), filepath.Join(m.vaultDir, filepath.FromSlash(oldPath)))
+		}
+		return err
+	}
+	return nil
 }
 
 // isDescendant checks if targetID is a descendant of ancestorID.
@@ -379,6 +556,38 @@ func (m *Manager) isDescendant(ancestorID, targetID string) bool {
 		current = parentMap[current]
 	}
 	return false
+}
+
+func (m *Manager) subtreeIDsLocked(rootID string) map[string]bool {
+	subtree := map[string]bool{rootID: true}
+	changed := true
+	for changed {
+		changed = false
+		for _, n := range m.tree.Nodes {
+			if !subtree[n.ID] && subtree[n.ParentID] {
+				subtree[n.ID] = true
+				changed = true
+			}
+		}
+	}
+	return subtree
+}
+
+func (m *Manager) rewriteDescendantPathsLocked(rootID, oldRootPath, newRootPath string) {
+	if oldRootPath == "" || oldRootPath == newRootPath {
+		return
+	}
+	prefix := oldRootPath + "/"
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	for i := range m.tree.Nodes {
+		if m.tree.Nodes[i].ID == rootID {
+			continue
+		}
+		if strings.HasPrefix(m.tree.Nodes[i].Path, prefix) {
+			m.tree.Nodes[i].Path = newRootPath + strings.TrimPrefix(m.tree.Nodes[i].Path, oldRootPath)
+			m.tree.Nodes[i].UpdatedAt = now
+		}
+	}
 }
 
 // ArchiveNode sets a node's status to archived.

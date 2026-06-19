@@ -17,13 +17,15 @@
   let currentPluginId = null;
   let currentComponent = null;
   let currentAPI = null;
+  let currentPropsKey = '';
 
   $: activePluginId = pluginId || viewPluginId;
   $: activeComponent = componentId;
+  $: propsKey = JSON.stringify(componentProps || {});
 
   // React to changes — reload on view change
   $: if (activePluginId && activeComponent) {
-    loadAndMount(activePluginId, activeComponent);
+    loadAndMount(activePluginId, activeComponent, propsKey);
   } else if (!activePluginId) {
     cleanup();
     loadState = 'idle';
@@ -58,6 +60,7 @@
     currentPluginId = null;
     currentComponent = null;
     currentAPI = null;
+    currentPropsKey = '';
   }
 
   function unpackBackendResult(result) {
@@ -67,9 +70,9 @@
     return { value: result, error: '' };
   }
 
-  async function loadAndMount(pId, compId) {
+  async function loadAndMount(pId, compId, nextPropsKey) {
     // If same plugin+component and already mounted, skip
-    if (currentPluginId === pId && currentComponent === compId && loadState === 'loaded') {
+    if (currentPluginId === pId && currentComponent === compId && currentPropsKey === nextPropsKey && loadState === 'loaded') {
       return;
     }
 
@@ -80,6 +83,7 @@
     errorText = '';
     currentPluginId = pId;
     currentComponent = compId;
+    currentPropsKey = nextPropsKey;
 
     try {
       // Get plugin frontend info
@@ -181,7 +185,7 @@
 
   {:else if loadState === 'error'}
     <div class="host-state error">
-      <Icon name="warning" size={24} className="error-icon" />
+      <Icon name="warning" size={24} class="error-icon" />
       <p class="error-title">Plugin View Error</p>
       <div class="error-details">
         <p><strong>Plugin:</strong> {currentPluginId || 'unknown'}</p>
@@ -209,17 +213,20 @@
       bind:this={mountContainer}
       data-plugin-id={currentPluginId}
       data-component={currentComponent}
+      style="flex:1;min-width:0;min-height:0;height:100%;display:flex;flex-direction:column;position:relative;"
     ></div>
   {/if}
 </div>
 
 <style>
   .plugin-bundle-host {
+    flex: 1;
     width: 100%;
-    min-height: 200px;
+    height: 100%;
     display: flex;
     flex-direction: column;
     min-width: 0;
+    min-height: 0;
   }
 
   .host-state {
@@ -305,7 +312,12 @@
   }
 
   .plugin-mount-container {
+    flex: 1;
     min-width: 0;
+    min-height: 0;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
     position: relative;
   }
 

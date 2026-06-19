@@ -135,7 +135,7 @@
 
     {#if error}
       <div class="error-box">
-        <Icon name="warning" size={14} className="error-icon" />
+        <Icon name="warning" size={14} class="error-icon" />
         <span class="error-text">{error}</span>
       </div>
     {/if}
@@ -191,7 +191,7 @@
           {#each recentVaults as path}
             <li>
               <button class="recent-item" on:click={() => openRecent(path)} type="button" disabled={opening}>
-                <Icon name="vault" size={16} className="recent-icon" />
+                <Icon name="vault" size={16} class="recent-icon" />
                 <span class="recent-path">{path}</span>
               </button>
             </li>
@@ -247,7 +247,7 @@
     font-size: 0.85rem;
     color: #e94560;
   }
-  .error-icon { flex-shrink: 0; }
+  :global(.error-icon) { flex-shrink: 0; }
   .error-text { word-break: break-word; }
   .actions {
     display: flex;
@@ -369,7 +369,7 @@
     opacity: 0.5;
     cursor: not-allowed;
   }
-  .recent-icon { flex-shrink: 0; }
+  :global(.recent-icon) { flex-shrink: 0; }
   .recent-path {
     overflow: hidden;
     text-overflow: ellipsis;

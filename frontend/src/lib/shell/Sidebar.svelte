@@ -81,7 +81,7 @@
 
 <aside class="sidebar">
   <div class="sidebar-header">
-    <Icon name="logo" size={20} className="sidebar-logo" />
+    <Icon name="logo" size={20} class="sidebar-logo" />
     <span class="sidebar-title">Verstak</span>
   </div>
 
@@ -92,7 +92,7 @@
         on:click={() => handleNav(item.id)}
         type="button"
       >
-        <Icon name={item.icon} size={16} className="nav-icon" />
+        <Icon name={item.icon} size={16} class="nav-icon" />
         <span class="nav-label">{item.label}</span>
       </button>
     {/each}
@@ -107,7 +107,7 @@
           on:click={() => handleSidebarItem(item)}
           type="button"
         >
-          <Icon name={item.icon || 'plugin'} size={16} className="nav-icon icon-plugin" />
+          <Icon name={item.icon || 'plugin'} size={16} class="nav-icon icon-plugin" />
           <span class="nav-label">{item.title || item.id}</span>
         </button>
       {/each}
@@ -121,7 +121,7 @@
   <div class="sidebar-footer">
     {#if errorMessage}
       <span class="sidebar-error">
-        <Icon name="warning" size={10} className="sidebar-error-icon" />
+        <Icon name="warning" size={10} class="sidebar-error-icon" />
         Plugin UI error
       </span>
     {/if}
@@ -152,7 +152,7 @@
     border-bottom: 1px solid #0f3460;
   }
 
-  .sidebar-logo {
+  :global(.sidebar-logo) {
     width: 1.2rem;
     height: 1.2rem;
     color: #4ecca3;
@@ -218,13 +218,13 @@
     color: #e0e0f0;
   }
 
-  .nav-icon {
+  :global(.nav-icon) {
     width: 1.2rem;
     height: 1.2rem;
     flex-shrink: 0;
     color: currentColor;
   }
-  .nav-icon.icon-plugin {
+  :global(.nav-icon.icon-plugin) {
     color: #a78bfa;
   }
 
@@ -261,7 +261,7 @@
     color: #e94560;
     margin-bottom: 0.25rem;
   }
-  .sidebar-error-icon {
+  :global(.sidebar-error-icon) {
     color: #e94560;
   }
 </style>

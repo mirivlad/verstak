@@ -81,4 +81,15 @@ test.describe('E: Plugin Manager layout', () => {
     await expect(selected).toHaveCount(1);
     await expect(selected).toHaveText('Beta Case');
   });
+
+  test('shell icons render through bundled Lucide SVG components', async ({ page }) => {
+    const logo = page.locator('.sidebar-logo');
+    await expect(logo).toBeVisible();
+    await expect(logo).toHaveClass(/lucide/);
+
+    await page.locator('.wt-label').filter({ hasText: 'Alpha Case' }).click();
+    const workspaceIcon = page.locator('.wt-node-icon').first();
+    await expect(workspaceIcon).toBeVisible();
+    await expect(workspaceIcon).toHaveClass(/lucide/);
+  });
 });

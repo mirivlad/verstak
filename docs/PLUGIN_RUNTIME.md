@@ -146,7 +146,7 @@ foreach plugin:
 |---|---|---|
 | `description` | string | Описание плагина |
 | `source` | string | `"official"`, `"local"`, `"third-party"` |
-| `icon` | string | Иконка (emoji или имя) |
+| `icon` | string | Имя иконки из встроенного Lucide-набора shell |
 | `requires` | string[] | Жёзкие capability-зависимости |
 | `optionalRequires` | string[] | Мягкие capability-зависимости |
 | `frontend` | object | `{ "entry": "path/to/index.js", "style": "path/to/style.css" }` |
@@ -180,6 +180,8 @@ foreach plugin:
 
 Плагины могут регистрировать UI contributions через поле `contributes` в `plugin.json`.
 
+Icon fields use shell icon names rendered through the bundled Lucide SVG wrapper. Plugins must not rely on emoji, Unicode pictographs, or system icon fonts; if a plugin needs its own icon font, it must bundle the font and reference it from its own frontend bundle.
+
 ### Реализованные contribution points (Milestone 5a)
 
 | Тип | Поле manifest | Описание | Frontend host |
@@ -210,7 +212,7 @@ foreach plugin:
       {
         "id": "mypanel.sidebar",
         "title": "My Panel",
-        "icon": "📌",
+        "icon": "puzzle",
         "view": "mypanel.view",
         "position": 100
       }
@@ -219,7 +221,7 @@ foreach plugin:
       {
         "id": "mypanel.view",
         "title": "My Panel View",
-        "icon": "📌",
+        "icon": "puzzle",
         "component": "MyPanelComponent"
       }
     ],
@@ -234,7 +236,7 @@ foreach plugin:
       {
         "id": "mypanel.cmd",
         "title": "Do Something",
-        "icon": "⚡",
+        "icon": "gear",
         "handler": "doSomething"
       }
     ]
@@ -717,12 +719,13 @@ Vault plugin state хранится **внутри vault** в `.verstak/plugins.
 │ │          │                                       │ │
 │ │ Verstak  │ PluginManager | ViewContainer         │ │
 │ │          │                                       │ │
-│ │ 🧩 Plugin│ (padding: 1.5rem)                    │ │
+│ │ [icon]   │ (padding: 1.5rem)                    │ │
+│ │ Plugin   │                                      │ │
 │ │   Manager│                                       │ │
 │ │          │                                       │ │
 │ │ Plugins  │                                       │ │
-│ │ 📌 item1 │                                       │ │
-│ │ 📌 item2 │                                       │ │
+│ │ [icon] item1                                    │ │
+│ │ [icon] item2                                    │ │
 │ │          │                                       │ │
 │ │ ● Vault  │                                       │ │
 │ └──────────┴──────────────────────────────────────┘ │
@@ -759,6 +762,7 @@ Workspace — центральная модель Верстака вокруг 
 | `parentId` | string | ID родителя (пусто для root) |
 | `type` | space/case/folder | Тип ноды |
 | `title` | string | Название |
+| `path` | string | Vault-relative папка ноды |
 | `status` | active/sleeping/archived | Жизненный цикл |
 | `tags` | string[] | Теги |
 | `order` | int | Порядок среди siblings |
@@ -767,7 +771,20 @@ Workspace — центральная модель Верстака вокруг 
 
 ### Хранение
 
-`<vault>/.verstak/workspace.json` — атомарная запись (temp + rename).
+`<vault>/.verstak/workspace.json` — атомарная запись metadata (temp + rename).
+Каждая workspace node также имеет user-visible folder inside vault. `path`
+хранит canonical vault-relative folder path. Имена папок читаемые: берутся из
+title, очищаются от запрещённых символов, сохраняют Unicode/кириллицу, а при
+коллизии получают suffix ` (2)`, ` (3)`, ...
+
+Пример:
+
+```
+<vault>/
+  My Workspace/
+    Test/
+    test/
+```
 
 ### API
 
@@ -786,8 +803,15 @@ Workspace — центральная модель Верстака вокруг 
 ### Правила
 
 - Root node создаётся при создании vault
+- Для каждой node создаётся обычная папка внутри vault
+- WorkspaceItems получают выбранную node и `workspaceRootPath`; Files plugin
+  показывает именно эту папку, а не общий root vault
 - Порядок children стабилен (sort by order)
 - Нельзя переместить ноду в себя или в своего потомка
+- `MoveWorkspaceNode` переносит physical folder subtree and updates descendant
+  paths
+- `RenameWorkspaceNode` меняет display title; physical folder rename/UI для этого
+  остаётся отдельным действием
 - Архивирование — soft delete (status = archived)
 - Corrupt JSON → backup + defaults
 

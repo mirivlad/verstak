@@ -154,9 +154,9 @@
       status: 'initialized',
       currentNodeId: 'case-alpha',
       nodes: [
-        { id: 'space-main', parentId: '', type: 'space', title: 'Main Space', status: 'active', order: 1 },
-        { id: 'case-alpha', parentId: 'space-main', type: 'case', title: 'Alpha Case', status: 'active', order: 1 },
-        { id: 'case-beta', parentId: 'space-main', type: 'case', title: 'Beta Case', status: 'active', order: 2 }
+        { id: 'space-main', parentId: '', type: 'space', title: 'Main Space', path: 'Main Space', status: 'active', order: 1 },
+        { id: 'case-alpha', parentId: 'space-main', type: 'case', title: 'Alpha Case', path: 'Main Space/Alpha Case', status: 'active', order: 1 },
+        { id: 'case-beta', parentId: 'space-main', type: 'case', title: 'Beta Case', path: 'Main Space/Beta Case', status: 'active', order: 2 }
       ]
     };
   }
@@ -176,7 +176,12 @@
       'Docs/todo.txt': { type: 'file', content: 'Buy groceries\nWrite tests', modifiedAt: new Date().toISOString() },
       'Docs/readme.md': { type: 'file', content: '# Hello World\n\nThis is a **test** document.\n\n- item 1\n- item 2', modifiedAt: new Date().toISOString() },
       'Notes': { type: 'folder', modifiedAt: new Date().toISOString() },
-      'Notes/Overview.md': { type: 'file', content: '# Notes Overview\n\nMy notes content here.', modifiedAt: new Date().toISOString() }
+      'Notes/Overview.md': { type: 'file', content: '# Notes Overview\n\nMy notes content here.', modifiedAt: new Date().toISOString() },
+      'Main Space': { type: 'folder', modifiedAt: new Date().toISOString() },
+      'Main Space/Alpha Case': { type: 'folder', modifiedAt: new Date().toISOString() },
+      'Main Space/Alpha Case/alpha-only.txt': { type: 'file', content: 'alpha file', modifiedAt: new Date().toISOString() },
+      'Main Space/Beta Case': { type: 'folder', modifiedAt: new Date().toISOString() },
+      'Main Space/Beta Case/beta-only.txt': { type: 'file', content: 'beta file', modifiedAt: new Date().toISOString() }
     };
   }
 
@@ -379,6 +384,12 @@
       '(function(){',
       'var DefaultEditor={',
       'mount:function(c,p,api){',
+      'if(!document.getElementById("mock-default-editor-styles")){',
+      'var style=document.createElement("style");',
+      'style.id="mock-default-editor-styles";',
+      'style.textContent=".de-root{display:flex;flex-direction:column;height:100%;min-height:0;overflow:hidden}.de-toolbar{display:flex;align-items:center;gap:.5rem;padding:.5rem .75rem;border-bottom:1px solid #16213e;flex-shrink:0;background:#12122a}.de-toolbar-mode{font-size:.75rem;color:#4ecca3;padding:.15rem .5rem;border-radius:3px;background:#1a2a3a}.de-toolbar-context{font-size:.7rem;color:#8b8ba8}.de-editor-wrap{flex:1;display:flex;min-height:0;overflow:hidden}.de-textarea{flex:1;width:100%;height:100%;resize:none;border:0;outline:0;padding:.75rem;font-family:monospace;font-size:.85rem;line-height:1.6;background:#0d0d1a;color:#e0e0e0}.de-preview{flex:1;height:100%;padding:.75rem 1rem;overflow-y:auto;background:#0d0d1a;line-height:1.7;font-size:.9rem}.de-notes-badge{font-size:.65rem;padding:.1rem .4rem;border-radius:3px;background:#2a1a3a;color:#b388ff}";',
+      'document.head.appendChild(style);',
+      '}',
       'c.innerHTML="";',
       'c.className="de-root";',
       'var req=p.request||{};',
@@ -442,13 +453,14 @@
       "c.innerHTML='';",
       "c.className='files-root';",
       "c.setAttribute('data-plugin-id','verstak.files');",
+      "var root=String((p&&(p.workspaceRootPath||(p.workspaceNode&&p.workspaceNode.path)))||'').split('/').filter(Boolean).join('/');",
       "var list=document.createElement('div');",
       "list.className='files-list';",
       "list.setAttribute('data-files-list','');",
       "c.appendChild(list);",
       "function load(){",
       "list.textContent='Loading...';",
-      "api.files.list('').then(function(entries){",
+      "api.files.list(root).then(function(entries){",
       "list.innerHTML='';",
       "if(!entries||!entries.length){list.textContent='Empty folder';return;}",
       "entries.forEach(function(e){",

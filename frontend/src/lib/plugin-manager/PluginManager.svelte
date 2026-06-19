@@ -268,7 +268,7 @@
     <div class="loading">Scanning plugin directories...</div>
   {:else if error}
     <div class="error">
-      <Icon name="warning" size={24} className="error-icon" />
+      <Icon name="warning" size={24} class="error-icon" />
       <div class="error-message">{error}</div>
       <button class="retry-btn" on:click={loadAll} type="button">⟳ Retry</button>
     </div>
@@ -454,7 +454,7 @@
     padding: 2rem; text-align: center; color: #a0a0b8;
   }
   .error { color: #e94560; }
-  .error-icon { color: #e94560; margin-bottom: 0.5rem; }
+  :global(.error-icon) { color: #e94560; margin-bottom: 0.5rem; }
   .error-message {
     font-family: monospace; font-size: 0.85rem; margin-bottom: 1rem; word-break: break-word;
   }

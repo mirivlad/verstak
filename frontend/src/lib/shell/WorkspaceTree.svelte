@@ -7,6 +7,7 @@
 <script>
   import { onMount } from 'svelte';
   import * as App from '../../../wailsjs/go/api/App';
+  import Icon from '../ui/Icon.svelte';
 
   export let nodes = [];
   export let node = null;
@@ -66,11 +67,11 @@
     return nodes.some(n => n.parentId === id);
   }
 
-  function icon(type) {
-    if (type === 'space') return '\u{1F310}';
-    if (type === 'case') return '\u{1F4CB}';
-    if (type === 'folder') return '\u{1F4C1}';
-    return '\u{1F4C4}';
+  function iconName(type) {
+    if (type === 'space') return 'space';
+    if (type === 'case') return 'case';
+    if (type === 'folder') return 'folder';
+    return 'dot';
   }
 
   async function selectNode(id) {
@@ -121,7 +122,7 @@
       <div class="wt-error">{localError}</div>
     {:else}
       {#each roots() as node (node.id)}
-        <svelte:self {node} {nodes} {currentNodeId} {expandedNodes} depth={1} {icon} {toggle} {hasKids} {selectNode} {openCreate} />
+        <svelte:self {node} {nodes} {currentNodeId} {expandedNodes} depth={1} {toggle} {hasKids} {selectNode} {openCreate} />
       {/each}
     {/if}
 
@@ -129,7 +130,7 @@
       <div class="wt-create">
         <div class="wt-create-header">
           <span>New {newNodeType}</span>
-          <button class="wt-btn" on:click={cancelCreate} type="button">\u2715</button>
+          <button class="wt-btn" on:click={cancelCreate} type="button">x</button>
         </div>
         <input type="text" bind:value={newNodeTitle} placeholder="Name..." disabled={creating} />
         <div class="wt-create-actions">
@@ -143,11 +144,13 @@
   <div class="wt-node" class:selected={node.id === $activeWorkspaceNodeId} class:archived={node.status === 'archived'} class:sleeping={node.status === 'sleeping'}>
     <div class="wt-row" style="padding-left: {depth * 1.0 + 0.4}rem;">
       {#if hasKids(node.id)}
-        <button class="wt-expand" on:click={() => toggle(node.id)} type="button">{expandedNodes[node.id] ? '\u25BE' : '\u25B8'}</button>
+        <button class="wt-expand" on:click={() => toggle(node.id)} type="button" aria-label={expandedNodes[node.id] ? 'Collapse' : 'Expand'}>
+          <Icon name={expandedNodes[node.id] ? 'chevronDown' : 'chevronRight'} size={12} class="wt-expand-icon" />
+        </button>
       {:else}
         <span class="wt-expand-spacer"></span>
       {/if}
-      <span class="wt-icon">{icon(node.type)}</span>
+      <span class="wt-icon"><Icon name={iconName(node.type)} size={13} class="wt-node-icon" /></span>
       <button class="wt-label" on:click={() => selectNode(node.id)} type="button">{node.title}</button>
       {#if node.type !== 'case'}
         <button class="wt-btn wt-btn-small" on:click={() => openCreate(node.id, 'case')} title="Add child" type="button">+</button>
@@ -155,7 +158,7 @@
     </div>
     {#if expandedNodes[node.id]}
       {#each childrenOf(node.id) as child (child.id)}
-        <svelte:self node={child} {nodes} {currentNodeId} {expandedNodes} depth={depth + 1} {icon} {toggle} {hasKids} {selectNode} {openCreate} />
+        <svelte:self node={child} {nodes} {currentNodeId} {expandedNodes} depth={depth + 1} {toggle} {hasKids} {selectNode} {openCreate} />
       {/each}
     {/if}
   </div>
@@ -178,7 +181,8 @@
   .wt-expand { width: 1rem; height: 1rem; min-height: 0; display: flex; align-items: center; justify-content: center; font-size: 0.65rem; color: #666; background: none; border: none; cursor: pointer; padding: 0; flex-shrink: 0; }
   .wt-expand:hover { color: #e0e0f0; }
   .wt-expand-spacer { width: 1rem; flex-shrink: 0; }
-  .wt-icon { font-size: 0.8rem; flex-shrink: 0; }
+  .wt-icon { width: 0.9rem; height: 0.9rem; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; color: #a0a0b8; }
+  :global(.wt-node-icon), :global(.wt-expand-icon) { display: block; }
   .wt-label { flex: 1; min-height: 0; justify-content: flex-start; background: none; border: none; color: #e0e0f0; font-size: 0.78rem; text-align: left; cursor: pointer; padding: 0.1rem 0.2rem; border-radius: 3px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .wt-label:hover { color: #4ecca3; }
   .wt-node.archived .wt-label { text-decoration: line-through; opacity: 0.5; }

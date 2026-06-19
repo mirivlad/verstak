@@ -61,11 +61,45 @@ func TestCreateNode_Case(t *testing.T) {
 	if node.Status != StatusActive {
 		t.Errorf("status: got %s, want %s", node.Status, StatusActive)
 	}
+	if node.Path != filepath.Join("My Workspace", "Test Case") {
+		t.Errorf("path: got %q, want %q", node.Path, filepath.Join("My Workspace", "Test Case"))
+	}
+	if _, err := os.Stat(filepath.Join(vaultDir, node.Path)); err != nil {
+		t.Fatalf("expected workspace folder to exist: %v", err)
+	}
 
 	// Verify persisted
 	tree := m.GetTree()
 	if len(tree.Nodes) != 2 {
 		t.Errorf("expected 2 nodes, got %d", len(tree.Nodes))
+	}
+}
+
+func TestCreateNode_DuplicateTitlesGetUniquePaths(t *testing.T) {
+	dir := t.TempDir()
+	vaultDir := filepath.Join(dir, "vault")
+	os.MkdirAll(filepath.Join(vaultDir, ".verstak"), 0o755)
+
+	m := NewManager(vaultDir)
+	if err := m.Load(); err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+
+	rootID := m.GetTree().Nodes[0].ID
+	first, err := m.CreateNode(rootID, TypeCase, "SameName")
+	if err != nil {
+		t.Fatalf("CreateNode first: %v", err)
+	}
+	second, err := m.CreateNode(rootID, TypeCase, "SameName")
+	if err != nil {
+		t.Fatalf("CreateNode second: %v", err)
+	}
+
+	if first.Path == second.Path {
+		t.Fatalf("expected unique paths, got %q", first.Path)
+	}
+	if second.Path != filepath.Join("My Workspace", "SameName (2)") {
+		t.Errorf("second path: got %q, want %q", second.Path, filepath.Join("My Workspace", "SameName (2)"))
 	}
 }
 
@@ -146,6 +180,12 @@ func TestMoveNode(t *testing.T) {
 	if moved.ParentID != folder.ID {
 		t.Errorf("parentID: got %q, want %q", moved.ParentID, folder.ID)
 	}
+	if moved.Path != filepath.Join("My Workspace", "Folder", "Case") {
+		t.Errorf("path: got %q, want %q", moved.Path, filepath.Join("My Workspace", "Folder", "Case"))
+	}
+	if _, err := os.Stat(filepath.Join(vaultDir, moved.Path)); err != nil {
+		t.Fatalf("expected moved folder to exist: %v", err)
+	}
 }
 
 func TestMoveNode_CannotMoveIntoSelf(t *testing.T) {
@@ -162,6 +202,27 @@ func TestMoveNode_CannotMoveIntoSelf(t *testing.T) {
 	err := m.MoveNode(node.ID, node.ID)
 	if err == nil {
 		t.Error("expected error when moving node into itself")
+	}
+}
+
+func TestMoveNode_SameParentKeepsPath(t *testing.T) {
+	dir := t.TempDir()
+	vaultDir := filepath.Join(dir, "vault")
+	os.MkdirAll(filepath.Join(vaultDir, ".verstak"), 0o755)
+
+	m := NewManager(vaultDir)
+	m.Load()
+
+	rootID := m.GetTree().Nodes[0].ID
+	node, _ := m.CreateNode(rootID, TypeCase, "Case")
+
+	if err := m.MoveNode(node.ID, rootID); err != nil {
+		t.Fatalf("MoveNode: %v", err)
+	}
+
+	moved, _ := m.GetNode(node.ID)
+	if moved.Path != node.Path {
+		t.Errorf("path changed on same-parent move: got %q, want %q", moved.Path, node.Path)
 	}
 }
 
