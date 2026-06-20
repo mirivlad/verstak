@@ -750,51 +750,104 @@ Vault plugin state хранится **внутри vault** в `.verstak/plugins.
 - `./scripts/smoke-platform.sh` — ✅ (enable/disable/plugins.json)
 - `./scripts/build.sh` — ✅
 
-## Workspace / Cases Core Capability
+## Workspace Core Capability
 
-Workspace — центральная модель Верстака вокруг "дел". Это НЕ notes/files — это фундамент.
-
-### Ноды
-
-| Поле | Тип | Описание |
-|------|-----|----------|
-| `id` | UUID | Стабильный идентификатор |
-| `parentId` | string | ID родителя (пусто для root) |
-| `type` | space/case/folder | Тип ноды |
-| `title` | string | Название |
-| `path` | string | Vault-relative папка ноды |
-| `status` | active/sleeping/archived | Жизненный цикл |
-| `tags` | string[] | Теги |
-| `order` | int | Порядок среди siblings |
-| `createdAt` | RFC3339Nano | Создан |
-| `updatedAt` | RFC3339Nano | Обновлён |
-
-### Хранение
-
-`<vault>/.verstak/workspace.json` — атомарная запись metadata (temp + rename).
-Каждая workspace node также имеет user-visible folder inside vault. `path`
-хранит canonical vault-relative folder path. Имена папок читаемые: берутся из
-title, очищаются от запрещённых символов, сохраняют Unicode/кириллицу, а при
-коллизии получают suffix ` (2)`, ` (3)`, ...
+Workspace — это физическая папка верхнего уровня внутри vault root. Filesystem
+является source of truth для списка workspaces.
 
 Пример:
 
 ```
 <vault>/
-  My Workspace/
-    Test/
-    test/
+  Workspace/
+    Notes/
+      Overview.md
+  Project/
+  ClientA/
+  .verstak/
 ```
+
+Нет единого `<vault>/Workspace/` контейнера для всех workspaces. Папка
+`Workspace/` может быть обычным workspace, но `Project/` и `ClientA/` являются
+такими же workspace на том же уровне.
+
+### Хранение
+
+Workspace existence/list хранится только в filesystem:
+
+- `ListWorkspaces()` читает top-level directories из vault root.
+- `.verstak`, reserved/internal directories, top-level files и symlinks не
+  считаются workspaces.
+- `.verstak/workspace*.json` не является source of truth для списка workspaces.
+- Нет persisted workspace path mapping и нет virtual workspace tree, которое
+  мапится на произвольные папки.
+
+`.verstak` может хранить только metadata, которая не заменяет filesystem:
+
+- UI state: selected workspace, expanded folders, sort/pin state, preferences.
+- Semantic snapshot: applied template snapshot, enabled feature areas, folder
+  conventions.
+
+Template snapshot копируется в metadata при создании workspace. Workspace
+identity при этом остаётся именем top-level folder; `metadata.workspaceName`
+является presentation/snapshot field, not canonical identity. Если сохранённое
+значение расходится с именем папки, runtime возвращает canonical `workspaceName`
+равным имени папки без filesystem side effects.
+
+```json
+{
+  "workspaceName": "Project",
+  "createdFromTemplate": {
+    "templateId": "client-project",
+    "templateName": "Client Project",
+    "templateVersion": 1,
+    "appliedAt": "2026-06-19T12:00:00Z"
+  },
+  "features": {
+    "notes": true,
+    "files": true,
+    "secrets": true,
+    "activity": false
+  },
+  "folders": {
+    "notes": "Notes",
+    "files": "Files",
+    "secrets": "Secrets"
+  }
+}
+```
+
+Если original template удалён или изменён позже, существующий workspace
+открывается по сохранённому snapshot и не мутирует автоматически. Template
+update/migration может быть только явной future feature. Если metadata
+отсутствует, workspace открывается как generic workspace минимум с `files: true`.
 
 ### API
 
-- `GetWorkspaceTree()` — полное дерево
-- `CreateWorkspaceNode(parentID, type, title)` — создать
-- `RenameWorkspaceNode(id, title)` — переименовать
-- `MoveWorkspaceNode(id, newParentID)` — переместить
-- `ArchiveWorkspaceNode(id)` — архивировать
-- `SetCurrentWorkspaceNode(id)` — выбрать текущую
-- `GetCurrentWorkspaceNode()` — получить текущую
+- `ListWorkspaces()` — список top-level physical folders.
+- `CreateWorkspace(name, templateId?)` — создать `<vault>/<name>/`, применить
+  template один раз, сохранить snapshot metadata.
+- `RenameWorkspace(oldName, newName)` — физически переименовать top-level folder
+  и обновить metadata key/name.
+- `TrashWorkspace(name)` — перенести весь top-level workspace folder в internal
+  trash policy.
+- `GetWorkspaceMetadata(name)` — прочитать metadata или вернуть generic fallback.
+- `UpdateWorkspaceMetadata(name, patch)` — обновить metadata без влияния на
+  существование workspace.
+
+Deprecated compatibility APIs:
+
+- `GetWorkspaceTree()` — flat view, derived from top-level folders. Не дерево.
+- `CreateWorkspaceNode(...)` — wrapper over `CreateWorkspace`.
+- `RenameWorkspaceNode(...)` — wrapper over `RenameWorkspace`.
+- `ArchiveWorkspaceNode(...)` — wrapper over `TrashWorkspace`.
+- `MoveWorkspaceNode(...)` — unsupported; old nested/mapped moves are rejected.
+- `GetCurrentWorkspaceNode()` / `SetCurrentWorkspaceNode(...)` — wrappers over
+  selected top-level workspace UI state.
+
+Эти методы существуют только для постепенного frontend/Wails cleanup. Они не
+должны создавать или сохранять nested workspace tree и не должны восстанавливать
+`WorkspaceNode.path` mapping.
 
 ### Capability
 
@@ -802,28 +855,16 @@ title, очищаются от запрещённых символов, сохр
 
 ### Правила
 
-- Root node создаётся при создании vault
-- Для каждой node создаётся обычная папка внутри vault
-- WorkspaceItems получают выбранную node и `workspaceRootPath`; Files plugin
-  показывает именно эту папку, а не общий root vault
-- Порядок children стабилен (sort by order)
-- Нельзя переместить ноду в себя или в своего потомка
-- `MoveWorkspaceNode` переносит physical folder subtree and updates descendant
-  paths
-- `RenameWorkspaceNode` меняет display title; physical folder rename/UI для этого
-  остаётся отдельным действием
-- Архивирование — soft delete (status = archived)
-- Corrupt JSON → backup + defaults
-
-### Типы нод
-
-| Тип | Назначение |
-|-----|-----------|
-| `space` | Рабочее пространство (root) |
-| `case` | Дело |
-| `folder` | Папка |
-
-НЕ добавляются: note, file, action, secret, worklog, link — это плагины.
+- Workspace name — один safe folder name, не path.
+- Reject: empty, slash, backslash, absolute-looking paths, `..`, null byte,
+  `.verstak`, reserved/internal names, symlink workspaces, conflicts.
+- WorkspaceItems получают `workspaceRootPath`, равный имени top-level папки
+  (`Project`, `ClientA`, etc). Files plugin показывает именно эту папку.
+- Files API остаётся raw vault-relative API: `Project/Notes/Overview.md`,
+  `Project/docs/file.md`, `Test/readme.md`.
+- Notes are ordinary Markdown files under `<workspace>/Notes/`; нет
+  `.verstak/notes`, UUID note storage или второго source of truth для note
+  content.
 
 ### Lifecycle Events
 
@@ -837,11 +878,11 @@ title, очищаются от запрещённых символов, сохр
 
 ### UI
 
-WorkspaceTree в sidebar:
-- Дерево с expand/collapse
-- Создание case/folder
-- Выбор текущей ноды
-- Индикатор статуса (active/archived/sleeping)
+Workspace list в sidebar:
+- Flat list of top-level workspace folders.
+- Create workspace, rename workspace, trash workspace.
+- Selection is stored as selected workspace name.
+- No expand/collapse workspace tree and no case/folder node creation in core.
 
 ---
 

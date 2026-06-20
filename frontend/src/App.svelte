@@ -22,7 +22,7 @@
   let openedResource = null;
 
   let workspaceNodes = [];
-  let currentWorkspaceNodeId = '';
+  let selectedWorkspaceName = '';
 
   function flog(msg) {
     App.WriteFrontendLog('App', msg);
@@ -95,11 +95,11 @@
     currentView = 'workbench';
   }
 
-  function onWorkspaceNodeSelected(e) {
-    debug.log('[App] onWorkspaceNodeSelected:', e.detail?.nodeId);
-    currentWorkspaceNodeId = e.detail?.nodeId || '';
+  function onWorkspaceSelected(e) {
+    debug.log('[App] onWorkspaceSelected:', e.detail?.workspaceName);
+    selectedWorkspaceName = e.detail?.workspaceName || '';
     workspaceNodes = e.detail?.nodes || workspaceNodes;
-    if (currentWorkspaceNodeId) {
+    if (selectedWorkspaceName) {
       currentView = 'workspace';
     }
   }
@@ -118,7 +118,7 @@
     window.addEventListener('verstak:open-settings', onOpenSettings);
     window.addEventListener('verstak:close-settings', onCloseSettings);
     window.addEventListener('verstak:workbench-opened', onWorkbenchOpened);
-    window.addEventListener('verstak:workspace-node-selected', onWorkspaceNodeSelected);
+    window.addEventListener('verstak:workspace-selected', onWorkspaceSelected);
   }
 
   onMount(() => { checkVault(); });
@@ -140,7 +140,7 @@
       {:else if currentView === 'workbench'}
         <WorkbenchHost {openedResource} />
       {:else if currentView === 'workspace'}
-        <WorkspaceHost currentNodeId={currentWorkspaceNodeId} nodes={workspaceNodes} />
+        <WorkspaceHost selectedWorkspaceName={selectedWorkspaceName} nodes={workspaceNodes} />
       {:else}
         <ViewContainer {activeView} {activeViewPluginId} />
       {/if}

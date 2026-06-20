@@ -2,15 +2,16 @@
   import PluginBundleHost from '../plugin-host/PluginBundleHost.svelte';
   import * as App from '../../../wailsjs/go/api/App';
 
-  export let currentNodeId = '';
+  export let selectedWorkspaceName = '';
   export let nodes = [];
 
   let contributions = {};
   let plugins = [];
   let workspaceTools = [];
 
-  $: currentNode = nodes.find(n => n.id === currentNodeId) || null;
-  $: if (currentNodeId) loadTools();
+  $: selectedWorkspace = nodes.find(n => n.id === selectedWorkspaceName || n.name === selectedWorkspaceName || n.rootPath === selectedWorkspaceName) || null;
+  $: workspaceRootPath = selectedWorkspace?.rootPath || selectedWorkspace?.name || selectedWorkspace?.id || '';
+  $: if (selectedWorkspaceName) loadTools();
 
   async function loadTools() {
     try {
@@ -33,10 +34,10 @@
 </script>
 
 <div class="workspace-host">
-  {#if currentNode}
+  {#if selectedWorkspace}
     <div class="workspace-header">
-      <span class="workspace-title">{currentNode.title}</span>
-      <span class="workspace-type">{currentNode.type}</span>
+      <span class="workspace-title">{selectedWorkspace.title}</span>
+      <span class="workspace-type">{selectedWorkspace.type}</span>
     </div>
 
     {#if workspaceTools.length > 0}
@@ -51,7 +52,7 @@
               <PluginBundleHost
                 pluginId={tool.pluginId}
                 componentId={tool.component}
-                componentProps={{ workspaceNodeId: currentNodeId, workspaceNode: currentNode, workspaceRootPath: currentNode.path || '' }}
+                componentProps={{ workspaceName: selectedWorkspaceName, workspaceNodeId: selectedWorkspaceName, workspaceNode: selectedWorkspace, workspaceRootPath }}
               />
             </div>
           </div>

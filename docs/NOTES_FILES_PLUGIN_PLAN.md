@@ -15,7 +15,7 @@ Already available:
 
 - Plugin discovery, lifecycle, settings, capabilities, bundled commands, and
   bundled frontend events.
-- Workspace tree APIs for `space`, `case`, and `folder`.
+- Workspace lifecycle APIs for top-level physical folders under the vault root.
 - Plugin-owned internal storage directories:
   `.verstak/plugin-data/<pluginId>`, `.verstak/plugin-settings/<pluginId>`, and
   `.verstak/plugin-cache/<pluginId>`.
@@ -54,11 +54,11 @@ Canonical rules:
 
 Canonical scoped paths:
 
-- Workspace/root overview notes live under `<workspace-node-path>/Notes/`.
-- Case/project/folder scoped notes live under `<workspace-node-path>/Notes/`.
-- The default overview note is `<workspace-node-path>/Notes/Overview.md`.
-- `workspace-node-path` is a normal vault-relative folder path stored on the
-  workspace node. Files plugin workspace views are scoped to this path.
+- Workspace overview notes live under `<workspace>/Notes/`.
+- The default overview note is `<workspace>/Notes/Overview.md`.
+- `<workspace>` is the top-level physical folder name under the vault root.
+- Files plugin workspace views are scoped with `workspaceRootPath`, which is the
+  selected top-level workspace folder name.
 
 Visibility requirements:
 
@@ -67,10 +67,9 @@ Visibility requirements:
 - External file managers must show the same `.md` files.
 - Outside Verstak, the files must remain useful as normal Markdown.
 
-The workspace tree can remain `space`/`case`/`folder`. Adding `note` as a
-workspace node type is not part of the next milestone because it would require a
-schema migration. The Notes service can index and manage Markdown files inside
-canonical `Notes/` folders without changing workspace node types.
+There is no canonical metadata workspace tree. Adding `note` as a workspace node
+type is not part of the next milestone. The Notes service can index and manage
+Markdown files inside canonical `Notes/` folders under each top-level workspace.
 
 ## Title To Filename Contract
 
@@ -201,8 +200,8 @@ Files owns safe raw vault file access. Notes owns note semantics.
 
 The same physical note must be visible through both APIs:
 
-- Files sees `SomeCase/Notes/Overview.md` as a file.
-- Notes sees `SomeCase/Notes/Overview.md` as a note with title `Overview`.
+- Files sees `Project/Notes/Overview.md` as a file.
+- Notes sees `Project/Notes/Overview.md` as a note with title `Overview`.
 
 There must be no duplicate note content stored in plugin settings, plugin data,
 or a separate `.verstak` note database. Indexes and caches may exist later, but

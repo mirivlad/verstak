@@ -25,6 +25,7 @@
   import Settings from 'lucide-svelte/icons/settings';
   import Shield from 'lucide-svelte/icons/shield';
   import TriangleAlert from 'lucide-svelte/icons/triangle-alert';
+  import Trash2 from 'lucide-svelte/icons/trash-2';
 
   export let name = 'dot';
   export let size = 16;
@@ -43,6 +44,7 @@
     plugin: Plug,
     puzzle: Puzzle,
     space: LayoutGrid,
+    trash: Trash2,
     vault: Shield,
     warning: TriangleAlert,
   };

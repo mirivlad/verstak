@@ -74,12 +74,33 @@ test.describe('E: Plugin Manager layout', () => {
   test('workspace selection keeps exactly one active node', async ({ page }) => {
     const selected = page.locator('.wt-node.selected .wt-label');
     await expect(selected).toHaveCount(1);
-    await expect(selected).toHaveText('Alpha Case');
+    await expect(selected).toHaveText('Project');
 
-    await page.locator('.wt-label').filter({ hasText: 'Beta Case' }).click();
+    await page.locator('.wt-label').filter({ hasText: 'Test' }).click();
 
     await expect(selected).toHaveCount(1);
-    await expect(selected).toHaveText('Beta Case');
+    await expect(selected).toHaveText('Test');
+  });
+
+  test('workspace sidebar creates renames and trashes top-level workspaces', async ({ page }) => {
+    await page.locator('button[title="New workspace"]').click();
+    await page.locator('.wt-create input').fill('ClientA');
+    await page.locator('.wt-btn-primary', { hasText: 'Create' }).click();
+
+    await expect(page.locator('.wt-label').filter({ hasText: 'ClientA' })).toBeVisible();
+
+    const client = page.locator('.wt-node').filter({ hasText: 'ClientA' });
+    await client.locator('button[title="Rename workspace"]').click();
+    await page.locator('.wt-rename').fill('ClientB');
+    await page.locator('button[title="Save rename"]').click();
+
+    await expect(page.locator('.wt-label').filter({ hasText: 'ClientB' })).toBeVisible();
+    await expect(page.locator('.wt-label').filter({ hasText: 'ClientA' })).toHaveCount(0);
+
+    const renamed = page.locator('.wt-node').filter({ hasText: 'ClientB' });
+    await renamed.locator('button[title="Trash workspace"]').click();
+
+    await expect(page.locator('.wt-label').filter({ hasText: 'ClientB' })).toHaveCount(0);
   });
 
   test('shell icons render through bundled Lucide SVG components', async ({ page }) => {
@@ -87,7 +108,7 @@ test.describe('E: Plugin Manager layout', () => {
     await expect(logo).toBeVisible();
     await expect(logo).toHaveClass(/lucide/);
 
-    await page.locator('.wt-label').filter({ hasText: 'Alpha Case' }).click();
+    await page.locator('.wt-label').filter({ hasText: 'Project' }).click();
     const workspaceIcon = page.locator('.wt-node-icon').first();
     await expect(workspaceIcon).toBeVisible();
     await expect(workspaceIcon).toHaveClass(/lucide/);

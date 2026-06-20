@@ -18,6 +18,10 @@ export function CreateVaultFolder(arg1, arg2) {
   return window['go']['api']['App']['CreateVaultFolder'](arg1, arg2);
 }
 
+export function CreateWorkspace(arg1, arg2) {
+  return window['go']['api']['App']['CreateWorkspace'](arg1, arg2);
+}
+
 export function CreateWorkspaceNode(arg1, arg2, arg3) {
   return window['go']['api']['App']['CreateWorkspaceNode'](arg1, arg2, arg3);
 }
@@ -48,6 +52,10 @@ export function GetCapabilities() {
 
 export function GetContributions() {
   return window['go']['api']['App']['GetContributions']();
+}
+
+export function GetCurrentWorkspace() {
+  return window['go']['api']['App']['GetCurrentWorkspace']();
 }
 
 export function GetCurrentWorkspaceNode() {
@@ -94,6 +102,10 @@ export function GetWorkbenchPreferences() {
   return window['go']['api']['App']['GetWorkbenchPreferences']();
 }
 
+export function GetWorkspaceMetadata(arg1) {
+  return window['go']['api']['App']['GetWorkspaceMetadata'](arg1);
+}
+
 export function GetWorkspaceTree() {
   return window['go']['api']['App']['GetWorkspaceTree']();
 }
@@ -104,6 +116,10 @@ export function ListPluginCapabilities(arg1) {
 
 export function ListVaultFiles(arg1, arg2) {
   return window['go']['api']['App']['ListVaultFiles'](arg1, arg2);
+}
+
+export function ListWorkspaces() {
+  return window['go']['api']['App']['ListWorkspaces']();
 }
 
 export function MoveVaultPath(arg1, arg2, arg3, arg4) {
@@ -150,8 +166,16 @@ export function ReloadPlugins() {
   return window['go']['api']['App']['ReloadPlugins']();
 }
 
+export function RenameWorkspace(arg1, arg2) {
+  return window['go']['api']['App']['RenameWorkspace'](arg1, arg2);
+}
+
 export function RenameWorkspaceNode(arg1, arg2) {
   return window['go']['api']['App']['RenameWorkspaceNode'](arg1, arg2);
+}
+
+export function ResetSyncKey() {
+  return window['go']['api']['App']['ResetSyncKey']();
 }
 
 export function SelectDirectory() {
@@ -166,6 +190,10 @@ export function SetCurrentVault(arg1) {
   return window['go']['api']['App']['SetCurrentVault'](arg1);
 }
 
+export function SetCurrentWorkspace(arg1) {
+  return window['go']['api']['App']['SetCurrentWorkspace'](arg1);
+}
+
 export function SetCurrentWorkspaceNode(arg1) {
   return window['go']['api']['App']['SetCurrentWorkspaceNode'](arg1);
 }
@@ -174,8 +202,36 @@ export function SubscribePluginEvent(arg1, arg2) {
   return window['go']['api']['App']['SubscribePluginEvent'](arg1, arg2);
 }
 
+export function SyncConfigure(arg1, arg2, arg3) {
+  return window['go']['api']['App']['SyncConfigure'](arg1, arg2, arg3);
+}
+
+export function SyncDisconnect() {
+  return window['go']['api']['App']['SyncDisconnect']();
+}
+
+export function SyncNow() {
+  return window['go']['api']['App']['SyncNow']();
+}
+
+export function SyncSetInterval(arg1) {
+  return window['go']['api']['App']['SyncSetInterval'](arg1);
+}
+
+export function SyncStatus() {
+  return window['go']['api']['App']['SyncStatus']();
+}
+
+export function SyncTestConnection(arg1, arg2, arg3) {
+  return window['go']['api']['App']['SyncTestConnection'](arg1, arg2, arg3);
+}
+
 export function TrashVaultPath(arg1, arg2) {
   return window['go']['api']['App']['TrashVaultPath'](arg1, arg2);
+}
+
+export function TrashWorkspace(arg1) {
+  return window['go']['api']['App']['TrashWorkspace'](arg1);
 }
 
 export function UpdateAppSettings(arg1) {
@@ -184,6 +240,10 @@ export function UpdateAppSettings(arg1) {
 
 export function UpdateWorkbenchPreferences(arg1) {
   return window['go']['api']['App']['UpdateWorkbenchPreferences'](arg1);
+}
+
+export function UpdateWorkspaceMetadata(arg1, arg2) {
+  return window['go']['api']['App']['UpdateWorkspaceMetadata'](arg1, arg2);
 }
 
 export function WriteFrontendLog(arg1, arg2) {

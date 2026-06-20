@@ -124,7 +124,7 @@
         icon: 'folder',
         provides: ['verstak/files/v1'],
         requires: ['verstak/core/files/v1', 'verstak/core/workbench/v1'],
-        permissions: ['files.read', 'files.write', 'workbench.open', 'ui.register'],
+        permissions: ['files.read', 'files.write', 'files.delete', 'workbench.open', 'ui.register'],
         frontend: { entry: 'frontend/dist/index.js' },
     contributes: {
       views: [{ id: 'verstak.files.view', title: 'Files', icon: 'folder', component: 'FilesView' }],
@@ -152,11 +152,10 @@
   function makeDefaultWorkspaceTree() {
     return {
       status: 'initialized',
-      currentNodeId: 'case-alpha',
+      currentNodeId: 'Project',
       nodes: [
-        { id: 'space-main', parentId: '', type: 'space', title: 'Main Space', path: 'Main Space', status: 'active', order: 1 },
-        { id: 'case-alpha', parentId: 'space-main', type: 'case', title: 'Alpha Case', path: 'Main Space/Alpha Case', status: 'active', order: 1 },
-        { id: 'case-beta', parentId: 'space-main', type: 'case', title: 'Beta Case', path: 'Main Space/Beta Case', status: 'active', order: 2 }
+        { id: 'Project', parentId: '', type: 'space', title: 'Project', name: 'Project', rootPath: 'Project', status: 'active', order: 1 },
+        { id: 'Test', parentId: '', type: 'space', title: 'Test', name: 'Test', rootPath: 'Test', status: 'active', order: 2 }
       ]
     };
   }
@@ -169,6 +168,16 @@
     };
   }
 
+  function listWorkspacesFromTree() {
+    return workspaceTree.nodes
+      .filter(function (n) { return !n.parentId; })
+      .map(function (n) { return { name: n.name || n.id, rootPath: n.rootPath || n.name || n.id }; });
+  }
+
+  function makeWorkspaceNode(name, order) {
+    return { id: name, parentId: '', type: 'space', title: name, name: name, rootPath: name, status: 'active', order: order };
+  }
+
   function makeDefaultVaultFiles() {
     return {
       '': { type: 'folder', modifiedAt: new Date().toISOString() },
@@ -177,11 +186,12 @@
       'Docs/readme.md': { type: 'file', content: '# Hello World\n\nThis is a **test** document.\n\n- item 1\n- item 2', modifiedAt: new Date().toISOString() },
       'Notes': { type: 'folder', modifiedAt: new Date().toISOString() },
       'Notes/Overview.md': { type: 'file', content: '# Notes Overview\n\nMy notes content here.', modifiedAt: new Date().toISOString() },
-      'Main Space': { type: 'folder', modifiedAt: new Date().toISOString() },
-      'Main Space/Alpha Case': { type: 'folder', modifiedAt: new Date().toISOString() },
-      'Main Space/Alpha Case/alpha-only.txt': { type: 'file', content: 'alpha file', modifiedAt: new Date().toISOString() },
-      'Main Space/Beta Case': { type: 'folder', modifiedAt: new Date().toISOString() },
-      'Main Space/Beta Case/beta-only.txt': { type: 'file', content: 'beta file', modifiedAt: new Date().toISOString() }
+      'Project': { type: 'folder', modifiedAt: new Date().toISOString() },
+      'Project/Notes': { type: 'folder', modifiedAt: new Date().toISOString() },
+      'Project/Notes/Overview.md': { type: 'file', content: '# Project Overview\n', modifiedAt: new Date().toISOString() },
+      'Project/project-only.txt': { type: 'file', content: 'project file', modifiedAt: new Date().toISOString() },
+      'Test': { type: 'folder', modifiedAt: new Date().toISOString() },
+      'Test/test-only.txt': { type: 'file', content: 'test file', modifiedAt: new Date().toISOString() }
     };
   }
 
@@ -380,122 +390,275 @@
   }
 
   function defaultEditorBundle() {
-    return [
-      '(function(){',
-      'var DefaultEditor={',
-      'mount:function(c,p,api){',
-      'if(!document.getElementById("mock-default-editor-styles")){',
-      'var style=document.createElement("style");',
-      'style.id="mock-default-editor-styles";',
-      'style.textContent=".de-root{display:flex;flex-direction:column;height:100%;min-height:0;overflow:hidden}.de-toolbar{display:flex;align-items:center;gap:.5rem;padding:.5rem .75rem;border-bottom:1px solid #16213e;flex-shrink:0;background:#12122a}.de-toolbar-mode{font-size:.75rem;color:#4ecca3;padding:.15rem .5rem;border-radius:3px;background:#1a2a3a}.de-toolbar-context{font-size:.7rem;color:#8b8ba8}.de-editor-wrap{flex:1;display:flex;min-height:0;overflow:hidden}.de-textarea{flex:1;width:100%;height:100%;resize:none;border:0;outline:0;padding:.75rem;font-family:monospace;font-size:.85rem;line-height:1.6;background:#0d0d1a;color:#e0e0e0}.de-preview{flex:1;height:100%;padding:.75rem 1rem;overflow-y:auto;background:#0d0d1a;line-height:1.7;font-size:.9rem}.de-notes-badge{font-size:.65rem;padding:.1rem .4rem;border-radius:3px;background:#2a1a3a;color:#b388ff}";',
-      'document.head.appendChild(style);',
-      '}',
-      'c.innerHTML="";',
-      'c.className="de-root";',
-      'var req=p.request||{};',
-      'var path=req.path||"";',
-      'var mode=req.mode||"view";',
-      'var ctx=req.context||{};',
-      'var isNotes=ctx.notesMode||ctx.isInsideNotesFolder;',
-      'var ext=(req.extension||"").toLowerCase();',
-      'var isMd=ext===".md"||ext===".markdown";',
-      'var editorMode=isNotes?"notes-markdown":isMd?"generic-markdown":"text";',
-      'c.setAttribute("data-editor-mode",editorMode);',
-      'c.setAttribute("data-resource-path",path);',
-      'c.setAttribute("data-request-mode",mode);',
-      'var toolbar=document.createElement("div");',
-      'toolbar.className="de-toolbar";',
-      'var modeLabel=document.createElement("span");',
-      'modeLabel.className="de-toolbar-mode";',
-      'modeLabel.textContent=editorMode;',
-      'toolbar.appendChild(modeLabel);',
-      'var pathLabel=document.createElement("span");',
-      'pathLabel.className="de-toolbar-context";',
-      'pathLabel.textContent=path;',
-      'toolbar.appendChild(pathLabel);',
-      'if(isNotes){var badge=document.createElement("span");badge.className="de-notes-badge";badge.textContent="notes context";badge.setAttribute("data-notes-badge","");toolbar.appendChild(badge);}',
-      'c.appendChild(toolbar);',
-      'var content=document.createElement("div");',
-      'content.className="de-editor-wrap";',
-      'content.textContent="Loading...";',
-      'c.appendChild(content);',
-      'api.files.readText(path).then(function(text){',
-      'content.textContent="";',
-      'if(isMd){',
-      'var preview=document.createElement("div");',
-      'preview.className="de-preview";',
-      'preview.setAttribute("data-preview","");',
-      'preview.textContent=text;',
-      'content.appendChild(preview);',
-      '}else{',
-      'var ta=document.createElement("textarea");',
-      'ta.className="de-textarea";',
-      'ta.value=text;',
-      'ta.setAttribute("data-editor-textarea","");',
-      'content.appendChild(ta);',
-      '}',
-      '}).catch(function(err){',
-      'content.textContent="Error: "+(err.message||err);',
-      '});',
-      '},',
-      'unmount:function(c){c.innerHTML="";}',
-      '};',
-      'window.VerstakPluginRegister("verstak.default-editor",{components:{DefaultEditor:DefaultEditor}});',
-      '})();'
-    ].join('\n');
+    return '(' + function () {
+      function e(tag, attrs, children) {
+        var node = document.createElement(tag);
+        attrs = attrs || {};
+        Object.keys(attrs).forEach(function (key) {
+          if (key === 'className') node.className = attrs[key];
+          else if (key.indexOf('on') === 0) node.addEventListener(key.slice(2).toLowerCase(), attrs[key]);
+          else node.setAttribute(key, attrs[key]);
+        });
+        (children || []).forEach(function (child) { node.appendChild(typeof child === 'string' ? document.createTextNode(child) : child); });
+        return node;
+      }
+      function esc(s) { return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+      function renderMarkdown(text) {
+        return String(text || '').split(/\n/).map(function (line) {
+          if (/^#\s+/.test(line)) return '<h1>' + esc(line.replace(/^#\s+/, '')) + '</h1>';
+          if (/^-\s+\[[ x]\]\s+/i.test(line)) return '<ul><li><input type="checkbox" disabled> ' + esc(line.replace(/^-\s+\[[ x]\]\s+/i, '')) + '</li></ul>';
+          if (/^-\s+/.test(line)) return '<ul><li>' + esc(line.replace(/^-\s+/, '')) + '</li></ul>';
+          return line ? '<p>' + esc(line).replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>') + '</p>' : '';
+        }).join('');
+      }
+      function insertAround(ta, before, after, fallback) {
+        var start = ta.selectionStart;
+        var end = ta.selectionEnd;
+        var text = ta.value.slice(start, end) || fallback || '';
+        ta.value = ta.value.slice(0, start) + before + text + after + ta.value.slice(end);
+        ta.selectionStart = start + before.length;
+        ta.selectionEnd = start + before.length + text.length;
+        ta.dispatchEvent(new Event('input', { bubbles: true }));
+      }
+      var DefaultEditor = {
+        mount: function (c, p, api) {
+          if (!document.getElementById('mock-default-editor-styles')) {
+            var style = document.createElement('style');
+            style.id = 'mock-default-editor-styles';
+            style.textContent = '.de-root{display:flex;flex-direction:column;height:100%;min-height:0;overflow:hidden}.de-toolbar,.de-md-toolbar{display:flex;align-items:center;gap:.5rem;padding:.5rem .75rem;border-bottom:1px solid #16213e;background:#12122a;flex-wrap:wrap}.de-toolbar-mode{font-size:.75rem;color:#4ecca3;padding:.15rem .5rem;border-radius:3px;background:#1a2a3a}.de-toolbar-context{font-size:.75rem;color:#8b8ba8}.de-toolbar-spacer{flex:1}.de-toolbar-btn,.de-md-btn{font-size:.75rem;padding:.25rem .6rem;border:1px solid #333;border-radius:4px;background:#1a1a2e;color:#ccc}.de-toolbar-btn.active{border-color:#4ecca3;color:#4ecca3}.de-status.dirty{color:#f39c12}.de-status.saved{color:#4ecca3}.de-editor-wrap{flex:1;display:flex;min-height:0;overflow:hidden}.de-pane{flex:1;display:flex;min-width:0}.de-pane+.de-pane{border-left:1px solid #16213e}.de-lines{padding:.75rem .4rem;background:#0a0a15;color:#555;font-family:monospace;line-height:1.6;white-space:pre}.de-textarea{flex:1;height:100%;resize:none;border:0;outline:0;padding:.75rem;font-family:monospace;font-size:.85rem;line-height:1.6;background:#0d0d1a;color:#e0e0e0}.de-preview{flex:1;padding:1rem;overflow:auto;background:#0d0d1a;color:#ddd}.de-notes-badge{font-size:.65rem;padding:.1rem .4rem;border-radius:3px;background:#2a1a3a;color:#b388ff}';
+            document.head.appendChild(style);
+          }
+          c.innerHTML = '';
+          c.className = 'de-root';
+          var req = p.request || {};
+          var path = req.path || '';
+          var ctx = req.context || {};
+          var isNotes = ctx.notesMode || ctx.isInsideNotesFolder;
+          var ext = (req.extension || '').toLowerCase();
+          var isMd = ext === '.md' || ext === '.markdown';
+          var editorMode = isNotes ? 'notes-markdown' : isMd ? 'generic-markdown' : 'text';
+          var viewMode = isMd && req.mode !== 'edit' ? 'preview' : 'edit';
+          var current = '';
+          var saved = '';
+          var dirty = false;
+          var ta = null;
+          var preview = null;
+          var status = e('span', { className: 'de-status', 'data-save-state': '' }, []);
+          c.setAttribute('data-editor-mode', editorMode);
+          c.setAttribute('data-resource-path', path);
+          c.setAttribute('data-request-mode', req.mode || 'view');
+          var toolbar = e('div', { className: 'de-toolbar' }, [e('span', { className: 'de-toolbar-mode' }, [editorMode]), e('span', { className: 'de-toolbar-context' }, [path])]);
+          if (isNotes) toolbar.appendChild(e('span', { className: 'de-notes-badge', 'data-notes-badge': '' }, ['notes context']));
+          toolbar.appendChild(e('span', { className: 'de-toolbar-spacer' }, []));
+          ['edit', 'preview', 'split'].forEach(function (mode) {
+            if (!isMd) return;
+            toolbar.appendChild(e('button', { className: 'de-toolbar-btn', 'data-editor-mode-button': mode, onClick: function () { viewMode = mode; rebuild(); } }, [mode[0].toUpperCase() + mode.slice(1)]));
+          });
+          toolbar.appendChild(e('button', { className: 'de-toolbar-btn', 'data-editor-action': 'reload', onClick: reload }, ['Reload']));
+          toolbar.appendChild(e('button', { className: 'de-toolbar-btn', onClick: save }, ['Save']));
+          toolbar.appendChild(status);
+          c.appendChild(toolbar);
+          if (isMd) {
+            var md = e('div', { className: 'de-md-toolbar' }, []);
+            [['heading', 'H'], ['bold', 'B'], ['italic', 'I'], ['link', 'Link'], ['code', 'Code'], ['code-block', '```'], ['bullet', 'List'], ['numbered', '1.'], ['quote', 'Quote'], ['task', 'Task']].forEach(function (item) {
+              md.appendChild(e('button', { className: 'de-md-btn', 'data-md-action': item[0], onClick: function () { mdAction(item[0]); } }, [item[1]]));
+            });
+            c.appendChild(md);
+          }
+          var wrap = e('div', { className: 'de-editor-wrap' }, []);
+          c.appendChild(wrap);
+          function setStatus(text, cls) { status.textContent = text; status.className = 'de-status ' + (cls || ''); }
+          function update() { dirty = current !== saved; setStatus(dirty ? 'Modified' : 'Saved', dirty ? 'dirty' : 'saved'); if (preview) preview.innerHTML = renderMarkdown(current); }
+          function makeEditor() {
+            var pane = e('div', { className: 'de-pane' }, []);
+            var lines = e('div', { className: 'de-lines' }, []);
+            ta = e('textarea', { className: 'de-textarea', 'data-editor-textarea': '', spellcheck: 'false' }, []);
+            ta.value = current;
+            function renumber() { lines.textContent = Array.from({ length: ta.value.split('\n').length }, function (_, i) { return i + 1; }).join('\n'); }
+            ta.addEventListener('input', function () { current = ta.value; renumber(); update(); });
+            ta.addEventListener('keydown', function (ev) { if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === 's') { ev.preventDefault(); save(); } if (ev.key === 'Tab') { ev.preventDefault(); insertAround(ta, '  ', '', ''); } });
+            renumber();
+            pane.appendChild(lines);
+            pane.appendChild(ta);
+            return pane;
+          }
+          function makePreview() { preview = e('div', { className: 'de-preview', 'data-preview': '' }, []); preview.innerHTML = renderMarkdown(current); return e('div', { className: 'de-pane' }, [preview]); }
+          function rebuild() {
+            wrap.innerHTML = '';
+            ta = null;
+            preview = null;
+            if (!isMd || viewMode === 'edit' || viewMode === 'split') wrap.appendChild(makeEditor());
+            if (isMd && (viewMode === 'preview' || viewMode === 'split')) wrap.appendChild(makePreview());
+            Array.from(toolbar.querySelectorAll('[data-editor-mode-button]')).forEach(function (btn) { btn.className = 'de-toolbar-btn' + (btn.getAttribute('data-editor-mode-button') === viewMode ? ' active' : ''); });
+            update();
+          }
+          function save() {
+            return api.files.writeText(path, current, { createIfMissing: false, overwrite: true }).then(function () { saved = current; dirty = false; setStatus('Saved', 'saved'); });
+          }
+          function reload() {
+            if (dirty && !window.confirm('Discard unsaved changes and reload from disk?')) return;
+            api.files.readText(path).then(function (text) { current = text || ''; saved = current; dirty = false; rebuild(); });
+          }
+          function mdAction(action) {
+            if (!ta) { viewMode = 'edit'; rebuild(); }
+            if (action === 'heading') insertAround(ta, '# ', '', '');
+            else if (action === 'bold') insertAround(ta, '**', '**', 'bold text');
+            else if (action === 'italic') insertAround(ta, '*', '*', 'italic text');
+            else if (action === 'link') insertAround(ta, '[', '](https://)', 'link text');
+            else if (action === 'code') insertAround(ta, '`', '`', 'code');
+            else if (action === 'code-block') insertAround(ta, '```\n', '\n```', 'code');
+            else if (action === 'bullet') insertAround(ta, '- ', '', 'item');
+            else if (action === 'numbered') insertAround(ta, '1. ', '', 'item');
+            else if (action === 'quote') insertAround(ta, '> ', '', 'quote');
+            else if (action === 'task') insertAround(ta, '- [ ] ', '', 'task');
+          }
+          reload();
+        },
+        unmount: function (c) { c.innerHTML = ''; }
+      };
+      window.VerstakPluginRegister('verstak.default-editor', { components: { DefaultEditor: DefaultEditor } });
+    }.toString() + ')();';
   }
 
   function filesPluginBundle() {
-    return [
-      "(function(){",
-      "var FilesView={",
-      "mount:function(c,p,api){",
-      "c.innerHTML='';",
-      "c.className='files-root';",
-      "c.setAttribute('data-plugin-id','verstak.files');",
-      "var root=String((p&&(p.workspaceRootPath||(p.workspaceNode&&p.workspaceNode.path)))||'').split('/').filter(Boolean).join('/');",
-      "var list=document.createElement('div');",
-      "list.className='files-list';",
-      "list.setAttribute('data-files-list','');",
-      "c.appendChild(list);",
-      "function load(){",
-      "list.textContent='Loading...';",
-      "api.files.list(root).then(function(entries){",
-      "list.innerHTML='';",
-      "if(!entries||!entries.length){list.textContent='Empty folder';return;}",
-      "entries.forEach(function(e){",
-      "if(e.isHidden||e.isReserved)return;",
-      "var item=document.createElement('div');",
-      "item.className='files-item';",
-      "item.setAttribute('data-file-name',e.name);",
-      "item.setAttribute('data-file-type',e.type);",
-      "item.setAttribute('data-file-path',e.relativePath);",
-      "var icon=document.createElement('span');",
-      "icon.className='files-item-icon';",
-      "icon.textContent=e.type==='folder'?'[D]':'[F]';",
-      "var name=document.createElement('span');",
-      "name.className='files-item-name';",
-      "name.textContent=e.name;",
-      "item.appendChild(icon);",
-      "item.appendChild(name);",
-      "if(e.type!=='folder'){",
-      "item.addEventListener('dblclick',function(){",
-      "var ext=e.extension?'.'+e.extension:'';",
-      "var ctx={sourcePluginId:'verstak.files',sourceView:'files'};",
-      "api.workbench.openResource({kind:'vault-file',path:e.relativePath,mode:'view',extension:ext,context:ctx});",
-      "});",
-      "}",
-      "list.appendChild(item);",
-      "});",
-      "}).catch(function(err){list.textContent='Error: '+(err.message||err);});",
-      "}",
-      "load();",
-      "},",
-      "unmount:function(c){c.innerHTML='';}",
-      "};",
-      "window.VerstakPluginRegister('verstak.files',{components:{FilesView:FilesView}});",
-      "})();"
-    ].join('\n');
+    return '(' + function () {
+      function e(tag, attrs, children) {
+        var node = document.createElement(tag);
+        attrs = attrs || {};
+        Object.keys(attrs).forEach(function (key) {
+          if (key === 'className') node.className = attrs[key];
+          else if (key.indexOf('on') === 0) node.addEventListener(key.slice(2).toLowerCase(), attrs[key]);
+          else node.setAttribute(key, attrs[key]);
+        });
+        (children || []).forEach(function (child) { if (child) node.appendChild(typeof child === 'string' ? document.createTextNode(child) : child); });
+        return node;
+      }
+      function clean(path) { return String(path || '').split('/').filter(Boolean).join('/'); }
+      function parent(path) { path = clean(path); var i = path.lastIndexOf('/'); return i < 0 ? '' : path.slice(0, i); }
+      function base(path) { path = clean(path); var i = path.lastIndexOf('/'); return i < 0 ? path : path.slice(i + 1); }
+      function ext(name) { var i = String(name || '').lastIndexOf('.'); return i > 0 ? name.slice(i + 1).toLowerCase() : ''; }
+      var FilesView = {
+        mount: function (c, p, api) {
+          c.innerHTML = '';
+          c.className = 'files-root';
+          c.setAttribute('tabindex', '0');
+          c.setAttribute('data-plugin-id', 'verstak.files');
+          var n = p && p.workspaceNode;
+          var root = clean((p && (p.workspaceRootPath || (n && (n.rootPath || n.name || n.id)))) || '');
+          var workspaceName = root || 'Workspace';
+          var current = '';
+          var entries = [];
+          var selected = '';
+          var filter = '';
+          var sort = 'folder-name';
+          var createMode = '';
+          var renaming = null;
+          function scoped(local) { local = clean(local); return root ? (local ? root + '/' + local : root) : local; }
+          function local(full) { full = clean(full); return root && full.indexOf(root + '/') === 0 ? full.slice(root.length + 1) : full === root ? '' : full; }
+          var toolbar = e('div', { className: 'files-toolbar' }, []);
+          var breadcrumb = e('div', { className: 'files-breadcrumb' }, []);
+          function btn(label, action, fn) { return e('button', { className: 'files-toolbar-btn', 'data-files-action': action, onClick: fn }, [label]); }
+          toolbar.appendChild(breadcrumb);
+          toolbar.appendChild(btn('Up', 'up', function () { if (current) nav(parent(current)); }));
+          toolbar.appendChild(btn('Refresh', 'refresh', load));
+          toolbar.appendChild(btn('+ Folder', 'new-folder', function () { startCreate('folder'); }));
+          toolbar.appendChild(btn('+ Markdown', 'new-markdown', function () { startCreate('markdown'); }));
+          toolbar.appendChild(btn('+ Text', 'new-text', function () { startCreate('text'); }));
+          toolbar.appendChild(btn('Open', 'open', function () { open(entryByPath(selected)); }));
+          toolbar.appendChild(btn('Rename', 'rename', function () { startRename(entryByPath(selected)); }));
+          toolbar.appendChild(btn('Trash', 'trash', function () { trash(entryByPath(selected)); }));
+          var filterInput = e('input', { className: 'files-filter', 'data-files-filter': '', placeholder: 'Filter current folder' }, []);
+          filterInput.addEventListener('input', function () { filter = filterInput.value.toLowerCase(); render(); });
+          toolbar.appendChild(filterInput);
+          var sortSelect = e('select', { className: 'files-sort', 'data-files-sort': '' }, [
+            e('option', { value: 'folder-name' }, ['Folders + name']),
+            e('option', { value: 'name-asc' }, ['Name']),
+            e('option', { value: 'type' }, ['Type']),
+            e('option', { value: 'modified-desc' }, ['Modified']),
+            e('option', { value: 'size-desc' }, ['Size'])
+          ]);
+          sortSelect.addEventListener('change', function () { sort = sortSelect.value; render(); });
+          toolbar.appendChild(sortSelect);
+          c.appendChild(toolbar);
+          var list = e('div', { className: 'files-list', 'data-files-list': '' }, []);
+          c.appendChild(list);
+          var createPanel = e('div', { className: 'files-panel', style: 'display:none' }, []);
+          var createInput = e('input', { className: 'files-create-input', 'data-files-create-input': '' }, []);
+          createPanel.appendChild(createInput);
+          createPanel.appendChild(e('button', { className: 'files-toolbar-btn', 'data-files-create-confirm': '', onClick: confirmCreate }, ['Create']));
+          createPanel.appendChild(e('button', { className: 'files-toolbar-btn', onClick: function () { createPanel.style.display = 'none'; } }, ['Cancel']));
+          c.appendChild(createPanel);
+          var renamePanel = e('div', { className: 'files-panel', style: 'display:none' }, []);
+          var renameInput = e('input', { className: 'files-rename-input', 'data-files-rename-input': '' }, []);
+          renamePanel.appendChild(renameInput);
+          renamePanel.appendChild(e('button', { className: 'files-toolbar-btn', 'data-files-rename-confirm': '', onClick: confirmRename }, ['Rename']));
+          renamePanel.appendChild(e('button', { className: 'files-toolbar-btn', onClick: function () { renamePanel.style.display = 'none'; } }, ['Cancel']));
+          c.appendChild(renamePanel);
+          function entryByPath(path) { return entries.find(function (item) { return item.relativePath === path; }) || null; }
+          function updateBreadcrumb() {
+            breadcrumb.innerHTML = '';
+            breadcrumb.appendChild(e('span', { className: 'files-breadcrumb-item', onClick: function () { nav(''); } }, [workspaceName]));
+            if (current) breadcrumb.appendChild(e('span', { className: 'files-breadcrumb-current' }, [' / ' + current]));
+          }
+          function visible() {
+            return entries.filter(function (item) { return !item.isHidden && !item.isReserved && (!filter || item.name.toLowerCase().indexOf(filter) !== -1); }).sort(function (a, b) {
+              if (sort === 'folder-name') { if (a.type === 'folder' && b.type !== 'folder') return -1; if (a.type !== 'folder' && b.type === 'folder') return 1; }
+              if (sort === 'modified-desc') return new Date(b.modifiedAt || 0) - new Date(a.modifiedAt || 0) || a.name.localeCompare(b.name);
+              if (sort === 'size-desc') return (b.size || 0) - (a.size || 0) || a.name.localeCompare(b.name);
+              if (sort === 'type') return (a.type + (a.extension || '')).localeCompare(b.type + (b.extension || '')) || a.name.localeCompare(b.name);
+              return a.name.localeCompare(b.name);
+            });
+          }
+          function render() {
+            updateBreadcrumb();
+            list.innerHTML = '';
+            list.appendChild(e('div', { className: 'files-header' }, [e('span', {}, ['Name']), e('span', {}, ['Type']), e('span', {}, ['Size']), e('span', {}, ['Modified']), e('span', {}, ['Actions'])]));
+            visible().forEach(function (item) {
+              var row = e('div', { className: 'files-item' + (selected === item.relativePath ? ' selected' : ''), 'data-file-name': item.name, 'data-file-type': item.type, 'data-file-path': item.relativePath, onClick: function () { selected = item.relativePath; render(); }, onDblclick: function () { open(item); } }, []);
+              row.appendChild(e('span', { className: 'files-item-name' }, [item.name]));
+              row.appendChild(e('span', { className: 'files-item-meta' }, [item.type === 'folder' ? 'folder' : (item.extension || ext(item.name) || 'file')]));
+              row.appendChild(e('span', { className: 'files-item-meta' }, [item.size ? String(item.size) : '']));
+              row.appendChild(e('span', { className: 'files-item-meta' }, [item.modifiedAt || '']));
+              row.appendChild(e('span', { className: 'files-row-actions' }, [e('button', { className: 'files-row-btn', onClick: function (ev) { ev.stopPropagation(); open(item); } }, ['Open']), e('button', { className: 'files-row-btn', onClick: function (ev) { ev.stopPropagation(); startRename(item); } }, ['Rename']), e('button', { className: 'files-row-btn', onClick: function (ev) { ev.stopPropagation(); trash(item); } }, ['Trash'])]));
+              list.appendChild(row);
+            });
+          }
+          function load() { selected = ''; api.files.list(scoped(current)).then(function (result) { entries = result || []; render(); }).catch(function (err) { list.textContent = 'Error: ' + (err.message || err); }); }
+          function nav(path) { current = clean(path); load(); }
+          function open(item) {
+            if (!item) return;
+            if (item.type === 'folder') { nav(local(item.relativePath)); return; }
+            var itemExt = item.extension ? '.' + item.extension : (ext(item.name) ? '.' + ext(item.name) : '');
+            var ctx = { sourcePluginId: 'verstak.files', sourceView: 'files' };
+            if ((itemExt === '.md' || itemExt === '.markdown') && local(item.relativePath).split('/')[0] === 'Notes') { ctx.isInsideNotesFolder = true; ctx.notesMode = true; }
+            api.workbench.openResource({ kind: 'vault-file', path: item.relativePath, mode: 'view', extension: itemExt, context: ctx });
+          }
+          function startCreate(mode) { createMode = mode; createInput.value = ''; createPanel.style.display = 'flex'; createInput.focus(); }
+          function confirmCreate() {
+            var name = createInput.value.trim();
+            var mode = createMode;
+            if (!name) return;
+            if (mode === 'markdown' && !/\.(md|markdown)$/i.test(name)) name += '.md';
+            if (mode === 'text' && !/\.[^/.]+$/.test(name)) name += '.txt';
+            var path = scoped(current ? current + '/' + name : name);
+            (mode === 'folder' ? api.files.createFolder(path) : api.files.writeText(path, '', { createIfMissing: true, overwrite: false })).then(function () { createPanel.style.display = 'none'; load(); });
+          }
+          function startRename(item) { if (!item) return; renaming = item; renameInput.value = item.name; renamePanel.style.display = 'flex'; renameInput.focus(); renameInput.select(); }
+          function confirmRename() {
+            if (!renaming) return;
+            var to = parent(renaming.relativePath);
+            to = to ? to + '/' + renameInput.value.trim() : renameInput.value.trim();
+            api.files.move(renaming.relativePath, to, { overwrite: false }).then(function () { renamePanel.style.display = 'none'; renaming = null; load(); });
+          }
+          function trash(item) { if (!item || !window.confirm('Move "' + item.name + '" to trash?')) return; api.files.trash(item.relativePath).then(load); }
+          createInput.addEventListener('keydown', function (ev) { if (ev.key === 'Enter') confirmCreate(); });
+          renameInput.addEventListener('keydown', function (ev) { if (ev.key === 'Enter') confirmRename(); });
+          load();
+        },
+        unmount: function (c) { c.innerHTML = ''; }
+      };
+      window.VerstakPluginRegister('verstak.files', { components: { FilesView: FilesView } });
+    }.toString() + ')();';
   }
 
   function platformTestBundle() {
@@ -780,18 +943,92 @@
       moving.forEach(function (path) { delete vaultFiles[path]; });
       return Promise.resolve([{ originalPath: norm.path, trashPath: trashPath, trashId: trashId, deletedAt: new Date().toISOString() }, '']);
     },
-    GetCurrentWorkspaceNode: function () { return Promise.resolve(null); },
+    ListWorkspaces: function () {
+      return Promise.resolve(listWorkspacesFromTree());
+    },
+    CreateWorkspace: function (name) {
+      var norm = normalizeVaultPath(name, false);
+      if (norm.error || norm.path !== String(name || '').trim() || norm.path.indexOf('/') !== -1) {
+        return Promise.resolve(norm.error || 'invalid-workspace-name');
+      }
+      if (vaultFiles[norm.path]) return Promise.resolve('conflict: ' + norm.path);
+      vaultFiles[norm.path] = { type: 'folder', modifiedAt: new Date().toISOString() };
+      vaultFiles[norm.path + '/Notes'] = { type: 'folder', modifiedAt: new Date().toISOString() };
+      vaultFiles[norm.path + '/Notes/Overview.md'] = { type: 'file', content: '# Overview\n', modifiedAt: new Date().toISOString() };
+      workspaceTree.nodes.push(makeWorkspaceNode(norm.path, workspaceTree.nodes.length + 1));
+      return Promise.resolve({ name: norm.path, rootPath: norm.path });
+    },
+    RenameWorkspace: function (oldName, newName) {
+      var oldNorm = normalizeVaultPath(oldName, false);
+      var newNorm = normalizeVaultPath(newName, false);
+      if (oldNorm.error) return Promise.resolve(oldNorm.error);
+      if (newNorm.error || newNorm.path.indexOf('/') !== -1) return Promise.resolve(newNorm.error || 'invalid-workspace-name');
+      if (!vaultFiles[oldNorm.path]) return Promise.resolve('not-found: ' + oldNorm.path);
+      if (vaultFiles[newNorm.path]) return Promise.resolve('conflict: ' + newNorm.path);
+      Object.keys(vaultFiles).filter(function (path) {
+        return path === oldNorm.path || path.indexOf(oldNorm.path + '/') === 0;
+      }).forEach(function (path) {
+        var suffix = path.slice(oldNorm.path.length);
+        vaultFiles[newNorm.path + suffix] = vaultFiles[path];
+        delete vaultFiles[path];
+      });
+      workspaceTree.nodes = workspaceTree.nodes.map(function (n) {
+        if (n.id !== oldNorm.path) return n;
+        return makeWorkspaceNode(newNorm.path, n.order);
+      });
+      if (workspaceTree.currentNodeId === oldNorm.path) workspaceTree.currentNodeId = newNorm.path;
+      return Promise.resolve('');
+    },
+    TrashWorkspace: function (name) {
+      var norm = normalizeVaultPath(name, false);
+      if (norm.error) return Promise.resolve(norm.error);
+      if (!vaultFiles[norm.path]) return Promise.resolve('not-found: ' + norm.path);
+      Object.keys(vaultFiles).filter(function (path) {
+        return path === norm.path || path.indexOf(norm.path + '/') === 0;
+      }).forEach(function (path) { delete vaultFiles[path]; });
+      workspaceTree.nodes = workspaceTree.nodes.filter(function (n) { return n.id !== norm.path; });
+      if (workspaceTree.currentNodeId === norm.path) workspaceTree.currentNodeId = workspaceTree.nodes[0] ? workspaceTree.nodes[0].id : '';
+      return Promise.resolve({ originalPath: norm.path, trashPath: '.verstak/trash/workspaces/mock/' + norm.path, trashId: 'mock', deletedAt: new Date().toISOString() });
+    },
+    GetWorkspaceMetadata: function (name) {
+      var norm = normalizeVaultPath(name, false);
+      if (norm.error) return Promise.resolve(norm.error);
+      if (!vaultFiles[norm.path]) return Promise.resolve('not-found: ' + norm.path);
+      return Promise.resolve({
+        workspaceName: norm.path,
+        features: { files: true },
+        folders: { notes: 'Notes', files: 'Files' }
+      });
+    },
+    UpdateWorkspaceMetadata: function (name, patch) {
+      return Promise.resolve(Object.assign({ workspaceName: name, features: { files: true }, folders: { notes: 'Notes', files: 'Files' } }, patch || {}));
+    },
+    GetCurrentWorkspace: function () {
+      var found = workspaceTree.nodes.find(function (n) { return n.id === workspaceTree.currentNodeId; });
+      return Promise.resolve(found ? { name: found.name || found.id, rootPath: found.rootPath || found.name || found.id } : null);
+    },
+    GetCurrentWorkspaceNode: function () {
+      var found = workspaceTree.nodes.find(function (n) { return n.id === workspaceTree.currentNodeId; });
+      return Promise.resolve(found ? Object.assign({}, found) : null);
+    },
     GetWorkspaceTree: function () { return Promise.resolve(cloneWorkspaceTree()); },
-    ArchiveWorkspaceNode: function () { return Promise.resolve(''); },
-    CreateWorkspaceNode: function () { return Promise.resolve({}); },
+    ArchiveWorkspaceNode: function (id) { return this.TrashWorkspace(id).then(function (response) { return typeof response === 'string' ? response : ''; }); },
+    CreateWorkspaceNode: function (parentId, nodeType, title) {
+      return this.CreateWorkspace(title, 'default').then(function (response) {
+        if (typeof response === 'string') return { error: response };
+        var ws = response;
+        return makeWorkspaceNode(ws.name, workspaceTree.nodes.length);
+      });
+    },
     MoveWorkspaceNode: function () { return Promise.resolve(''); },
-    RenameWorkspaceNode: function () { return Promise.resolve(''); },
-    SetCurrentWorkspaceNode: function (id) {
+    RenameWorkspaceNode: function (id, title) { return this.RenameWorkspace(id, title); },
+    SetCurrentWorkspace: function (id) {
       var found = workspaceTree.nodes.some(function (n) { return n.id === id; });
-      if (!found) return Promise.resolve('workspace node not found: ' + id);
+      if (!found) return Promise.resolve('workspace not found: ' + id);
       workspaceTree.currentNodeId = id;
       return Promise.resolve('');
     },
+    SetCurrentWorkspaceNode: function (id) { return this.SetCurrentWorkspace(id); },
     SelectDirectory: function () { return Promise.resolve(''); },
     SelectVaultForOpen: function () { return Promise.resolve(''); },
     CreateVault: function () { return Promise.resolve(null); },
@@ -962,7 +1199,7 @@
             icon: 'folder',
             provides: ['verstak/files/v1'],
             requires: ['verstak/core/files/v1', 'verstak/core/workbench/v1'],
-            permissions: ['files.read', 'files.write', 'workbench.open', 'ui.register'],
+            permissions: ['files.read', 'files.write', 'files.delete', 'workbench.open', 'ui.register'],
             frontend: { entry: 'frontend/dist/index.js' },
             contributes: {
               views: [{ id: 'verstak.files.view', title: 'Files', icon: 'folder', component: 'FilesView' }],

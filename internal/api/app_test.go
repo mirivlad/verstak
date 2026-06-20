@@ -479,8 +479,78 @@ func TestSetCurrentVaultInitializesWorkspaceWhenMissingAtStartup(t *testing.T) {
 	if len(nodes) == 0 {
 		t.Fatal("workspace nodes should not be empty")
 	}
+	if nodes[0].Path != "" {
+		t.Fatalf("compatibility node should not expose workspace path mapping: %+v", nodes[0])
+	}
 	if !app.capRegistry.Has("verstak/core/workspace/v1") {
 		t.Fatal("workspace capability should be registered after SetCurrentVault")
+	}
+}
+
+func TestWorkspaceAPIUsesTopLevelFoldersAndMetadataSnapshot(t *testing.T) {
+	app, vaultDir := newFilesTestApp(t, []string{"files.read"})
+	app.workspace = workspace.NewManager(vaultDir)
+	if err := app.workspace.Load(); err != nil {
+		t.Fatalf("workspace Load: %v", err)
+	}
+
+	ws, errStr := app.CreateWorkspace("Project", "client-project")
+	if errStr != "" {
+		t.Fatalf("CreateWorkspace: %s", errStr)
+	}
+	if ws.RootPath != "Project" {
+		t.Fatalf("workspace = %+v, want rootPath Project", ws)
+	}
+	if _, err := os.Stat(filepath.Join(vaultDir, "Project", "Notes", "Overview.md")); err != nil {
+		t.Fatalf("template file missing: %v", err)
+	}
+
+	meta, errStr := app.GetWorkspaceMetadata("Project")
+	if errStr != "" {
+		t.Fatalf("GetWorkspaceMetadata: %s", errStr)
+	}
+	if meta.CreatedFromTemplate == nil || meta.CreatedFromTemplate.TemplateID != "client-project" {
+		t.Fatalf("metadata snapshot = %+v", meta.CreatedFromTemplate)
+	}
+
+	if errStr := app.RenameWorkspace("Project", "Renamed"); errStr != "" {
+		t.Fatalf("RenameWorkspace: %s", errStr)
+	}
+	if _, err := os.Stat(filepath.Join(vaultDir, "Renamed")); err != nil {
+		t.Fatalf("renamed folder missing: %v", err)
+	}
+
+	result, errStr := app.TrashWorkspace("Renamed")
+	if errStr != "" {
+		t.Fatalf("TrashWorkspace: %s", errStr)
+	}
+	if result.TrashPath == "" {
+		t.Fatalf("trash result = %+v", result)
+	}
+	if _, err := os.Stat(filepath.Join(vaultDir, "Renamed")); !os.IsNotExist(err) {
+		t.Fatalf("workspace should be moved out of top level, stat err=%v", err)
+	}
+}
+
+func TestMoveWorkspaceNodeCompatibilityIsUnsupported(t *testing.T) {
+	app, vaultDir := newFilesTestApp(t, []string{"files.read"})
+	app.workspace = workspace.NewManager(vaultDir)
+	if err := app.workspace.Load(); err != nil {
+		t.Fatalf("workspace Load: %v", err)
+	}
+	if _, errStr := app.CreateWorkspace("Project", "default"); errStr != "" {
+		t.Fatalf("CreateWorkspace Project: %s", errStr)
+	}
+	if _, errStr := app.CreateWorkspace("Test", "default"); errStr != "" {
+		t.Fatalf("CreateWorkspace Test: %s", errStr)
+	}
+
+	errStr := app.MoveWorkspaceNode("Project", "Test")
+	if errStr == "" || !strings.Contains(errStr, "top-level only") {
+		t.Fatalf("MoveWorkspaceNode error = %q, want top-level only", errStr)
+	}
+	if _, err := os.Stat(filepath.Join(vaultDir, "Test", "Project")); !os.IsNotExist(err) {
+		t.Fatalf("MoveWorkspaceNode created nested mapped workspace, stat err=%v", err)
 	}
 }
 

@@ -36,6 +36,67 @@ test.describe('F: Default Editor Plugin', () => {
     await expect(textarea).toHaveValue('Buy groceries\nWrite tests');
   });
 
+  test('editor supports markdown toolbar split save reopen and revert', async ({ page }) => {
+    await page.evaluate(async () => {
+      const err = await window.go.api.App.WriteVaultTextFile(
+        'verstak.platform-test',
+        'Project/Notes/editing.md',
+        '# Editing\n\nplain text',
+        { createIfMissing: true, overwrite: true }
+      );
+      if (err) throw new Error(err);
+      const [result, openErr] = await window.go.api.App.OpenWorkbenchResource('verstak.platform-test', {
+        kind: 'vault-file',
+        path: 'Project/Notes/editing.md',
+        extension: '.md',
+        context: { sourceView: 'files', isInsideNotesFolder: true, notesMode: true },
+      });
+      if (openErr) throw new Error(openErr);
+      window.dispatchEvent(new CustomEvent('verstak:workbench-opened', { detail: result }));
+    });
+
+    const editor = page.locator('[data-editor-mode="notes-markdown"]');
+    await expect(editor).toBeVisible({ timeout: 10000 });
+    await expect(editor.locator('[data-notes-badge]')).toBeVisible();
+
+    await editor.locator('[data-editor-mode-button="edit"]').click();
+    const textarea = editor.locator('[data-editor-textarea]');
+    await expect(textarea).toBeVisible();
+    await textarea.fill('plain text');
+    await textarea.selectText();
+    await editor.locator('[data-md-action="bold"]').click();
+    await expect(textarea).toHaveValue('**plain text**');
+
+    await editor.locator('[data-md-action="heading"]').click();
+    await expect(textarea).toHaveValue('# **plain text**');
+    await expect(editor.locator('[data-save-state]')).toContainText('Modified');
+
+    await editor.locator('[data-editor-mode-button="split"]').click();
+    await expect(editor.locator('[data-editor-textarea]')).toBeVisible();
+    await expect(editor.locator('[data-preview]')).toBeVisible();
+    await expect(editor.locator('[data-preview]')).toContainText('plain text');
+
+    await textarea.press(process.platform === 'darwin' ? 'Meta+S' : 'Control+S');
+    await expect(editor.locator('[data-save-state]')).toContainText('Saved');
+
+    await textarea.fill('discard me');
+    page.once('dialog', (dialog) => dialog.accept());
+    await editor.locator('[data-editor-action="reload"]').click();
+    await expect(textarea).toHaveValue('# **plain text**');
+
+    await page.evaluate(async () => {
+      const [result, openErr] = await window.go.api.App.OpenWorkbenchResource('verstak.platform-test', {
+        kind: 'vault-file',
+        path: 'Project/Notes/editing.md',
+        extension: '.md',
+        context: { sourceView: 'files', isInsideNotesFolder: true, notesMode: true },
+      });
+      if (openErr) throw new Error(openErr);
+      window.dispatchEvent(new CustomEvent('verstak:workbench-opened', { detail: result }));
+    });
+    await expect(page.locator('[data-editor-mode="notes-markdown"] [data-preview]')).toContainText('plain text', { timeout: 10000 });
+  });
+
   test('open .md file outside Notes routes to highest-priority provider', async ({ page }) => {
     await page.evaluate(async () => {
       const [result, err] = await window.go.api.App.OpenWorkbenchResource('verstak.platform-test', {

@@ -115,9 +115,10 @@ func (v *Vault) CreateVault(path string) error {
 		return fmt.Errorf("failed to write vault.json: %w", err)
 	}
 
-	// Create workspace.json with root node
+	// Create the initial physical workspace folder. Workspace listing is still
+	// sourced from top-level vault folders, not from .verstak metadata.
 	wsMgr := workspace.NewManager(vaultDir)
-	if err := wsMgr.Load(); err != nil {
+	if _, err := wsMgr.CreateWorkspace("Workspace", "default"); err != nil {
 		return fmt.Errorf("failed to create workspace: %w", err)
 	}
 

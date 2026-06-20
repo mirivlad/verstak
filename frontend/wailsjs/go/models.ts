@@ -206,6 +206,41 @@ export namespace api {
 	
 	
 	
+	
+	export class SyncStatusDTO {
+	    configured: boolean;
+	    serverUrl: string;
+	    deviceId: string;
+	    deviceName: string;
+	    connected: boolean;
+	    revoked: boolean;
+	    tokenStored: boolean;
+	    unpushedOps: number;
+	    lastSyncAt: string;
+	    syncInterval: number;
+	    lastError: string;
+	    statusLabel: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new SyncStatusDTO(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.configured = source["configured"];
+	        this.serverUrl = source["serverUrl"];
+	        this.deviceId = source["deviceId"];
+	        this.deviceName = source["deviceName"];
+	        this.connected = source["connected"];
+	        this.revoked = source["revoked"];
+	        this.tokenStored = source["tokenStored"];
+	        this.unpushedOps = source["unpushedOps"];
+	        this.lastSyncAt = source["lastSyncAt"];
+	        this.syncInterval = source["syncInterval"];
+	        this.lastError = source["lastError"];
+	        this.statusLabel = source["statusLabel"];
+	    }
+	}
 
 }
 
@@ -1012,6 +1047,114 @@ export namespace workbench {
 	        this.defaultTextEditorProvider = source["defaultTextEditorProvider"];
 	        this.defaultMarkdownEditorProvider = source["defaultMarkdownEditorProvider"];
 	        this.defaultNotesMarkdownEditorProvider = source["defaultNotesMarkdownEditorProvider"];
+	    }
+	}
+
+}
+
+export namespace workspace {
+	
+	export class TemplateSnapshot {
+	    templateId: string;
+	    templateName: string;
+	    templateVersion: number;
+	    appliedAt: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new TemplateSnapshot(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.templateId = source["templateId"];
+	        this.templateName = source["templateName"];
+	        this.templateVersion = source["templateVersion"];
+	        this.appliedAt = source["appliedAt"];
+	    }
+	}
+	export class Metadata {
+	    workspaceName: string;
+	    createdFromTemplate?: TemplateSnapshot;
+	    features?: Record<string, boolean>;
+	    folders?: Record<string, string>;
+	    updatedAt?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new Metadata(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.workspaceName = source["workspaceName"];
+	        this.createdFromTemplate = this.convertValues(source["createdFromTemplate"], TemplateSnapshot);
+	        this.features = source["features"];
+	        this.folders = source["folders"];
+	        this.updatedAt = source["updatedAt"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class MetadataPatch {
+	    features?: Record<string, boolean>;
+	    folders?: Record<string, string>;
+	
+	    static createFrom(source: any = {}) {
+	        return new MetadataPatch(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.features = source["features"];
+	        this.folders = source["folders"];
+	    }
+	}
+	
+	export class TrashResult {
+	    originalPath: string;
+	    trashPath: string;
+	    trashId: string;
+	    deletedAt: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new TrashResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.originalPath = source["originalPath"];
+	        this.trashPath = source["trashPath"];
+	        this.trashId = source["trashId"];
+	        this.deletedAt = source["deletedAt"];
+	    }
+	}
+	export class Workspace {
+	    name: string;
+	    rootPath: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new Workspace(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.rootPath = source["rootPath"];
 	    }
 	}
 
