@@ -86,14 +86,14 @@
   }
 
   function mouseHistoryDirection(event) {
-    if (currentView === 'workspace') return '';
+    if (currentView === 'workspace' || currentView === 'workbench') return '';
     if (event.button === 3 || event.button === 8 || event.buttons === 8 || event.buttons === 128 || event.which === 8) return 'back';
     if (event.button === 4 || event.button === 9 || event.buttons === 16 || event.buttons === 256 || event.which === 9) return 'forward';
     return '';
   }
 
   function keyHistoryDirection(event) {
-    if (currentView === 'workspace') return '';
+    if (currentView === 'workspace' || currentView === 'workbench') return '';
     const key = event.key || '';
     if (event.altKey && key === 'ArrowLeft') return 'back';
     if (event.altKey && key === 'ArrowRight') return 'forward';
@@ -216,9 +216,10 @@
   }
 
   function onNavigateBack(e) {
+    if (currentView === 'workbench') return;
     if (currentView === 'workspace') {
       const upBtn = document.querySelector('[data-files-action="up"]');
-      if (upBtn) {
+      if (upBtn && !upBtn.disabled) {
         upBtn.click();
         e?.preventDefault?.();
         return;
@@ -228,9 +229,10 @@
   }
 
   function onNavigateForward(e) {
+    if (currentView === 'workbench') return;
     if (currentView === 'workspace') {
       const fwdBtn = document.querySelector('[data-files-action="forward"]');
-      if (fwdBtn) {
+      if (fwdBtn && !fwdBtn.disabled) {
         fwdBtn.click();
         e?.preventDefault?.();
         return;
