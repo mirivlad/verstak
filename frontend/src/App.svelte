@@ -216,10 +216,26 @@
   }
 
   function onNavigateBack(e) {
+    if (currentView === 'workspace') {
+      const upBtn = document.querySelector('[data-files-action="up"]');
+      if (upBtn) {
+        upBtn.click();
+        e?.preventDefault?.();
+        return;
+      }
+    }
     if (navigateBack()) e?.preventDefault?.();
   }
 
   function onNavigateForward(e) {
+    if (currentView === 'workspace') {
+      const fwdBtn = document.querySelector('[data-files-action="forward"]');
+      if (fwdBtn) {
+        fwdBtn.click();
+        e?.preventDefault?.();
+        return;
+      }
+    }
     if (navigateForward()) e?.preventDefault?.();
   }
 
