@@ -7,10 +7,13 @@ import {api} from '../models';
 import {permissions} from '../models';
 import {plugin} from '../models';
 import {files} from '../models';
+import {notes} from '../models';
 
 export function ArchiveWorkspaceNode(arg1:string):Promise<string>;
 
 export function CloseVault():Promise<void>;
+
+export function CreateNote(arg1:string,arg2:string):Promise<Record<string, any>|string>;
 
 export function CreateVault(arg1:string):Promise<void>;
 
@@ -25,6 +28,8 @@ export function DisablePlugin(arg1:string):Promise<string>;
 export function EditWorkbenchResource(arg1:string,arg2:Record<string, any>):Promise<workbench.OpenResourceResult|string>;
 
 export function EnablePlugin(arg1:string):Promise<string>;
+
+export function EnsureOverview(arg1:string):Promise<Record<string, any>|string>;
 
 export function ExecutePluginCommand(arg1:string,arg2:string,arg3:Record<string, any>):Promise<Record<string, any>|string>;
 
@@ -62,6 +67,8 @@ export function GetWorkspaceMetadata(arg1:string):Promise<workspace.Metadata|str
 
 export function GetWorkspaceTree():Promise<Record<string, any>>;
 
+export function ListNotes(arg1:string):Promise<Array<notes.NoteInfo>|string>;
+
 export function ListPluginCapabilities(arg1:string):Promise<Array<capability.Entry>|string>;
 
 export function ListVaultFiles(arg1:string,arg2:string):Promise<Array<files.FileEntry>|string>;
@@ -72,11 +79,15 @@ export function MoveVaultPath(arg1:string,arg2:string,arg3:string,arg4:files.Mov
 
 export function MoveWorkspaceNode(arg1:string,arg2:string):Promise<string>;
 
+export function NormalizeNoteTitle(arg1:string):Promise<Record<string, any>|string>;
+
 export function OpenVault(arg1:string):Promise<void>;
 
 export function OpenWorkbenchResource(arg1:string,arg2:Record<string, any>):Promise<workbench.OpenResourceResult|string>;
 
 export function PublishPluginEvent(arg1:string,arg2:string,arg3:Record<string, any>):Promise<string>;
+
+export function ReadNote(arg1:string):Promise<Record<string, any>|string>;
 
 export function ReadPluginDataJSON(arg1:string,arg2:string):Promise<Record<string, any>>;
 
@@ -90,11 +101,17 @@ export function RecordDesiredPlugin(arg1:string,arg2:string,arg3:string):Promise
 
 export function ReloadPlugins():Promise<number|string>;
 
+export function RenameNote(arg1:string,arg2:string):Promise<Record<string, any>|string>;
+
 export function RenameWorkspace(arg1:string,arg2:string):Promise<string>;
 
 export function RenameWorkspaceNode(arg1:string,arg2:string):Promise<string>;
 
 export function ResetSyncKey():Promise<void>;
+
+export function SaveNote(arg1:string,arg2:string):Promise<string>;
+
+export function SearchNotes(arg1:string):Promise<Array<notes.NoteInfo>|string>;
 
 export function SelectDirectory():Promise<string>;
 

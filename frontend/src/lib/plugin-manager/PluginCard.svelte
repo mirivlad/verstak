@@ -33,6 +33,7 @@
     sidebar: (contributions.sidebarItems || []).filter(s => s.pluginId === pluginId).length,
     statusbar: (contributions.statusBarItems || []).filter(s => s.pluginId === pluginId).length,
     openProviders: (contributions.openProviders || []).filter(o => o.pluginId === pluginId).length,
+    workspaceItems: (contributions.workspaceItems || []).filter(w => w.pluginId === pluginId).length,
   };
 
   $: contribSummary = (() => {
@@ -42,6 +43,7 @@
     if (contribCounts.sidebar > 0) parts.push(contribCounts.sidebar + ' sidebar' + (contribCounts.sidebar !== 1 ? 's' : ''));
     if (contribCounts.statusbar > 0) parts.push(contribCounts.statusbar + ' statusbar' + (contribCounts.statusbar !== 1 ? 's' : ''));
     if (contribCounts.openProviders > 0) parts.push(contribCounts.openProviders + ' openProvider' + (contribCounts.openProviders !== 1 ? 's' : ''));
+    if (contribCounts.workspaceItems > 0) parts.push(contribCounts.workspaceItems + ' workspace' + (contribCounts.workspaceItems !== 1 ? 's' : ''));
     return parts.length > 0 ? parts.join(', ') : 'none';
   })();
 

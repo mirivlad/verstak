@@ -10,6 +10,10 @@ export function CloseVault() {
   return window['go']['api']['App']['CloseVault']();
 }
 
+export function CreateNote(arg1, arg2) {
+  return window['go']['api']['App']['CreateNote'](arg1, arg2);
+}
+
 export function CreateVault(arg1) {
   return window['go']['api']['App']['CreateVault'](arg1);
 }
@@ -36,6 +40,10 @@ export function EditWorkbenchResource(arg1, arg2) {
 
 export function EnablePlugin(arg1) {
   return window['go']['api']['App']['EnablePlugin'](arg1);
+}
+
+export function EnsureOverview(arg1) {
+  return window['go']['api']['App']['EnsureOverview'](arg1);
 }
 
 export function ExecutePluginCommand(arg1, arg2, arg3) {
@@ -110,6 +118,10 @@ export function GetWorkspaceTree() {
   return window['go']['api']['App']['GetWorkspaceTree']();
 }
 
+export function ListNotes(arg1) {
+  return window['go']['api']['App']['ListNotes'](arg1);
+}
+
 export function ListPluginCapabilities(arg1) {
   return window['go']['api']['App']['ListPluginCapabilities'](arg1);
 }
@@ -130,6 +142,10 @@ export function MoveWorkspaceNode(arg1, arg2) {
   return window['go']['api']['App']['MoveWorkspaceNode'](arg1, arg2);
 }
 
+export function NormalizeNoteTitle(arg1) {
+  return window['go']['api']['App']['NormalizeNoteTitle'](arg1);
+}
+
 export function OpenVault(arg1) {
   return window['go']['api']['App']['OpenVault'](arg1);
 }
@@ -140,6 +156,10 @@ export function OpenWorkbenchResource(arg1, arg2) {
 
 export function PublishPluginEvent(arg1, arg2, arg3) {
   return window['go']['api']['App']['PublishPluginEvent'](arg1, arg2, arg3);
+}
+
+export function ReadNote(arg1) {
+  return window['go']['api']['App']['ReadNote'](arg1);
 }
 
 export function ReadPluginDataJSON(arg1, arg2) {
@@ -166,6 +186,10 @@ export function ReloadPlugins() {
   return window['go']['api']['App']['ReloadPlugins']();
 }
 
+export function RenameNote(arg1, arg2) {
+  return window['go']['api']['App']['RenameNote'](arg1, arg2);
+}
+
 export function RenameWorkspace(arg1, arg2) {
   return window['go']['api']['App']['RenameWorkspace'](arg1, arg2);
 }
@@ -176,6 +200,14 @@ export function RenameWorkspaceNode(arg1, arg2) {
 
 export function ResetSyncKey() {
   return window['go']['api']['App']['ResetSyncKey']();
+}
+
+export function SaveNote(arg1, arg2) {
+  return window['go']['api']['App']['SaveNote'](arg1, arg2);
+}
+
+export function SearchNotes(arg1) {
+  return window['go']['api']['App']['SearchNotes'](arg1);
 }
 
 export function SelectDirectory() {

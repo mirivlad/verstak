@@ -403,7 +403,7 @@ func TestDetermineContextName(t *testing.T) {
 			want:    ContextGenericMarkdown,
 		},
 		{
-			name: "notes markdown",
+			name: "notes markdown with explicit context",
 			request: OpenResourceRequest{
 				Kind: "vault-file",
 				Path: "Notes/Overview.md",
@@ -413,6 +413,30 @@ func TestDetermineContextName(t *testing.T) {
 				},
 			},
 			want: ContextNotesMarkdown,
+		},
+		{
+			name: "notes markdown auto-detected from path",
+			request: OpenResourceRequest{
+				Kind: "vault-file",
+				Path: "Workspace/Notes/MyNote.md",
+			},
+			want: ContextNotesMarkdown,
+		},
+		{
+			name: "notes overview auto-detected",
+			request: OpenResourceRequest{
+				Kind: "vault-file",
+				Path: "Notes/Overview.md",
+			},
+			want: ContextNotesMarkdown,
+		},
+		{
+			name: "non-notes markdown stays generic",
+			request: OpenResourceRequest{
+				Kind: "vault-file",
+				Path: "Workspace/Files/readme.md",
+			},
+			want: ContextGenericMarkdown,
 		},
 	}
 	for _, tt := range tests {

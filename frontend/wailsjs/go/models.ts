@@ -380,6 +380,31 @@ export namespace files {
 
 }
 
+export namespace notes {
+	
+	export class NoteInfo {
+	    title: string;
+	    filename: string;
+	    path: string;
+	    parentPath: string;
+	    isOverview: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new NoteInfo(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.title = source["title"];
+	        this.filename = source["filename"];
+	        this.path = source["path"];
+	        this.parentPath = source["parentPath"];
+	        this.isOverview = source["isOverview"];
+	    }
+	}
+
+}
+
 export namespace permissions {
 	
 	export class Entry {

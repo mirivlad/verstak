@@ -18,6 +18,7 @@ import (
 	"github.com/verstak/verstak-desktop/internal/core/contribution"
 	"github.com/verstak/verstak-desktop/internal/core/events"
 	corefiles "github.com/verstak/verstak-desktop/internal/core/files"
+	"github.com/verstak/verstak-desktop/internal/core/notes"
 	"github.com/verstak/verstak-desktop/internal/core/permissions"
 	"github.com/verstak/verstak-desktop/internal/core/plugin"
 	"github.com/verstak/verstak-desktop/internal/core/pluginstate"
@@ -40,6 +41,7 @@ type App struct {
 	vault           *vault.Vault
 	storage         *storage.Storage
 	files           *corefiles.Service
+	notes           *notes.Service
 	appSettings     *appsettings.Manager
 	pluginState     *pluginstate.Manager
 	workbench       *coreworkbench.Router
@@ -58,6 +60,7 @@ func NewApp(
 	vaultService *vault.Vault,
 	storageService *storage.Storage,
 	filesService *corefiles.Service,
+	notesService *notes.Service,
 	appSettingsMgr *appsettings.Manager,
 	pluginStateMgr *pluginstate.Manager,
 	workspaceMgr *workspace.Manager,
@@ -73,6 +76,7 @@ func NewApp(
 		vault:           vaultService,
 		storage:         storageService,
 		files:           filesService,
+		notes:           notesService,
 		appSettings:     appSettingsMgr,
 		pluginState:     pluginStateMgr,
 		workbench:       coreworkbench.NewRouter(workbenchPrefsFromSettings(appSettingsMgr)),
@@ -345,6 +349,7 @@ func (a *App) ReloadPlugins() (int, string) {
 		"verstak/core/events/v1",
 		"verstak/core/files/v1",
 		"verstak/core/workbench/v1",
+		"verstak/core/notes/v1",
 	}
 	if err := a.capRegistry.Register("verstak-desktop", coreCaps); err != nil {
 		log.Printf("[api] ReloadPlugins: failed to re-register core capabilities: %v", err)
@@ -1156,6 +1161,112 @@ func (a *App) SetCurrentWorkspaceNode(id string) string {
 		return err.Error()
 	}
 	return ""
+}
+
+// ─── Notes API ───────────────────────────────────────────────
+
+// EnsureOverview creates or returns the path to Notes/Overview.md under parent.
+func (a *App) EnsureOverview(parent string) (map[string]interface{}, string) {
+	if a.notes == nil {
+		return nil, "notes service not initialized"
+	}
+	path, err := a.notes.EnsureOverview(parent)
+	if err != nil {
+		return nil, err.Error()
+	}
+	return map[string]interface{}{"path": path}, ""
+}
+
+// CreateNote creates a new note under the given parent's Notes/ folder.
+// Returns the vault-relative path of the new note.
+func (a *App) CreateNote(parent, title string) (map[string]interface{}, string) {
+	if a.notes == nil {
+		return nil, "notes service not initialized"
+	}
+	path, err := a.notes.CreateNote(parent, title, "")
+	if err != nil {
+		if _, ok := err.(*notes.ConflictError); ok {
+			return map[string]interface{}{"conflict": true, "path": "", "error": err.Error()}, ""
+		}
+		return nil, err.Error()
+	}
+	return map[string]interface{}{"path": path, "conflict": false}, ""
+}
+
+// RenameNote renames a note by changing its title. File is renamed accordingly.
+// Returns the new vault-relative path.
+func (a *App) RenameNote(notePath, newTitle string) (map[string]interface{}, string) {
+	if a.notes == nil {
+		return nil, "notes service not initialized"
+	}
+	newPath, err := a.notes.RenameNote(notePath, newTitle)
+	if err != nil {
+		if _, ok := err.(*notes.ConflictError); ok {
+			return map[string]interface{}{"conflict": true, "path": "", "error": err.Error()}, ""
+		}
+		return nil, err.Error()
+	}
+	return map[string]interface{}{"path": newPath, "conflict": false}, ""
+}
+
+// ReadNote reads the content of a note file.
+func (a *App) ReadNote(notePath string) (string, string) {
+	if a.notes == nil {
+		return "", "notes service not initialized"
+	}
+	content, err := a.notes.ReadNote(notePath)
+	if err != nil {
+		return "", err.Error()
+	}
+	return content, ""
+}
+
+// SaveNote writes content to a note file.
+func (a *App) SaveNote(notePath, content string) string {
+	if a.notes == nil {
+		return "notes service not initialized"
+	}
+	if err := a.notes.SaveNote(notePath, content); err != nil {
+		return err.Error()
+	}
+	return ""
+}
+
+// ListNotes returns all notes in the given parent's Notes/ folder.
+func (a *App) ListNotes(parent string) ([]notes.NoteInfo, string) {
+	if a.notes == nil {
+		return nil, "notes service not initialized"
+	}
+	noteList, err := a.notes.ListNotes(parent)
+	if err != nil {
+		return nil, err.Error()
+	}
+	return noteList, ""
+}
+
+// SearchNotes performs a case-insensitive search across all notes in the vault.
+func (a *App) SearchNotes(query string) ([]notes.NoteInfo, string) {
+	if a.notes == nil {
+		return nil, "notes service not initialized"
+	}
+	vaultPath := a.vaultPath()
+	if vaultPath == "" {
+		return nil, "vault not open"
+	}
+	results, err := a.notes.SearchNotes(vaultPath, query)
+	if err != nil {
+		return nil, err.Error()
+	}
+	return results, ""
+}
+
+// NormalizeNoteTitle converts a note title to a safe filename (including .md extension).
+func (a *App) NormalizeNoteTitle(title string) (string, string) {
+	filename, err := notes.NormalizeTitleToFilename(title)
+	if err != nil {
+		return "", err.Error()
+	}
+	return filename, ""
 }
 
 // ─── Vault Plugin State API ────────────────────────────────

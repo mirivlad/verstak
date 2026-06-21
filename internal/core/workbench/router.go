@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/verstak/verstak-desktop/internal/core/contribution"
+	"github.com/verstak/verstak-desktop/internal/core/notes"
 	"github.com/verstak/verstak-desktop/internal/core/plugin"
 )
 
@@ -233,7 +234,9 @@ func (r *Router) preferenceFor(request OpenResourceRequest) string {
 func resourceContextName(request OpenResourceRequest) string {
 	ext := strings.ToLower(request.Extension)
 	if ext == ".md" || ext == ".markdown" {
-		if request.Context.NotesMode || request.Context.IsInsideNotesFolder {
+		// Auto-detect Notes context: either explicitly set in request context
+		// or path-based detection using the canonical Notes/ folder layout.
+		if request.Context.NotesMode || request.Context.IsInsideNotesFolder || notes.IsInsideNotes(request.Path) {
 			return ContextNotesMarkdown
 		}
 		return ContextGenericMarkdown
