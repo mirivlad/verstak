@@ -13,6 +13,7 @@
    */
   import Briefcase from 'lucide-svelte/icons/briefcase';
   import ChevronDown from 'lucide-svelte/icons/chevron-down';
+  import ChevronLeft from 'lucide-svelte/icons/chevron-left';
   import ChevronRight from 'lucide-svelte/icons/chevron-right';
   import Circle from 'lucide-svelte/icons/circle';
   import FlaskConical from 'lucide-svelte/icons/flask-conical';
@@ -26,6 +27,7 @@
   import Shield from 'lucide-svelte/icons/shield';
   import TriangleAlert from 'lucide-svelte/icons/triangle-alert';
   import Trash2 from 'lucide-svelte/icons/trash-2';
+  import X from 'lucide-svelte/icons/x';
 
   export let name = 'dot';
   export let size = 16;
@@ -34,6 +36,7 @@
   const icons = {
     case: Briefcase,
     chevronDown: ChevronDown,
+    chevronLeft: ChevronLeft,
     chevronRight: ChevronRight,
     dot: Circle,
     edit: Pencil,
@@ -47,6 +50,7 @@
     trash: Trash2,
     vault: Shield,
     warning: TriangleAlert,
+    x: X,
   };
 
   const aliases = {

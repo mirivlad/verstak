@@ -1,5 +1,6 @@
 <script>
   import PluginBundleHost from '../plugin-host/PluginBundleHost.svelte';
+  import Icon from '../ui/Icon.svelte';
 
   export let openedResource = null;
 
@@ -19,6 +20,10 @@
     requestMode,
     requestContext,
   ].join(':');
+
+  function closeWorkbench() {
+    window.dispatchEvent(new CustomEvent('verstak:close-workbench', { cancelable: true }));
+  }
 </script>
 
 <div class="workbench-host">
@@ -26,6 +31,9 @@
     <div class="workbench-header">
       <span class="workbench-title">{resourcePath}</span>
       <span class="workbench-provider">no-provider</span>
+      <button class="close-btn" type="button" title="Close" aria-label="Close" on:click={closeWorkbench}>
+        <Icon name="x" size={18} />
+      </button>
     </div>
     <div class="workbench-empty no-provider" data-workbench-status="no-provider">
       <p>No viewer/editor available</p>
@@ -35,6 +43,9 @@
     <div class="workbench-header">
       <span class="workbench-title">{resourcePath}</span>
       <span class="workbench-provider">{providerId}</span>
+      <button class="close-btn" type="button" title="Close" aria-label="Close" on:click={closeWorkbench}>
+        <Icon name="x" size={18} />
+      </button>
     </div>
     <div class="workbench-content">
       {#key mountKey}
@@ -80,6 +91,24 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+
+  .close-btn {
+    width: 2rem;
+    height: 2rem;
+    min-height: 0;
+    padding: 0;
+    border: 1px solid #1a3a5c;
+    border-radius: 4px;
+    background: #0f3460;
+    color: #a0a0b8;
+    flex-shrink: 0;
+    cursor: pointer;
+  }
+
+  .close-btn:hover {
+    color: #e0e0f0;
+    background: #1a4a7a;
   }
 
   .workbench-provider {

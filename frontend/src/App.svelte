@@ -23,9 +23,109 @@
 
   let workspaceNodes = [];
   let selectedWorkspaceName = '';
+  let navigationStack = [];
+  let navigationIndex = -1;
+  let applyingNavigation = false;
+  let lastMouseHistoryDirection = '';
+  let lastMouseHistoryAt = 0;
 
   function flog(msg) {
     App.WriteFrontendLog('App', msg);
+  }
+
+  function currentSnapshot() {
+    return {
+      currentView,
+      activeView,
+      activeViewPluginId,
+      activeSettingsPluginId,
+      activeSettingsPanelId,
+      openedResource,
+      selectedWorkspaceName,
+    };
+  }
+
+  function sameSnapshot(a, b) {
+    return JSON.stringify(a) === JSON.stringify(b);
+  }
+
+  function pushNavigation(snapshot = currentSnapshot()) {
+    if (applyingNavigation) return;
+    if (navigationIndex >= 0 && sameSnapshot(navigationStack[navigationIndex], snapshot)) return;
+    if (navigationIndex < navigationStack.length - 1) {
+      navigationStack = navigationStack.slice(0, navigationIndex + 1);
+    }
+    navigationStack = [...navigationStack, snapshot];
+    navigationIndex = navigationStack.length - 1;
+  }
+
+  function applySnapshot(snapshot) {
+    applyingNavigation = true;
+    currentView = snapshot.currentView;
+    activeView = snapshot.activeView;
+    activeViewPluginId = snapshot.activeViewPluginId;
+    activeSettingsPluginId = snapshot.activeSettingsPluginId;
+    activeSettingsPanelId = snapshot.activeSettingsPanelId;
+    openedResource = snapshot.openedResource;
+    selectedWorkspaceName = snapshot.selectedWorkspaceName;
+    applyingNavigation = false;
+  }
+
+  function navigateBack() {
+    if (navigationIndex <= 0) return false;
+    navigationIndex -= 1;
+    applySnapshot(navigationStack[navigationIndex]);
+    return true;
+  }
+
+  function navigateForward() {
+    if (navigationIndex >= navigationStack.length - 1) return false;
+    navigationIndex += 1;
+    applySnapshot(navigationStack[navigationIndex]);
+    return true;
+  }
+
+  function mouseHistoryDirection(event) {
+    if (currentView === 'workspace') return '';
+    if (event.button === 3 || event.button === 8 || event.buttons === 8 || event.buttons === 128 || event.which === 8) return 'back';
+    if (event.button === 4 || event.button === 9 || event.buttons === 16 || event.buttons === 256 || event.which === 9) return 'forward';
+    return '';
+  }
+
+  function keyHistoryDirection(event) {
+    if (currentView === 'workspace') return '';
+    const key = event.key || '';
+    if (event.altKey && key === 'ArrowLeft') return 'back';
+    if (event.altKey && key === 'ArrowRight') return 'forward';
+    if (key === 'BrowserBack' || key === 'XF86Back') return 'back';
+    if (key === 'BrowserForward' || key === 'XF86Forward') return 'forward';
+    if (event.keyCode === 166) return 'back';
+    if (event.keyCode === 167) return 'forward';
+    return '';
+  }
+
+  function handleHistoryRequest(direction, event) {
+    if (!direction || event?.defaultPrevented) return;
+    if (event?.type === 'mousedown' || event?.type === 'mouseup' || event?.type === 'auxclick' || event?.type === 'pointerdown') {
+      const now = Date.now();
+      if (direction === lastMouseHistoryDirection && now - lastMouseHistoryAt < 120) return;
+      lastMouseHistoryDirection = direction;
+      lastMouseHistoryAt = now;
+      debug.log('[App] mouse history event', {
+        type: event.type,
+        direction,
+        button: event.button,
+        buttons: event.buttons,
+        which: event.which,
+        pointerType: event.pointerType || '',
+        currentView,
+      });
+    }
+    const moved = direction === 'back' ? navigateBack() : navigateForward();
+    if (moved && event) {
+      event.preventDefault();
+      event.stopPropagation();
+    }
   }
 
   async function checkVault() {
@@ -73,6 +173,7 @@
   function onNav(e) {
     debug.log('[App] onNav:', e.detail.viewId);
     currentView = e.detail.viewId;
+    pushNavigation();
   }
 
   function onOpenView(e) {
@@ -80,6 +181,7 @@
     activeView = e.detail.viewId;
     activeViewPluginId = e.detail.pluginId || '';
     currentView = 'plugin-view';
+    pushNavigation();
   }
 
   function onOpenSettings(e) {
@@ -87,12 +189,14 @@
     activeSettingsPluginId = e.detail.pluginId;
     activeSettingsPanelId = e.detail.panelId || '';
     currentView = 'plugin-manager';
+    pushNavigation();
   }
 
   function onWorkbenchOpened(e) {
     debug.log('[App] onWorkbenchOpened:', e.detail?.request?.path, e.detail?.providerId);
     openedResource = e.detail;
     currentView = 'workbench';
+    pushNavigation();
   }
 
   function onWorkspaceSelected(e) {
@@ -101,6 +205,7 @@
     workspaceNodes = e.detail?.nodes || workspaceNodes;
     if (selectedWorkspaceName) {
       currentView = 'workspace';
+      pushNavigation();
     }
   }
 
@@ -108,6 +213,31 @@
     debug.log('[App] onCloseSettings');
     activeSettingsPluginId = '';
     activeSettingsPanelId = '';
+  }
+
+  function onNavigateBack(e) {
+    if (navigateBack()) e?.preventDefault?.();
+  }
+
+  function onNavigateForward(e) {
+    if (navigateForward()) e?.preventDefault?.();
+  }
+
+  function onCloseWorkbench(e) {
+    if (currentView !== 'workbench') return;
+    if (!navigateBack() && selectedWorkspaceName) {
+      currentView = 'workspace';
+      pushNavigation();
+    }
+    e?.preventDefault?.();
+  }
+
+  function onGlobalKeydown(e) {
+    handleHistoryRequest(keyHistoryDirection(e), e);
+  }
+
+  function onGlobalMouse(e) {
+    handleHistoryRequest(mouseHistoryDirection(e), e);
   }
 
   // Listen for events
@@ -119,9 +249,20 @@
     window.addEventListener('verstak:close-settings', onCloseSettings);
     window.addEventListener('verstak:workbench-opened', onWorkbenchOpened);
     window.addEventListener('verstak:workspace-selected', onWorkspaceSelected);
+    window.addEventListener('verstak:navigate-back', onNavigateBack);
+    window.addEventListener('verstak:navigate-forward', onNavigateForward);
+    window.addEventListener('verstak:close-workbench', onCloseWorkbench);
+    window.addEventListener('keydown', onGlobalKeydown);
+    window.addEventListener('pointerdown', onGlobalMouse, true);
+    window.addEventListener('mousedown', onGlobalMouse, true);
+    window.addEventListener('mouseup', onGlobalMouse, true);
+    window.addEventListener('auxclick', onGlobalMouse, true);
   }
 
-  onMount(() => { checkVault(); });
+  onMount(async () => {
+    await checkVault();
+    pushNavigation();
+  });
 </script>
 
 {#if loading}

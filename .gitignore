@@ -5,3 +5,4 @@ build/bin/verstak-desktop
 smoke-platform
 plugins/
 vendor/
+\nfrontend/e2e-results/

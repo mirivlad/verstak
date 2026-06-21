@@ -77,8 +77,7 @@ test.describe('G: Files Plugin', () => {
     await expect(page.locator('[data-resource-path="Project/Daily/Journal.md"]')).toBeVisible();
 
     await page.locator('.wt-label').filter({ hasText: 'Project' }).click();
-    await expect(page.locator('[data-file-name="Daily"]')).toBeVisible({ timeout: 10000 });
-    await page.locator('[data-file-name="Daily"]').dblclick();
+    await expect(page.locator('.files-breadcrumb')).toContainText('Daily', { timeout: 10000 });
     await expect(page.locator('[data-file-name="Journal.md"]')).toBeVisible({ timeout: 10000 });
     await page.locator('[data-file-name="Journal.md"]').click();
     page.once('dialog', (dialog) => dialog.accept());
@@ -87,6 +86,146 @@ test.describe('G: Files Plugin', () => {
 
     await page.locator('[data-files-action="up"]').click();
     await expect(page.locator('.files-breadcrumb')).not.toContainText('Daily');
+  });
+
+  test('files explorer uses icon controls and no row New Here action', async ({ page }) => {
+    await page.locator('.wt-label').filter({ hasText: 'Project' }).click();
+    await expect(page.locator('.files-breadcrumb')).toContainText('Project', { timeout: 10000 });
+
+    for (const action of ['back', 'forward', 'up', 'refresh', 'new-folder', 'new-markdown', 'new-text', 'open', 'rename', 'trash', 'cut', 'copy', 'paste']) {
+      const button = page.locator(`[data-files-action="${action}"]`);
+      await expect(button).toHaveAttribute('title', /.+/);
+      await expect(button.locator('svg')).toBeVisible();
+      await expect(button).not.toHaveText(/\S/);
+    }
+
+    await expect(page.locator('.files-row-btn').filter({ hasText: 'New here' })).toHaveCount(0);
+    const firstRowButton = page.locator('[data-file-name="Notes"] .files-row-btn').first();
+    await expect(firstRowButton).toBeVisible();
+    await expect(firstRowButton).not.toHaveText(/\S/);
+    expect(await firstRowButton.evaluate((node) => node.innerHTML)).toContain('<svg');
+  });
+
+  test('files explorer supports empty-space context paste after cutting a folder', async ({ page }) => {
+    await page.locator('.wt-label').filter({ hasText: 'Project' }).click();
+    await expect(page.locator('.files-breadcrumb')).toContainText('Project', { timeout: 10000 });
+
+    await page.locator('[data-files-action="new-folder"]').click();
+    await page.locator('[data-files-create-input]').fill('CutMe');
+    await page.locator('[data-files-create-confirm]').click();
+    await page.locator('[data-files-action="new-folder"]').click();
+    await page.locator('[data-files-create-input]').fill('Target');
+    await page.locator('[data-files-create-confirm]').click();
+
+    await page.locator('[data-file-name="CutMe"]').click({ button: 'right' });
+    await page.locator('[data-files-menu-action="cut"]').click();
+
+    await page.locator('[data-file-name="Target"]').dblclick();
+    await expect(page.locator('.files-breadcrumb')).toContainText('Target');
+    await page.locator('[data-files-list]').click({ button: 'right', position: { x: 24, y: 110 } });
+    await page.locator('[data-files-menu-action="paste"]').click();
+
+    await expect(page.locator('[data-file-name="CutMe"]')).toBeVisible();
+    await page.locator('[data-files-action="up"]').click();
+    await expect(page.locator('[data-file-name="CutMe"]')).toHaveCount(0);
+  });
+
+  test('files explorer supports multiselect and internal drag/drop move', async ({ page }) => {
+    await page.locator('.wt-label').filter({ hasText: 'Project' }).click();
+    await expect(page.locator('.files-breadcrumb')).toContainText('Project', { timeout: 10000 });
+
+    await page.locator('[data-files-action="new-folder"]').click();
+    await page.locator('[data-files-create-input]').fill('DropTarget');
+    await page.locator('[data-files-create-confirm]').click();
+    await page.locator('[data-files-action="new-markdown"]').click();
+    await page.locator('[data-files-create-input]').fill('DragOne.md');
+    await page.locator('[data-files-create-confirm]').click();
+    await page.locator('[data-files-action="new-text"]').click();
+    await page.locator('[data-files-create-input]').fill('DragTwo.txt');
+    await page.locator('[data-files-create-confirm]').click();
+
+    await page.locator('[data-file-name="DragOne.md"]').click();
+    await page.locator('[data-file-name="DragTwo.txt"]').click({ modifiers: [process.platform === 'darwin' ? 'Meta' : 'Control'] });
+    await expect(page.locator('.files-item.selected')).toHaveCount(2);
+
+    await page.evaluate(() => {
+      const source = document.querySelector('[data-file-name="DragOne.md"]');
+      const target = document.querySelector('[data-file-name="DropTarget"]');
+      const dt = new DataTransfer();
+      source.dispatchEvent(new DragEvent('dragstart', { bubbles: true, dataTransfer: dt }));
+      target.dispatchEvent(new DragEvent('dragover', { bubbles: true, dataTransfer: dt }));
+      target.dispatchEvent(new DragEvent('drop', { bubbles: true, dataTransfer: dt }));
+    });
+
+    await expect(page.locator('[data-file-name="DragOne.md"]')).toHaveCount(0);
+    await expect(page.locator('[data-file-name="DragTwo.txt"]')).toHaveCount(0);
+    await page.locator('[data-file-name="DropTarget"]').dblclick();
+    await expect(page.locator('[data-file-name="DragOne.md"]')).toBeVisible();
+    await expect(page.locator('[data-file-name="DragTwo.txt"]')).toBeVisible();
+  });
+
+  test('files history persists in workspace context and handles mouse back forward buttons', async ({ page }) => {
+    await page.locator('.wt-label').filter({ hasText: 'Project' }).click();
+    await expect(page.locator('.files-breadcrumb')).toContainText('Project', { timeout: 10000 });
+
+    await page.locator('[data-file-name="Notes"]').dblclick();
+    await expect(page.locator('.files-breadcrumb')).toContainText('Notes');
+
+    await page.locator('.files-root').focus();
+    await page.keyboard.press('Alt+ArrowLeft');
+    await expect(page.locator('.files-breadcrumb')).not.toContainText('Notes');
+
+    await page.keyboard.press('Alt+ArrowRight');
+    await expect(page.locator('.files-breadcrumb')).toContainText('Notes');
+
+    await page.dispatchEvent('.files-root', 'mouseup', { button: 8, buttons: 128, bubbles: true, cancelable: true });
+    await expect(page.locator('.files-breadcrumb')).not.toContainText('Notes');
+
+    await page.dispatchEvent('.files-root', 'mouseup', { button: 9, buttons: 256, bubbles: true, cancelable: true });
+    await expect(page.locator('.files-breadcrumb')).toContainText('Notes');
+
+    await page.locator('.wt-label').filter({ hasText: 'Test' }).click();
+    await page.locator('.wt-label').filter({ hasText: 'Project' }).click();
+    await expect(page.locator('.files-breadcrumb')).toContainText('Notes');
+  });
+
+  test('workbench close and mouse back return from editor to the previous Files folder', async ({ page }) => {
+    await page.locator('.wt-label').filter({ hasText: 'Project' }).click();
+    await expect(page.locator('.files-breadcrumb')).toContainText('Project', { timeout: 10000 });
+
+    await page.locator('[data-file-name="Notes"]').dblclick();
+    await expect(page.locator('.files-breadcrumb')).toContainText('Notes');
+
+    await page.locator('[data-file-name="Overview.md"]').dblclick();
+    await expect(page.locator('[data-editor-mode="notes-markdown"]')).toBeVisible({ timeout: 10000 });
+
+    await page.dispatchEvent('body', 'mousedown', { button: 3, bubbles: true, cancelable: true });
+    await expect(page.locator('.workspace-host')).toBeVisible({ timeout: 10000 });
+    await expect(page.locator('.files-breadcrumb')).toContainText('Notes');
+    await expect(page.locator('[data-file-name="Overview.md"]')).toBeVisible();
+
+    await page.locator('[data-file-name="Overview.md"]').dblclick();
+    await expect(page.locator('[data-editor-mode="notes-markdown"]')).toBeVisible({ timeout: 10000 });
+
+    await page.waitForTimeout(150);
+    await page.evaluate(() => {
+      document.body.dispatchEvent(new PointerEvent('pointerdown', {
+        button: 3,
+        buttons: 8,
+        bubbles: true,
+        cancelable: true,
+        pointerType: 'mouse'
+      }));
+    });
+    await expect(page.locator('.workspace-host')).toBeVisible({ timeout: 10000 });
+    await expect(page.locator('.files-breadcrumb')).toContainText('Notes');
+
+    await page.locator('[data-file-name="Overview.md"]').dblclick();
+    await expect(page.locator('[data-editor-mode="notes-markdown"]')).toBeVisible({ timeout: 10000 });
+
+    await page.locator('.workbench-header .close-btn[aria-label="Close"]').click();
+    await expect(page.locator('.workspace-host')).toBeVisible({ timeout: 10000 });
+    await expect(page.locator('.files-breadcrumb')).toContainText('Notes');
   });
 
   test('open .txt via workbench from files context shows default-editor', async ({ page }) => {

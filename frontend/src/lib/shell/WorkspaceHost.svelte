@@ -8,10 +8,21 @@
   let contributions = {};
   let plugins = [];
   let workspaceTools = [];
+  let activeToolKey = '';
 
   $: selectedWorkspace = nodes.find(n => n.id === selectedWorkspaceName || n.name === selectedWorkspaceName || n.rootPath === selectedWorkspaceName) || null;
   $: workspaceRootPath = selectedWorkspace?.rootPath || selectedWorkspace?.name || selectedWorkspace?.id || '';
+  $: workspaceTitle = selectedWorkspace?.title || selectedWorkspace?.name || selectedWorkspace?.id || selectedWorkspaceName;
+  $: workspaceType = selectedWorkspace?.type || 'workspace';
+  $: activeTool = workspaceTools.find(tool => toolKey(tool) === activeToolKey) || workspaceTools[0] || null;
+  $: if (workspaceTools.length > 0 && (!activeToolKey || !workspaceTools.some(tool => toolKey(tool) === activeToolKey))) {
+    activeToolKey = toolKey(workspaceTools[0]);
+  }
   $: if (selectedWorkspaceName) loadTools();
+
+  function toolKey(tool) {
+    return `${tool?.pluginId || ''}:${tool?.id || ''}`;
+  }
 
   async function loadTools() {
     try {
@@ -36,27 +47,33 @@
 <div class="workspace-host">
   {#if selectedWorkspace}
     <div class="workspace-header">
-      <span class="workspace-title">{selectedWorkspace.title}</span>
-      <span class="workspace-type">{selectedWorkspace.type}</span>
+      <span class="workspace-title">{workspaceTitle}</span>
+      <span class="workspace-type">{workspaceType}</span>
     </div>
 
     {#if workspaceTools.length > 0}
-      <div class="workspace-tools">
+      <div class="workspace-tabs" role="tablist" aria-label="Workspace tools">
         {#each workspaceTools as tool (tool.id + tool.pluginId)}
-          <div class="workspace-tool">
-            <div class="tool-header">
-              <span class="tool-title">{tool.title || tool.id}</span>
-              <span class="tool-plugin">{tool.pluginId}</span>
-            </div>
-            <div class="tool-content">
-              <PluginBundleHost
-                pluginId={tool.pluginId}
-                componentId={tool.component}
-                componentProps={{ workspaceName: selectedWorkspaceName, workspaceNodeId: selectedWorkspaceName, workspaceNode: selectedWorkspace, workspaceRootPath }}
-              />
-            </div>
-          </div>
+          <button
+            class:active={toolKey(tool) === toolKey(activeTool)}
+            role="tab"
+            aria-selected={toolKey(tool) === toolKey(activeTool)}
+            type="button"
+            title={tool.pluginId}
+            on:click={() => activeToolKey = toolKey(tool)}
+          >
+            {tool.title || tool.id}
+          </button>
         {/each}
+      </div>
+      <div class="workspace-tool-content" role="tabpanel" aria-label={activeTool?.title || activeTool?.id || 'Workspace tool'}>
+        {#if activeTool}
+          <PluginBundleHost
+            pluginId={activeTool.pluginId}
+            componentId={activeTool.component}
+            componentProps={{ workspaceName: selectedWorkspaceName, workspaceNodeId: selectedWorkspaceName, workspaceNode: selectedWorkspace, workspaceRootPath }}
+          />
+        {/if}
       </div>
     {:else}
       <div class="workspace-empty">
@@ -104,45 +121,44 @@
     background: #1a2a3a;
   }
 
-  .workspace-tools {
-    flex: 1;
-    min-height: 0;
-    overflow-y: auto;
-    padding: 0.5rem;
-  }
-
-  .workspace-tool {
-    border: 1px solid #16213e;
-    border-radius: 6px;
-    margin-bottom: 0.5rem;
-    overflow: hidden;
-  }
-
-  .tool-header {
+  .workspace-tabs {
     display: flex;
     align-items: center;
-    gap: 0.5rem;
-    padding: 0.4rem 0.75rem;
+    gap: 0.25rem;
+    padding: 0.35rem 0.75rem 0;
     background: #12122a;
     border-bottom: 1px solid #16213e;
+    flex-shrink: 0;
   }
 
-  .tool-title {
-    color: #e0e0f0;
+  .workspace-tabs button {
+    min-height: 2rem;
+    padding: 0.35rem 0.8rem;
+    border: 1px solid transparent;
+    border-bottom: none;
+    border-radius: 6px 6px 0 0;
+    background: transparent;
+    color: #8b8ba8;
+    cursor: pointer;
+    font: inherit;
     font-size: 0.8rem;
-    font-weight: 600;
   }
 
-  .tool-plugin {
-    color: #666;
-    font-size: 0.65rem;
-    margin-left: auto;
+  .workspace-tabs button:hover {
+    color: #e0e0f0;
+    background: rgba(15, 52, 96, 0.4);
   }
 
-  .tool-content {
-    min-height: 300px;
-    max-height: 60vh;
-    overflow: auto;
+  .workspace-tabs button.active {
+    color: #4ecca3;
+    background: #1a1a2e;
+    border-color: #16213e;
+  }
+
+  .workspace-tool-content {
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
   }
 
   .workspace-empty {

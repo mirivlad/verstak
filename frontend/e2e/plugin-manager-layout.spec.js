@@ -82,6 +82,18 @@ test.describe('E: Plugin Manager layout', () => {
     await expect(selected).toHaveText('Test');
   });
 
+  test('workspace tools render as tabs with Files as one tab', async ({ page }) => {
+    await page.locator('.wt-label').filter({ hasText: 'Project' }).click();
+
+    const tabs = page.locator('.workspace-tabs');
+    await expect(tabs).toBeVisible({ timeout: 10000 });
+    const filesTab = tabs.locator('[role="tab"]').filter({ hasText: 'Files' });
+    await expect(filesTab).toBeVisible();
+    await expect(filesTab).toHaveAttribute('aria-selected', 'true');
+    await expect(page.locator('.workspace-tool')).toHaveCount(0);
+    await expect(page.locator('.files-root')).toBeVisible();
+  });
+
   test('workspace sidebar creates renames and trashes top-level workspaces', async ({ page }) => {
     await page.locator('button[title="New workspace"]').click();
     await page.locator('.wt-create input').fill('ClientA');

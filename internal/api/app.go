@@ -113,6 +113,7 @@ func (a *App) ensureWorkbench() *coreworkbench.Router {
 func (a *App) Startup(ctx context.Context) {
 	a.ctx = ctx
 	log.Printf("[api] App.Startup: initialized with %d plugins", len(a.plugins))
+	startMouseMonitor(ctx)
 }
 
 func (a *App) findPlugin(pluginID string) (*plugin.Plugin, error) {
