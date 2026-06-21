@@ -1,0 +1,27 @@
+--- vendor/github.com/wailsapp/wails/v2/internal/frontend/desktop/linux/window.c
++++ vendor/github.com/wailsapp/wails/v2/internal/frontend/desktop/linux/window.c
+@@ -329,6 +329,24 @@
+     if (event->button == 3)
+     {
+         return FALSE;
++    }
++
++    // Handle mouse back/forward buttons (GDK button 8 = Back, button 9 = Forward)
++    // WebKitGTK doesn't propagate these correctly to DOM, so we dispatch custom events
++    // that the frontend can listen to for history navigation.
++    if (event->button == 8)
++    {
++        webkit_web_view_run_javascript(WEBKIT_WEB_VIEW(widget),
++            "window.dispatchEvent(new CustomEvent('verstak:navigate-back'));",
++            NULL, NULL, NULL);
++        return TRUE;
++    }
++    if (event->button == 9)
++    {
++        webkit_web_view_run_javascript(WEBKIT_WEB_VIEW(widget),
++            "window.dispatchEvent(new CustomEvent('verstak:navigate-forward'));",
++            NULL, NULL, NULL);
++        return TRUE;
+     }
+ 
+     if (event->type == GDK_BUTTON_PRESS && event->button == 1)

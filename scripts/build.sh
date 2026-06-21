@@ -64,6 +64,25 @@ echo "  🧪 go test..."
 (cd "$ROOT" && go test -count=1 ./...)
 echo "  ✅ go test"
 
+# ── Mouse button patch ──
+# WebKitGTK does not propagate buttons 8/9 (XButton1/XButton2) into DOM events.
+# We patch Wails' window.c on Linux to intercept these GTK signals and dispatch
+# CustomEvent('verstak:navigate-back'/'verstak:navigate-forward') into the page.
+echo ""
+echo "[mouse-buttons]"
+PATCH_FILE="$ROOT/patches/window.c.button-press.patch"
+if [ -f "$PATCH_FILE" ]; then
+  echo "  📦 go mod vendor..."
+  (cd "$ROOT" && go mod vendor)
+  echo "  ✅ go mod vendor"
+  echo "  📝 applying window.c.button-press.patch..."
+  (cd "$ROOT" && patch -p0 --forward < "$PATCH_FILE" 2>/dev/null || true)
+  rm -f "$ROOT/vendor/github.com/wailsapp/wails/v2/internal/frontend/desktop/linux/window.c.rej"
+  echo "  ✅ window.c patched"
+else
+  echo "  ℹ️  patch file not found at $PATCH_FILE — skipping"
+fi
+
 # ── Wails ──
 echo ""
 echo "[wails]"
