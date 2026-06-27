@@ -228,6 +228,14 @@ type FlatCommand struct {
 	Handler  string `json:"handler,omitempty"`
 }
 
+type FlatStatusBarItem struct {
+	PluginID string `json:"pluginId"`
+	ID       string `json:"id"`
+	Label    string `json:"label"`
+	Position string `json:"position,omitempty"`
+	Handler  string `json:"handler,omitempty"`
+}
+
 type FlatOpenProviderSupport struct {
 	Kind       string   `json:"kind"`
 	Mime       []string `json:"mime,omitempty"`
@@ -258,6 +266,7 @@ type ContributionSummary struct {
 	Commands       []FlatCommand       `json:"commands"`
 	SettingsPanels []FlatSettingsPanel `json:"settingsPanels"`
 	SidebarItems   []FlatSidebarItem   `json:"sidebarItems"`
+	StatusBarItems []FlatStatusBarItem `json:"statusBarItems"`
 	OpenProviders  []FlatOpenProvider  `json:"openProviders"`
 	WorkspaceItems []FlatWorkspaceItem `json:"workspaceItems"`
 }
@@ -271,6 +280,7 @@ func buildContributionSummary(r *contribution.Registry) ContributionSummary {
 	regCmds := r.Commands()
 	regPanels := r.SettingsPanels()
 	regSidebar := r.SidebarItems()
+	regStatusBar := r.StatusBarItems()
 	regOpenProviders := r.OpenProviders()
 	regWorkspaceItems := r.WorkspaceItems()
 
@@ -289,6 +299,10 @@ func buildContributionSummary(r *contribution.Registry) ContributionSummary {
 	sidebar := make([]FlatSidebarItem, len(regSidebar))
 	for i, v := range regSidebar {
 		sidebar[i] = FlatSidebarItem{PluginID: v.PluginID, ID: v.Item.ID, Title: v.Item.Title, Icon: v.Item.Icon, View: v.Item.View, Position: v.Item.Position}
+	}
+	statusBarItems := make([]FlatStatusBarItem, len(regStatusBar))
+	for i, v := range regStatusBar {
+		statusBarItems[i] = FlatStatusBarItem{PluginID: v.PluginID, ID: v.Item.ID, Label: v.Item.Label, Position: v.Item.Position, Handler: v.Item.Handler}
 	}
 	openProviders := make([]FlatOpenProvider, len(regOpenProviders))
 	for i, v := range regOpenProviders {
@@ -309,7 +323,7 @@ func buildContributionSummary(r *contribution.Registry) ContributionSummary {
 	for i, v := range regWorkspaceItems {
 		workspaceItems[i] = FlatWorkspaceItem{PluginID: v.PluginID, ID: v.Item.ID, Title: v.Item.Title, Icon: v.Item.Icon, Component: v.Item.Component}
 	}
-	return ContributionSummary{Views: views, Commands: cmds, SettingsPanels: panels, SidebarItems: sidebar, OpenProviders: openProviders, WorkspaceItems: workspaceItems}
+	return ContributionSummary{Views: views, Commands: cmds, SettingsPanels: panels, SidebarItems: sidebar, StatusBarItems: statusBarItems, OpenProviders: openProviders, WorkspaceItems: workspaceItems}
 }
 
 // GetContributions returns all registered contributions flattened for the frontend.
@@ -322,8 +336,8 @@ func (a *App) GetContributions() ContributionSummary {
 	}
 	summary := buildContributionSummary(a.contribRegistry)
 	if a.debug {
-		debug.Logf("[api] GetContributions: returning views=%d commands=%d sidebar=%d settings=%d openProviders=%d",
-			len(summary.Views), len(summary.Commands), len(summary.SidebarItems), len(summary.SettingsPanels), len(summary.OpenProviders))
+		debug.Logf("[api] GetContributions: returning views=%d commands=%d sidebar=%d statusBar=%d settings=%d openProviders=%d",
+			len(summary.Views), len(summary.Commands), len(summary.SidebarItems), len(summary.StatusBarItems), len(summary.SettingsPanels), len(summary.OpenProviders))
 	}
 	return summary
 }

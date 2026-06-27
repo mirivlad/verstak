@@ -2,6 +2,7 @@
   import PluginManager from './lib/plugin-manager/PluginManager.svelte';
   import Sidebar from './lib/shell/Sidebar.svelte';
   import CommandPalette from './lib/shell/CommandPalette.svelte';
+  import StatusBar from './lib/shell/StatusBar.svelte';
   import ViewContainer from './lib/shell/ViewContainer.svelte';
   import VaultSelection from './lib/shell/VaultSelection.svelte';
   import WorkbenchHost from './lib/shell/WorkbenchHost.svelte';
@@ -295,16 +296,19 @@
     <Sidebar />
     <CommandPalette />
 
-    <section class="content scroll-surface">
-      {#if currentView === 'plugin-manager'}
-        <PluginManager {activeSettingsPluginId} {activeSettingsPanelId} />
-      {:else if currentView === 'workbench'}
-        <WorkbenchHost {openedResource} />
-      {:else if currentView === 'workspace'}
-        <WorkspaceHost selectedWorkspaceName={selectedWorkspaceName} nodes={workspaceNodes} />
-      {:else}
-        <ViewContainer {activeView} {activeViewPluginId} />
-      {/if}
+    <section class="content-shell">
+      <section class="content scroll-surface">
+        {#if currentView === 'plugin-manager'}
+          <PluginManager {activeSettingsPluginId} {activeSettingsPanelId} />
+        {:else if currentView === 'workbench'}
+          <WorkbenchHost {openedResource} />
+        {:else if currentView === 'workspace'}
+          <WorkspaceHost selectedWorkspaceName={selectedWorkspaceName} nodes={workspaceNodes} />
+        {:else}
+          <ViewContainer {activeView} {activeViewPluginId} />
+        {/if}
+      </section>
+      <StatusBar />
     </section>
   </main>
 {/if}
@@ -458,6 +462,14 @@
     width: 100%;
     background: #1a1a2e;
     overflow: hidden;
+  }
+
+  .content-shell {
+    flex: 1;
+    min-width: 0;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
   }
 
   .content {

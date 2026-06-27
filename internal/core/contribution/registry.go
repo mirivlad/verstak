@@ -280,6 +280,15 @@ func (r *Registry) SidebarItems() []ContributionSidebarItem {
 	return result
 }
 
+func (r *Registry) StatusBarItems() []ContributionStatusBarItem {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	result := make([]ContributionStatusBarItem, len(r.statusBarItems))
+	copy(result, r.statusBarItems)
+	sort.Slice(result, func(i, j int) bool { return result[i].Item.ID < result[j].Item.ID })
+	return result
+}
+
 func (r *Registry) FileActions() []ContributionAction {
 	r.mu.RLock()
 	defer r.mu.RUnlock()

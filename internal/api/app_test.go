@@ -924,6 +924,9 @@ func newBridgeTestApp(t *testing.T) *App {
 		Commands: []plugin.ContributionCommand{
 			{ID: "bridge.command", Title: "Bridge Command", Handler: "runBridgeCommand"},
 		},
+		StatusBarItems: []plugin.ContributionStatusBarItem{
+			{ID: "bridge.status", Label: "Bridge Ready", Position: "right", Handler: "openBridgeStatus"},
+		},
 		OpenProviders: []plugin.ContributionOpenProvider{
 			{
 				ID:        "bridge.markdown",
@@ -995,6 +998,19 @@ func TestContributionSummaryIncludesOpenProviders(t *testing.T) {
 	}
 	if len(provider.Supports) != 1 || provider.Supports[0].Contexts[1] != "notes-markdown" {
 		t.Fatalf("supports = %+v", provider.Supports)
+	}
+}
+
+func TestContributionSummaryIncludesStatusBarItems(t *testing.T) {
+	app := newBridgeTestApp(t)
+
+	summary := app.GetContributions()
+	if len(summary.StatusBarItems) != 1 {
+		t.Fatalf("StatusBarItems count = %d, want 1", len(summary.StatusBarItems))
+	}
+	item := summary.StatusBarItems[0]
+	if item.PluginID != "bridge.plugin" || item.ID != "bridge.status" || item.Label != "Bridge Ready" || item.Position != "right" || item.Handler != "openBridgeStatus" {
+		t.Fatalf("status item = %+v", item)
 	}
 }
 

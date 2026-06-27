@@ -201,7 +201,7 @@ Icon fields use shell icon names rendered through the bundled Lucide SVG wrapper
 | Контекстное меню | `contextMenuEntries` | Registry готов, UI не реализован |
 | Провайдеры поиска | `searchProviders` | Registry готов, UI не реализован |
 | Провайдеры активности | `activityProviders` | Registry готов, UI не реализован |
-| Элементы status bar | `statusBarItems` | Registry готов, UI не реализован |
+| Элементы status bar | `statusBarItems` | ✅ StatusBar.svelte host |
 
 ### Структура contribution points в manifest
 
@@ -392,6 +392,16 @@ contributions summary.
   `Ctrl+Shift+P` / `Cmd+Shift+P`, показывает commands enabled plugins,
   фильтрует по title/id/plugin и вызывает зарегистрированные bundled frontend
   handlers.
+
+`statusBarItems`
+
+- Shell status bar renders enabled plugin `statusBarItems` contributions.
+- Items support `left`, `center`, and `right` positions. Missing position
+  defaults to `left`.
+- The host refreshes on plugin reload/enable/disable through
+  `verstak:plugins-changed`.
+- `handler` is preserved in the contribution summary for future action routing;
+  current host only renders status labels.
 
 `events`
 
