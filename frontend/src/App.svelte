@@ -1,6 +1,7 @@
 <script>
   import PluginManager from './lib/plugin-manager/PluginManager.svelte';
   import Sidebar from './lib/shell/Sidebar.svelte';
+  import CommandPalette from './lib/shell/CommandPalette.svelte';
   import ViewContainer from './lib/shell/ViewContainer.svelte';
   import VaultSelection from './lib/shell/VaultSelection.svelte';
   import WorkbenchHost from './lib/shell/WorkbenchHost.svelte';
@@ -292,6 +293,7 @@
 {:else}
   <main>
     <Sidebar />
+    <CommandPalette />
 
     <section class="content scroll-surface">
       {#if currentView === 'plugin-manager'}

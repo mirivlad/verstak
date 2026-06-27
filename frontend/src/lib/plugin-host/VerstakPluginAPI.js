@@ -75,6 +75,29 @@ function commandKey(pluginId, commandId) {
   return pluginId + ':' + commandId;
 }
 
+export async function executePluginCommand(pluginId, cmdId, args) {
+  if (!pluginId) {
+    throw new Error('executePluginCommand requires pluginId');
+  }
+  if (!cmdId) {
+    throw new Error('executePluginCommand requires command id');
+  }
+  const declared = await callBackend(pluginId, 'commands.execute(' + cmdId + ')', function() {
+    return App.ExecutePluginCommand(pluginId, cmdId, args || {});
+  });
+  const handler = window.__VERSTAK_COMMAND_HANDLERS__[commandKey(pluginId, cmdId)];
+  if (!handler) {
+    throw new Error('[plugin:' + pluginId + '] commands.execute(' + cmdId + ') failed: declared-but-unhandled');
+  }
+  const result = await handler(args || {}, declared);
+  return {
+    status: 'handled',
+    pluginId: pluginId,
+    commandId: cmdId,
+    result: result
+  };
+}
+
 export function createPluginAPI(pluginId) {
   if (!pluginId) {
     throw new Error('createPluginAPI requires pluginId');
@@ -306,20 +329,7 @@ export function createPluginAPI(pluginId) {
       },
       execute: async function(cmdId, args) {
         assertActive('commands.execute(' + cmdId + ')');
-        const declared = await callBackend(pluginId, 'commands.execute(' + cmdId + ')', function() {
-          return App.ExecutePluginCommand(pluginId, cmdId, args || {});
-        });
-        const handler = window.__VERSTAK_COMMAND_HANDLERS__[commandKey(pluginId, cmdId)];
-        if (!handler) {
-          throw new Error('[plugin:' + pluginId + '] commands.execute(' + cmdId + ') failed: declared-but-unhandled');
-        }
-        const result = await handler(args || {}, declared);
-        return {
-          status: 'handled',
-          pluginId: pluginId,
-          commandId: cmdId,
-          result: result
-        };
+        return executePluginCommand(pluginId, cmdId, args || {});
       }
     },
 

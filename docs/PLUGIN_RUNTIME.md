@@ -189,7 +189,7 @@ Icon fields use shell icon names rendered through the bundled Lucide SVG wrapper
 | Боковая панель | `sidebarItems` | Элементы в sidebar слева | ✅ Sidebar.svelte (из ContributionRegistry) |
 | Основные панели | `views` | Полноценные страницы/панели | ✅ ViewContainer.svelte (PluginBundleHost — real frontend bundle) |
 | Панели настроек | `settingsPanels` | Панели в Plugin Manager | ✅ PluginManager.svelte (кнопка Settings, открывает modal) |
-| Команды | `commands` | Команды для command palette | ✅ ContributionRegistry (UI command palette не реализован) |
+| Команды | `commands` | Команды для command palette | ✅ ContributionRegistry + CommandPalette UI |
 | Open/edit providers | `openProviders` | Провайдеры viewer/editor для Workbench routing | ✅ ContributionRegistry + минимальный Workbench host |
 
 ### Планируемые contribution points
@@ -388,6 +388,10 @@ contributions summary.
   понятную ошибку `declared-but-unhandled`.
 - Handler registry очищается при component unmount, reload/disable flow и
   `api.dispose()`.
+- Shell command palette открывается через `Ctrl+K` / `Cmd+K` или
+  `Ctrl+Shift+P` / `Cmd+Shift+P`, показывает commands enabled plugins,
+  фильтрует по title/id/plugin и вызывает зарегистрированные bundled frontend
+  handlers.
 
 `events`
 
@@ -487,6 +491,7 @@ bundled runtime. Это реальный runtime contract для cooperative bun
 | `api.capabilities.has(id)` | ✅ Работает | Boolean wrapper над `get` |
 | `api.commands.register(id, handler)` | ✅ Работает | Регистрирует bundled frontend handler для объявленной command |
 | `api.commands.execute(id, args)` | ✅ Работает | Валидирует declaration/permission/backend state и вызывает bundled handler |
+| Command Palette UI | ✅ Работает | `Ctrl/Cmd+K`, фильтр enabled plugin commands, вызов registered frontend handlers |
 | `api.events.publish(type, payload)` | ✅ Работает | Валидирует permission и публикует во frontend event bus |
 | `api.events.subscribe(type, handler)` | ✅ Работает | Валидирует permission и подписывает handler на frontend event bus |
 | `api.files.list(relativeDir)` | ✅ Работает | Список vault-relative директории, `.verstak` скрыта |
