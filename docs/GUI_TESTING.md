@@ -25,36 +25,27 @@ These tests:
 
 | File | Suite | Tests | Status |
 |------|-------|-------|--------|
-| `plugin-manager-disable-enable.spec.js` | A: Disable/Enable refresh | 4 | 3 pass, 1 fail* |
+| `plugin-manager-disable-enable.spec.js` | A: Disable/Enable refresh | 4 | pass |
 | `sidebar-opens-view.spec.js` | B: Sidebar → view routing | 3 | 3 pass |
-| `reload-updates-state.spec.js` | C: Reload updates UI | 3 | 2 pass, 1 fail* |
+| `reload-updates-state.spec.js` | C: Reload updates UI | 4 | pass |
 
-\* Failing tests document **known bugs** (see below).
+## Resolved bugs covered by tests
 
-## Known bugs detected by tests
+### Bug M5-1: Sidebar updates when plugin state changes
 
-### Bug M5-1: Sidebar does not update when plugin state changes
+**Previous symptom:** After disabling a plugin in Plugin Manager, the sidebar
+item for that plugin remained visible. Reloading after external mock state
+changes also left stale sidebar items.
 
-**Symptom:** After disabling a plugin in Plugin Manager, the sidebar item for
-that plugin remains visible. After re-enabling, it stays visible (doesn't
-disappear then reappear — it was never gone).
+**Current behavior:** `PluginManager.svelte` dispatches
+`verstak:plugins-changed` after reload/enable/disable flows. `Sidebar.svelte`
+listens for that event and re-fetches plugins, vault status, and contributions.
 
-**Root cause:** `Sidebar.svelte` loads plugin/contribution data once in
-`onMount` and stores it in local `sidebarItems`. When `PluginManager`
-disables/enables a plugin and calls `ReloadPlugins`, the `PluginManager`
-component re-fetches data, but `Sidebar` does not react to the change — it
-still holds the stale list.
+**Regression coverage:**
 
-**Affected tests:**
 - `A: Disable plugin: button changes to Enable, sidebar item disappears`
 - `A: Disable → Enable full flow in sequence`
 - `C: Reload after mock state change reflects new plugin status`
-
-**Fix needed:** Sidebar must either:
-1. Re-fetch contributions when it receives a custom event (e.g.
-   `verstak:plugins-reloaded`), or
-2. Read plugin state reactively from a shared store that both
-   PluginManager and Sidebar subscribe to.
 
 ## What is NOT tested
 

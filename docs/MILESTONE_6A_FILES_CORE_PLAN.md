@@ -181,18 +181,18 @@ type Entry struct {
 - Create: `internal/core/files/path.go`
 - Create: `internal/core/files/path_test.go`
 
-- [ ] Add `NormalizeVaultRelativePath(relative string) (string, error)`.
-- [ ] Reject absolute paths, null bytes, `..`, and empty file paths.
-- [ ] Preserve path case, including canonical `Notes`.
-- [ ] Add `IsReservedPath(relative string) bool` returning true for `.verstak`
+- [x] Add `NormalizeVaultRelativePath(relative string) (string, error)`.
+- [x] Reject absolute paths, null bytes, `..`, and empty file paths.
+- [x] Preserve path case, including canonical `Notes`.
+- [x] Add `IsReservedPath(relative string) bool` returning true for `.verstak`
       and `.verstak/...`.
-- [ ] Add tests:
+- [x] Add tests:
       `TestNormalizeRejectsAbsolutePath`,
       `TestNormalizeRejectsTraversal`,
       `TestNormalizeRejectsNullByte`,
       `TestNormalizePreservesCase`,
       `TestReservedPathPolicy`.
-- [ ] Run:
+- [x] Run:
 
 ```bash
 go test ./internal/core/files
@@ -207,21 +207,21 @@ Expected: all `internal/core/files` tests pass.
 - Create: `internal/core/files/service.go`
 - Create/modify: `internal/core/files/service_test.go`
 
-- [ ] Define `Service` with a vault dependency that can return the current vault
+- [x] Define `Service` with a vault dependency that can return the current vault
       root and status.
-- [ ] Implement `List(relativeDir string) ([]Entry, error)`.
-- [ ] Implement `Metadata(relativePath string) (Entry, error)`.
-- [ ] Implement `ReadText(relativePath string) (string, error)`.
-- [ ] Implement `WriteText(relativePath, content string, overwrite bool) (Entry, error)`.
-- [ ] Implement `Mkdir(relativePath string) (Entry, error)`.
-- [ ] Implement `Move(fromRelativePath, toRelativePath string, overwrite bool) (Entry, error)`.
-- [ ] Implement `Trash(relativePath string) (Entry, error)`.
-- [ ] Use the shared path policy for every public method.
-- [ ] Block `.verstak` paths in every public method.
-- [ ] Add tests for closed vault, list, metadata, text read/write, mkdir, move,
+- [x] Implement `List(relativeDir string) ([]Entry, error)`.
+- [x] Implement `Metadata(relativePath string) (Entry, error)`.
+- [x] Implement `ReadText(relativePath string) (string, error)`.
+- [x] Implement `WriteText(relativePath, content string, overwrite bool) (Entry, error)`.
+- [x] Implement `Mkdir(relativePath string) (Entry, error)`.
+- [x] Implement `Move(fromRelativePath, toRelativePath string, overwrite bool) (Entry, error)`.
+- [x] Implement `Trash(relativePath string) (Entry, error)`.
+- [x] Use the shared path policy for every public method.
+- [x] Block `.verstak` paths in every public method.
+- [x] Add tests for closed vault, list, metadata, text read/write, mkdir, move,
       trash, overwrite false conflict, overwrite true replace, and reserved path
       rejection.
-- [ ] Run:
+- [x] Run:
 
 ```bash
 go test ./internal/core/files
@@ -236,13 +236,13 @@ Expected: all `internal/core/files` tests pass.
 - Modify: `internal/core/files/service.go`
 - Modify: `internal/core/files/service_test.go`
 
-- [ ] Write text content to a temp file in the target directory.
-- [ ] Rename the temp file into the final path only after successful write.
-- [ ] Remove temp file on write failure.
-- [ ] Add test `TestWriteTextIsAtomicOnFailure` using a controlled failing path
+- [x] Write text content to a temp file in the target directory.
+- [x] Rename the temp file into the final path only after successful write.
+- [x] Remove temp file on write failure.
+- [x] Add test `TestWriteTextIsAtomicOnFailure` using a controlled failing path
       or permission-denied directory.
-- [ ] Add test `TestWriteTextDoesNotLeaveTempFile`.
-- [ ] Run:
+- [x] Add test `TestWriteTextDoesNotLeaveTempFile`.
+- [x] Run:
 
 ```bash
 go test ./internal/core/files
@@ -258,12 +258,12 @@ Expected: all `internal/core/files` tests pass.
 - Modify: `main.go`
 - Modify: `internal/api/app_test.go`
 
-- [ ] Register permissions: `files.read`, `files.write`, `files.delete`.
-- [ ] Register core capability `verstak/core/files/v1` when vault services are
+- [x] Register permissions: `files.read`, `files.write`, `files.delete`.
+- [x] Register core capability `verstak/core/files/v1` when vault services are
       initialized.
-- [ ] Add API guard tests proving each Files bridge method rejects plugins that
+- [x] Add API guard tests proving each Files bridge method rejects plugins that
       are missing the required permission.
-- [ ] Run:
+- [x] Run:
 
 ```bash
 go test ./internal/core/permissions ./internal/api
@@ -282,13 +282,13 @@ Expected: permission registry and API tests pass.
 - Modify after Wails generation or by hand if generation is unavailable:
   `frontend/wailsjs/go/api/App.js`
 
-- [ ] Add `files.Service` to `api.App`.
-- [ ] Add plugin-scoped methods listed in "Public Backend Shape".
-- [ ] Use `requirePluginAccess(pluginID, permission)` for every method.
-- [ ] Return readable errors for closed vault, missing file, reserved path,
+- [x] Add `files.Service` to `api.App`.
+- [x] Add plugin-scoped methods listed in "Public Backend Shape".
+- [x] Use `requirePluginAccess(pluginID, permission)` for every method.
+- [x] Return readable errors for closed vault, missing file, reserved path,
       conflict, and missing permission.
-- [ ] Add tests for successful read/write/list/mkdir/move/trash through `App`.
-- [ ] Run:
+- [x] Add tests for successful read/write/list/mkdir/move/trash through `App`.
+- [x] Run:
 
 ```bash
 go test ./internal/api
@@ -305,16 +305,16 @@ Expected: API tests pass.
 - Add/modify focused frontend tests under `frontend/e2e/` only if existing test
   coverage cannot validate the shape outside Playwright.
 
-- [ ] Add `api.files.list(relativeDir)`.
-- [ ] Add `api.files.metadata(relativePath)`.
-- [ ] Add `api.files.readText(relativePath)`.
-- [ ] Add `api.files.writeText(relativePath, content, options)`.
-- [ ] Add `api.files.mkdir(relativePath)`.
-- [ ] Add `api.files.move(fromRelativePath, toRelativePath, options)`.
-- [ ] Add `api.files.trash(relativePath)`.
-- [ ] Keep all calls plugin-scoped; plugin code must not pass `pluginId`.
-- [ ] Mock readable errors for reserved path and missing permission.
-- [ ] Run:
+- [x] Add `api.files.list(relativeDir)`.
+- [x] Add `api.files.metadata(relativePath)`.
+- [x] Add `api.files.readText(relativePath)`.
+- [x] Add `api.files.writeText(relativePath, content, options)`.
+- [x] Add `api.files.mkdir(relativePath)`.
+- [x] Add `api.files.move(fromRelativePath, toRelativePath, options)`.
+- [x] Add `api.files.trash(relativePath)`.
+- [x] Keep all calls plugin-scoped; plugin code must not pass `pluginId`.
+- [x] Mock readable errors for reserved path and missing permission.
+- [x] Run:
 
 ```bash
 cd frontend
@@ -331,11 +331,11 @@ Expected: frontend build passes.
 - Modify: `../verstak-sdk/src/test-utils.ts`
 - Modify: `../verstak-sdk/src/plugin-api.test.ts`
 
-- [ ] Add `files` API TypeScript interfaces matching the frontend API names.
-- [ ] Add mock Files API methods in `createMockPluginAPI`.
-- [ ] Add contract tests for API shape, text write/read, reserved path error, and
+- [x] Add `files` API TypeScript interfaces matching the frontend API names.
+- [x] Add mock Files API methods in `createMockPluginAPI`.
+- [x] Add contract tests for API shape, text write/read, reserved path error, and
       trash result shape.
-- [ ] Run:
+- [x] Run:
 
 ```bash
 cd ../verstak-sdk
@@ -353,36 +353,36 @@ Expected: SDK check, build, and tests pass.
 - Modify: `docs/PLUGIN_RUNTIME.md`
 - Modify: `docs/NOTES_FILES_PLUGIN_PLAN.md`
 
-- [ ] Document Files Core API as functional for Milestone 6a.
-- [ ] Keep Notes API documented as planned until Milestone 6b or later.
-- [ ] Document `.verstak` reserved path policy.
-- [ ] Document slash-only path policy, Windows/UNC rejection, and symlink policy.
-- [ ] Document text-only write support and deferred binary streaming.
+- [x] Document Files Core API as functional for Milestone 6a.
+- [x] Keep Notes API documented as planned until Milestone 6b or later.
+- [x] Document `.verstak` reserved path policy.
+- [x] Document slash-only path policy, Windows/UNC rejection, and symlink policy.
+- [x] Document text-only write support and deferred binary streaming.
 
 ## Task 9: Final Verification
 
-- [ ] Run desktop backend tests:
+- [x] Run desktop backend tests:
 
 ```bash
 cd verstak-desktop
 go test ./...
 ```
 
-- [ ] Run desktop frontend build:
+- [x] Run desktop frontend build:
 
 ```bash
 cd verstak-desktop/frontend
 npm run build
 ```
 
-- [ ] Run desktop e2e:
+- [x] Run desktop e2e:
 
 ```bash
 cd verstak-desktop/frontend
 npm run test:e2e -- --reporter=list
 ```
 
-- [ ] Run official plugins checks:
+- [x] Run official plugins checks:
 
 ```bash
 cd verstak-official-plugins
@@ -390,7 +390,7 @@ cd verstak-official-plugins
 ./scripts/build.sh
 ```
 
-- [ ] Run SDK checks:
+- [x] Run SDK checks:
 
 ```bash
 cd verstak-sdk
