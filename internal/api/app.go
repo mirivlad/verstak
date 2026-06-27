@@ -1550,6 +1550,8 @@ func (a *App) syncStatus() (*SyncStatusDTO, error) {
 		dto.StatusLabel = "connected"
 	case dto.Configured:
 		dto.StatusLabel = "disconnected"
+	case dto.ServerURL != "":
+		dto.StatusLabel = "disconnected"
 	default:
 		dto.StatusLabel = "disabled"
 	}
@@ -1694,6 +1696,40 @@ func (a *App) PluginSyncSetInterval(pluginID string, minutes int) string {
 		return err.Error()
 	}
 	if err := a.syncSetInterval(minutes); err != nil {
+		return err.Error()
+	}
+	return ""
+}
+
+func (a *App) syncResetKey() error {
+	if err := a.requireVault(); err != nil {
+		return err
+	}
+	vaultPath := a.vaultPath()
+	if err := syncsvc.RemoveDeviceToken(vaultPath); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+
+	cfg := a.appSettings.Get()
+	cfg.Sync.Enabled = false
+	cfg.Sync.DeviceID = ""
+	cfg.Sync.DeviceName = ""
+	cfg.Sync.LastStatus = "disconnected"
+	cfg.Sync.LastError = ""
+	if a.syncSvc != nil {
+		if err := a.syncSvc.SetState(cfg.Sync.ServerURL, ""); err != nil {
+			return err
+		}
+	}
+	return a.appSettings.UpdateSync(cfg.Sync)
+}
+
+// PluginSyncResetKey clears the stored sync device token for a plugin with sync permission.
+func (a *App) PluginSyncResetKey(pluginID string) string {
+	if err := a.requirePluginSyncAccess(pluginID, false); err != nil {
+		return err.Error()
+	}
+	if err := a.syncResetKey(); err != nil {
 		return err.Error()
 	}
 	return ""

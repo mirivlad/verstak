@@ -311,6 +311,12 @@ export function createPluginAPI(pluginId) {
           return App.PluginSyncSetInterval(pluginId, Number(minutes) || 0);
         });
       },
+      resetKey: function() {
+        assertActive('sync.resetKey');
+        return callBackendErrorString(pluginId, 'sync.resetKey', function() {
+          return App.PluginSyncResetKey(pluginId);
+        });
+      },
       now: function() {
         assertActive('sync.now');
         return callBackend(pluginId, 'sync.now', function() {

@@ -154,6 +154,10 @@ export function PluginSyncNow(arg1) {
   return window['go']['api']['App']['PluginSyncNow'](arg1);
 }
 
+export function PluginSyncResetKey(arg1) {
+  return window['go']['api']['App']['PluginSyncResetKey'](arg1);
+}
+
 export function PluginSyncSetInterval(arg1, arg2) {
   return window['go']['api']['App']['PluginSyncSetInterval'](arg1, arg2);
 }

@@ -84,6 +84,8 @@ export function PluginSyncDisconnect(arg1:string):Promise<string>;
 
 export function PluginSyncNow(arg1:string):Promise<Record<string, any>|string>;
 
+export function PluginSyncResetKey(arg1:string):Promise<string>;
+
 export function PluginSyncSetInterval(arg1:string,arg2:number):Promise<string>;
 
 export function PluginSyncStatus(arg1:string):Promise<api.SyncStatusDTO|string>;

@@ -1116,6 +1116,22 @@
       syncState.syncInterval = Number(minutes) || 0;
       return Promise.resolve('');
     },
+    PluginSyncResetKey: function (pluginId) {
+      var err = requirePluginSyncPermission(pluginId, false);
+      if (err) return Promise.resolve(err);
+      syncState.configured = false;
+      syncState.deviceId = '';
+      syncState.deviceName = '';
+      syncState.connected = false;
+      syncState.revoked = false;
+      syncState.tokenStored = false;
+      syncState.lastError = '';
+      syncState.statusLabel = 'disconnected';
+      pluginSettings[pluginId] = Object.assign({}, pluginSettings[pluginId] || {}, {
+        syncStatus: syncState.statusLabel
+      });
+      return Promise.resolve('');
+    },
     PluginSyncNow: function (pluginId) {
       var err = requirePluginSyncPermission(pluginId, true);
       if (err) return Promise.resolve([{}, err]);

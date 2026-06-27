@@ -104,10 +104,12 @@ test.describe('D: Plugin API bridge', () => {
       await api.sync.setInterval(15);
       const configured = await api.sync.status();
       const syncNow = await api.sync.now();
+      await api.sync.resetKey();
+      const reset = await api.sync.status();
       await api.sync.disconnect();
       const disconnected = await api.sync.status();
       api.dispose();
-      return { initial, configured, syncNow, disconnected };
+      return { initial, configured, syncNow, reset, disconnected };
     });
 
     expect(result.initial.statusLabel).toBe('disabled');
@@ -115,6 +117,10 @@ test.describe('D: Plugin API bridge', () => {
     expect(result.configured.serverUrl).toBe('https://sync.example.test');
     expect(result.configured.syncInterval).toBe(15);
     expect(result.syncNow).toEqual({ pushed: 0, pulled: 0, serverSequence: 0 });
+    expect(result.reset.configured).toBe(false);
+    expect(result.reset.serverUrl).toBe('https://sync.example.test');
+    expect(result.reset.tokenStored).toBe(false);
+    expect(result.reset.statusLabel).toBe('disconnected');
     expect(result.disconnected.configured).toBe(false);
     expect(result.disconnected.statusLabel).toBe('disabled');
   });

@@ -1270,6 +1270,48 @@ func TestPluginSyncBridgeRequiresDeclaredPermissions(t *testing.T) {
 	if _, errStr := app.PluginSyncNow("sync.local"); !strings.Contains(errStr, "network.remote") {
 		t.Fatalf("PluginSyncNow err = %q, want network.remote permission error", errStr)
 	}
+
+	app.syncSvc = syncsvc.NewService(app.vaultPath(), "local-device")
+	app.appSettings = appsettings.NewManager(filepath.Join(t.TempDir(), "config.json"))
+	if err := app.appSettings.Load(); err != nil {
+		t.Fatalf("settings Load: %v", err)
+	}
+	cfg := app.appSettings.Get()
+	cfg.Sync.Enabled = true
+	cfg.Sync.ServerURL = "https://sync.example.test"
+	cfg.Sync.DeviceID = "device-1"
+	cfg.Sync.DeviceName = "test-device"
+	cfg.Sync.LastStatus = "connected"
+	if err := app.appSettings.UpdateSync(cfg.Sync); err != nil {
+		t.Fatalf("settings UpdateSync: %v", err)
+	}
+	if err := syncsvc.SaveDeviceToken(app.vaultPath(), "secret-token"); err != nil {
+		t.Fatalf("SaveDeviceToken: %v", err)
+	}
+
+	if errStr := app.PluginSyncResetKey("sync.local"); errStr != "" {
+		t.Fatalf("PluginSyncResetKey: %s", errStr)
+	}
+	if token := syncsvc.LoadDeviceToken(app.vaultPath()); token != "" {
+		t.Fatalf("device token = %q, want cleared", token)
+	}
+	cfg = app.appSettings.Get()
+	if cfg.Sync.DeviceID != "" || cfg.Sync.DeviceName != "" || cfg.Sync.LastStatus != "disconnected" {
+		t.Fatalf("sync settings after reset = %#v, want cleared device and disconnected status", cfg.Sync)
+	}
+	if cfg.Sync.ServerURL != "https://sync.example.test" {
+		t.Fatalf("server URL = %q, want preserved", cfg.Sync.ServerURL)
+	}
+	status, errStr = app.PluginSyncStatus("sync.local")
+	if errStr != "" {
+		t.Fatalf("PluginSyncStatus after reset: %s", errStr)
+	}
+	if status.Configured || status.ServerURL != "https://sync.example.test" || status.StatusLabel != "disconnected" {
+		t.Fatalf("status after reset = %#v, want server preserved, not configured, disconnected", status)
+	}
+	if errStr := app.PluginSyncResetKey("no.storage"); !strings.Contains(errStr, "sync.participate") {
+		t.Fatalf("PluginSyncResetKey err = %q, want sync.participate permission error", errStr)
+	}
 }
 
 func TestPluginBridgeCapabilitiesCommandsAndEventsAreChecked(t *testing.T) {
