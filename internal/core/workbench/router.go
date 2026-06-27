@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/verstak/verstak-desktop/internal/core/contribution"
-	"github.com/verstak/verstak-desktop/internal/core/notes"
 	"github.com/verstak/verstak-desktop/internal/core/plugin"
 )
 
@@ -236,7 +235,7 @@ func resourceContextName(request OpenResourceRequest) string {
 	if ext == ".md" || ext == ".markdown" {
 		// Auto-detect Notes context: either explicitly set in request context
 		// or path-based detection using the canonical Notes/ folder layout.
-		if request.Context.NotesMode || request.Context.IsInsideNotesFolder || notes.IsInsideNotes(request.Path) {
+		if request.Context.NotesMode || request.Context.IsInsideNotesFolder || isInsideNotesPath(request.Path) {
 			return ContextNotesMarkdown
 		}
 		return ContextGenericMarkdown
@@ -245,6 +244,21 @@ func resourceContextName(request OpenResourceRequest) string {
 		return ContextGenericText
 	}
 	return ""
+}
+
+func isInsideNotesPath(relativePath string) bool {
+	if relativePath == "" {
+		return false
+	}
+	cleaned := strings.TrimSpace(relativePath)
+	cleaned = strings.TrimPrefix(cleaned, "./")
+	cleaned = strings.TrimPrefix(cleaned, "/")
+	for _, part := range strings.Split(cleaned, "/") {
+		if part == "Notes" {
+			return true
+		}
+	}
+	return false
 }
 
 func isTextResource(request OpenResourceRequest) bool {

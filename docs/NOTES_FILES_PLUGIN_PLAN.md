@@ -54,8 +54,9 @@ Canonical rules:
 
 Canonical scoped paths:
 
-- Workspace overview notes live under `<workspace>/Notes/`.
-- The default overview note is `<workspace>/Notes/Overview.md`.
+- Notes live under `<workspace>/Notes/`.
+- `Overview.md` is allowed as an ordinary Markdown filename, but the platform
+  must not create it automatically or treat it as a dedicated UI entity.
 - `<workspace>` is the top-level physical folder name under the vault root.
 - Files plugin workspace views are scoped with `workspaceRootPath`, which is the
   selected top-level workspace folder name.
@@ -68,8 +69,9 @@ Visibility requirements:
 - Outside Verstak, the files must remain useful as normal Markdown.
 
 There is no canonical metadata workspace tree. Adding `note` as a workspace node
-type is not part of the next milestone. The Notes service can index and manage
-Markdown files inside canonical `Notes/` folders under each top-level workspace.
+type is not part of the next milestone. The official Notes plugin can index and
+manage Markdown files inside canonical `Notes/` folders under each top-level
+workspace.
 
 ## Title To Filename Contract
 
@@ -99,9 +101,9 @@ Examples:
 Same-folder collisions must not be solved silently with `_2`, `_3`, or timestamp
 suffixes.
 
-`CreateNote` and `RenameNote` must return a conflict error if the normalized
-target filename already exists in the target `Notes/` folder. The UI should show a
-clear dialog or notification and ask the user to change the title.
+Creating or renaming a note must return a conflict error if the normalized target
+filename already exists in the target `Notes/` folder. The UI should show a clear
+dialog or notification and ask the user to change the title.
 
 Required conflict metadata:
 
@@ -159,16 +161,17 @@ Later Files methods:
 - `OpenExternal(relativePath)` with explicit permission and UX confirmation.
 - `RevealInFileManager(relativePath)`.
 
-## Notes Service Model
+## Official Notes Plugin Model
 
-Notes API is a semantic layer over Markdown files managed by the Files/path
-policy.
+The official Notes plugin is a semantic layer over Markdown files managed through
+the public Files plugin API. There is no core desktop Notes service or
+`verstak/core/notes/v1` capability in v2.
 
 Rules:
 
 - A note physically is a `.md` file.
-- Notes API and Files API must not create two sources of truth.
-- Notes API reads/writes the same files that Files API lists.
+- Notes plugin and Files API must not create two sources of truth.
+- Notes plugin reads/writes the same files that Files API lists.
 - The note title is the semantic source of truth and is projected to the filename.
   If frontmatter or a first-heading convention is introduced later, `RenameNote`
   must keep that visible title metadata and the filename synchronized.
@@ -178,27 +181,27 @@ Rules:
   watcher/indexer must observe it.
 - Until watcher/indexer exists, external changes require reload/rescan.
 
-Minimum Notes methods:
+Minimum Notes plugin behavior:
 
-- `ListNotes(scope)` where `scope` resolves to a canonical `Notes/` folder.
-- `GetNote(notePath)`.
-- `CreateNote(scope, title, initialBody)`.
-- `RenameNote(notePath, newTitle)`.
-- `UpdateNoteBody(notePath, body)`.
-- `TrashNote(notePath)`.
+- list Markdown files in a scoped canonical `Notes/` folder;
+- create a Markdown note by writing the normalized filename atomically with
+  `overwrite: false`;
+- rename a note by moving the file to the normalized filename;
+- open and edit notes through Workbench providers;
+- never special-case `Overview.md` in the UI.
 
-Later Notes methods:
+Later Notes plugin behavior:
 
-- `SearchNotes(query, filters)`.
-- `ListBacklinks(notePath)`.
-- `ResolveNoteLinks(notePath)`.
-- `ExportNote(notePath, format)`.
+- search notes;
+- list backlinks;
+- resolve note links;
+- export notes.
 
 ## Notes Vs Files Relationship
 
 Files owns safe raw vault file access. Notes owns note semantics.
 
-The same physical note must be visible through both APIs:
+The same physical note must be visible through both surfaces:
 
 - Files sees `Project/Notes/Overview.md` as a file.
 - Notes sees `Project/Notes/Overview.md` as a note with title `Overview`.
@@ -238,7 +241,6 @@ real isolation boundary.
 Recommended capabilities:
 
 - `verstak/core/files/v1`
-- `verstak/core/notes/v1`
 - `verstak/files/v1` provided by the official Files plugin.
 - `verstak/notes/v1` provided by the official Notes plugin.
 
@@ -389,7 +391,7 @@ Backend Go tests:
 - Atomic text writes and temp-file cleanup on failure.
 - Notes `Notes/` folder casing and no lowercase `notes`.
 - Title to filename normalization.
-- `CreateNote` and `RenameNote` conflict errors without silent suffixes.
+- note create/rename conflict errors without silent suffixes.
 - Notes and Files read the same physical `.md` file.
 - Permission checks for `files.*`, `notes.*`, `vault.read`, and `vault.write`.
 

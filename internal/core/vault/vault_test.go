@@ -262,8 +262,11 @@ func TestCreateVault_CreatesWorkspace(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(v.GetVaultPath(), "Workspace")); err != nil {
 		t.Fatalf("Workspace folder not found: %v", err)
 	}
-	if _, err := os.Stat(filepath.Join(v.GetVaultPath(), "Workspace", "Notes", "Overview.md")); err != nil {
-		t.Fatalf("default workspace overview not found: %v", err)
+	if _, err := os.Stat(filepath.Join(v.GetVaultPath(), "Workspace", "Notes")); err != nil {
+		t.Fatalf("default workspace notes folder not found: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(v.GetVaultPath(), "Workspace", "Notes", "Overview.md")); !os.IsNotExist(err) {
+		t.Fatalf("default workspace should not create overview file, stat err=%v", err)
 	}
 	if _, err := os.Stat(filepath.Join(v.GetVaultPath(), ".verstak", "workspace.json")); !os.IsNotExist(err) {
 		t.Fatalf("workspace.json should not be created as workspace source of truth, stat err=%v", err)

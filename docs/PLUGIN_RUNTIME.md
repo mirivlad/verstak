@@ -761,7 +761,6 @@ Workspace — это физическая папка верхнего уровн
 <vault>/
   Workspace/
     Notes/
-      Overview.md
   Project/
   ClientA/
   .verstak/
@@ -860,7 +859,7 @@ Deprecated compatibility APIs:
   `.verstak`, reserved/internal names, symlink workspaces, conflicts.
 - WorkspaceItems получают `workspaceRootPath`, равный имени top-level папки
   (`Project`, `ClientA`, etc). Files plugin показывает именно эту папку.
-- Files API остаётся raw vault-relative API: `Project/Notes/Overview.md`,
+- Files API остаётся raw vault-relative API: `Project/Notes/example.md`,
   `Project/docs/file.md`, `Test/readme.md`.
 - Notes are ordinary Markdown files under `<workspace>/Notes/`; нет
   `.verstak/notes`, UUID note storage или второго source of truth для note

@@ -125,9 +125,7 @@ var builtInTemplates = map[string]templateDefinition{
 			"notes": "Notes",
 			"files": "Files",
 		},
-		Files: map[string]string{
-			"Notes/Overview.md": "# Overview\n",
-		},
+		Files: map[string]string{},
 	},
 	"client-project": {
 		ID:      "client-project",
@@ -144,9 +142,7 @@ var builtInTemplates = map[string]templateDefinition{
 			"files":   "Files",
 			"secrets": "Secrets",
 		},
-		Files: map[string]string{
-			"Notes/Overview.md": "# Overview\n",
-		},
+		Files: map[string]string{},
 	},
 }
 

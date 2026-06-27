@@ -92,8 +92,11 @@ func TestCreateWorkspaceCreatesFolderDefaultTemplateAndMetadataSnapshot(t *testi
 	if _, err := os.Stat(filepath.Join(vaultDir, "Project")); err != nil {
 		t.Fatalf("workspace folder missing: %v", err)
 	}
-	if _, err := os.Stat(filepath.Join(vaultDir, "Project", "Notes", "Overview.md")); err != nil {
-		t.Fatalf("default template overview missing: %v", err)
+	if _, err := os.Stat(filepath.Join(vaultDir, "Project", "Notes")); err != nil {
+		t.Fatalf("default template notes folder missing: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(vaultDir, "Project", "Notes", "Overview.md")); !os.IsNotExist(err) {
+		t.Fatalf("default template should not create overview file, stat err=%v", err)
 	}
 
 	meta, err := m.GetWorkspaceMetadata("Project")

@@ -841,8 +841,11 @@ func TestWorkspaceAPIUsesTopLevelFoldersAndMetadataSnapshot(t *testing.T) {
 	if ws.RootPath != "Project" {
 		t.Fatalf("workspace = %+v, want rootPath Project", ws)
 	}
-	if _, err := os.Stat(filepath.Join(vaultDir, "Project", "Notes", "Overview.md")); err != nil {
-		t.Fatalf("template file missing: %v", err)
+	if _, err := os.Stat(filepath.Join(vaultDir, "Project", "Notes")); err != nil {
+		t.Fatalf("template notes folder missing: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(vaultDir, "Project", "Notes", "Overview.md")); !os.IsNotExist(err) {
+		t.Fatalf("template should not create overview file, stat err=%v", err)
 	}
 
 	meta, errStr := app.GetWorkspaceMetadata("Project")
