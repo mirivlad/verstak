@@ -157,11 +157,59 @@
       },
       rootPath: '/tmp/verstak-test/plugins/sync',
       error: ''
+    },
+    'verstak.activity': {
+      status: 'loaded',
+      enabled: true,
+      manifest: {
+        schemaVersion: 1,
+        id: 'verstak.activity',
+        name: 'Activity',
+        version: '0.1.0',
+        apiVersion: '0.1.0',
+        description: 'Workspace-scoped activity log for public plugin events.',
+        source: 'official',
+        icon: 'activity',
+        provides: ['activity.log', 'activity.provider', 'activity.reconstruction'],
+        permissions: ['events.subscribe', 'storage.namespace', 'ui.register'],
+        frontend: { entry: 'frontend/dist/index.js' },
+        contributes: {
+          views: [{ id: 'verstak.activity.view', title: 'Activity', icon: 'activity', component: 'ActivityView' }],
+          sidebarItems: [{ id: 'verstak.activity.sidebar', title: 'Activity', icon: 'activity', view: 'verstak.activity.view', position: 20 }],
+          workspaceItems: [{ id: 'verstak.activity.workspace', title: 'Activity', icon: 'activity', component: 'ActivityView' }]
+        }
+      },
+      rootPath: '/tmp/verstak-test/plugins/activity',
+      error: ''
+    },
+    'verstak.browser-inbox': {
+      status: 'loaded',
+      enabled: true,
+      manifest: {
+        schemaVersion: 1,
+        id: 'verstak.browser-inbox',
+        name: 'Browser Inbox',
+        version: '0.1.0',
+        apiVersion: '0.1.0',
+        description: 'Workspace-scoped inbox for browser captures.',
+        source: 'official',
+        icon: 'inbox',
+        provides: ['browser.inbox'],
+        permissions: ['events.subscribe', 'storage.namespace', 'ui.register'],
+        frontend: { entry: 'frontend/dist/index.js' },
+        contributes: {
+          views: [{ id: 'verstak.browser-inbox.view', title: 'Browser Inbox', icon: 'inbox', component: 'BrowserInboxView' }],
+          sidebarItems: [{ id: 'verstak.browser-inbox.sidebar', title: 'Browser Inbox', icon: 'inbox', view: 'verstak.browser-inbox.view', position: 30 }],
+          workspaceItems: [{ id: 'verstak.browser-inbox.workspace', title: 'Browser Inbox', icon: 'inbox', component: 'BrowserInboxView' }]
+        }
+      },
+      rootPath: '/tmp/verstak-test/plugins/browser-inbox',
+      error: ''
     }
   };
 
   var vaultStatus = { status: 'open', path: '/tmp/verstak-test/vault', vaultId: 'test-vault-001' };
-  var vaultPluginState = { enabledPlugins: ['verstak.platform-test', 'verstak.default-editor', 'verstak.files', 'verstak.sync'], disabledPlugins: [], desiredPlugins: [{ id: 'verstak.platform-test', version: '0.1.0', source: 'official' }, { id: 'verstak.default-editor', version: '0.1.0', source: 'official' }, { id: 'verstak.files', version: '0.1.0', source: 'official' }, { id: 'verstak.sync', version: '0.1.0', source: 'official' }] };
+  var vaultPluginState = { enabledPlugins: ['verstak.platform-test', 'verstak.default-editor', 'verstak.files', 'verstak.sync', 'verstak.activity', 'verstak.browser-inbox'], disabledPlugins: [], desiredPlugins: [{ id: 'verstak.platform-test', version: '0.1.0', source: 'official' }, { id: 'verstak.default-editor', version: '0.1.0', source: 'official' }, { id: 'verstak.files', version: '0.1.0', source: 'official' }, { id: 'verstak.sync', version: '0.1.0', source: 'official' }, { id: 'verstak.activity', version: '0.1.0', source: 'official' }, { id: 'verstak.browser-inbox', version: '0.1.0', source: 'official' }] };
   var appSettings = { currentVaultPath: '/tmp/verstak-test/vault', recentVaults: [] };
   var workbenchPreferences = {};
   var openedResources = [];
@@ -922,6 +970,24 @@
     }.toString() + ')();';
   }
 
+  function activityBundle() {
+    return [
+      "(function(){",
+      "var ActivityView={mount:function(containerEl){containerEl.innerHTML='';var root=document.createElement('div');root.className='activity-root';root.setAttribute('data-plugin-id','verstak.activity');var title=document.createElement('h2');title.textContent='Activity';var body=document.createElement('div');body.textContent='Global activity feed';root.appendChild(title);root.appendChild(body);containerEl.appendChild(root);},unmount:function(containerEl){containerEl.innerHTML='';}};",
+      "window.VerstakPluginRegister('verstak.activity',{components:{ActivityView:ActivityView}});",
+      "})();"
+    ].join('');
+  }
+
+  function browserInboxBundle() {
+    return [
+      "(function(){",
+      "var BrowserInboxView={mount:function(containerEl){containerEl.innerHTML='';var root=document.createElement('div');root.className='browser-inbox-root';root.setAttribute('data-plugin-id','verstak.browser-inbox');var title=document.createElement('h2');title.textContent='Browser Inbox';var body=document.createElement('div');body.textContent='Global browser inbox';root.appendChild(title);root.appendChild(body);containerEl.appendChild(root);},unmount:function(containerEl){containerEl.innerHTML='';}};",
+      "window.VerstakPluginRegister('verstak.browser-inbox',{components:{BrowserInboxView:BrowserInboxView}});",
+      "})();"
+    ].join('');
+  }
+
   function platformTestBundle() {
     return [
       "(function(){",
@@ -1151,6 +1217,12 @@
       }
       if (pluginId === 'verstak.files' && assetPath === 'frontend/dist/index.js') {
         return Promise.resolve(filesPluginBundle());
+      }
+      if (pluginId === 'verstak.activity' && assetPath === 'frontend/dist/index.js') {
+        return Promise.resolve(activityBundle());
+      }
+      if (pluginId === 'verstak.browser-inbox' && assetPath === 'frontend/dist/index.js') {
+        return Promise.resolve(browserInboxBundle());
       }
       return Promise.resolve('');
     },
@@ -1583,10 +1655,58 @@
           },
           rootPath: '/tmp/verstak-test/plugins/sync',
           error: ''
+        },
+        'verstak.activity': {
+          status: 'loaded',
+          enabled: true,
+          manifest: {
+            schemaVersion: 1,
+            id: 'verstak.activity',
+            name: 'Activity',
+            version: '0.1.0',
+            apiVersion: '0.1.0',
+            description: 'Workspace-scoped activity log for public plugin events.',
+            source: 'official',
+            icon: 'activity',
+            provides: ['activity.log', 'activity.provider', 'activity.reconstruction'],
+            permissions: ['events.subscribe', 'storage.namespace', 'ui.register'],
+            frontend: { entry: 'frontend/dist/index.js' },
+            contributes: {
+              views: [{ id: 'verstak.activity.view', title: 'Activity', icon: 'activity', component: 'ActivityView' }],
+              sidebarItems: [{ id: 'verstak.activity.sidebar', title: 'Activity', icon: 'activity', view: 'verstak.activity.view', position: 20 }],
+              workspaceItems: [{ id: 'verstak.activity.workspace', title: 'Activity', icon: 'activity', component: 'ActivityView' }]
+            }
+          },
+          rootPath: '/tmp/verstak-test/plugins/activity',
+          error: ''
+        },
+        'verstak.browser-inbox': {
+          status: 'loaded',
+          enabled: true,
+          manifest: {
+            schemaVersion: 1,
+            id: 'verstak.browser-inbox',
+            name: 'Browser Inbox',
+            version: '0.1.0',
+            apiVersion: '0.1.0',
+            description: 'Workspace-scoped inbox for browser captures.',
+            source: 'official',
+            icon: 'inbox',
+            provides: ['browser.inbox'],
+            permissions: ['events.subscribe', 'storage.namespace', 'ui.register'],
+            frontend: { entry: 'frontend/dist/index.js' },
+            contributes: {
+              views: [{ id: 'verstak.browser-inbox.view', title: 'Browser Inbox', icon: 'inbox', component: 'BrowserInboxView' }],
+              sidebarItems: [{ id: 'verstak.browser-inbox.sidebar', title: 'Browser Inbox', icon: 'inbox', view: 'verstak.browser-inbox.view', position: 30 }],
+              workspaceItems: [{ id: 'verstak.browser-inbox.workspace', title: 'Browser Inbox', icon: 'inbox', component: 'BrowserInboxView' }]
+            }
+          },
+          rootPath: '/tmp/verstak-test/plugins/browser-inbox',
+          error: ''
         }
       };
       vaultStatus = { status: 'open', path: '/tmp/verstak-test/vault', vaultId: 'test-vault-001' };
-      vaultPluginState = { enabledPlugins: ['verstak.platform-test', 'verstak.default-editor', 'verstak.files', 'verstak.sync'], disabledPlugins: [], desiredPlugins: [{ id: 'verstak.platform-test', version: '0.1.0', source: 'official' }, { id: 'verstak.default-editor', version: '0.1.0', source: 'official' }, { id: 'verstak.files', version: '0.1.0', source: 'official' }, { id: 'verstak.sync', version: '0.1.0', source: 'official' }] };
+      vaultPluginState = { enabledPlugins: ['verstak.platform-test', 'verstak.default-editor', 'verstak.files', 'verstak.sync', 'verstak.activity', 'verstak.browser-inbox'], disabledPlugins: [], desiredPlugins: [{ id: 'verstak.platform-test', version: '0.1.0', source: 'official' }, { id: 'verstak.default-editor', version: '0.1.0', source: 'official' }, { id: 'verstak.files', version: '0.1.0', source: 'official' }, { id: 'verstak.sync', version: '0.1.0', source: 'official' }, { id: 'verstak.activity', version: '0.1.0', source: 'official' }, { id: 'verstak.browser-inbox', version: '0.1.0', source: 'official' }] };
       appSettings = { currentVaultPath: '/tmp/verstak-test/vault', recentVaults: [] };
       workbenchPreferences = {};
       openedResources = [];

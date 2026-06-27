@@ -14,10 +14,6 @@
   let sidebarItems = [];
   let errorMessage = '';
 
-  let navItems = [
-    { id: 'plugin-manager', label: 'Plugin Manager', icon: 'puzzle' },
-  ];
-
   $: vaultOpen = vaultStatus.status === 'open';
 
   async function loadSidebar() {
@@ -66,11 +62,6 @@
     window.removeEventListener('verstak:plugins-changed', loadSidebar);
   });
 
-  function handleNav(id) {
-    debug.log('[Sidebar] handleNav:', id);
-    window.dispatchEvent(new CustomEvent('verstak:nav', { detail: { viewId: id } }));
-  }
-
   function handleSidebarItem(item) {
     debug.log('[Sidebar] handleSidebarItem:', item.id, '-> view:', item.view);
     // Use item.view (the view contribution ID) if available, fall back to item.id
@@ -85,22 +76,9 @@
     <span class="sidebar-title">Verstak</span>
   </div>
 
-  <nav class="sidebar-nav">
-    {#each navItems as item}
-      <button
-        class="nav-item"
-        on:click={() => handleNav(item.id)}
-        type="button"
-      >
-        <Icon name={item.icon} size={16} class="nav-icon" />
-        <span class="nav-label">{item.label}</span>
-      </button>
-    {/each}
-  </nav>
-
   {#if sidebarItems.length > 0}
     <div class="sidebar-section">
-      <span class="section-label">Plugins</span>
+      <span class="section-label">Tools</span>
       {#each sidebarItems as item}
         <button
           class="nav-item plugin-item"
@@ -123,11 +101,6 @@
       <span class="sidebar-error">
         <Icon name="warning" size={10} class="sidebar-error-icon" />
         Plugin UI error
-      </span>
-    {/if}
-    {#if vaultStatus.status !== 'unknown'}
-      <span class="vault-indicator" class:vault-open={vaultStatus.status === 'open'} class:vault-closed={vaultStatus.status !== 'open'}>
-        ● Vault: {vaultStatus.status}
       </span>
     {/if}
   </div>
@@ -165,20 +138,12 @@
     font-weight: 600;
   }
 
-  .sidebar-nav {
-    display: flex;
-    flex-direction: column;
-    padding: 0.5rem 0.75rem;
-    gap: 0.15rem;
-  }
-
   .sidebar-section {
     display: flex;
     flex-direction: column;
     padding: 0.5rem 0.75rem;
     gap: 0.15rem;
-    border-top: 1px solid #0f3460;
-    margin-top: 0.25rem;
+    border-bottom: 1px solid #0f3460;
   }
 
   :global(workspace-tree) {
@@ -238,19 +203,6 @@
     margin-top: auto;
     padding: 0.75rem 1.25rem;
     border-top: 1px solid #0f3460;
-  }
-
-  .vault-indicator {
-    font-size: 0.7rem;
-    color: #666;
-  }
-
-  .vault-indicator.vault-open {
-    color: #4ecca3;
-  }
-
-  .vault-indicator.vault-closed {
-    color: #a0a0b8;
   }
 
   .sidebar-error {

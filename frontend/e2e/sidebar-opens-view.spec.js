@@ -28,8 +28,20 @@ test.describe('B: Sidebar opens plugin view by item.view', () => {
   });
 
   test('Sidebar item exists with correct label', async ({ page }) => {
+    await expect(page.locator('.sidebar .nav-item').filter({ hasText: 'Plugin Manager' })).not.toBeVisible();
+    await expect(page.locator('.sidebar .plugin-item').filter({ hasText: 'Activity' })).toBeVisible();
+    await expect(page.locator('.sidebar .plugin-item').filter({ hasText: 'Browser Inbox' })).toBeVisible();
+
     const sidebarItem = page.locator('.sidebar .plugin-item').filter({ hasText: 'Platform Test' });
     await expect(sidebarItem).toBeVisible();
+  });
+
+  test('Global Activity and Browser Inbox sidebar items open plugin views', async ({ page }) => {
+    await page.locator('.sidebar .plugin-item').filter({ hasText: 'Activity' }).click();
+    await expect(page.locator('.view-container .view-header h2')).toHaveText('Activity', { timeout: 10000 });
+
+    await page.locator('.sidebar .plugin-item').filter({ hasText: 'Browser Inbox' }).click();
+    await expect(page.locator('.view-container .view-header h2')).toHaveText('Browser Inbox', { timeout: 10000 });
   });
 
   test('Click sidebar item opens diagnostics view by view ID, not sidebar ID', async ({ page }) => {

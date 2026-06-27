@@ -11,6 +11,7 @@
    *   - NO dependency on system icon fonts
    *   - If name is not found, renders a default circle icon
    */
+  import Activity from 'lucide-svelte/icons/activity';
   import Briefcase from 'lucide-svelte/icons/briefcase';
   import ChevronDown from 'lucide-svelte/icons/chevron-down';
   import ChevronLeft from 'lucide-svelte/icons/chevron-left';
@@ -18,6 +19,7 @@
   import Circle from 'lucide-svelte/icons/circle';
   import FlaskConical from 'lucide-svelte/icons/flask-conical';
   import Folder from 'lucide-svelte/icons/folder';
+  import Inbox from 'lucide-svelte/icons/inbox';
   import LayoutGrid from 'lucide-svelte/icons/layout-grid';
   import PanelsTopLeft from 'lucide-svelte/icons/panels-top-left';
   import Pencil from 'lucide-svelte/icons/pencil';
@@ -34,6 +36,7 @@
   export let className = '';
 
   const icons = {
+    activity: Activity,
     case: Briefcase,
     chevronDown: ChevronDown,
     chevronLeft: ChevronLeft,
@@ -43,6 +46,7 @@
     flask: FlaskConical,
     folder: Folder,
     gear: Settings,
+    inbox: Inbox,
     logo: PanelsTopLeft,
     plugin: Plug,
     puzzle: Puzzle,
