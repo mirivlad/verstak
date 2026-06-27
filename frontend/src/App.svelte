@@ -86,7 +86,7 @@
   }
 
   function mouseHistoryDirection(event) {
-    if (currentView === 'workspace' || currentView === 'workbench') return '';
+    if (currentView === 'workspace') return '';
     if (event.button === 3 || event.button === 8 || event.buttons === 8 || event.buttons === 128 || event.which === 8) return 'back';
     if (event.button === 4 || event.button === 9 || event.buttons === 16 || event.buttons === 256 || event.which === 9) return 'forward';
     return '';

@@ -229,6 +229,60 @@ func TestPathTraversal_Blocked(t *testing.T) {
 	}
 }
 
+func TestPluginDataJSONNameTraversal_Blocked(t *testing.T) {
+	s, _ := newTestStorage(t)
+
+	traversalNames := []string{
+		"..",
+		"../evil",
+		"foo/../../bar",
+		"/absolute",
+		`backslash\traverse`,
+		"nested/name",
+	}
+
+	for _, name := range traversalNames {
+		t.Run(name, func(t *testing.T) {
+			err := s.WritePluginDataJSON("data-plugin", name, map[string]interface{}{"x": 1})
+			if err == nil {
+				t.Errorf("WritePluginDataJSON(%q): expected error, got nil", name)
+			}
+
+			_, err = s.ReadPluginDataJSON("data-plugin", name)
+			if err == nil {
+				t.Errorf("ReadPluginDataJSON(%q): expected error, got nil", name)
+			}
+		})
+	}
+}
+
+func TestPluginCacheJSONNameTraversal_Blocked(t *testing.T) {
+	s, _ := newTestStorage(t)
+
+	traversalNames := []string{
+		"..",
+		"../evil",
+		"foo/../../bar",
+		"/absolute",
+		`backslash\traverse`,
+		"nested/name",
+	}
+
+	for _, name := range traversalNames {
+		t.Run(name, func(t *testing.T) {
+			err := s.WritePluginCacheJSON("cache-plugin", name, map[string]interface{}{"x": 1})
+			if err == nil {
+				t.Errorf("WritePluginCacheJSON(%q): expected error, got nil", name)
+			}
+
+			_, err = s.ReadPluginCacheJSON("cache-plugin", name)
+			if err == nil {
+				t.Errorf("ReadPluginCacheJSON(%q): expected error, got nil", name)
+			}
+		})
+	}
+}
+
 // ─── Atomic write tests ──────────────────────────────────────
 
 func TestAtomicWrite(t *testing.T) {

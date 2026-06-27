@@ -155,6 +155,51 @@ func TestUpdate_WorkbenchPreferences(t *testing.T) {
 	}
 }
 
+func TestUpdateSync(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.json")
+
+	m := NewManager(path)
+	if err := m.Load(); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.Update(&Config{DevMode: true}); err != nil {
+		t.Fatalf("Update dev mode: %v", err)
+	}
+
+	if err := m.UpdateSync(SyncSettings{
+		Enabled:      true,
+		ServerURL:    "https://sync.example",
+		DeviceID:     "device-1",
+		DeviceName:   "Desktop",
+		SyncInterval: 15,
+		LastStatus:   "connected",
+		LastSyncAt:   "2026-06-27T00:00:00Z",
+		LastError:    "previous",
+	}); err != nil {
+		t.Fatalf("UpdateSync: %v", err)
+	}
+
+	reloaded := NewManager(path)
+	if err := reloaded.Load(); err != nil {
+		t.Fatal(err)
+	}
+	cfg := reloaded.Get()
+	if !cfg.Sync.Enabled ||
+		cfg.Sync.ServerURL != "https://sync.example" ||
+		cfg.Sync.DeviceID != "device-1" ||
+		cfg.Sync.DeviceName != "Desktop" ||
+		cfg.Sync.SyncInterval != 15 ||
+		cfg.Sync.LastStatus != "connected" ||
+		cfg.Sync.LastSyncAt != "2026-06-27T00:00:00Z" ||
+		cfg.Sync.LastError != "previous" {
+		t.Fatalf("sync settings = %+v", cfg.Sync)
+	}
+	if !cfg.DevMode {
+		t.Fatal("UpdateSync changed DevMode")
+	}
+}
+
 func TestAppSettings_NotInsideVault(t *testing.T) {
 	// App settings path should be under ~/.config/verstak/, not inside vault
 	path := DefaultConfigPath()

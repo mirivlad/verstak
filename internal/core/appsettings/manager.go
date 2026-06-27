@@ -191,6 +191,20 @@ func (m *Manager) Update(patch *Config) error {
 	return m.saveLocked()
 }
 
+// UpdateSync replaces sync settings without changing unrelated app settings.
+func (m *Manager) UpdateSync(syncSettings SyncSettings) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if m.config == nil {
+		m.config = defaultConfig()
+	}
+
+	m.config.Sync = syncSettings
+	m.config.LastOpenedAt = time.Now().UTC().Format(time.RFC3339)
+	return m.saveLocked()
+}
+
 // SetCurrentVault updates the current vault path and adds to recents.
 func (m *Manager) SetCurrentVault(path string) error {
 	m.mu.Lock()

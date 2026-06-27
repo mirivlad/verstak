@@ -1,6 +1,9 @@
 package api
 
 import (
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -13,6 +16,7 @@ import (
 	corefiles "github.com/verstak/verstak-desktop/internal/core/files"
 	"github.com/verstak/verstak-desktop/internal/core/plugin"
 	"github.com/verstak/verstak-desktop/internal/core/storage"
+	syncsvc "github.com/verstak/verstak-desktop/internal/core/sync"
 	"github.com/verstak/verstak-desktop/internal/core/vault"
 	"github.com/verstak/verstak-desktop/internal/core/workspace"
 )
@@ -76,6 +80,22 @@ func newFilesTestApp(t *testing.T, perms []string) (*App, string) {
 			},
 		},
 	}, v.GetVaultPath()
+}
+
+func newSyncFilesTestApp(t *testing.T, perms []string, deviceID string) (*App, string) {
+	t.Helper()
+	app, root := newFilesTestApp(t, perms)
+	app.syncSvc = syncsvc.NewService(root, deviceID)
+	app.appSettings = appsettings.NewManager(filepath.Join(t.TempDir(), "config.json"))
+	if err := app.appSettings.Load(); err != nil {
+		t.Fatalf("settings Load: %v", err)
+	}
+	cfg := app.appSettings.Get()
+	cfg.Sync.DeviceID = deviceID
+	if err := app.appSettings.UpdateSync(cfg.Sync); err != nil {
+		t.Fatalf("settings UpdateSync: %v", err)
+	}
+	return app, root
 }
 
 // TestGetPluginFrontendInfo_KnownPluginWithFrontend verifies that
@@ -438,6 +458,326 @@ func TestFilesBridgeRequiresLoadedPluginAndOpenVault(t *testing.T) {
 	}
 }
 
+func TestApplyRemoteFileOps(t *testing.T) {
+	app, _ := newSyncFilesTestApp(t, []string{"files.read", "files.write", "files.delete"}, "local-device")
+
+	ops := []syncsvc.Op{
+		{
+			OpID:        "folder-create",
+			DeviceID:    "remote-device",
+			EntityType:  syncsvc.EntityFolder,
+			EntityID:    "Docs",
+			OpType:      syncsvc.OpCreate,
+			PayloadJSON: `{"path":"Docs"}`,
+		},
+		{
+			OpID:        "file-create",
+			DeviceID:    "remote-device",
+			EntityType:  syncsvc.EntityFile,
+			EntityID:    "Docs/one.txt",
+			OpType:      syncsvc.OpCreate,
+			PayloadJSON: `{"path":"Docs/one.txt","content":"hello"}`,
+		},
+		{
+			OpID:        "file-update",
+			DeviceID:    "remote-device",
+			EntityType:  syncsvc.EntityFile,
+			EntityID:    "Docs/one.txt",
+			OpType:      syncsvc.OpUpdate,
+			PayloadJSON: `{"path":"Docs/one.txt","content":"updated"}`,
+		},
+		{
+			OpID:        "file-move",
+			DeviceID:    "remote-device",
+			EntityType:  syncsvc.EntityFile,
+			EntityID:    "Docs/one.txt",
+			OpType:      syncsvc.OpMove,
+			PayloadJSON: `{"fromPath":"Docs/one.txt","toPath":"Docs/two.txt"}`,
+		},
+	}
+	for _, op := range ops {
+		if err := app.applyRemoteOp(op); err != nil {
+			t.Fatalf("applyRemoteOp(%s): %v", op.OpID, err)
+		}
+	}
+
+	text, errStr := app.ReadVaultTextFile("files.plugin", "Docs/two.txt")
+	if errStr != "" {
+		t.Fatalf("ReadVaultTextFile: %s", errStr)
+	}
+	if text != "updated" {
+		t.Fatalf("content = %q, want updated", text)
+	}
+	if _, errStr := app.GetVaultFileMetadata("files.plugin", "Docs/one.txt"); !strings.Contains(errStr, "not-found") {
+		t.Fatalf("old path metadata err = %q, want not-found", errStr)
+	}
+
+	if err := app.applyRemoteOp(syncsvc.Op{
+		OpID:        "file-delete",
+		DeviceID:    "remote-device",
+		EntityType:  syncsvc.EntityFile,
+		EntityID:    "Docs/two.txt",
+		OpType:      syncsvc.OpDelete,
+		PayloadJSON: `{"path":"Docs/two.txt"}`,
+	}); err != nil {
+		t.Fatalf("applyRemoteOp(file-delete): %v", err)
+	}
+	if _, errStr := app.GetVaultFileMetadata("files.plugin", "Docs/two.txt"); !strings.Contains(errStr, "not-found") {
+		t.Fatalf("deleted path metadata err = %q, want not-found", errStr)
+	}
+}
+
+func TestApplyRemoteFolderOps(t *testing.T) {
+	app, _ := newSyncFilesTestApp(t, []string{"files.read", "files.write", "files.delete"}, "local-device")
+
+	ops := []syncsvc.Op{
+		{
+			OpID:        "folder-create",
+			DeviceID:    "remote-device",
+			EntityType:  syncsvc.EntityFolder,
+			EntityID:    "Projects",
+			OpType:      syncsvc.OpCreate,
+			PayloadJSON: `{"path":"Projects"}`,
+		},
+		{
+			OpID:        "folder-move",
+			DeviceID:    "remote-device",
+			EntityType:  syncsvc.EntityFolder,
+			EntityID:    "Projects",
+			OpType:      syncsvc.OpMove,
+			PayloadJSON: `{"fromPath":"Projects","toPath":"Archive"}`,
+		},
+		{
+			OpID:        "folder-delete",
+			DeviceID:    "remote-device",
+			EntityType:  syncsvc.EntityFolder,
+			EntityID:    "Archive",
+			OpType:      syncsvc.OpDelete,
+			PayloadJSON: `{"path":"Archive"}`,
+		},
+	}
+	for _, op := range ops {
+		if err := app.applyRemoteOp(op); err != nil {
+			t.Fatalf("applyRemoteOp(%s): %v", op.OpID, err)
+		}
+	}
+	if _, errStr := app.GetVaultFileMetadata("files.plugin", "Archive"); !strings.Contains(errStr, "not-found") {
+		t.Fatalf("deleted folder metadata err = %q, want not-found", errStr)
+	}
+}
+
+func TestApplyRemoteOpSkipsLocalDevice(t *testing.T) {
+	app, _ := newSyncFilesTestApp(t, []string{"files.read", "files.write", "files.delete"}, "local-device")
+	if errStr := app.WriteVaultTextFile("files.plugin", "local.txt", "keep", corefiles.WriteOptions{CreateIfMissing: true}); errStr != "" {
+		t.Fatalf("WriteVaultTextFile: %s", errStr)
+	}
+
+	err := app.applyRemoteOp(syncsvc.Op{
+		OpID:        "own-delete",
+		DeviceID:    "local-device",
+		EntityType:  syncsvc.EntityFile,
+		EntityID:    "local.txt",
+		OpType:      syncsvc.OpDelete,
+		PayloadJSON: `{"path":"local.txt"}`,
+	})
+	if err != nil {
+		t.Fatalf("applyRemoteOp: %v", err)
+	}
+	text, errStr := app.ReadVaultTextFile("files.plugin", "local.txt")
+	if errStr != "" {
+		t.Fatalf("ReadVaultTextFile: %s", errStr)
+	}
+	if text != "keep" {
+		t.Fatalf("content = %q, want keep", text)
+	}
+}
+
+func TestFileBridgeRecordsSyncOps(t *testing.T) {
+	app, _ := newSyncFilesTestApp(t, []string{"files.read", "files.write", "files.delete"}, "local-device")
+
+	if errStr := app.CreateVaultFolder("files.plugin", "Docs"); errStr != "" {
+		t.Fatalf("CreateVaultFolder: %s", errStr)
+	}
+	if errStr := app.WriteVaultTextFile("files.plugin", "Docs/one.txt", "hello", corefiles.WriteOptions{CreateIfMissing: true}); errStr != "" {
+		t.Fatalf("WriteVaultTextFile create: %s", errStr)
+	}
+	if errStr := app.WriteVaultTextFile("files.plugin", "Docs/one.txt", "updated", corefiles.WriteOptions{Overwrite: true}); errStr != "" {
+		t.Fatalf("WriteVaultTextFile update: %s", errStr)
+	}
+	if errStr := app.MoveVaultPath("files.plugin", "Docs/one.txt", "Docs/two.txt", corefiles.MoveOptions{}); errStr != "" {
+		t.Fatalf("MoveVaultPath: %s", errStr)
+	}
+	if _, errStr := app.TrashVaultPath("files.plugin", "Docs/two.txt"); errStr != "" {
+		t.Fatalf("TrashVaultPath: %s", errStr)
+	}
+
+	ops, err := app.syncSvc.GetUnpushedOps()
+	if err != nil {
+		t.Fatalf("GetUnpushedOps: %v", err)
+	}
+	if len(ops) != 5 {
+		t.Fatalf("ops len = %d, want 5: %#v", len(ops), ops)
+	}
+
+	want := []struct {
+		entityType string
+		entityID   string
+		opType     string
+		payload    string
+	}{
+		{syncsvc.EntityFolder, "Docs", syncsvc.OpCreate, `"path":"Docs"`},
+		{syncsvc.EntityFile, "Docs/one.txt", syncsvc.OpCreate, `"content":"hello"`},
+		{syncsvc.EntityFile, "Docs/one.txt", syncsvc.OpUpdate, `"content":"updated"`},
+		{syncsvc.EntityFile, "Docs/one.txt", syncsvc.OpMove, `"toPath":"Docs/two.txt"`},
+		{syncsvc.EntityFile, "Docs/two.txt", syncsvc.OpDelete, `"path":"Docs/two.txt"`},
+	}
+	for i, w := range want {
+		if ops[i].DeviceID != "local-device" || ops[i].EntityType != w.entityType || ops[i].EntityID != w.entityID || ops[i].OpType != w.opType {
+			t.Fatalf("op[%d] = %+v, want device/local %s %s %s", i, ops[i], w.entityType, w.entityID, w.opType)
+		}
+		if !strings.Contains(ops[i].PayloadJSON, w.payload) {
+			t.Fatalf("op[%d] payload = %s, want contains %s", i, ops[i].PayloadJSON, w.payload)
+		}
+	}
+}
+
+func TestSyncNowPushesLocalOpsAndAppliesPulledFileOps(t *testing.T) {
+	app, root := newSyncFilesTestApp(t, []string{"files.read", "files.write", "files.delete"}, "local-device")
+
+	var pushedOps []struct {
+		OpID              string `json:"op_id"`
+		EntityType        string `json:"entity_type"`
+		EntityID          string `json:"entity_id"`
+		OpType            string `json:"op_type"`
+		PayloadJSON       string `json:"payload_json"`
+		ClientSequence    int    `json:"client_sequence"`
+		LastSeenServerSeq int    `json:"last_seen_server_seq"`
+		CreatedAt         string `json:"created_at"`
+	}
+	var pushedDeviceID string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "Bearer device-token" {
+			http.Error(w, "missing auth", http.StatusUnauthorized)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/api/v1/sync/push":
+			var req struct {
+				DeviceID string `json:"device_id"`
+				Ops      []struct {
+					OpID              string `json:"op_id"`
+					EntityType        string `json:"entity_type"`
+					EntityID          string `json:"entity_id"`
+					OpType            string `json:"op_type"`
+					PayloadJSON       string `json:"payload_json"`
+					ClientSequence    int    `json:"client_sequence"`
+					LastSeenServerSeq int    `json:"last_seen_server_seq"`
+					CreatedAt         string `json:"created_at"`
+				} `json:"ops"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+			pushedDeviceID = req.DeviceID
+			pushedOps = req.Ops
+			accepted := make([]string, 0, len(req.Ops))
+			for _, op := range req.Ops {
+				accepted = append(accepted, op.OpID)
+			}
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{
+				"accepted":  accepted,
+				"count":     len(accepted),
+				"conflicts": []map[string]interface{}{},
+			})
+		case "/api/v1/sync/pull":
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{
+				"server_sequence": 2,
+				"ops": []map[string]interface{}{
+					{
+						"op_id":           "remote-folder",
+						"server_sequence": 1,
+						"device_id":       "remote-device",
+						"entity_type":     syncsvc.EntityFolder,
+						"entity_id":       "Remote",
+						"op_type":         syncsvc.OpCreate,
+						"payload_json":    `{"path":"Remote"}`,
+						"created_at":      "2026-06-27T00:00:00Z",
+					},
+					{
+						"op_id":           "remote-file",
+						"server_sequence": 2,
+						"device_id":       "remote-device",
+						"entity_type":     syncsvc.EntityFile,
+						"entity_id":       "Remote/hello.txt",
+						"op_type":         syncsvc.OpCreate,
+						"payload_json":    `{"path":"Remote/hello.txt","content":"from remote"}`,
+						"created_at":      "2026-06-27T00:00:01Z",
+					},
+				},
+			})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	if err := app.syncSvc.SetState(server.URL, ""); err != nil {
+		t.Fatalf("SetState: %v", err)
+	}
+	if err := syncsvc.SaveDeviceToken(root, "device-token"); err != nil {
+		t.Fatalf("SaveDeviceToken: %v", err)
+	}
+	if errStr := app.CreateVaultFolder("files.plugin", "Local"); errStr != "" {
+		t.Fatalf("CreateVaultFolder: %s", errStr)
+	}
+	if errStr := app.WriteVaultTextFile("files.plugin", "Local/one.txt", "local", corefiles.WriteOptions{CreateIfMissing: true}); errStr != "" {
+		t.Fatalf("WriteVaultTextFile: %s", errStr)
+	}
+
+	result, err := app.syncNow()
+	if err != nil {
+		t.Fatalf("syncNow: %v", err)
+	}
+	if result["pushed"] != 2 || result["pulled"] != 2 || result["serverSequence"] != 2 {
+		t.Fatalf("sync result = %#v", result)
+	}
+	if pushedDeviceID != "local-device" {
+		t.Fatalf("pushed device = %q, want local-device", pushedDeviceID)
+	}
+	if len(pushedOps) != 2 {
+		t.Fatalf("pushed ops len = %d, want 2", len(pushedOps))
+	}
+	for i, op := range pushedOps {
+		if op.LastSeenServerSeq != 0 {
+			t.Fatalf("pushed op[%d] last seen = %d, want 0", i, op.LastSeenServerSeq)
+		}
+	}
+
+	text, errStr := app.ReadVaultTextFile("files.plugin", "Remote/hello.txt")
+	if errStr != "" {
+		t.Fatalf("ReadVaultTextFile remote: %s", errStr)
+	}
+	if text != "from remote" {
+		t.Fatalf("remote content = %q, want from remote", text)
+	}
+	unpushed, err := app.syncSvc.GetUnpushedOps()
+	if err != nil {
+		t.Fatalf("GetUnpushedOps: %v", err)
+	}
+	if len(unpushed) != 0 {
+		t.Fatalf("unpushed len = %d, want 0: %#v", len(unpushed), unpushed)
+	}
+	_, _, lastPullSeq, _, err := app.syncSvc.GetState()
+	if err != nil {
+		t.Fatalf("GetState: %v", err)
+	}
+	if lastPullSeq != 2 {
+		t.Fatalf("last pull seq = %d, want 2", lastPullSeq)
+	}
+}
+
 func TestSetCurrentVaultInitializesWorkspaceWhenMissingAtStartup(t *testing.T) {
 	tmpDir := t.TempDir()
 	vaultParent := filepath.Join(tmpDir, "vault-parent")
@@ -779,6 +1119,38 @@ func TestPluginBridgeSettingsRequireLoadedPluginAndStoragePermission(t *testing.
 	}
 	if _, errStr := app.ReadPluginSettings("no.storage"); errStr == "" {
 		t.Fatal("expected error for plugin without storage.namespace")
+	}
+}
+
+func TestPluginSyncBridgeRequiresDeclaredPermissions(t *testing.T) {
+	app := newBridgeTestApp(t)
+	app.plugins = append(app.plugins,
+		plugin.Plugin{
+			Manifest: plugin.Manifest{
+				ID:          "sync.local",
+				Name:        "Sync Local",
+				Version:     "1.0.0",
+				Provides:    []string{"sync/local/v1"},
+				Permissions: []string{"sync.participate"},
+			},
+			Status:  plugin.StatusLoaded,
+			Enabled: true,
+		},
+	)
+
+	status, errStr := app.PluginSyncStatus("sync.local")
+	if errStr != "" {
+		t.Fatalf("PluginSyncStatus: %s", errStr)
+	}
+	if status == nil {
+		t.Fatal("PluginSyncStatus returned nil status")
+	}
+
+	if _, errStr := app.PluginSyncStatus("no.storage"); !strings.Contains(errStr, "sync.participate") {
+		t.Fatalf("PluginSyncStatus err = %q, want sync.participate permission error", errStr)
+	}
+	if _, errStr := app.PluginSyncNow("sync.local"); !strings.Contains(errStr, "network.remote") {
+		t.Fatalf("PluginSyncNow err = %q, want network.remote permission error", errStr)
 	}
 }
 

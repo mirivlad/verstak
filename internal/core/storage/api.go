@@ -44,6 +44,23 @@ func validatePluginID(pluginID string) error {
 	return nil
 }
 
+func validateStorageName(kind, name string) error {
+	if name == "" {
+		return fmt.Errorf("%s name is empty", kind)
+	}
+	if strings.ContainsAny(name, `/\`) {
+		return fmt.Errorf("%s name %q contains path separators", kind, name)
+	}
+	if name == "." || name == ".." {
+		return fmt.Errorf("%s name %q is a path traversal reference", kind, name)
+	}
+	cleaned := filepath.Clean(name)
+	if cleaned != name {
+		return fmt.Errorf("%s name %q contains path traversal", kind, name)
+	}
+	return nil
+}
+
 // ─── Atomic write helper ──────────────────────────────────
 
 func atomicWrite(path string, data []byte) error {
@@ -135,8 +152,8 @@ func (s *Storage) ReadPluginDataJSON(pluginID, name string) (map[string]interfac
 	if err := validatePluginID(pluginID); err != nil {
 		return nil, err
 	}
-	if name == "" {
-		return nil, fmt.Errorf("data name is empty")
+	if err := validateStorageName("data", name); err != nil {
+		return nil, err
 	}
 
 	dir := s.vault.GetPluginDataPath(pluginID)
@@ -162,8 +179,8 @@ func (s *Storage) WritePluginDataJSON(pluginID, name string, data map[string]int
 	if err := validatePluginID(pluginID); err != nil {
 		return err
 	}
-	if name == "" {
-		return fmt.Errorf("data name is empty")
+	if err := validateStorageName("data", name); err != nil {
+		return err
 	}
 
 	dir := s.vault.GetPluginDataPath(pluginID)
@@ -183,8 +200,8 @@ func (s *Storage) ReadPluginCacheJSON(pluginID, name string) (map[string]interfa
 	if err := validatePluginID(pluginID); err != nil {
 		return nil, err
 	}
-	if name == "" {
-		return nil, fmt.Errorf("cache name is empty")
+	if err := validateStorageName("cache", name); err != nil {
+		return nil, err
 	}
 
 	dir := s.vault.GetPluginCachePath(pluginID)
@@ -210,8 +227,8 @@ func (s *Storage) WritePluginCacheJSON(pluginID, name string, data map[string]in
 	if err := validatePluginID(pluginID); err != nil {
 		return err
 	}
-	if name == "" {
-		return fmt.Errorf("cache name is empty")
+	if err := validateStorageName("cache", name); err != nil {
+		return err
 	}
 
 	dir := s.vault.GetPluginCachePath(pluginID)

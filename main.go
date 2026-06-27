@@ -17,7 +17,6 @@ import (
 	"github.com/verstak/verstak-desktop/internal/core/contribution"
 	"github.com/verstak/verstak-desktop/internal/core/events"
 	corefiles "github.com/verstak/verstak-desktop/internal/core/files"
-	"github.com/verstak/verstak-desktop/internal/core/notes"
 	"github.com/verstak/verstak-desktop/internal/core/permissions"
 	"github.com/verstak/verstak-desktop/internal/core/plugin"
 	"github.com/verstak/verstak-desktop/internal/core/pluginstate"
@@ -93,7 +92,6 @@ func main() {
 		"verstak/core/events/v1",
 		"verstak/core/files/v1",
 		"verstak/core/workbench/v1",
-		"verstak/core/notes/v1",
 	}
 	if err := capRegistry.Register(corePluginID, coreCaps); err != nil {
 		log.Fatalf("[main] failed to register core capabilities: %v", err)
@@ -248,12 +246,11 @@ func main() {
 	// Create the App struct
 	storageService := storage.New(vaultService)
 	filesService := corefiles.NewService(vaultService)
-	notesService := notes.NewService(filesService)
 	var syncService *syncsvc.Service
 	if vaultService.GetVaultStatus() == vault.StatusOpen {
 		syncService = syncsvc.NewService(vaultService.GetVaultPath(), "")
 	}
-	app := api.NewApp(capRegistry, contribRegistry, permRegistry, eventBus, plugins, vaultService, storageService, filesService, notesService, appSettingsMgr, pluginStateMgr, workspaceMgr, syncService, debugEnabled)
+	app := api.NewApp(capRegistry, contribRegistry, permRegistry, eventBus, plugins, vaultService, storageService, filesService, appSettingsMgr, pluginStateMgr, workspaceMgr, syncService, debugEnabled)
 
 	// ─── Wails App ───────────────────────────────────────────
 	err := wails.Run(&options.App{

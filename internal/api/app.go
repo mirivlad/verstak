@@ -18,7 +18,6 @@ import (
 	"github.com/verstak/verstak-desktop/internal/core/contribution"
 	"github.com/verstak/verstak-desktop/internal/core/events"
 	corefiles "github.com/verstak/verstak-desktop/internal/core/files"
-	"github.com/verstak/verstak-desktop/internal/core/notes"
 	"github.com/verstak/verstak-desktop/internal/core/permissions"
 	"github.com/verstak/verstak-desktop/internal/core/plugin"
 	"github.com/verstak/verstak-desktop/internal/core/pluginstate"
@@ -41,7 +40,6 @@ type App struct {
 	vault           *vault.Vault
 	storage         *storage.Storage
 	files           *corefiles.Service
-	notes           *notes.Service
 	appSettings     *appsettings.Manager
 	pluginState     *pluginstate.Manager
 	workbench       *coreworkbench.Router
@@ -60,7 +58,6 @@ func NewApp(
 	vaultService *vault.Vault,
 	storageService *storage.Storage,
 	filesService *corefiles.Service,
-	notesService *notes.Service,
 	appSettingsMgr *appsettings.Manager,
 	pluginStateMgr *pluginstate.Manager,
 	workspaceMgr *workspace.Manager,
@@ -76,7 +73,6 @@ func NewApp(
 		vault:           vaultService,
 		storage:         storageService,
 		files:           filesService,
-		notes:           notesService,
 		appSettings:     appSettingsMgr,
 		pluginState:     pluginStateMgr,
 		workbench:       coreworkbench.NewRouter(workbenchPrefsFromSettings(appSettingsMgr)),
@@ -349,7 +345,6 @@ func (a *App) ReloadPlugins() (int, string) {
 		"verstak/core/events/v1",
 		"verstak/core/files/v1",
 		"verstak/core/workbench/v1",
-		"verstak/core/notes/v1",
 	}
 	if err := a.capRegistry.Register("verstak-desktop", coreCaps); err != nil {
 		log.Printf("[api] ReloadPlugins: failed to re-register core capabilities: %v", err)
@@ -653,7 +648,21 @@ func (a *App) WriteVaultTextFile(pluginID, relativePath string, content string, 
 	if a.files == nil {
 		return "files service not initialized"
 	}
+	opType := syncsvc.OpUpdate
+	if _, err := a.files.GetVaultFileMetadata(relativePath); err != nil {
+		if isSyncNotFound(err) {
+			opType = syncsvc.OpCreate
+		} else {
+			return err.Error()
+		}
+	}
 	if err := a.files.WriteVaultTextFile(relativePath, content, options); err != nil {
+		return err.Error()
+	}
+	if err := a.recordFileSyncOp(syncsvc.EntityFile, relativePath, opType, map[string]string{
+		"path":    relativePath,
+		"content": content,
+	}); err != nil {
 		return err.Error()
 	}
 	return ""
@@ -670,6 +679,11 @@ func (a *App) CreateVaultFolder(pluginID, relativePath string) string {
 	if err := a.files.CreateVaultFolder(relativePath); err != nil {
 		return err.Error()
 	}
+	if err := a.recordFileSyncOp(syncsvc.EntityFolder, relativePath, syncsvc.OpCreate, map[string]string{
+		"path": relativePath,
+	}); err != nil {
+		return err.Error()
+	}
 	return ""
 }
 
@@ -681,7 +695,17 @@ func (a *App) MoveVaultPath(pluginID, fromRelativePath string, toRelativePath st
 	if a.files == nil {
 		return "files service not initialized"
 	}
+	meta, err := a.files.GetVaultFileMetadata(fromRelativePath)
+	if err != nil {
+		return err.Error()
+	}
 	if err := a.files.MoveVaultPath(fromRelativePath, toRelativePath, options); err != nil {
+		return err.Error()
+	}
+	if err := a.recordFileSyncOp(syncEntityTypeForFileType(meta.Type), fromRelativePath, syncsvc.OpMove, map[string]string{
+		"fromPath": fromRelativePath,
+		"toPath":   toRelativePath,
+	}); err != nil {
 		return err.Error()
 	}
 	return ""
@@ -695,11 +719,34 @@ func (a *App) TrashVaultPath(pluginID, relativePath string) (corefiles.TrashResu
 	if a.files == nil {
 		return corefiles.TrashResult{}, "files service not initialized"
 	}
+	meta, err := a.files.GetVaultFileMetadata(relativePath)
+	if err != nil {
+		return corefiles.TrashResult{}, err.Error()
+	}
 	result, err := a.files.TrashVaultPath(relativePath)
 	if err != nil {
 		return corefiles.TrashResult{}, err.Error()
 	}
+	if err := a.recordFileSyncOp(syncEntityTypeForFileType(meta.Type), relativePath, syncsvc.OpDelete, map[string]string{
+		"path": relativePath,
+	}); err != nil {
+		return corefiles.TrashResult{}, err.Error()
+	}
 	return result, ""
+}
+
+func (a *App) recordFileSyncOp(entityType, entityID, opType string, payload interface{}) error {
+	if a.syncSvc == nil {
+		return nil
+	}
+	return a.syncSvc.RecordOp(entityType, entityID, opType, payload)
+}
+
+func syncEntityTypeForFileType(fileType corefiles.FileType) string {
+	if fileType == corefiles.FileTypeFolder {
+		return syncsvc.EntityFolder
+	}
+	return syncsvc.EntityFile
 }
 
 func (a *App) activeOpenProviders() []contribution.ContributionOpenProvider {
@@ -1163,112 +1210,6 @@ func (a *App) SetCurrentWorkspaceNode(id string) string {
 	return ""
 }
 
-// ─── Notes API ───────────────────────────────────────────────
-
-// EnsureOverview creates or returns the path to Notes/Overview.md under parent.
-func (a *App) EnsureOverview(parent string) (map[string]interface{}, string) {
-	if a.notes == nil {
-		return nil, "notes service not initialized"
-	}
-	path, err := a.notes.EnsureOverview(parent)
-	if err != nil {
-		return nil, err.Error()
-	}
-	return map[string]interface{}{"path": path}, ""
-}
-
-// CreateNote creates a new note under the given parent's Notes/ folder.
-// Returns the vault-relative path of the new note.
-func (a *App) CreateNote(parent, title string) (map[string]interface{}, string) {
-	if a.notes == nil {
-		return nil, "notes service not initialized"
-	}
-	path, err := a.notes.CreateNote(parent, title, "")
-	if err != nil {
-		if _, ok := err.(*notes.ConflictError); ok {
-			return map[string]interface{}{"conflict": true, "path": "", "error": err.Error()}, ""
-		}
-		return nil, err.Error()
-	}
-	return map[string]interface{}{"path": path, "conflict": false}, ""
-}
-
-// RenameNote renames a note by changing its title. File is renamed accordingly.
-// Returns the new vault-relative path.
-func (a *App) RenameNote(notePath, newTitle string) (map[string]interface{}, string) {
-	if a.notes == nil {
-		return nil, "notes service not initialized"
-	}
-	newPath, err := a.notes.RenameNote(notePath, newTitle)
-	if err != nil {
-		if _, ok := err.(*notes.ConflictError); ok {
-			return map[string]interface{}{"conflict": true, "path": "", "error": err.Error()}, ""
-		}
-		return nil, err.Error()
-	}
-	return map[string]interface{}{"path": newPath, "conflict": false}, ""
-}
-
-// ReadNote reads the content of a note file.
-func (a *App) ReadNote(notePath string) (string, string) {
-	if a.notes == nil {
-		return "", "notes service not initialized"
-	}
-	content, err := a.notes.ReadNote(notePath)
-	if err != nil {
-		return "", err.Error()
-	}
-	return content, ""
-}
-
-// SaveNote writes content to a note file.
-func (a *App) SaveNote(notePath, content string) string {
-	if a.notes == nil {
-		return "notes service not initialized"
-	}
-	if err := a.notes.SaveNote(notePath, content); err != nil {
-		return err.Error()
-	}
-	return ""
-}
-
-// ListNotes returns all notes in the given parent's Notes/ folder.
-func (a *App) ListNotes(parent string) ([]notes.NoteInfo, string) {
-	if a.notes == nil {
-		return nil, "notes service not initialized"
-	}
-	noteList, err := a.notes.ListNotes(parent)
-	if err != nil {
-		return nil, err.Error()
-	}
-	return noteList, ""
-}
-
-// SearchNotes performs a case-insensitive search across all notes in the vault.
-func (a *App) SearchNotes(query string) ([]notes.NoteInfo, string) {
-	if a.notes == nil {
-		return nil, "notes service not initialized"
-	}
-	vaultPath := a.vaultPath()
-	if vaultPath == "" {
-		return nil, "vault not open"
-	}
-	results, err := a.notes.SearchNotes(vaultPath, query)
-	if err != nil {
-		return nil, err.Error()
-	}
-	return results, ""
-}
-
-// NormalizeNoteTitle converts a note title to a safe filename (including .md extension).
-func (a *App) NormalizeNoteTitle(title string) (string, string) {
-	filename, err := notes.NormalizeTitleToFilename(title)
-	if err != nil {
-		return "", err.Error()
-	}
-	return filename, ""
-}
-
 // ─── Vault Plugin State API ────────────────────────────────
 
 // GetVaultPluginState returns the current vault plugin state.
@@ -1427,6 +1368,18 @@ func (a *App) GetPluginAssetContent(pluginID, assetPath string) (string, string)
 
 // ─── Sync API ──────────────────────────────────────────────
 
+func (a *App) requirePluginSyncAccess(pluginID string, remote bool) error {
+	if _, err := a.requirePluginAccess(pluginID, "sync.participate"); err != nil {
+		return err
+	}
+	if remote {
+		if _, err := a.requirePluginAccess(pluginID, "network.remote"); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (a *App) requireVault() error {
 	if a.vault == nil || a.vault.GetVaultStatus() != vault.StatusOpen {
 		return fmt.Errorf("vault not open")
@@ -1457,8 +1410,7 @@ type SyncStatusDTO struct {
 	StatusLabel  string `json:"statusLabel"`
 }
 
-// SyncStatus returns the current sync status.
-func (a *App) SyncStatus() (*SyncStatusDTO, error) {
+func (a *App) syncStatus() (*SyncStatusDTO, error) {
 	if a.vault == nil || a.vault.GetVaultStatus() != vault.StatusOpen {
 		return &SyncStatusDTO{}, nil
 	}
@@ -1524,14 +1476,25 @@ func (a *App) SyncStatus() (*SyncStatusDTO, error) {
 	if cfg.Sync.LastSyncAt != lastSyncAt || cfg.Sync.LastStatus != dto.StatusLabel {
 		cfg.Sync.LastSyncAt = lastSyncAt
 		cfg.Sync.LastStatus = dto.StatusLabel
-		_ = a.appSettings.Update(&appsettings.Config{Sync: cfg.Sync})
+		_ = a.appSettings.UpdateSync(cfg.Sync)
 	}
 
 	return dto, nil
 }
 
-// SyncConfigure pairs the device with a sync server.
-func (a *App) SyncConfigure(serverURL, username, password string) error {
+// PluginSyncStatus returns sync status for plugins with sync permission.
+func (a *App) PluginSyncStatus(pluginID string) (*SyncStatusDTO, string) {
+	if err := a.requirePluginSyncAccess(pluginID, false); err != nil {
+		return nil, err.Error()
+	}
+	dto, err := a.syncStatus()
+	if err != nil {
+		return nil, err.Error()
+	}
+	return dto, ""
+}
+
+func (a *App) syncConfigure(serverURL, username, password string) error {
 	if err := a.requireVault(); err != nil {
 		return err
 	}
@@ -1558,13 +1521,23 @@ func (a *App) SyncConfigure(serverURL, username, password string) error {
 	cfg.Sync.DeviceID = deviceID
 	cfg.Sync.DeviceName = hostname
 	cfg.Sync.LastStatus = "connected"
-	_ = a.appSettings.Update(&appsettings.Config{Sync: cfg.Sync})
+	_ = a.appSettings.UpdateSync(cfg.Sync)
 
 	return nil
 }
 
-// SyncDisconnect disconnects from the sync server and revokes the device token.
-func (a *App) SyncDisconnect() error {
+// PluginSyncConfigure pairs the current vault with a sync server for a plugin.
+func (a *App) PluginSyncConfigure(pluginID, serverURL, username, password string) string {
+	if err := a.requirePluginSyncAccess(pluginID, true); err != nil {
+		return err.Error()
+	}
+	if err := a.syncConfigure(serverURL, username, password); err != nil {
+		return err.Error()
+	}
+	return ""
+}
+
+func (a *App) syncDisconnect() error {
 	if err := a.requireVault(); err != nil {
 		return err
 	}
@@ -1585,14 +1558,24 @@ func (a *App) SyncDisconnect() error {
 	cfg.Sync.DeviceName = ""
 	cfg.Sync.LastStatus = "disabled"
 	cfg.Sync.LastError = ""
-	if err := a.appSettings.Update(&appsettings.Config{Sync: cfg.Sync}); err != nil {
+	if err := a.appSettings.UpdateSync(cfg.Sync); err != nil {
 		return err
 	}
 	return a.syncSvc.SetState("", "")
 }
 
-// SyncTestConnection tests the connection to a sync server with the given credentials.
-func (a *App) SyncTestConnection(serverURL, username, password string) error {
+// PluginSyncDisconnect disconnects sync for a plugin with sync permission.
+func (a *App) PluginSyncDisconnect(pluginID string) string {
+	if err := a.requirePluginSyncAccess(pluginID, false); err != nil {
+		return err.Error()
+	}
+	if err := a.syncDisconnect(); err != nil {
+		return err.Error()
+	}
+	return ""
+}
+
+func (a *App) syncTestConnection(serverURL, username, password string) error {
 	vaultPath := a.vaultPath()
 	if vaultPath == "" {
 		vaultPath = "/tmp"
@@ -1601,8 +1584,18 @@ func (a *App) SyncTestConnection(serverURL, username, password string) error {
 	return client.TestAuth(serverURL, username, password)
 }
 
-// SyncSetInterval sets the auto-sync interval in minutes.
-func (a *App) SyncSetInterval(minutes int) error {
+// PluginSyncTestConnection tests sync server credentials for a plugin.
+func (a *App) PluginSyncTestConnection(pluginID, serverURL, username, password string) string {
+	if err := a.requirePluginSyncAccess(pluginID, true); err != nil {
+		return err.Error()
+	}
+	if err := a.syncTestConnection(serverURL, username, password); err != nil {
+		return err.Error()
+	}
+	return ""
+}
+
+func (a *App) syncSetInterval(minutes int) error {
 	if err := a.requireVault(); err != nil {
 		return err
 	}
@@ -1611,11 +1604,21 @@ func (a *App) SyncSetInterval(minutes int) error {
 	if cfg.Sync.DeviceID == "" && a.syncSvc != nil {
 		cfg.Sync.DeviceID = a.syncSvc.GetDeviceID()
 	}
-	return a.appSettings.Update(&appsettings.Config{Sync: cfg.Sync})
+	return a.appSettings.UpdateSync(cfg.Sync)
 }
 
-// SyncNow triggers an immediate sync cycle (push local ops, pull remote ops).
-func (a *App) SyncNow() (map[string]interface{}, error) {
+// PluginSyncSetInterval sets the sync interval for a plugin with sync permission.
+func (a *App) PluginSyncSetInterval(pluginID string, minutes int) string {
+	if err := a.requirePluginSyncAccess(pluginID, false); err != nil {
+		return err.Error()
+	}
+	if err := a.syncSetInterval(minutes); err != nil {
+		return err.Error()
+	}
+	return ""
+}
+
+func (a *App) syncNow() (map[string]interface{}, error) {
 	if err := a.requireVault(); err != nil {
 		return nil, err
 	}
@@ -1706,23 +1709,23 @@ func (a *App) SyncNow() (map[string]interface{}, error) {
 	return result, nil
 }
 
-// ResetSyncKey clears the device token and resets sync state.
-func (a *App) ResetSyncKey() error {
-	if err := a.requireVault(); err != nil {
-		return err
+// PluginSyncNow triggers sync for a plugin with sync permission.
+func (a *App) PluginSyncNow(pluginID string) (map[string]interface{}, string) {
+	if err := a.requirePluginSyncAccess(pluginID, true); err != nil {
+		return nil, err.Error()
 	}
-	_ = syncsvc.RemoveDeviceToken(a.vaultPath())
-	cfg := a.appSettings.Get()
-	cfg.Sync.LastStatus = "disabled"
-	cfg.Sync.LastError = ""
-	return a.appSettings.Update(&appsettings.Config{Sync: cfg.Sync})
+	result, err := a.syncNow()
+	if err != nil {
+		return nil, err.Error()
+	}
+	return result, ""
 }
 
 func (a *App) updateSyncError(errMsg string) error {
 	cfg := a.appSettings.Get()
 	cfg.Sync.LastError = errMsg
 	cfg.Sync.LastStatus = "error"
-	return a.appSettings.Update(&appsettings.Config{Sync: cfg.Sync})
+	return a.appSettings.UpdateSync(cfg.Sync)
 }
 
 func (a *App) updateSyncSuccess(lastSyncAt string) error {
@@ -1730,12 +1733,157 @@ func (a *App) updateSyncSuccess(lastSyncAt string) error {
 	cfg.Sync.LastError = ""
 	cfg.Sync.LastStatus = "connected"
 	cfg.Sync.LastSyncAt = lastSyncAt
-	return a.appSettings.Update(&appsettings.Config{Sync: cfg.Sync})
+	return a.appSettings.UpdateSync(cfg.Sync)
 }
 
 func (a *App) applyRemoteOp(op syncsvc.Op) error {
 	if a.debug {
 		log.Printf("[sync] applyRemoteOp: type=%s entity=%s/%s", op.OpType, op.EntityType, op.EntityID)
 	}
-	return nil
+	if op.DeviceID != "" && op.DeviceID == a.localSyncDeviceID() {
+		return nil
+	}
+	if a.files == nil {
+		return fmt.Errorf("files service not initialized")
+	}
+
+	payload, err := parseSyncFilePayload(op.PayloadJSON)
+	if err != nil {
+		return err
+	}
+	switch op.EntityType {
+	case syncsvc.EntityFile:
+		return a.applyRemoteFileOp(op, payload)
+	case syncsvc.EntityFolder:
+		return a.applyRemoteFolderOp(op, payload)
+	default:
+		return fmt.Errorf("unsupported sync entity type: %s", op.EntityType)
+	}
+}
+
+type syncFilePayload struct {
+	Path     string `json:"path"`
+	Content  string `json:"content"`
+	FromPath string `json:"fromPath"`
+	ToPath   string `json:"toPath"`
+}
+
+func parseSyncFilePayload(payloadJSON string) (syncFilePayload, error) {
+	if payloadJSON == "" {
+		return syncFilePayload{}, nil
+	}
+	var payload syncFilePayload
+	if err := json.Unmarshal([]byte(payloadJSON), &payload); err != nil {
+		return syncFilePayload{}, fmt.Errorf("invalid sync payload: %w", err)
+	}
+	return payload, nil
+}
+
+func (a *App) applyRemoteFileOp(op syncsvc.Op, payload syncFilePayload) error {
+	switch op.OpType {
+	case syncsvc.OpCreate:
+		path := syncPayloadPath(op, payload)
+		if path == "" {
+			return fmt.Errorf("missing file path")
+		}
+		return a.files.WriteVaultTextFile(path, payload.Content, corefiles.WriteOptions{CreateIfMissing: true})
+	case syncsvc.OpUpdate:
+		path := syncPayloadPath(op, payload)
+		if path == "" {
+			return fmt.Errorf("missing file path")
+		}
+		return a.files.WriteVaultTextFile(path, payload.Content, corefiles.WriteOptions{CreateIfMissing: true, Overwrite: true})
+	case syncsvc.OpDelete:
+		path := syncPayloadPath(op, payload)
+		if path == "" {
+			return fmt.Errorf("missing file path")
+		}
+		_, err := a.files.TrashVaultPath(path)
+		if isSyncNotFound(err) {
+			return nil
+		}
+		return err
+	case syncsvc.OpMove:
+		fromPath := payload.FromPath
+		if fromPath == "" {
+			fromPath = op.EntityID
+		}
+		if fromPath == "" || payload.ToPath == "" {
+			return fmt.Errorf("missing file move path")
+		}
+		err := a.files.MoveVaultPath(fromPath, payload.ToPath, corefiles.MoveOptions{})
+		if isSyncNotFound(err) {
+			return nil
+		}
+		return err
+	default:
+		return fmt.Errorf("unsupported file sync op type: %s", op.OpType)
+	}
+}
+
+func (a *App) applyRemoteFolderOp(op syncsvc.Op, payload syncFilePayload) error {
+	switch op.OpType {
+	case syncsvc.OpCreate:
+		path := syncPayloadPath(op, payload)
+		if path == "" {
+			return fmt.Errorf("missing folder path")
+		}
+		err := a.files.CreateVaultFolder(path)
+		if isSyncConflict(err) {
+			return nil
+		}
+		return err
+	case syncsvc.OpDelete:
+		path := syncPayloadPath(op, payload)
+		if path == "" {
+			return fmt.Errorf("missing folder path")
+		}
+		_, err := a.files.TrashVaultPath(path)
+		if isSyncNotFound(err) {
+			return nil
+		}
+		return err
+	case syncsvc.OpMove:
+		fromPath := payload.FromPath
+		if fromPath == "" {
+			fromPath = op.EntityID
+		}
+		if fromPath == "" || payload.ToPath == "" {
+			return fmt.Errorf("missing folder move path")
+		}
+		err := a.files.MoveVaultPath(fromPath, payload.ToPath, corefiles.MoveOptions{})
+		if isSyncNotFound(err) {
+			return nil
+		}
+		return err
+	default:
+		return fmt.Errorf("unsupported folder sync op type: %s", op.OpType)
+	}
+}
+
+func syncPayloadPath(op syncsvc.Op, payload syncFilePayload) string {
+	if payload.Path != "" {
+		return payload.Path
+	}
+	return op.EntityID
+}
+
+func (a *App) localSyncDeviceID() string {
+	if a.appSettings != nil {
+		if deviceID := a.appSettings.Get().Sync.DeviceID; deviceID != "" {
+			return deviceID
+		}
+	}
+	if a.syncSvc != nil {
+		return a.syncSvc.GetDeviceID()
+	}
+	return ""
+}
+
+func isSyncNotFound(err error) bool {
+	return err != nil && strings.Contains(err.Error(), "not-found")
+}
+
+func isSyncConflict(err error) bool {
+	return err != nil && strings.Contains(err.Error(), "conflict")
 }

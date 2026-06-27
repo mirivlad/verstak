@@ -225,20 +225,42 @@ export function createPluginAPI(pluginId) {
       }
     },
 
-    backend: {
-      call: async function(method, ...args) {
-        assertActive('backend.call(' + method + ')');
-        try {
-          const App = window['go']?.['api']?.['App'];
-          if (!App || typeof App[method] !== 'function') {
-            throw new Error('Backend method not found: ' + method);
-          }
-          const result = await App[method](...args);
-          return result;
-        } catch (e) {
-          const message = e && e.message ? e.message : String(e);
-          throw new Error('[plugin:' + pluginId + '] backend.call(' + method + ') failed: ' + message);
-        }
+    sync: {
+      status: function() {
+        assertActive('sync.status');
+        return callBackend(pluginId, 'sync.status', function() {
+          return App.PluginSyncStatus(pluginId);
+        });
+      },
+      configure: function(serverURL, username, password) {
+        assertActive('sync.configure');
+        return callBackendErrorString(pluginId, 'sync.configure', function() {
+          return App.PluginSyncConfigure(pluginId, serverURL || '', username || '', password || '');
+        });
+      },
+      disconnect: function() {
+        assertActive('sync.disconnect');
+        return callBackendErrorString(pluginId, 'sync.disconnect', function() {
+          return App.PluginSyncDisconnect(pluginId);
+        });
+      },
+      testConnection: function(serverURL, username, password) {
+        assertActive('sync.testConnection');
+        return callBackendErrorString(pluginId, 'sync.testConnection', function() {
+          return App.PluginSyncTestConnection(pluginId, serverURL || '', username || '', password || '');
+        });
+      },
+      setInterval: function(minutes) {
+        assertActive('sync.setInterval');
+        return callBackendErrorString(pluginId, 'sync.setInterval', function() {
+          return App.PluginSyncSetInterval(pluginId, Number(minutes) || 0);
+        });
+      },
+      now: function() {
+        assertActive('sync.now');
+        return callBackend(pluginId, 'sync.now', function() {
+          return App.PluginSyncNow(pluginId);
+        });
       }
     },
 
