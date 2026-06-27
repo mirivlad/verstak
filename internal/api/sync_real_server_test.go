@@ -55,6 +55,36 @@ func TestSyncNowAgainstRealServerTwoVaults(t *testing.T) {
 	if _, errStr := appB.GetVaultFileMetadata("files.plugin", "Shared/two.txt"); !strings.Contains(errStr, "not-found") {
 		t.Fatalf("appB deleted file metadata err = %q, want not-found", errStr)
 	}
+
+	if errStr := appB.CreateVaultFolder("files.plugin", "Shared/Folder"); errStr != "" {
+		t.Fatalf("appB create folder: %s", errStr)
+	}
+	expectSyncCounts(t, appB, 1, 1)
+	expectSyncCounts(t, appA, 0, 1)
+	if meta, errStr := appA.GetVaultFileMetadata("files.plugin", "Shared/Folder"); errStr != "" || meta.Type != corefiles.FileTypeFolder {
+		t.Fatalf("appA folder metadata = %+v err=%q, want folder", meta, errStr)
+	}
+
+	if errStr := appA.MoveVaultPath("files.plugin", "Shared/Folder", "Shared/Archive", corefiles.MoveOptions{}); errStr != "" {
+		t.Fatalf("appA move folder: %s", errStr)
+	}
+	expectSyncCounts(t, appA, 1, 1)
+	expectSyncCounts(t, appB, 0, 1)
+	if _, errStr := appB.GetVaultFileMetadata("files.plugin", "Shared/Folder"); !strings.Contains(errStr, "not-found") {
+		t.Fatalf("appB moved folder old metadata err = %q, want not-found", errStr)
+	}
+	if meta, errStr := appB.GetVaultFileMetadata("files.plugin", "Shared/Archive"); errStr != "" || meta.Type != corefiles.FileTypeFolder {
+		t.Fatalf("appB moved folder metadata = %+v err=%q, want folder", meta, errStr)
+	}
+
+	if _, errStr := appB.TrashVaultPath("files.plugin", "Shared/Archive"); errStr != "" {
+		t.Fatalf("appB trash folder: %s", errStr)
+	}
+	expectSyncCounts(t, appB, 1, 1)
+	expectSyncCounts(t, appA, 0, 1)
+	if _, errStr := appA.GetVaultFileMetadata("files.plugin", "Shared/Archive"); !strings.Contains(errStr, "not-found") {
+		t.Fatalf("appA deleted folder metadata err = %q, want not-found", errStr)
+	}
 }
 
 func expectSyncCounts(t *testing.T, app *App, pushed, pulled int) {
