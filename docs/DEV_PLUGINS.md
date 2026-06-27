@@ -85,11 +85,12 @@ Frontend bundles are mounted with a plugin-scoped API created by
 - `capabilities.list/get/has`
 - `commands.register/execute` for handlers declared in `contributes.commands`
 - `events.publish/subscribe` using the bundled frontend event bus
-- `files.list/metadata/readText/writeText/createFolder/move/trash` for
-  canonical vault-relative slash paths guarded by `files.read`, `files.write`,
-  and `files.delete`. Backslashes, Windows absolute paths, UNC paths,
-  traversal, `.verstak` variants, and symlink read/write/move/trash operations
-  are rejected. Text read/write is UTF-8 only and limited to 2 MB for reads.
+- `files.list/metadata/readText/writeText/createFolder/move/trash/openExternal/showInFolder`
+  for canonical vault-relative slash paths guarded by `files.read`,
+  `files.write`, `files.delete`, and `files.openExternal`. Backslashes,
+  Windows absolute paths, UNC paths, traversal, `.verstak` variants, and
+  symlink read/write/move/trash/external-open operations are rejected. Text
+  read/write is UTF-8 only and limited to 2 MB for reads.
 - `workbench.openResource/editResource` for routing vault resources to
   contributed `openProviders`. Plugins must declare `workbench.open`; this is a
   policy/contract check. Files and Notes plugins call this API and do not import

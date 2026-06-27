@@ -24,7 +24,7 @@
         provides: ['verstak/platform-test/v1', 'verstak/diagnostics/v1'],
         requires: ['verstak/core/plugin-manager/v1', 'verstak/core/capability-registry/v1'],
         optionalRequires: ['verstak/core/vault/v1', 'verstak/core/sync/v1', 'verstak/core/files/v1', 'verstak/core/workbench/v1'],
-        permissions: ['vault.read', 'events.publish', 'events.subscribe', 'ui.register', 'commands.register', 'storage.namespace', 'files.read', 'files.write', 'files.delete', 'workbench.open'],
+        permissions: ['vault.read', 'events.publish', 'events.subscribe', 'ui.register', 'commands.register', 'storage.namespace', 'files.read', 'files.write', 'files.delete', 'files.openExternal', 'workbench.open'],
         frontend: { entry: 'frontend/dist/index.js' },
         contributes: {
           views: [
@@ -124,7 +124,7 @@
         icon: 'folder',
         provides: ['verstak/files/v1'],
         requires: ['verstak/core/files/v1', 'verstak/core/workbench/v1'],
-        permissions: ['files.read', 'files.write', 'files.delete', 'workbench.open', 'ui.register'],
+        permissions: ['files.read', 'files.write', 'files.delete', 'files.openExternal', 'workbench.open', 'ui.register'],
         frontend: { entry: 'frontend/dist/index.js' },
     contributes: {
       views: [{ id: 'verstak.files.view', title: 'Files', icon: 'folder', component: 'FilesView' }],
@@ -145,6 +145,8 @@
     'verstak.platform-test': { savedText: 'initial value' }
   };
   var vaultFiles = makeDefaultVaultFiles();
+  var externalOpens = [];
+  window.__wailsMockExternalOpens = [];
   var workspaceTree = makeDefaultWorkspaceTree();
   var reloadResponseMode = 'tuple';
 
@@ -293,6 +295,7 @@
       { name: 'files.read', description: 'Read vault files', dangerous: false },
       { name: 'files.write', description: 'Write vault files', dangerous: true },
       { name: 'files.delete', description: 'Trash vault files', dangerous: true },
+      { name: 'files.openExternal', description: 'Open vault files and folders externally', dangerous: true },
       { name: 'workbench.open', description: 'Request Workbench open/edit routing', dangerous: false }
     ];
   }
@@ -1125,6 +1128,26 @@
       moving.forEach(function (path) { delete vaultFiles[path]; });
       return Promise.resolve([{ originalPath: norm.path, trashPath: trashPath, trashId: trashId, deletedAt: new Date().toISOString() }, '']);
     },
+    OpenVaultPathExternal: function (pluginId, relativePath) {
+      var err = requirePluginPermission(pluginId, 'files.openExternal');
+      if (err) return Promise.resolve(err);
+      var norm = normalizeVaultPath(relativePath, false);
+      if (norm.error) return Promise.resolve(norm.error);
+      if (!vaultFiles[norm.path]) return Promise.resolve('not-found: ' + norm.path);
+      externalOpens.push({ action: 'open', path: norm.path });
+      window.__wailsMockExternalOpens = externalOpens.slice();
+      return Promise.resolve('');
+    },
+    ShowVaultPathInFolder: function (pluginId, relativePath) {
+      var err = requirePluginPermission(pluginId, 'files.openExternal');
+      if (err) return Promise.resolve(err);
+      var norm = normalizeVaultPath(relativePath, false);
+      if (norm.error) return Promise.resolve(norm.error);
+      if (!vaultFiles[norm.path]) return Promise.resolve('not-found: ' + norm.path);
+      externalOpens.push({ action: 'show', path: norm.path });
+      window.__wailsMockExternalOpens = externalOpens.slice();
+      return Promise.resolve('');
+    },
     ListWorkspaces: function () {
       return Promise.resolve(listWorkspacesFromTree());
     },
@@ -1281,7 +1304,7 @@
             provides: ['verstak/platform-test/v1', 'verstak/diagnostics/v1'],
             requires: ['verstak/core/plugin-manager/v1', 'verstak/core/capability-registry/v1'],
             optionalRequires: ['verstak/core/vault/v1', 'verstak/core/sync/v1', 'verstak/core/files/v1', 'verstak/core/workbench/v1'],
-            permissions: ['vault.read', 'events.publish', 'events.subscribe', 'ui.register', 'commands.register', 'storage.namespace', 'files.read', 'files.write', 'files.delete', 'workbench.open'],
+            permissions: ['vault.read', 'events.publish', 'events.subscribe', 'ui.register', 'commands.register', 'storage.namespace', 'files.read', 'files.write', 'files.delete', 'files.openExternal', 'workbench.open'],
             frontend: { entry: 'frontend/dist/index.js' },
             contributes: {
               views: [
@@ -1381,7 +1404,7 @@
             icon: 'folder',
             provides: ['verstak/files/v1'],
             requires: ['verstak/core/files/v1', 'verstak/core/workbench/v1'],
-            permissions: ['files.read', 'files.write', 'files.delete', 'workbench.open', 'ui.register'],
+            permissions: ['files.read', 'files.write', 'files.delete', 'files.openExternal', 'workbench.open', 'ui.register'],
             frontend: { entry: 'frontend/dist/index.js' },
             contributes: {
               views: [{ id: 'verstak.files.view', title: 'Files', icon: 'folder', component: 'FilesView' }],
@@ -1399,6 +1422,8 @@
       openedResources = [];
       pluginSettings = { 'verstak.platform-test': { savedText: 'initial value' } };
       vaultFiles = makeDefaultVaultFiles();
+      externalOpens = [];
+      window.__wailsMockExternalOpens = [];
       workspaceTree = makeDefaultWorkspaceTree();
       reloadResponseMode = 'tuple';
     },

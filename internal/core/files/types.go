@@ -39,6 +39,12 @@ type FileMetadata struct {
 	CanWrite     bool     `json:"canWrite"`
 }
 
+type ExternalOpenTarget struct {
+	RelativePath string       `json:"relativePath"`
+	AbsolutePath string       `json:"absolutePath"`
+	Metadata     FileMetadata `json:"metadata"`
+}
+
 type WriteOptions struct {
 	CreateIfMissing bool `json:"createIfMissing"`
 	Overwrite       bool `json:"overwrite"`

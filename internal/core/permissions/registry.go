@@ -36,6 +36,7 @@ func (r *Registry) registerDefaults() {
 		{Name: "files.read", Description: "List files and read text files through the vault Files API", Dangerous: false},
 		{Name: "files.write", Description: "Create folders, write text files, and move paths through the vault Files API", Dangerous: true},
 		{Name: "files.delete", Description: "Trash vault files and folders through the vault Files API", Dangerous: true},
+		{Name: "files.openExternal", Description: "Open vault files and folders in external OS applications", Dangerous: true},
 		{Name: "storage.namespace", Description: "Read/write plugin's own storage namespace", Dangerous: false},
 		{Name: "storage.migrations", Description: "Run database migrations in plugin namespace", Dangerous: false},
 		{Name: "events.publish", Description: "Publish events to the event bus", Dangerous: false},

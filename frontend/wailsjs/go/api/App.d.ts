@@ -74,6 +74,8 @@ export function MoveWorkspaceNode(arg1:string,arg2:string):Promise<string>;
 
 export function OpenVault(arg1:string):Promise<void>;
 
+export function OpenVaultPathExternal(arg1:string,arg2:string):Promise<string>;
+
 export function OpenWorkbenchResource(arg1:string,arg2:Record<string, any>):Promise<workbench.OpenResourceResult|string>;
 
 export function PluginSyncConfigure(arg1:string,arg2:string,arg3:string,arg4:string):Promise<string>;
@@ -115,6 +117,8 @@ export function SetCurrentVault(arg1:string):Promise<string>;
 export function SetCurrentWorkspace(arg1:string):Promise<string>;
 
 export function SetCurrentWorkspaceNode(arg1:string):Promise<string>;
+
+export function ShowVaultPathInFolder(arg1:string,arg2:string):Promise<string>;
 
 export function SubscribePluginEvent(arg1:string,arg2:string):Promise<string>;
 

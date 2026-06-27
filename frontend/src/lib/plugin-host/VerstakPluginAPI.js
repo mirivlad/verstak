@@ -245,6 +245,18 @@ export function createPluginAPI(pluginId) {
         return callBackend(pluginId, 'files.trash(' + relativePath + ')', function() {
           return App.TrashVaultPath(pluginId, relativePath);
         });
+      },
+      openExternal: function(relativePath) {
+        assertActive('files.openExternal(' + relativePath + ')');
+        return callBackendErrorString(pluginId, 'files.openExternal(' + relativePath + ')', function() {
+          return App.OpenVaultPathExternal(pluginId, relativePath);
+        });
+      },
+      showInFolder: function(relativePath) {
+        assertActive('files.showInFolder(' + relativePath + ')');
+        return callBackendErrorString(pluginId, 'files.showInFolder(' + relativePath + ')', function() {
+          return App.ShowVaultPathInFolder(pluginId, relativePath);
+        });
       }
     },
 

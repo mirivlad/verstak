@@ -134,6 +134,10 @@ export function OpenVault(arg1) {
   return window['go']['api']['App']['OpenVault'](arg1);
 }
 
+export function OpenVaultPathExternal(arg1, arg2) {
+  return window['go']['api']['App']['OpenVaultPathExternal'](arg1, arg2);
+}
+
 export function OpenWorkbenchResource(arg1, arg2) {
   return window['go']['api']['App']['OpenWorkbenchResource'](arg1, arg2);
 }
@@ -216,6 +220,10 @@ export function SetCurrentWorkspace(arg1) {
 
 export function SetCurrentWorkspaceNode(arg1) {
   return window['go']['api']['App']['SetCurrentWorkspaceNode'](arg1);
+}
+
+export function ShowVaultPathInFolder(arg1, arg2) {
+  return window['go']['api']['App']['ShowVaultPathInFolder'](arg1, arg2);
 }
 
 export function SubscribePluginEvent(arg1, arg2) {

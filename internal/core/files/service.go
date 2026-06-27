@@ -88,6 +88,31 @@ func (s *Service) GetVaultFileMetadata(relativePath string) (FileMetadata, error
 	return makeMetadata(rel, info), nil
 }
 
+func (s *Service) ResolveExternalOpenTarget(relativePath string) (ExternalOpenTarget, error) {
+	root, rel, full, err := s.resolveFile(relativePath)
+	if err != nil {
+		return ExternalOpenTarget{}, err
+	}
+	if err := rejectSymlinkPath(root, rel, true); err != nil {
+		return ExternalOpenTarget{}, err
+	}
+	info, err := os.Lstat(full)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return ExternalOpenTarget{}, fmt.Errorf("not-found: %s", rel)
+		}
+		return ExternalOpenTarget{}, err
+	}
+	if info.Mode()&os.ModeSymlink != 0 {
+		return ExternalOpenTarget{}, fmt.Errorf("symlink-not-allowed: %s", rel)
+	}
+	return ExternalOpenTarget{
+		RelativePath: rel,
+		AbsolutePath: full,
+		Metadata:     makeMetadata(rel, info),
+	}, nil
+}
+
 func (s *Service) ReadVaultTextFile(relativePath string) (string, error) {
 	root, rel, full, err := s.resolveFile(relativePath)
 	if err != nil {

@@ -82,6 +82,22 @@ func newFilesTestApp(t *testing.T, perms []string) (*App, string) {
 	}, v.GetVaultPath()
 }
 
+type testExternalOpenService struct {
+	open func(path string) error
+}
+
+func newTestExternalOpenService(open func(path string) error) *testExternalOpenService {
+	return &testExternalOpenService{open: open}
+}
+
+func (s *testExternalOpenService) OpenPath(path string) error {
+	return s.open(path)
+}
+
+func (s *testExternalOpenService) ShowInFolder(path string, _ bool) error {
+	return s.open(path)
+}
+
 func newSyncFilesTestApp(t *testing.T, perms []string, deviceID string) (*App, string) {
 	t.Helper()
 	app, root := newFilesTestApp(t, perms)
@@ -358,6 +374,61 @@ func TestFilesBridgeReadWriteListMoveTrash(t *testing.T) {
 	}
 }
 
+func TestFilesBridgeOpenExternalUsesVaultPathPolicyAndPermission(t *testing.T) {
+	app, root := newFilesTestApp(t, []string{"files.openExternal"})
+	filePath := filepath.Join(root, "Docs", "one.txt")
+	if err := os.MkdirAll(filepath.Dir(filePath), 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	if err := os.WriteFile(filePath, []byte("hello"), 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	var opened []string
+	app.externalOpen = newTestExternalOpenService(func(path string) error {
+		opened = append(opened, path)
+		return nil
+	})
+
+	if errStr := app.OpenVaultPathExternal("files.plugin", "Docs/one.txt"); errStr != "" {
+		t.Fatalf("OpenVaultPathExternal: %s", errStr)
+	}
+	if len(opened) != 1 || opened[0] != filePath {
+		t.Fatalf("opened = %#v, want %q", opened, filePath)
+	}
+
+	if errStr := app.OpenVaultPathExternal("files.plugin", ".verstak/vault.json"); errStr == "" || !strings.Contains(errStr, "reserved-path") {
+		t.Fatalf("reserved path error = %q, want reserved-path", errStr)
+	}
+	if len(opened) != 1 {
+		t.Fatalf("reserved path should not open, opened = %#v", opened)
+	}
+}
+
+func TestFilesBridgeShowInFolderUsesVaultPathPolicyAndPermission(t *testing.T) {
+	app, root := newFilesTestApp(t, []string{"files.openExternal"})
+	filePath := filepath.Join(root, "Docs", "one.txt")
+	if err := os.MkdirAll(filepath.Dir(filePath), 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	if err := os.WriteFile(filePath, []byte("hello"), 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	var shown []string
+	app.externalOpen = newTestExternalOpenService(func(path string) error {
+		shown = append(shown, path)
+		return nil
+	})
+
+	if errStr := app.ShowVaultPathInFolder("files.plugin", "Docs/one.txt"); errStr != "" {
+		t.Fatalf("ShowVaultPathInFolder: %s", errStr)
+	}
+	if len(shown) != 1 || shown[0] != filePath {
+		t.Fatalf("shown = %#v, want %q", shown, filePath)
+	}
+}
+
 func TestFilesBridgePermissions(t *testing.T) {
 	cases := []struct {
 		name       string
@@ -410,6 +481,18 @@ func TestFilesBridgePermissions(t *testing.T) {
 			perms:      []string{"files.read", "files.write"},
 			call:       func(app *App) string { _, errStr := app.TrashVaultPath("files.plugin", "one.txt"); return errStr },
 			wantPhrase: "files.delete",
+		},
+		{
+			name:       "open external requires openExternal",
+			perms:      []string{"files.read", "files.write", "files.delete"},
+			call:       func(app *App) string { return app.OpenVaultPathExternal("files.plugin", "one.txt") },
+			wantPhrase: "files.openExternal",
+		},
+		{
+			name:       "show in folder requires openExternal",
+			perms:      []string{"files.read", "files.write", "files.delete"},
+			call:       func(app *App) string { return app.ShowVaultPathInFolder("files.plugin", "one.txt") },
+			wantPhrase: "files.openExternal",
 		},
 	}
 

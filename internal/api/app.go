@@ -17,6 +17,7 @@ import (
 	"github.com/verstak/verstak-desktop/internal/core/capability"
 	"github.com/verstak/verstak-desktop/internal/core/contribution"
 	"github.com/verstak/verstak-desktop/internal/core/events"
+	"github.com/verstak/verstak-desktop/internal/core/externalopen"
 	corefiles "github.com/verstak/verstak-desktop/internal/core/files"
 	"github.com/verstak/verstak-desktop/internal/core/permissions"
 	"github.com/verstak/verstak-desktop/internal/core/plugin"
@@ -40,12 +41,18 @@ type App struct {
 	vault           *vault.Vault
 	storage         *storage.Storage
 	files           *corefiles.Service
+	externalOpen    externalOpenService
 	appSettings     *appsettings.Manager
 	pluginState     *pluginstate.Manager
 	workbench       *coreworkbench.Router
 	workspace       *workspace.Manager
 	syncSvc         *syncsvc.Service
 	debug           bool
+}
+
+type externalOpenService interface {
+	OpenPath(path string) error
+	ShowInFolder(path string, isDir bool) error
 }
 
 // NewApp creates a new App instance.
@@ -73,6 +80,7 @@ func NewApp(
 		vault:           vaultService,
 		storage:         storageService,
 		files:           filesService,
+		externalOpen:    externalopen.NewService(),
 		appSettings:     appSettingsMgr,
 		pluginState:     pluginStateMgr,
 		workbench:       coreworkbench.NewRouter(workbenchPrefsFromSettings(appSettingsMgr)),
@@ -747,6 +755,50 @@ func (a *App) TrashVaultPath(pluginID, relativePath string) (corefiles.TrashResu
 		return corefiles.TrashResult{}, err.Error()
 	}
 	return result, ""
+}
+
+// OpenVaultPathExternal opens a vault-relative file or folder in the OS default app.
+func (a *App) OpenVaultPathExternal(pluginID, relativePath string) string {
+	if _, err := a.requirePluginAccess(pluginID, "files.openExternal"); err != nil {
+		return err.Error()
+	}
+	if a.files == nil {
+		return "files service not initialized"
+	}
+	target, err := a.files.ResolveExternalOpenTarget(relativePath)
+	if err != nil {
+		return err.Error()
+	}
+	if err := a.externalOpenService().OpenPath(target.AbsolutePath); err != nil {
+		return err.Error()
+	}
+	return ""
+}
+
+// ShowVaultPathInFolder reveals a vault-relative file or folder in the OS file manager.
+func (a *App) ShowVaultPathInFolder(pluginID, relativePath string) string {
+	if _, err := a.requirePluginAccess(pluginID, "files.openExternal"); err != nil {
+		return err.Error()
+	}
+	if a.files == nil {
+		return "files service not initialized"
+	}
+	target, err := a.files.ResolveExternalOpenTarget(relativePath)
+	if err != nil {
+		return err.Error()
+	}
+	isDir := target.Metadata.Type == corefiles.FileTypeFolder
+	if err := a.externalOpenService().ShowInFolder(target.AbsolutePath, isDir); err != nil {
+		return err.Error()
+	}
+	return ""
+}
+
+func (a *App) externalOpenService() externalOpenService {
+	if a.externalOpen != nil {
+		return a.externalOpen
+	}
+	return externalopen.NewService()
 }
 
 func (a *App) recordFileSyncOp(entityType, entityID, opType string, payload interface{}) error {

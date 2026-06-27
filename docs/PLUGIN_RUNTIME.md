@@ -426,8 +426,13 @@ contributions summary.
   folder into itself and conflicts unless `options.overwrite` is true.
 - `files.trash(relativePath)` — moves a file/folder into internal
   `.verstak/trash/files/<trashId>/...` and returns trash metadata.
+- `files.openExternal(relativePath)` — opens a vault-relative file/folder in
+  the OS default application.
+- `files.showInFolder(relativePath)` — reveals a vault-relative file/folder in
+  the OS file manager where the platform supports it.
 - Backend requires plugin exists, enabled, status `loaded`/`degraded`, open
-  vault, and `files.read`, `files.write`, or `files.delete`.
+  vault, and `files.read`, `files.write`, `files.delete`, or
+  `files.openExternal`.
 - All paths are canonical vault-relative slash paths. Backslashes, POSIX
   absolute paths, Windows drive paths, UNC/network paths, `..`, null bytes,
   symlink traversal, and public access to `.verstak/` are rejected.
@@ -511,6 +516,8 @@ bundled runtime. Это реальный runtime contract для cooperative bun
 | `api.files.createFolder(relativePath)` | ✅ Работает | Создаёт vault-relative folder |
 | `api.files.move(from, to, options)` | ✅ Работает | Move file/folder с conflict и path-policy checks |
 | `api.files.trash(relativePath)` | ✅ Работает | Перемещает в internal trash, permanent delete нет |
+| `api.files.openExternal(relativePath)` | ✅ Работает | Открывает vault file/folder во внешнем приложении, требует `files.openExternal` |
+| `api.files.showInFolder(relativePath)` | ✅ Работает | Показывает vault file/folder в системном файловом менеджере, требует `files.openExternal` |
 | `api.workbench.openResource(request)` | ✅ Работает | Routes vault resources to `openProviders` |
 | `api.workbench.editResource(request)` | ✅ Работает | Same routing, forcing `mode: "edit"` |
 | `api.dispose()` | ✅ Работает | Очищает command handlers и event subscriptions текущего API instance |
