@@ -241,6 +241,13 @@ type FlatCommand struct {
 	Handler  string `json:"handler,omitempty"`
 }
 
+type FlatSearchProvider struct {
+	PluginID string `json:"pluginId"`
+	ID       string `json:"id"`
+	Label    string `json:"label"`
+	Handler  string `json:"handler"`
+}
+
 type FlatStatusBarItem struct {
 	PluginID string `json:"pluginId"`
 	ID       string `json:"id"`
@@ -276,13 +283,14 @@ type FlatWorkspaceItem struct {
 
 // ContributionSummary aggregates all contribution types for the frontend.
 type ContributionSummary struct {
-	Views          []FlatView          `json:"views"`
-	Commands       []FlatCommand       `json:"commands"`
-	SettingsPanels []FlatSettingsPanel `json:"settingsPanels"`
-	SidebarItems   []FlatSidebarItem   `json:"sidebarItems"`
-	StatusBarItems []FlatStatusBarItem `json:"statusBarItems"`
-	OpenProviders  []FlatOpenProvider  `json:"openProviders"`
-	WorkspaceItems []FlatWorkspaceItem `json:"workspaceItems"`
+	Views           []FlatView           `json:"views"`
+	Commands        []FlatCommand        `json:"commands"`
+	SearchProviders []FlatSearchProvider `json:"searchProviders"`
+	SettingsPanels  []FlatSettingsPanel  `json:"settingsPanels"`
+	SidebarItems    []FlatSidebarItem    `json:"sidebarItems"`
+	StatusBarItems  []FlatStatusBarItem  `json:"statusBarItems"`
+	OpenProviders   []FlatOpenProvider   `json:"openProviders"`
+	WorkspaceItems  []FlatWorkspaceItem  `json:"workspaceItems"`
 }
 
 // buildContributionSummary creates a ContributionSummary from the registry.
@@ -292,6 +300,7 @@ func buildContributionSummary(r *contribution.Registry) ContributionSummary {
 	}
 	regViews := r.Views()
 	regCmds := r.Commands()
+	regSearchProviders := r.SearchProviders()
 	regPanels := r.SettingsPanels()
 	regSidebar := r.SidebarItems()
 	regStatusBar := r.StatusBarItems()
@@ -305,6 +314,10 @@ func buildContributionSummary(r *contribution.Registry) ContributionSummary {
 	cmds := make([]FlatCommand, len(regCmds))
 	for i, v := range regCmds {
 		cmds[i] = FlatCommand{PluginID: v.PluginID, ID: v.Item.ID, Title: v.Item.Title, Icon: v.Item.Icon, Handler: v.Item.Handler}
+	}
+	searchProviders := make([]FlatSearchProvider, len(regSearchProviders))
+	for i, v := range regSearchProviders {
+		searchProviders[i] = FlatSearchProvider{PluginID: v.PluginID, ID: v.Item.ID, Label: v.Item.Label, Handler: v.Item.Handler}
 	}
 	panels := make([]FlatSettingsPanel, len(regPanels))
 	for i, v := range regPanels {
@@ -337,7 +350,7 @@ func buildContributionSummary(r *contribution.Registry) ContributionSummary {
 	for i, v := range regWorkspaceItems {
 		workspaceItems[i] = FlatWorkspaceItem{PluginID: v.PluginID, ID: v.Item.ID, Title: v.Item.Title, Icon: v.Item.Icon, Component: v.Item.Component}
 	}
-	return ContributionSummary{Views: views, Commands: cmds, SettingsPanels: panels, SidebarItems: sidebar, StatusBarItems: statusBarItems, OpenProviders: openProviders, WorkspaceItems: workspaceItems}
+	return ContributionSummary{Views: views, Commands: cmds, SearchProviders: searchProviders, SettingsPanels: panels, SidebarItems: sidebar, StatusBarItems: statusBarItems, OpenProviders: openProviders, WorkspaceItems: workspaceItems}
 }
 
 // GetContributions returns all registered contributions flattened for the frontend.
@@ -350,8 +363,8 @@ func (a *App) GetContributions() ContributionSummary {
 	}
 	summary := buildContributionSummary(a.contribRegistry)
 	if a.debug {
-		debug.Logf("[api] GetContributions: returning views=%d commands=%d sidebar=%d statusBar=%d settings=%d openProviders=%d",
-			len(summary.Views), len(summary.Commands), len(summary.SidebarItems), len(summary.StatusBarItems), len(summary.SettingsPanels), len(summary.OpenProviders))
+		debug.Logf("[api] GetContributions: returning views=%d commands=%d searchProviders=%d sidebar=%d statusBar=%d settings=%d openProviders=%d",
+			len(summary.Views), len(summary.Commands), len(summary.SearchProviders), len(summary.SidebarItems), len(summary.StatusBarItems), len(summary.SettingsPanels), len(summary.OpenProviders))
 	}
 	return summary
 }

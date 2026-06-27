@@ -30,6 +30,7 @@
   $: contribCounts = {
     views: (contributions.views || []).filter(v => v.pluginId === pluginId).length,
     commands: (contributions.commands || []).filter(c => c.pluginId === pluginId).length,
+    searchProviders: (contributions.searchProviders || []).filter(s => s.pluginId === pluginId).length,
     sidebar: (contributions.sidebarItems || []).filter(s => s.pluginId === pluginId).length,
     statusbar: (contributions.statusBarItems || []).filter(s => s.pluginId === pluginId).length,
     openProviders: (contributions.openProviders || []).filter(o => o.pluginId === pluginId).length,
@@ -40,6 +41,7 @@
     const parts = [];
     if (contribCounts.views > 0) parts.push(contribCounts.views + ' view' + (contribCounts.views !== 1 ? 's' : ''));
     if (contribCounts.commands > 0) parts.push(contribCounts.commands + ' command' + (contribCounts.commands !== 1 ? 's' : ''));
+    if (contribCounts.searchProviders > 0) parts.push(contribCounts.searchProviders + ' searchProvider' + (contribCounts.searchProviders !== 1 ? 's' : ''));
     if (contribCounts.sidebar > 0) parts.push(contribCounts.sidebar + ' sidebar' + (contribCounts.sidebar !== 1 ? 's' : ''));
     if (contribCounts.statusbar > 0) parts.push(contribCounts.statusbar + ' statusbar' + (contribCounts.statusbar !== 1 ? 's' : ''));
     if (contribCounts.openProviders > 0) parts.push(contribCounts.openProviders + ' openProvider' + (contribCounts.openProviders !== 1 ? 's' : ''));

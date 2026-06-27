@@ -80,6 +80,44 @@ export namespace api {
 		    return a;
 		}
 	}
+	export class FlatSearchProvider {
+	    pluginId: string;
+	    id: string;
+	    label: string;
+	    handler: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new FlatSearchProvider(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.pluginId = source["pluginId"];
+	        this.id = source["id"];
+	        this.label = source["label"];
+	        this.handler = source["handler"];
+	    }
+	}
+	export class FlatStatusBarItem {
+	    pluginId: string;
+	    id: string;
+	    label: string;
+	    position?: string;
+	    handler?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new FlatStatusBarItem(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.pluginId = source["pluginId"];
+	        this.id = source["id"];
+	        this.label = source["label"];
+	        this.position = source["position"];
+	        this.handler = source["handler"];
+	    }
+	}
 	export class FlatSidebarItem {
 	    pluginId: string;
 	    id: string;
@@ -165,8 +203,10 @@ export namespace api {
 	export class ContributionSummary {
 	    views: FlatView[];
 	    commands: FlatCommand[];
+	    searchProviders: FlatSearchProvider[];
 	    settingsPanels: FlatSettingsPanel[];
 	    sidebarItems: FlatSidebarItem[];
+	    statusBarItems: FlatStatusBarItem[];
 	    openProviders: FlatOpenProvider[];
 	    workspaceItems: FlatWorkspaceItem[];
 	
@@ -178,8 +218,10 @@ export namespace api {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.views = this.convertValues(source["views"], FlatView);
 	        this.commands = this.convertValues(source["commands"], FlatCommand);
+	        this.searchProviders = this.convertValues(source["searchProviders"], FlatSearchProvider);
 	        this.settingsPanels = this.convertValues(source["settingsPanels"], FlatSettingsPanel);
 	        this.sidebarItems = this.convertValues(source["sidebarItems"], FlatSidebarItem);
+	        this.statusBarItems = this.convertValues(source["statusBarItems"], FlatStatusBarItem);
 	        this.openProviders = this.convertValues(source["openProviders"], FlatOpenProvider);
 	        this.workspaceItems = this.convertValues(source["workspaceItems"], FlatWorkspaceItem);
 	    }
@@ -202,6 +244,7 @@ export namespace api {
 		    return a;
 		}
 	}
+	
 	
 	
 	

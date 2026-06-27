@@ -374,19 +374,20 @@
   }
 
   function allContributions() {
-    var views = [], commands = [], sidebarItems = [], statusBarItems = [], settingsPanels = [], openProviders = [], workspaceItems = [];
+    var views = [], commands = [], searchProviders = [], sidebarItems = [], statusBarItems = [], settingsPanels = [], openProviders = [], workspaceItems = [];
     for (var id in pluginStates) {
       var s = pluginStates[id];
       var c = (s.manifest && s.manifest.contributes) || {};
       if (c.views) c.views.forEach(function (v) { views.push(Object.assign({}, v, { pluginId: id })); });
       if (c.commands) c.commands.forEach(function (cmd) { commands.push(Object.assign({}, cmd, { pluginId: id })); });
+      if (c.searchProviders) c.searchProviders.forEach(function (sp) { searchProviders.push(Object.assign({}, sp, { pluginId: id })); });
       if (c.sidebarItems) c.sidebarItems.forEach(function (sb) { sidebarItems.push(Object.assign({}, sb, { pluginId: id })); });
       if (c.statusBarItems) c.statusBarItems.forEach(function (st) { statusBarItems.push(Object.assign({}, st, { pluginId: id })); });
       if (c.settingsPanels) c.settingsPanels.forEach(function (sp) { settingsPanels.push(Object.assign({}, sp, { pluginId: id })); });
       if (c.openProviders) c.openProviders.forEach(function (op) { openProviders.push(Object.assign({}, op, { pluginId: id })); });
       if (c.workspaceItems) c.workspaceItems.forEach(function (wi) { workspaceItems.push(Object.assign({}, wi, { pluginId: id })); });
     }
-    return { views: views, commands: commands, sidebarItems: sidebarItems, statusBarItems: statusBarItems, settingsPanels: settingsPanels, openProviders: openProviders, workspaceItems: workspaceItems };
+    return { views: views, commands: commands, searchProviders: searchProviders, sidebarItems: sidebarItems, statusBarItems: statusBarItems, settingsPanels: settingsPanels, openProviders: openProviders, workspaceItems: workspaceItems };
   }
 
   function requestExtension(request) {

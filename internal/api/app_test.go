@@ -1026,6 +1026,9 @@ func newBridgeTestApp(t *testing.T) *App {
 		StatusBarItems: []plugin.ContributionStatusBarItem{
 			{ID: "bridge.status", Label: "Bridge Ready", Position: "right", Handler: "openBridgeStatus"},
 		},
+		SearchProviders: []plugin.ContributionSearchProvider{
+			{ID: "bridge.search", Label: "Bridge Search", Handler: "searchVault"},
+		},
 		OpenProviders: []plugin.ContributionOpenProvider{
 			{
 				ID:        "bridge.markdown",
@@ -1110,6 +1113,19 @@ func TestContributionSummaryIncludesStatusBarItems(t *testing.T) {
 	item := summary.StatusBarItems[0]
 	if item.PluginID != "bridge.plugin" || item.ID != "bridge.status" || item.Label != "Bridge Ready" || item.Position != "right" || item.Handler != "openBridgeStatus" {
 		t.Fatalf("status item = %+v", item)
+	}
+}
+
+func TestContributionSummaryIncludesSearchProviders(t *testing.T) {
+	app := newBridgeTestApp(t)
+
+	summary := app.GetContributions()
+	if len(summary.SearchProviders) != 1 {
+		t.Fatalf("SearchProviders count = %d, want 1", len(summary.SearchProviders))
+	}
+	provider := summary.SearchProviders[0]
+	if provider.PluginID != "bridge.plugin" || provider.ID != "bridge.search" || provider.Label != "Bridge Search" || provider.Handler != "searchVault" {
+		t.Fatalf("search provider = %+v", provider)
 	}
 }
 
