@@ -95,6 +95,52 @@ test.describe('D: Plugin API bridge', () => {
     await expect(page.locator('[data-workbench-status="no-provider"]')).toContainText('No viewer/editor available');
   });
 
+  test('sync plugin API routes through mocked Wails bridge', async ({ page }) => {
+    const result = await page.evaluate(async () => {
+      const api = window.createPluginAPI('verstak.sync');
+      const initial = await api.sync.status();
+      await api.sync.testConnection('https://sync.example.test', 'alice', 'secret');
+      await api.sync.configure('https://sync.example.test', 'alice', 'secret');
+      await api.sync.setInterval(15);
+      const configured = await api.sync.status();
+      const syncNow = await api.sync.now();
+      await api.sync.disconnect();
+      const disconnected = await api.sync.status();
+      api.dispose();
+      return { initial, configured, syncNow, disconnected };
+    });
+
+    expect(result.initial.statusLabel).toBe('disabled');
+    expect(result.configured.configured).toBe(true);
+    expect(result.configured.serverUrl).toBe('https://sync.example.test');
+    expect(result.configured.syncInterval).toBe(15);
+    expect(result.syncNow).toEqual({ pushed: 0, pulled: 0, serverSequence: 0 });
+    expect(result.disconnected.configured).toBe(false);
+    expect(result.disconnected.statusLabel).toBe('disabled');
+  });
+
+  test('backend plugin events are dispatched to subscribed frontend handlers', async ({ page }) => {
+    const result = await page.evaluate(async () => {
+      const api = window.createPluginAPI('verstak.platform-test');
+      let received = null;
+      const unsubscribe = await api.events.subscribe('browser.capture.page', (event) => {
+        received = event;
+      });
+      window.__VERSTAK_DISPATCH_BACKEND_EVENT__({
+        name: 'browser.capture.page',
+        timestamp: '2026-06-27T00:00:00.000Z',
+        payload: { url: 'https://example.com/article' }
+      });
+      unsubscribe();
+      api.dispose();
+      return received;
+    });
+
+    expect(result.name).toBe('browser.capture.page');
+    expect(result.payload.url).toBe('https://example.com/article');
+    expect(result.timestamp).toBe('2026-06-27T00:00:00.000Z');
+  });
+
   test('platform-test command and event handlers are cleaned up after leaving plugin view', async ({ page }) => {
     await page.locator('.sidebar .plugin-item').filter({ hasText: 'Platform Test' }).click();
 

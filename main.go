@@ -13,6 +13,7 @@ import (
 
 	"github.com/verstak/verstak-desktop/internal/api"
 	"github.com/verstak/verstak-desktop/internal/core/appsettings"
+	"github.com/verstak/verstak-desktop/internal/core/browserreceiver"
 	"github.com/verstak/verstak-desktop/internal/core/capability"
 	"github.com/verstak/verstak-desktop/internal/core/contribution"
 	"github.com/verstak/verstak-desktop/internal/core/events"
@@ -251,9 +252,17 @@ func main() {
 		syncService = syncsvc.NewService(vaultService.GetVaultPath(), "")
 	}
 	app := api.NewApp(capRegistry, contribRegistry, permRegistry, eventBus, plugins, vaultService, storageService, filesService, appSettingsMgr, pluginStateMgr, workspaceMgr, syncService, debugEnabled)
+	browserReceiver := browserreceiver.New(eventBus)
+	browserReceiverServer, err := browserreceiver.Start(browserreceiver.DefaultAddr, browserReceiver)
+	if err != nil {
+		log.Printf("[browserreceiver] local receiver disabled: %v", err)
+	} else {
+		defer browserReceiverServer.Close()
+		log.Printf("[browserreceiver] local receiver listening at %s", browserReceiverServer.URL())
+	}
 
 	// ─── Wails App ───────────────────────────────────────────
-	err := wails.Run(&options.App{
+	err = wails.Run(&options.App{
 		Title:            "Verstak",
 		Width:            1200,
 		Height:           800,

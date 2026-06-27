@@ -97,14 +97,14 @@ func (s *Service) RecordOp(entityType, entityID, opType string, payload interfac
 	}
 
 	op := Op{
-		ID:         id,
-		OpID:       id,
-		DeviceID:   s.deviceID,
-		EntityType: entityType,
-		EntityID:   entityID,
-		OpType:     opType,
+		ID:          id,
+		OpID:        id,
+		DeviceID:    s.deviceID,
+		EntityType:  entityType,
+		EntityID:    entityID,
+		OpType:      opType,
 		PayloadJSON: payloadStr,
-		CreatedAt:  now,
+		CreatedAt:   now,
 	}
 
 	ops, err := s.loadOps()

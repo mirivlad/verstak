@@ -16,9 +16,10 @@ test.describe('E: Plugin Manager layout', () => {
   });
 
   test('plugin list scrolls through the global main scroll surface and stays responsive', async ({ page }) => {
+    const basePluginCount = await page.locator('.plugin-card').count();
     await page.evaluate(() => window.__wailsMock.addSyntheticPlugins(18));
     await page.locator('button.reload-btn').click();
-    await expect(page.locator('.plugin-card')).toHaveCount(21, { timeout: 10000 });
+    await expect(page.locator('.plugin-card')).toHaveCount(basePluginCount + 18, { timeout: 10000 });
 
     const manager = page.locator('.plugin-manager');
     const scrollSurface = page.locator('.content.scroll-surface');

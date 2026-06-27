@@ -30,6 +30,11 @@ import (
 	"github.com/verstak/verstak-desktop/internal/shell/debug"
 )
 
+var newSyncClient = syncsvc.NewClient
+var emitFrontendEvent = runtime.EventsEmit
+
+const pluginEventRuntimeName = "verstak:plugin-event"
+
 // App is the main application struct exposed to the Wails frontend.
 type App struct {
 	ctx             context.Context
@@ -974,14 +979,23 @@ func (a *App) PublishPluginEvent(pluginID, eventName string, payload map[string]
 	return ""
 }
 
-// SubscribePluginEvent validates subscribe permission for a bundled frontend plugin.
-// Actual bundled event dispatch is handled by the frontend plugin host event bus.
+// SubscribePluginEvent validates subscribe permission and bridges backend events
+// into the bundled frontend plugin host.
 func (a *App) SubscribePluginEvent(pluginID, eventName string) string {
 	if _, err := a.requirePluginAccess(pluginID, "events.subscribe"); err != nil {
 		return err.Error()
 	}
 	if eventName == "" {
 		return "event name is empty"
+	}
+	if a.eventBus != nil {
+		a.eventBus.Subscribe(eventName, func(event events.Event) {
+			emitFrontendEvent(a.ctx, pluginEventRuntimeName, map[string]interface{}{
+				"name":      event.Name,
+				"timestamp": event.Timestamp,
+				"payload":   event.Payload,
+			})
+		})
 	}
 	return ""
 }
@@ -1513,7 +1527,7 @@ func (a *App) syncStatus() (*SyncStatusDTO, error) {
 	dto.UnpushedOps = len(unpushed)
 
 	if deviceToken != "" {
-		client := syncsvc.NewClient(serverURL, "", "", vaultPath)
+		client := newSyncClient(serverURL, "", "", vaultPath)
 		client.DeviceToken = deviceToken
 		if cfg.Sync.DeviceID != "" {
 			client.DeviceID = cfg.Sync.DeviceID
@@ -1570,7 +1584,7 @@ func (a *App) syncConfigure(serverURL, username, password string) error {
 	if hostname == "" {
 		hostname = "unknown"
 	}
-	client := syncsvc.NewClient(serverURL, "", "", vaultPath)
+	client := newSyncClient(serverURL, "", "", vaultPath)
 	deviceID, deviceToken, err := client.PairDevice(serverURL, username, password, hostname, "verstak-desktop/v2")
 	if err != nil {
 		return fmt.Errorf("pair: %w", err)
@@ -1613,7 +1627,7 @@ func (a *App) syncDisconnect() error {
 	cfg := a.appSettings.Get()
 
 	if deviceToken != "" {
-		client := syncsvc.NewClient(cfg.Sync.ServerURL, "", "", vaultPath)
+		client := newSyncClient(cfg.Sync.ServerURL, "", "", vaultPath)
 		client.DeviceToken = deviceToken
 		_ = client.RevokeCurrent()
 	}
@@ -1647,7 +1661,7 @@ func (a *App) syncTestConnection(serverURL, username, password string) error {
 	if vaultPath == "" {
 		vaultPath = "/tmp"
 	}
-	client := syncsvc.NewClient(serverURL, "", "", vaultPath)
+	client := newSyncClient(serverURL, "", "", vaultPath)
 	return client.TestAuth(serverURL, username, password)
 }
 
@@ -1703,7 +1717,7 @@ func (a *App) syncNow() (map[string]interface{}, error) {
 		deviceID = cfg.Sync.DeviceID
 	}
 
-	client := syncsvc.NewClient(serverURL, apiKey, deviceID, vaultPath)
+	client := newSyncClient(serverURL, apiKey, deviceID, vaultPath)
 	client.DeviceToken = deviceToken
 
 	unpushed, err := a.syncSvc.GetUnpushedOps()

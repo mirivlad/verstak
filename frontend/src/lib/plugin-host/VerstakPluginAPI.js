@@ -71,6 +71,24 @@ function dispatchLocalEvent(pluginId, eventName, payload) {
   });
 }
 
+function dispatchBackendEvent(event) {
+  if (!event || !event.name) return;
+  const handlers = getEventHandlers(event.name).slice();
+  handlers.forEach(function(handler) {
+    try {
+      handler(event);
+    } catch (e) {
+      console.error('[VerstakPluginAPI] backend event handler error:', e);
+    }
+  });
+}
+
+window.__VERSTAK_DISPATCH_BACKEND_EVENT__ = dispatchBackendEvent;
+
+if (!window.__VERSTAK_BACKEND_EVENT_BRIDGE__ && window.runtime && typeof window.runtime.EventsOnMultiple === 'function') {
+  window.__VERSTAK_BACKEND_EVENT_BRIDGE__ = window.runtime.EventsOnMultiple('verstak:plugin-event', dispatchBackendEvent, -1);
+}
+
 function commandKey(pluginId, commandId) {
   return pluginId + ':' + commandId;
 }
@@ -150,7 +168,9 @@ export function createPluginAPI(pluginId) {
         await callBackendErrorString(pluginId, 'events.publish(' + type + ')', function() {
           return App.PublishPluginEvent(pluginId, type, payload || {});
         });
-        dispatchLocalEvent(pluginId, type, payload || {});
+        if (!window.__VERSTAK_BACKEND_EVENT_BRIDGE__) {
+          dispatchLocalEvent(pluginId, type, payload || {});
+        }
       },
       subscribe: function(type, handler) {
         assertActive('events.subscribe(' + type + ')');

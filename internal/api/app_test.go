@@ -1,7 +1,9 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -20,6 +22,20 @@ import (
 	"github.com/verstak/verstak-desktop/internal/core/vault"
 	"github.com/verstak/verstak-desktop/internal/core/workspace"
 )
+
+func newLocalHTTPTestServer(t *testing.T, handler http.Handler) *httptest.Server {
+	t.Helper()
+
+	listener, err := net.Listen("tcp4", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen local test server: %v", err)
+	}
+
+	server := httptest.NewUnstartedServer(handler)
+	server.Listener = listener
+	server.Start()
+	return server
+}
 
 // newTestApp creates an App with a mocked plugin list for testing.
 func newTestApp(tmpRoot string) *App {
@@ -738,7 +754,7 @@ func TestSyncNowPushesLocalOpsAndAppliesPulledFileOps(t *testing.T) {
 		CreatedAt         string `json:"created_at"`
 	}
 	var pushedDeviceID string
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := newLocalHTTPTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("Authorization") != "Bearer device-token" {
 			http.Error(w, "missing auth", http.StatusUnauthorized)
 			return
@@ -1289,5 +1305,57 @@ func TestPluginBridgeCapabilitiesCommandsAndEventsAreChecked(t *testing.T) {
 	}
 	if _, errStr := app.ExecutePluginCommand("no.storage", "bridge.command", nil); errStr == "" {
 		t.Fatal("expected command permission/ownership error")
+	}
+}
+
+func TestSubscribePluginEventRegistersBackendEventBridge(t *testing.T) {
+	app := newBridgeTestApp(t)
+	emitted := make(chan map[string]interface{}, 1)
+	originalEmit := emitFrontendEvent
+	emitFrontendEvent = func(_ context.Context, eventName string, data ...interface{}) {
+		if eventName != pluginEventRuntimeName {
+			t.Errorf("eventName = %q, want %q", eventName, pluginEventRuntimeName)
+		}
+		if len(data) != 1 {
+			t.Errorf("data length = %d, want 1", len(data))
+			return
+		}
+		payload, ok := data[0].(map[string]interface{})
+		if !ok {
+			t.Errorf("data[0] type = %T, want map[string]interface{}", data[0])
+			return
+		}
+		emitted <- payload
+	}
+	t.Cleanup(func() {
+		emitFrontendEvent = originalEmit
+	})
+
+	if errStr := app.SubscribePluginEvent("bridge.plugin", "browser.capture.page"); errStr != "" {
+		t.Fatalf("SubscribePluginEvent: %s", errStr)
+	}
+	if !app.eventBus.HasSubscribers("browser.capture.page") {
+		t.Fatal("expected backend event bus subscriber")
+	}
+
+	app.eventBus.Publish(events.Event{
+		Name:      "browser.capture.page",
+		Timestamp: "2026-06-27T00:00:00.000Z",
+		Payload:   map[string]interface{}{"url": "https://example.com"},
+	})
+
+	event := <-emitted
+	if event["name"] != "browser.capture.page" {
+		t.Fatalf("event name = %v, want browser.capture.page", event["name"])
+	}
+	if event["timestamp"] != "2026-06-27T00:00:00.000Z" {
+		t.Fatalf("event timestamp = %v, want documented timestamp", event["timestamp"])
+	}
+	payload, ok := event["payload"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("event payload type = %T, want map[string]interface{}", event["payload"])
+	}
+	if payload["url"] != "https://example.com" {
+		t.Fatalf("payload url = %v, want https://example.com", payload["url"])
 	}
 }

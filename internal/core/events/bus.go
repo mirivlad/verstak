@@ -35,6 +35,13 @@ func (b *Bus) Subscribe(event string, handler Handler) {
 	b.handlers[event] = append(b.handlers[event], handler)
 }
 
+// HasSubscribers reports whether an event has at least one registered handler.
+func (b *Bus) HasSubscribers(event string) bool {
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+	return len(b.handlers[event]) > 0
+}
+
 // Unsubscribe removes all handlers for a plugin (matched by prefix or exact).
 // For now, a simple version: clear all handlers for a given event name.
 func (b *Bus) Unsubscribe(event string) {

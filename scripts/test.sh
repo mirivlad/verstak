@@ -34,16 +34,18 @@ echo "=== verstak-desktop test ==="
 
 # ── Go tests ──
 (cd "$ROOT" && go mod download)
-OUTPUT=$(cd "$ROOT" && go test -count=1 -v ./... 2>&1) || true
+GO_TEST_STATUS=0
+OUTPUT=$(cd "$ROOT" && go test -count=1 -v ./... 2>&1) || GO_TEST_STATUS=$?
 echo "$OUTPUT" | grep -E '(FAIL|PASS|---)' || true
-report "go test" $?
+report "go test" "$GO_TEST_STATUS"
 
 # ── Frontend tests ──
 echo "[frontend]"
 if ensure_npm_deps "$ROOT/frontend"; then
   if grep -q '"test"' "$ROOT/frontend/package.json" 2>/dev/null; then
-    (cd "$ROOT/frontend" && npm test 2>&1 || true)
-    report "frontend test" $?
+    FRONTEND_TEST_STATUS=0
+    (cd "$ROOT/frontend" && npm test 2>&1) || FRONTEND_TEST_STATUS=$?
+    report "frontend test" "$FRONTEND_TEST_STATUS"
   else
     echo "  ℹ️  no test script in frontend/package.json"
   fi

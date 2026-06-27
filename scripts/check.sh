@@ -41,7 +41,7 @@ report "go mod download" $?
 report "go vet" $?
 
 # ── Go fmt (non-destructive — only report unformatted files) ──
-UNFORMATTED=$(cd "$ROOT" && gofmt -l . 2>/dev/null || go fmt -n ./... 2>&1 || true)
+UNFORMATTED=$(cd "$ROOT" && find . -path ./vendor -prune -o -name '*.go' -print | xargs gofmt -l 2>/dev/null || go fmt -n ./... 2>&1 || true)
 if [ -z "$UNFORMATTED" ]; then
   echo "  ✅ gofmt: all files formatted"
 else
@@ -58,15 +58,17 @@ report "go mod tidy" $?
 echo "[frontend]"
 if ensure_npm_deps "$ROOT/frontend"; then
   if grep -q '"lint"' "$ROOT/frontend/package.json" 2>/dev/null; then
-    (cd "$ROOT/frontend" && npm run lint 2>&1 || true)
-    report "frontend lint" $?
+    FRONTEND_LINT_STATUS=0
+    (cd "$ROOT/frontend" && npm run lint 2>&1) || FRONTEND_LINT_STATUS=$?
+    report "frontend lint" "$FRONTEND_LINT_STATUS"
   else
     echo "  ℹ️  no lint script in frontend/package.json"
   fi
   # Always run tsc --noEmit if typescript is available
   if [ -f "$ROOT/frontend/node_modules/.bin/tsc" ]; then
-    (cd "$ROOT/frontend" && npx tsc --noEmit 2>&1 || true)
-    report "frontend tsc --noEmit" $?
+    FRONTEND_TSC_STATUS=0
+    (cd "$ROOT/frontend" && npx tsc --noEmit 2>&1) || FRONTEND_TSC_STATUS=$?
+    report "frontend tsc --noEmit" "$FRONTEND_TSC_STATUS"
   fi
 else
   echo "  ℹ️  no frontend/package.json"

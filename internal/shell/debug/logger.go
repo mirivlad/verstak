@@ -13,8 +13,8 @@ import (
 )
 
 var (
-	logger *log.Logger
-	mu     sync.Mutex
+	logger  *log.Logger
+	mu      sync.Mutex
 	enabled bool
 )
 

@@ -133,11 +133,35 @@
       },
       rootPath: '/tmp/verstak-test/plugins/files',
       error: ''
+    },
+    'verstak.sync': {
+      status: 'loaded',
+      enabled: true,
+      manifest: {
+        schemaVersion: 1,
+        id: 'verstak.sync',
+        name: 'Sync',
+        version: '0.1.0',
+        apiVersion: '0.1.0',
+        description: 'Synchronize vault data across devices.',
+        source: 'official',
+        icon: 'refresh-cw',
+        provides: ['verstak/sync/v1', 'verstak/sync.status/v1'],
+        requires: ['verstak/core/files/v1'],
+        permissions: ['files.read', 'files.write', 'network.remote', 'storage.namespace', 'sync.participate', 'ui.register'],
+        frontend: { entry: 'frontend/dist/index.js' },
+        contributes: {
+          settingsPanels: [{ id: 'verstak.sync.settings', title: 'Sync', component: 'SyncSettings' }],
+          statusBarItems: [{ id: 'verstak.sync.status', label: 'Sync', position: 'right' }]
+        }
+      },
+      rootPath: '/tmp/verstak-test/plugins/sync',
+      error: ''
     }
   };
 
   var vaultStatus = { status: 'open', path: '/tmp/verstak-test/vault', vaultId: 'test-vault-001' };
-  var vaultPluginState = { enabledPlugins: ['verstak.platform-test', 'verstak.default-editor', 'verstak.files'], disabledPlugins: [], desiredPlugins: [{ id: 'verstak.platform-test', version: '0.1.0', source: 'official' }, { id: 'verstak.default-editor', version: '0.1.0', source: 'official' }, { id: 'verstak.files', version: '0.1.0', source: 'official' }] };
+  var vaultPluginState = { enabledPlugins: ['verstak.platform-test', 'verstak.default-editor', 'verstak.files', 'verstak.sync'], disabledPlugins: [], desiredPlugins: [{ id: 'verstak.platform-test', version: '0.1.0', source: 'official' }, { id: 'verstak.default-editor', version: '0.1.0', source: 'official' }, { id: 'verstak.files', version: '0.1.0', source: 'official' }, { id: 'verstak.sync', version: '0.1.0', source: 'official' }] };
   var appSettings = { currentVaultPath: '/tmp/verstak-test/vault', recentVaults: [] };
   var workbenchPreferences = {};
   var openedResources = [];
@@ -149,6 +173,7 @@
   window.__wailsMockExternalOpens = [];
   var workspaceTree = makeDefaultWorkspaceTree();
   var reloadResponseMode = 'tuple';
+  var syncState = makeDefaultSyncState();
 
   // ── Helpers ────────────────────────────────────────────────────────
   function makeDefaultWorkspaceTree() {
@@ -194,6 +219,24 @@
       'Project/project-only.txt': { type: 'file', content: 'project file', modifiedAt: new Date().toISOString() },
       'Test': { type: 'folder', modifiedAt: new Date().toISOString() },
       'Test/test-only.txt': { type: 'file', content: 'test file', modifiedAt: new Date().toISOString() }
+    };
+  }
+
+  function makeDefaultSyncState() {
+    return {
+      configured: false,
+      serverUrl: '',
+      deviceId: 'mock-device',
+      deviceName: '',
+      connected: false,
+      revoked: false,
+      tokenStored: false,
+      unpushedOps: 0,
+      lastSyncAt: '',
+      syncInterval: 0,
+      lastError: '',
+      statusLabel: 'disabled',
+      serverSequence: 0
     };
   }
 
@@ -273,6 +316,7 @@
     caps.push({ name: 'verstak/core/capability-registry/v1', description: 'Capability registry', pluginId: 'verstak-desktop', status: 'stable' });
     caps.push({ name: 'verstak/core/files/v1', description: 'Files API', pluginId: 'verstak-desktop', status: 'stable' });
     caps.push({ name: 'verstak/core/workbench/v1', description: 'Workbench routing', pluginId: 'verstak-desktop', status: 'stable' });
+    caps.push({ name: 'verstak/core/sync/v1', description: 'Sync API', pluginId: 'verstak-desktop', status: 'stable' });
     for (var id in pluginStates) {
       var s = pluginStates[id];
       if (s.status === 'loaded' && s.enabled && s.manifest && s.manifest.provides) {
@@ -296,8 +340,37 @@
       { name: 'files.write', description: 'Write vault files', dangerous: true },
       { name: 'files.delete', description: 'Trash vault files', dangerous: true },
       { name: 'files.openExternal', description: 'Open vault files and folders externally', dangerous: true },
-      { name: 'workbench.open', description: 'Request Workbench open/edit routing', dangerous: false }
+      { name: 'workbench.open', description: 'Request Workbench open/edit routing', dangerous: false },
+      { name: 'network.remote', description: 'Connect to remote network services', dangerous: true },
+      { name: 'sync.participate', description: 'Participate in vault sync', dangerous: true }
     ];
+  }
+
+  function syncStatusDTO() {
+    return {
+      configured: syncState.configured,
+      serverUrl: syncState.serverUrl,
+      deviceId: syncState.deviceId,
+      deviceName: syncState.deviceName,
+      connected: syncState.connected,
+      revoked: syncState.revoked,
+      tokenStored: syncState.tokenStored,
+      unpushedOps: syncState.unpushedOps,
+      lastSyncAt: syncState.lastSyncAt,
+      syncInterval: syncState.syncInterval,
+      lastError: syncState.lastError,
+      statusLabel: syncState.statusLabel
+    };
+  }
+
+  function requirePluginSyncPermission(pluginId, remote) {
+    var err = requirePluginPermission(pluginId, 'sync.participate');
+    if (err) return err;
+    if (remote) {
+      err = requirePluginPermission(pluginId, 'network.remote');
+      if (err) return err;
+    }
+    return '';
   }
 
   function allContributions() {
@@ -998,6 +1071,60 @@
       workbenchPreferences = Object.assign({}, workbenchPreferences, preferences || {});
       return Promise.resolve('');
     },
+    PluginSyncStatus: function (pluginId) {
+      var err = requirePluginSyncPermission(pluginId, false);
+      if (err) return Promise.resolve([{}, err]);
+      return Promise.resolve([syncStatusDTO(), '']);
+    },
+    PluginSyncConfigure: function (pluginId, serverUrl) {
+      var err = requirePluginSyncPermission(pluginId, true);
+      if (err) return Promise.resolve(err);
+      syncState.configured = true;
+      syncState.serverUrl = serverUrl || '';
+      syncState.deviceId = 'mock-device';
+      syncState.deviceName = 'mock-device';
+      syncState.connected = true;
+      syncState.revoked = false;
+      syncState.tokenStored = true;
+      syncState.lastError = '';
+      syncState.statusLabel = 'connected';
+      pluginSettings[pluginId] = Object.assign({}, pluginSettings[pluginId] || {}, {
+        serverUrl: syncState.serverUrl,
+        syncStatus: syncState.statusLabel
+      });
+      return Promise.resolve('');
+    },
+    PluginSyncDisconnect: function (pluginId) {
+      var err = requirePluginSyncPermission(pluginId, false);
+      if (err) return Promise.resolve(err);
+      syncState = makeDefaultSyncState();
+      pluginSettings[pluginId] = Object.assign({}, pluginSettings[pluginId] || {}, {
+        serverUrl: '',
+        syncStatus: syncState.statusLabel
+      });
+      return Promise.resolve('');
+    },
+    PluginSyncTestConnection: function (pluginId, serverUrl) {
+      var err = requirePluginSyncPermission(pluginId, true);
+      if (err) return Promise.resolve(err);
+      if (!serverUrl) return Promise.resolve('server URL is required');
+      return Promise.resolve('');
+    },
+    PluginSyncSetInterval: function (pluginId, minutes) {
+      var err = requirePluginSyncPermission(pluginId, false);
+      if (err) return Promise.resolve(err);
+      syncState.syncInterval = Number(minutes) || 0;
+      return Promise.resolve('');
+    },
+    PluginSyncNow: function (pluginId) {
+      var err = requirePluginSyncPermission(pluginId, true);
+      if (err) return Promise.resolve([{}, err]);
+      if (!syncState.configured) return Promise.resolve([{}, 'sync not configured']);
+      syncState.lastSyncAt = new Date().toISOString();
+      syncState.lastError = '';
+      syncState.statusLabel = 'connected';
+      return Promise.resolve([{ pushed: 0, pulled: 0, serverSequence: syncState.serverSequence }, '']);
+    },
     GetPluginAssetContent: function (pluginId, assetPath) {
       if (pluginId === 'verstak.platform-test' && assetPath === 'frontend/dist/index.js') {
         return Promise.resolve(platformTestBundle());
@@ -1415,10 +1542,34 @@
           },
           rootPath: '/tmp/verstak-test/plugins/files',
           error: ''
+        },
+        'verstak.sync': {
+          status: 'loaded',
+          enabled: true,
+          manifest: {
+            schemaVersion: 1,
+            id: 'verstak.sync',
+            name: 'Sync',
+            version: '0.1.0',
+            apiVersion: '0.1.0',
+            description: 'Synchronize vault data across devices.',
+            source: 'official',
+            icon: 'refresh-cw',
+            provides: ['verstak/sync/v1', 'verstak/sync.status/v1'],
+            requires: ['verstak/core/files/v1'],
+            permissions: ['files.read', 'files.write', 'network.remote', 'storage.namespace', 'sync.participate', 'ui.register'],
+            frontend: { entry: 'frontend/dist/index.js' },
+            contributes: {
+              settingsPanels: [{ id: 'verstak.sync.settings', title: 'Sync', component: 'SyncSettings' }],
+              statusBarItems: [{ id: 'verstak.sync.status', label: 'Sync', position: 'right' }]
+            }
+          },
+          rootPath: '/tmp/verstak-test/plugins/sync',
+          error: ''
         }
       };
       vaultStatus = { status: 'open', path: '/tmp/verstak-test/vault', vaultId: 'test-vault-001' };
-      vaultPluginState = { enabledPlugins: ['verstak.platform-test', 'verstak.default-editor', 'verstak.files'], disabledPlugins: [], desiredPlugins: [{ id: 'verstak.platform-test', version: '0.1.0', source: 'official' }, { id: 'verstak.default-editor', version: '0.1.0', source: 'official' }, { id: 'verstak.files', version: '0.1.0', source: 'official' }] };
+      vaultPluginState = { enabledPlugins: ['verstak.platform-test', 'verstak.default-editor', 'verstak.files', 'verstak.sync'], disabledPlugins: [], desiredPlugins: [{ id: 'verstak.platform-test', version: '0.1.0', source: 'official' }, { id: 'verstak.default-editor', version: '0.1.0', source: 'official' }, { id: 'verstak.files', version: '0.1.0', source: 'official' }, { id: 'verstak.sync', version: '0.1.0', source: 'official' }] };
       appSettings = { currentVaultPath: '/tmp/verstak-test/vault', recentVaults: [] };
       workbenchPreferences = {};
       openedResources = [];
@@ -1428,6 +1579,7 @@
       window.__wailsMockExternalOpens = [];
       workspaceTree = makeDefaultWorkspaceTree();
       reloadResponseMode = 'tuple';
+      syncState = makeDefaultSyncState();
     },
     setPluginStatus: function (pluginId, status, enabled) {
       if (pluginStates[pluginId]) {
