@@ -19,8 +19,11 @@ const capturePath = "/api/browser-inbox/v1/captures"
 const DefaultAddr = "127.0.0.1:47731"
 
 type Receiver struct {
-	bus *events.Bus
+	bus               *events.Bus
+	workspaceProvider WorkspaceProvider
 }
+
+type WorkspaceProvider func() string
 
 type Server struct {
 	listener net.Listener
@@ -59,8 +62,12 @@ type CaptureBrowser struct {
 	Name string `json:"name"`
 }
 
-func New(bus *events.Bus) *Receiver {
-	return &Receiver{bus: bus}
+func New(bus *events.Bus, providers ...WorkspaceProvider) *Receiver {
+	var provider WorkspaceProvider
+	if len(providers) > 0 {
+		provider = providers[0]
+	}
+	return &Receiver{bus: bus, workspaceProvider: provider}
 }
 
 func Start(addr string, receiver *Receiver) (*Server, error) {
@@ -128,10 +135,12 @@ func (r *Receiver) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		writeError(w, http.StatusServiceUnavailable, "browser inbox unavailable")
 		return
 	}
+	eventPayload := payload.EventPayload()
+	r.annotateWorkspace(eventPayload)
 	r.bus.Publish(events.Event{
 		Name:      eventName,
 		Timestamp: time.Now().UTC().Format(time.RFC3339Nano),
-		Payload:   payload.EventPayload(),
+		Payload:   eventPayload,
 	})
 
 	w.WriteHeader(http.StatusAccepted)
@@ -139,6 +148,21 @@ func (r *Receiver) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		"status":    "accepted",
 		"captureId": payload.CaptureID,
 	})
+}
+
+func (r *Receiver) annotateWorkspace(payload map[string]interface{}) {
+	if r == nil || r.workspaceProvider == nil || payload == nil {
+		return
+	}
+	if _, ok := payload["workspaceRootPath"]; ok {
+		return
+	}
+	workspaceRoot := strings.TrimSpace(r.workspaceProvider())
+	if workspaceRoot == "" {
+		return
+	}
+	payload["workspaceRootPath"] = workspaceRoot
+	payload["workspaceName"] = workspaceRoot
 }
 
 func (p CapturePayload) Validate() error {

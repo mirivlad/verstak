@@ -252,7 +252,13 @@ func main() {
 		syncService = syncsvc.NewService(vaultService.GetVaultPath(), "")
 	}
 	app := api.NewApp(capRegistry, contribRegistry, permRegistry, eventBus, plugins, vaultService, storageService, filesService, appSettingsMgr, pluginStateMgr, workspaceMgr, syncService, debugEnabled)
-	browserReceiver := browserreceiver.New(eventBus)
+	browserReceiver := browserreceiver.New(eventBus, func() string {
+		current := app.GetCurrentWorkspace()
+		if root, ok := current["rootPath"].(string); ok {
+			return root
+		}
+		return ""
+	})
 	browserReceiverServer, err := browserreceiver.Start(browserreceiver.DefaultAddr, browserReceiver)
 	if err != nil {
 		log.Printf("[browserreceiver] local receiver disabled: %v", err)

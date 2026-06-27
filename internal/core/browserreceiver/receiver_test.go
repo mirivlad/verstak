@@ -85,6 +85,48 @@ func TestReceiverAcceptsSelectionCaptureAndPublishesEvent(t *testing.T) {
 	}
 }
 
+func TestReceiverAnnotatesCaptureWithCurrentWorkspace(t *testing.T) {
+	bus := events.NewBus()
+	received := make(chan events.Event, 1)
+	bus.Subscribe("browser.capture.page", func(event events.Event) {
+		received <- event
+	})
+
+	receiver := New(bus, func() string { return "Project" })
+	body := `{
+		"schemaVersion": 1,
+		"captureId": "capture-workspace",
+		"capturedAt": "2026-06-27T00:00:00.000Z",
+		"source": "verstak-browser-extension",
+		"kind": "page",
+		"page": {
+			"url": "https://example.com/article",
+			"title": "Example Article"
+		}
+	}`
+
+	req := httptest.NewRequest(http.MethodPost, "/api/browser-inbox/v1/captures", bytes.NewBufferString(body))
+	rec := httptest.NewRecorder()
+
+	receiver.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusAccepted {
+		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusAccepted, rec.Body.String())
+	}
+
+	event := <-received
+	payload, ok := event.Payload.(map[string]interface{})
+	if !ok {
+		t.Fatalf("event payload type = %T, want map[string]interface{}", event.Payload)
+	}
+	if payload["workspaceRootPath"] != "Project" {
+		t.Fatalf("payload workspaceRootPath = %v, want Project", payload["workspaceRootPath"])
+	}
+	if payload["workspaceName"] != "Project" {
+		t.Fatalf("payload workspaceName = %v, want Project", payload["workspaceName"])
+	}
+}
+
 func TestServerStartsOnLocalAddressAndAcceptsCapture(t *testing.T) {
 	bus := events.NewBus()
 	bus.Subscribe("browser.capture.page", func(event events.Event) {})
