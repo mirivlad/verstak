@@ -25,6 +25,7 @@ export namespace api {
 	    mime?: string[];
 	    extensions?: string[];
 	    contexts?: string[];
+	    modes?: string[];
 	
 	    static createFrom(source: any = {}) {
 	        return new FlatOpenProviderSupport(source);
@@ -36,6 +37,7 @@ export namespace api {
 	        this.mime = source["mime"];
 	        this.extensions = source["extensions"];
 	        this.contexts = source["contexts"];
+	        this.modes = source["modes"];
 	    }
 	}
 	export class FlatOpenProvider {
@@ -534,6 +536,7 @@ export namespace plugin {
 	    mime?: string[];
 	    extensions?: string[];
 	    contexts?: string[];
+	    modes?: string[];
 	
 	    static createFrom(source: any = {}) {
 	        return new OpenProviderSupport(source);
@@ -545,6 +548,7 @@ export namespace plugin {
 	        this.mime = source["mime"];
 	        this.extensions = source["extensions"];
 	        this.contexts = source["contexts"];
+	        this.modes = source["modes"];
 	    }
 	}
 	export class ContributionOpenProvider {
@@ -1159,4 +1163,3 @@ export namespace workspace {
 	}
 
 }
-

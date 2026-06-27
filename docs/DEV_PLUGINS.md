@@ -97,8 +97,8 @@ Frontend bundles are mounted with a plugin-scoped API created by
   a concrete editor plugin.
 
 Editor/viewer plugins contribute providers with `contributes.openProviders`.
-Workbench selects by resource kind, extension/mime, context (`generic-text`,
-`generic-markdown`, `notes-markdown`), user preference, priority, then
+Workbench selects by resource kind, request mode, extension/mime, context
+(`generic-text`, `generic-markdown`, `notes-markdown`), user preference, priority, then
 deterministic `pluginId/providerId` tie-break. If nothing matches, Workbench
 shows `no-provider` fallback instead of a core editor.
 

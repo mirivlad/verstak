@@ -249,6 +249,7 @@ type FlatOpenProviderSupport struct {
 	Mime       []string `json:"mime,omitempty"`
 	Extensions []string `json:"extensions,omitempty"`
 	Contexts   []string `json:"contexts,omitempty"`
+	Modes      []string `json:"modes,omitempty"`
 }
 
 type FlatOpenProvider struct {
@@ -316,7 +317,7 @@ func buildContributionSummary(r *contribution.Registry) ContributionSummary {
 	for i, v := range regOpenProviders {
 		supports := make([]FlatOpenProviderSupport, len(v.Item.Supports))
 		for j, s := range v.Item.Supports {
-			supports[j] = FlatOpenProviderSupport{Kind: s.Kind, Mime: s.Mime, Extensions: s.Extensions, Contexts: s.Contexts}
+			supports[j] = FlatOpenProviderSupport{Kind: s.Kind, Mime: s.Mime, Extensions: s.Extensions, Contexts: s.Contexts, Modes: s.Modes}
 		}
 		openProviders[i] = FlatOpenProvider{
 			PluginID:  v.PluginID,

@@ -339,8 +339,10 @@
   function providerSupports(provider, request) {
     var ext = requestExtension(request);
     var contextName = requestContextName(request);
+    var mode = String((request && request.mode) || 'view').toLowerCase();
     return (provider.supports || []).some(function (support) {
       if (support.kind && support.kind !== request.kind) return false;
+      if (support.modes && support.modes.length && support.modes.map(function (m) { return String(m).toLowerCase(); }).indexOf(mode) === -1) return false;
       if (support.extensions && support.extensions.length && support.extensions.map(function (e) { return String(e).toLowerCase(); }).indexOf(ext) === -1) return false;
       if (support.contexts && support.contexts.length && support.contexts.indexOf(contextName) === -1) return false;
       return true;

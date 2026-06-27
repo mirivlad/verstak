@@ -317,7 +317,8 @@ the Workbench helper.
           {
             "kind": "vault-file",
             "extensions": [".md", ".markdown"],
-            "contexts": ["generic-markdown", "notes-markdown"]
+            "contexts": ["generic-markdown", "notes-markdown"],
+            "modes": ["view"]
           },
           {
             "kind": "vault-file",
@@ -333,7 +334,7 @@ the Workbench helper.
 ```
 
 Selection uses enabled loaded/degraded provider plugins, resource kind,
-extension/mime, context, user preference, priority, then deterministic
+request mode, extension/mime, context, user preference, priority, then deterministic
 `pluginId/providerId` fallback. If nothing matches, Workbench returns
 `status: "no-provider"` and shows the fallback view instead of a core editor.
 

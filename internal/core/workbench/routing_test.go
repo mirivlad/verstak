@@ -91,6 +91,47 @@ func TestSelectProviderFallsBackByPriorityThenID(t *testing.T) {
 	}
 }
 
+func TestSelectProviderHonorsSupportModes(t *testing.T) {
+	r := NewRouter(Preferences{})
+	providers := []contribution.ContributionOpenProvider{
+		provider("preview.plugin", "markdown.preview", 100, "MarkdownPreview", plugin.OpenProviderSupport{
+			Kind:       "vault-file",
+			Extensions: []string{".md"},
+			Contexts:   []string{ContextGenericMarkdown},
+			Modes:      []string{"view"},
+		}),
+		provider("editor.plugin", "markdown.editor", 50, "MarkdownEditor", plugin.OpenProviderSupport{
+			Kind:       "vault-file",
+			Extensions: []string{".md"},
+			Contexts:   []string{ContextGenericMarkdown},
+		}),
+	}
+
+	viewProvider, err := r.SelectProvider(OpenResourceRequest{
+		Kind: "vault-file",
+		Path: "Docs/readme.md",
+		Mode: "view",
+	}, providers)
+	if err != nil {
+		t.Fatalf("SelectProvider(view): %v", err)
+	}
+	if viewProvider.Item.ID != "markdown.preview" {
+		t.Fatalf("view provider = %q, want markdown.preview", viewProvider.Item.ID)
+	}
+
+	editProvider, err := r.SelectProvider(OpenResourceRequest{
+		Kind: "vault-file",
+		Path: "Docs/readme.md",
+		Mode: "edit",
+	}, providers)
+	if err != nil {
+		t.Fatalf("SelectProvider(edit): %v", err)
+	}
+	if editProvider.Item.ID != "markdown.editor" {
+		t.Fatalf("edit provider = %q, want markdown.editor", editProvider.Item.ID)
+	}
+}
+
 func TestSelectProviderTieBreaksByPluginIDThenProviderID(t *testing.T) {
 	r := NewRouter(Preferences{})
 	providers := []contribution.ContributionOpenProvider{

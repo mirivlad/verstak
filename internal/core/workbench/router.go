@@ -168,6 +168,9 @@ func providerMatches(request OpenResourceRequest, provider plugin.ContributionOp
 		if support.Kind != request.Kind {
 			continue
 		}
+		if !supportMatchesMode(request, support) {
+			continue
+		}
 		if !supportMatchesExtensionOrMime(request, support) {
 			continue
 		}
@@ -175,6 +178,19 @@ func providerMatches(request OpenResourceRequest, provider plugin.ContributionOp
 			continue
 		}
 		return true
+	}
+	return false
+}
+
+func supportMatchesMode(request OpenResourceRequest, support plugin.OpenProviderSupport) bool {
+	if len(support.Modes) == 0 {
+		return true
+	}
+	mode := strings.ToLower(request.Mode)
+	for _, supported := range support.Modes {
+		if strings.ToLower(supported) == mode {
+			return true
+		}
 	}
 	return false
 }

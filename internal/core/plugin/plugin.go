@@ -152,6 +152,7 @@ type OpenProviderSupport struct {
 	Mime       []string `json:"mime,omitempty"`
 	Extensions []string `json:"extensions,omitempty"`
 	Contexts   []string `json:"contexts,omitempty"`
+	Modes      []string `json:"modes,omitempty"`
 }
 
 // ContributionOpenProvider represents an editor/viewer provider contribution.
