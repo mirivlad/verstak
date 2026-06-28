@@ -38,6 +38,10 @@ const pluginEventRuntimeName = "verstak:plugin-event"
 const activityGlobalKey = "events:global"
 const activityWorkspacePrefix = "events:workspace:"
 const maxActivityEvents = 250
+const workspaceCreatedEventName = "workspace.created"
+const workspaceRenamedEventName = "workspace.renamed"
+const workspaceTrashedEventName = "workspace.trashed"
+const workspaceSelectedEventName = "workspace.selected"
 
 // App is the main application struct exposed to the Wails frontend.
 type App struct {
@@ -1051,6 +1055,33 @@ func workspaceRootFromRelativePath(relativePath string) string {
 	return path
 }
 
+func (a *App) publishWorkspaceLifecycleEvent(eventName string, payload map[string]interface{}) {
+	if a.eventBus == nil {
+		return
+	}
+	if payload == nil {
+		payload = map[string]interface{}{}
+	}
+	workspaceRoot := strings.TrimSpace(fmt.Sprint(payload["workspaceRootPath"]))
+	if workspaceRoot == "" || workspaceRoot == "<nil>" {
+		workspaceRoot = strings.TrimSpace(fmt.Sprint(payload["workspaceName"]))
+	}
+	if workspaceRoot != "" && workspaceRoot != "<nil>" {
+		payload["workspaceRootPath"] = workspaceRoot
+		if _, ok := payload["workspaceName"]; !ok {
+			payload["workspaceName"] = workspaceRoot
+		}
+		if _, ok := payload["title"]; !ok {
+			payload["title"] = workspaceRoot
+		}
+	}
+	a.eventBus.Publish(events.Event{
+		Name:      eventName,
+		Timestamp: time.Now().UTC().Format(time.RFC3339Nano),
+		Payload:   payload,
+	})
+}
+
 func syncEntityTypeForFileType(fileType corefiles.FileType) string {
 	if fileType == corefiles.FileTypeFolder {
 		return syncsvc.EntityFolder
@@ -1345,6 +1376,12 @@ func (a *App) CreateWorkspace(name, templateID string) (workspace.Workspace, str
 	if err != nil {
 		return workspace.Workspace{}, err.Error()
 	}
+	a.publishWorkspaceLifecycleEvent(workspaceCreatedEventName, map[string]interface{}{
+		"operation":         "create",
+		"workspaceRootPath": ws.RootPath,
+		"workspaceName":     ws.Name,
+		"templateId":        templateID,
+	})
 	return ws, ""
 }
 
@@ -1356,6 +1393,13 @@ func (a *App) RenameWorkspace(oldName, newName string) string {
 	if err := a.workspace.RenameWorkspace(oldName, newName); err != nil {
 		return err.Error()
 	}
+	a.publishWorkspaceLifecycleEvent(workspaceRenamedEventName, map[string]interface{}{
+		"operation":                 "rename",
+		"workspaceRootPath":         newName,
+		"workspaceName":             newName,
+		"previousWorkspaceRootPath": oldName,
+		"previousWorkspaceName":     oldName,
+	})
 	return ""
 }
 
@@ -1368,6 +1412,14 @@ func (a *App) TrashWorkspace(name string) (workspace.TrashResult, string) {
 	if err != nil {
 		return workspace.TrashResult{}, err.Error()
 	}
+	a.publishWorkspaceLifecycleEvent(workspaceTrashedEventName, map[string]interface{}{
+		"operation":         "trash",
+		"workspaceRootPath": name,
+		"workspaceName":     name,
+		"trashId":           result.TrashID,
+		"trashPath":         result.TrashPath,
+		"deletedAt":         result.DeletedAt,
+	})
 	return result, ""
 }
 
@@ -1418,6 +1470,11 @@ func (a *App) SetCurrentWorkspace(name string) string {
 	if err := a.workspace.SetCurrentNode(name); err != nil {
 		return err.Error()
 	}
+	a.publishWorkspaceLifecycleEvent(workspaceSelectedEventName, map[string]interface{}{
+		"operation":         "select",
+		"workspaceRootPath": name,
+		"workspaceName":     name,
+	})
 	return ""
 }
 

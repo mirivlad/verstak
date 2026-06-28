@@ -1079,6 +1079,62 @@ func TestWorkspaceAPIUsesTopLevelFoldersAndMetadataSnapshot(t *testing.T) {
 	}
 }
 
+func TestWorkspaceAPIPublishesLifecycleEvents(t *testing.T) {
+	app, vaultDir := newFilesTestApp(t, []string{"files.read"})
+	app.workspace = workspace.NewManager(vaultDir)
+	app.eventBus = events.NewBus()
+	if err := app.workspace.Load(); err != nil {
+		t.Fatalf("workspace Load: %v", err)
+	}
+
+	received := map[string]map[string]interface{}{}
+	for _, eventName := range []string{"workspace.created", "workspace.selected", "workspace.renamed", "workspace.trashed"} {
+		name := eventName
+		app.eventBus.Subscribe(name, func(event events.Event) {
+			payload, ok := event.Payload.(map[string]interface{})
+			if !ok {
+				t.Fatalf("%s payload type = %T", name, event.Payload)
+			}
+			received[name] = payload
+		})
+	}
+
+	if _, errStr := app.CreateWorkspace("Project", "client-project"); errStr != "" {
+		t.Fatalf("CreateWorkspace: %s", errStr)
+	}
+	if errStr := app.SetCurrentWorkspace("Project"); errStr != "" {
+		t.Fatalf("SetCurrentWorkspace: %s", errStr)
+	}
+	if errStr := app.RenameWorkspace("Project", "Renamed"); errStr != "" {
+		t.Fatalf("RenameWorkspace: %s", errStr)
+	}
+	if _, errStr := app.TrashWorkspace("Renamed"); errStr != "" {
+		t.Fatalf("TrashWorkspace: %s", errStr)
+	}
+
+	if got := received["workspace.created"]["workspaceRootPath"]; got != "Project" {
+		t.Fatalf("workspace.created workspaceRootPath = %#v, want Project", got)
+	}
+	if got := received["workspace.created"]["templateId"]; got != "client-project" {
+		t.Fatalf("workspace.created templateId = %#v, want client-project", got)
+	}
+	if got := received["workspace.selected"]["workspaceRootPath"]; got != "Project" {
+		t.Fatalf("workspace.selected workspaceRootPath = %#v, want Project", got)
+	}
+	if got := received["workspace.renamed"]["workspaceRootPath"]; got != "Renamed" {
+		t.Fatalf("workspace.renamed workspaceRootPath = %#v, want Renamed", got)
+	}
+	if got := received["workspace.renamed"]["previousWorkspaceRootPath"]; got != "Project" {
+		t.Fatalf("workspace.renamed previousWorkspaceRootPath = %#v, want Project", got)
+	}
+	if got := received["workspace.trashed"]["workspaceRootPath"]; got != "Renamed" {
+		t.Fatalf("workspace.trashed workspaceRootPath = %#v, want Renamed", got)
+	}
+	if got := received["workspace.trashed"]["trashPath"]; got == "" {
+		t.Fatalf("workspace.trashed trashPath = %#v, want non-empty", got)
+	}
+}
+
 func TestMoveWorkspaceNodeCompatibilityIsUnsupported(t *testing.T) {
 	app, vaultDir := newFilesTestApp(t, []string{"files.read"})
 	app.workspace = workspace.NewManager(vaultDir)
