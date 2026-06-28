@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/verstak/verstak-desktop/internal/core/appsettings"
 	"github.com/verstak/verstak-desktop/internal/core/capability"
@@ -1064,6 +1065,63 @@ func TestSetCurrentVaultInitializesWorkspaceWhenMissingAtStartup(t *testing.T) {
 	}
 	if !app.capRegistry.Has("verstak/core/workspace/v1") {
 		t.Fatal("workspace capability should be registered after SetCurrentVault")
+	}
+}
+
+func TestSetCurrentVaultStartsLiveFileWatcher(t *testing.T) {
+	tmpDir := t.TempDir()
+	vaultParent := filepath.Join(tmpDir, "vault-parent")
+	if err := os.MkdirAll(vaultParent, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	bus := events.NewBus()
+	vaultService := vault.NewVault(bus)
+	if err := vaultService.CreateVault(vaultParent); err != nil {
+		t.Fatalf("CreateVault: %v", err)
+	}
+	vaultService.CloseVault()
+
+	settings := appsettings.NewManager(filepath.Join(tmpDir, "config.json"))
+	if err := settings.Load(); err != nil {
+		t.Fatalf("settings Load: %v", err)
+	}
+
+	received := make(chan events.Event, 4)
+	bus.Subscribe("file.changed", func(event events.Event) {
+		received <- event
+	})
+
+	app := &App{
+		capRegistry: capability.NewRegistry(),
+		eventBus:    bus,
+		vault:       vaultService,
+		appSettings: settings,
+	}
+	if errStr := app.SetCurrentVault(vaultParent); errStr != "" {
+		t.Fatalf("SetCurrentVault: %s", errStr)
+	}
+	t.Cleanup(func() {
+		if app.fileWatcher != nil {
+			app.fileWatcher.Stop()
+		}
+	})
+
+	if err := os.WriteFile(filepath.Join(vaultService.GetVaultPath(), "external.md"), []byte("changed"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	select {
+	case event := <-received:
+		payload, ok := event.Payload.(map[string]interface{})
+		if !ok {
+			t.Fatalf("payload type = %T, want map", event.Payload)
+		}
+		if payload["path"] != "external.md" || payload["operation"] != "external.create" {
+			t.Fatalf("event payload = %#v", payload)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for watcher event")
 	}
 }
 

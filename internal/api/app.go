@@ -20,6 +20,7 @@ import (
 	"github.com/verstak/verstak-desktop/internal/core/events"
 	"github.com/verstak/verstak-desktop/internal/core/externalopen"
 	corefiles "github.com/verstak/verstak-desktop/internal/core/files"
+	"github.com/verstak/verstak-desktop/internal/core/filewatcher"
 	"github.com/verstak/verstak-desktop/internal/core/permissions"
 	"github.com/verstak/verstak-desktop/internal/core/plugin"
 	"github.com/verstak/verstak-desktop/internal/core/pluginstate"
@@ -60,6 +61,7 @@ type App struct {
 	workbench       *coreworkbench.Router
 	workspace       *workspace.Manager
 	syncSvc         *syncsvc.Service
+	fileWatcher     *filewatcher.Service
 	debug           bool
 	activityEvents  map[string]bool
 }
@@ -100,10 +102,12 @@ func NewApp(
 		workbench:       coreworkbench.NewRouter(workbenchPrefsFromSettings(appSettingsMgr)),
 		workspace:       workspaceMgr,
 		syncSvc:         syncService,
+		fileWatcher:     filewatcher.NewService(bus, 0),
 		debug:           debugEnabled,
 		activityEvents:  make(map[string]bool),
 	}
 	app.ensureActivityProviderSubscriptions()
+	app.startFileWatcherForOpenVault()
 	return app
 }
 
@@ -699,7 +703,11 @@ func (a *App) CreateVault(path string) error {
 	if a.vault == nil {
 		return fmt.Errorf("vault service not initialized")
 	}
-	return a.vault.CreateVault(path)
+	if err := a.vault.CreateVault(path); err != nil {
+		return err
+	}
+	a.startFileWatcherForOpenVault()
+	return nil
 }
 
 // OpenVault opens an existing vault at the given path.
@@ -707,13 +715,20 @@ func (a *App) OpenVault(path string) error {
 	if a.vault == nil {
 		return fmt.Errorf("vault service not initialized")
 	}
-	return a.vault.OpenVault(path)
+	if err := a.vault.OpenVault(path); err != nil {
+		return err
+	}
+	a.startFileWatcherForOpenVault()
+	return nil
 }
 
 // CloseVault closes the current vault.
 func (a *App) CloseVault() error {
 	if a.vault == nil {
 		return fmt.Errorf("vault service not initialized")
+	}
+	if a.fileWatcher != nil {
+		a.fileWatcher.Stop()
 	}
 	a.vault.CloseVault()
 	return nil
@@ -1408,7 +1423,23 @@ func (a *App) SetCurrentVault(path string) string {
 			log.Printf("[api] SetCurrentVault: failed to register workspace capability: %v", err)
 		}
 	}
+	a.startFileWatcherForOpenVault()
 	return ""
+}
+
+func (a *App) startFileWatcherForOpenVault() {
+	if a == nil || a.vault == nil || a.eventBus == nil {
+		return
+	}
+	if a.vault.GetVaultStatus() != vault.StatusOpen {
+		return
+	}
+	if a.fileWatcher == nil {
+		a.fileWatcher = filewatcher.NewService(a.eventBus, 0)
+	}
+	if err := a.fileWatcher.Start(a.vault.GetVaultPath()); err != nil {
+		log.Printf("[api] file watcher start failed: %v", err)
+	}
 }
 
 // ─── Workspace API ─────────────────────────────────────────
