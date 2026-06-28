@@ -216,6 +216,7 @@
   var pluginSettings = {
     'verstak.platform-test': { savedText: 'initial value' }
   };
+  var pluginData = {};
   var vaultFiles = makeDefaultVaultFiles();
   var externalOpens = [];
   var trashEntries = [];
@@ -1120,8 +1121,15 @@
     },
     ReadPluginSetting: function () { return Promise.resolve(null); },
     WritePluginSetting: function () { return Promise.resolve(null); },
-    ReadPluginDataJSON: function () { return Promise.resolve({}); },
-    WritePluginDataJSON: function () { return Promise.resolve(null); },
+    ReadPluginDataJSON: function (pluginId, name) {
+      var data = (pluginData[pluginId] && pluginData[pluginId][name]) || {};
+      return Promise.resolve([Object.assign({}, data), '']);
+    },
+    WritePluginDataJSON: function (pluginId, name, data) {
+      pluginData[pluginId] = pluginData[pluginId] || {};
+      pluginData[pluginId][name] = Object.assign({}, data || {});
+      return Promise.resolve('');
+    },
     OpenWorkbenchResource: function (pluginId, request) {
       return openWorkbenchResource(pluginId, request || {}, '');
     },

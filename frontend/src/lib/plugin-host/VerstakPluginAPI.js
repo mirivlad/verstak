@@ -232,6 +232,31 @@ export function createPluginAPI(pluginId) {
       }
     },
 
+    storage: {
+      data: {
+        read: function(name) {
+          assertActive('storage.data.read(' + name + ')');
+          if (!name) {
+            throw new Error('storage.data.read requires a name');
+          }
+          return callBackend(pluginId, 'storage.data.read(' + name + ')', function() {
+            return App.ReadPluginDataJSON(pluginId, name);
+          }).then(function(data) {
+            return data || {};
+          });
+        },
+        write: function(name, data) {
+          assertActive('storage.data.write(' + name + ')');
+          if (!name) {
+            throw new Error('storage.data.write requires a name');
+          }
+          return callBackendErrorString(pluginId, 'storage.data.write(' + name + ')', function() {
+            return App.WritePluginDataJSON(pluginId, name, data || {});
+          });
+        }
+      }
+    },
+
     files: {
       list: function(relativeDir) {
         assertActive('files.list');

@@ -2,6 +2,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
+const pluginData = {};
+
 globalThis.window = {
   __VERSTAK_PLUGIN_REGISTRY__: {},
   __VERSTAK_EVENT_HANDLERS__: {},
@@ -27,6 +29,15 @@ globalThis.window = {
           commandId,
           args,
         }, '']),
+        ReadPluginDataJSON: (pluginId, name) => Promise.resolve([
+          Object.assign({}, (pluginData[pluginId] && pluginData[pluginId][name]) || {}),
+          '',
+        ]),
+        WritePluginDataJSON: (pluginId, name, data) => {
+          pluginData[pluginId] = pluginData[pluginId] || {};
+          pluginData[pluginId][name] = Object.assign({}, data || {});
+          return Promise.resolve('');
+        },
       },
     },
   },
@@ -65,6 +76,16 @@ const result = await api.commands.executeFor('provider.plugin', 'provider.comman
 });
 if (result.status !== 'handled' || result.result.handledPath !== 'Project/Docs/readme.md') {
   throw new Error(`unexpected executeFor result: ${JSON.stringify(result)}`);
+}
+
+if (!api.storage || !api.storage.data || typeof api.storage.data.read !== 'function' || typeof api.storage.data.write !== 'function') {
+  throw new Error('api.storage.data read/write is missing');
+}
+
+await api.storage.data.write('search-index', { version: 1, workspaceRootPath: 'Project' });
+const stored = await api.storage.data.read('search-index');
+if (stored.version !== 1 || stored.workspaceRootPath !== 'Project') {
+  throw new Error(`unexpected storage data: ${JSON.stringify(stored)}`);
 }
 
 console.log('plugin api contributions smoke passed');
