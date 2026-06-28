@@ -10,6 +10,15 @@
   let workspaceTools = [];
   let activeToolKey = '';
 
+  const toolOrder = new Map([
+    ['notes', 10],
+    ['files', 20],
+    ['activity', 40],
+    ['browser', 50],
+    ['inbox', 50],
+    ['search', 90],
+  ]);
+
   $: selectedWorkspace = nodes.find(n => n.id === selectedWorkspaceName || n.name === selectedWorkspaceName || n.rootPath === selectedWorkspaceName) || null;
   $: workspaceRootPath = selectedWorkspace?.rootPath || selectedWorkspace?.name || selectedWorkspace?.id || '';
   $: workspaceTitle = selectedWorkspace?.title || selectedWorkspace?.name || selectedWorkspace?.id || selectedWorkspaceName;
@@ -22,6 +31,22 @@
 
   function toolKey(tool) {
     return `${tool?.pluginId || ''}:${tool?.id || ''}`;
+  }
+
+  function toolRank(tool) {
+    const text = `${tool?.title || ''} ${tool?.id || ''} ${tool?.pluginId || ''}`.toLowerCase();
+    for (const [needle, rank] of toolOrder.entries()) {
+      if (text.includes(needle)) return rank;
+    }
+    return 1000;
+  }
+
+  function sortWorkspaceTools(tools) {
+    return [...tools].sort((a, b) => {
+      const rankDiff = toolRank(a) - toolRank(b);
+      if (rankDiff !== 0) return rankDiff;
+      return String(a.title || a.id).localeCompare(String(b.title || b.id));
+    });
   }
 
   async function loadTools() {
@@ -37,7 +62,7 @@
         plugins.filter(pl => pl.enabled && (pl.status === 'loaded' || pl.status === 'degraded')).map(pl => pl.manifest?.id)
       );
 
-      workspaceTools = (contributions.workspaceItems || []).filter(tool => enabledIds.has(tool.pluginId));
+      workspaceTools = sortWorkspaceTools((contributions.workspaceItems || []).filter(tool => enabledIds.has(tool.pluginId)));
     } catch (e) {
       console.error('[WorkspaceHost] loadTools error:', e);
     }
@@ -47,8 +72,13 @@
 <div class="workspace-host">
   {#if selectedWorkspace}
     <div class="workspace-header">
-      <span class="workspace-title">{workspaceTitle}</span>
-      <span class="workspace-type">{workspaceType}</span>
+      <div class="workspace-title-group">
+        <span class="workspace-title">{workspaceTitle}</span>
+        <span class="workspace-type">{workspaceType}</span>
+      </div>
+      <div class="workspace-search" data-workspace-search>
+        <input type="search" placeholder="Search workspace" aria-label="Search workspace" />
+      </div>
     </div>
 
     {#if workspaceTools.length > 0}
@@ -101,10 +131,18 @@
   .workspace-header {
     display: flex;
     align-items: center;
+    justify-content: space-between;
     gap: 0.75rem;
     padding: 0.75rem 1rem;
     border-bottom: 1px solid #16213e;
     flex-shrink: 0;
+  }
+
+  .workspace-title-group {
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
   }
 
   .workspace-title {
@@ -119,6 +157,40 @@
     padding: 0.1rem 0.4rem;
     border-radius: 3px;
     background: #1a2a3a;
+  }
+
+  .workspace-search {
+    flex: 0 1 22rem;
+    min-width: 12rem;
+  }
+
+  .workspace-search input {
+    width: 100%;
+    height: 2rem;
+    padding: 0.25rem 0.55rem;
+    border: 1px solid #283653;
+    border-radius: 4px;
+    background: #101626;
+    color: #e0e0f0;
+    font: inherit;
+    font-size: 0.82rem;
+    outline: none;
+  }
+
+  .workspace-search input:focus {
+    border-color: #4ecca3;
+  }
+
+  @media (max-width: 720px) {
+    .workspace-header {
+      align-items: stretch;
+      flex-direction: column;
+    }
+
+    .workspace-search {
+      flex-basis: auto;
+      min-width: 0;
+    }
   }
 
   .workspace-tabs {

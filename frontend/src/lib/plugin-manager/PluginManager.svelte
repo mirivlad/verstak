@@ -30,10 +30,10 @@
   export let activeSettingsPluginId = '';
   export let activeSettingsPanelId = '';
 
-  $: if (activeSettingsPluginId && activeSettingsPanelId) {
-    const key = `${activeSettingsPluginId}:${activeSettingsPanelId}`;
-    if (key !== lastOpenedKey) {
-      lastOpenedKey = key;
+  $: if (activeSettingsPluginId) {
+    const settingsPanelCount = (contributions.settingsPanels || []).length;
+    const key = `${activeSettingsPluginId}:${activeSettingsPanelId || '*'}`;
+    if (key !== lastOpenedKey || settingsPanelCount === 0) {
       openSettingsFromProps(activeSettingsPluginId, activeSettingsPanelId);
     }
   }
@@ -71,6 +71,7 @@
   async function openSettingsFromProps(pluginId, panelId) {
     const panel = (contributions.settingsPanels || []).find(sp => sp.pluginId === pluginId && (!panelId || sp.id === panelId));
     if (panel) {
+      lastOpenedKey = `${pluginId}:${panelId || '*'}`;
       settingsPanel = panel;
       settingsPluginId = pluginId;
       settingsError = null;

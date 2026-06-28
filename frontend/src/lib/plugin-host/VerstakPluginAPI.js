@@ -144,6 +144,15 @@ export function createPluginAPI(pluginId) {
   return {
     pluginId: pluginId,
 
+    ui: {
+      openSettings: function(panelId) {
+        assertActive('ui.openSettings');
+        window.dispatchEvent(new CustomEvent('verstak:open-settings', {
+          detail: { pluginId: pluginId, panelId: panelId || '' }
+        }));
+      }
+    },
+
     capabilities: {
       has: async function(capId) {
         const info = await callBackend(pluginId, 'capabilities.has(' + capId + ')', function() {

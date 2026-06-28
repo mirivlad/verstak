@@ -152,7 +152,7 @@
         frontend: { entry: 'frontend/dist/index.js' },
         contributes: {
           settingsPanels: [{ id: 'verstak.sync.settings', title: 'Sync', component: 'SyncSettings' }],
-          statusBarItems: [{ id: 'verstak.sync.status', label: 'Sync', position: 'right' }]
+          statusBarItems: [{ id: 'verstak.sync.status', label: 'Sync', position: 'right', handler: 'SyncStatusBar' }]
         }
       },
       rootPath: '/tmp/verstak-test/plugins/sync',
@@ -1703,7 +1703,7 @@
             frontend: { entry: 'frontend/dist/index.js' },
             contributes: {
               settingsPanels: [{ id: 'verstak.sync.settings', title: 'Sync', component: 'SyncSettings' }],
-              statusBarItems: [{ id: 'verstak.sync.status', label: 'Sync', position: 'right' }]
+              statusBarItems: [{ id: 'verstak.sync.status', label: 'Sync', position: 'right', handler: 'SyncStatusBar' }]
             }
           },
           rootPath: '/tmp/verstak-test/plugins/sync',

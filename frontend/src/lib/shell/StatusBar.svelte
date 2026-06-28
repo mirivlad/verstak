@@ -1,6 +1,7 @@
 <script>
   import { onDestroy, onMount } from 'svelte';
   import * as App from '../../../wailsjs/go/api/App';
+  import PluginBundleHost from '../plugin-host/PluginBundleHost.svelte';
   import Icon from '../ui/Icon.svelte';
 
   let items = [];
@@ -65,6 +66,10 @@
     settingsOpen = false;
   }
 
+  function statusItemProps(item) {
+    return { statusBarItem: item };
+  }
+
   onMount(() => {
     loadStatusBar();
     window.addEventListener('verstak:plugins-changed', loadStatusBar);
@@ -92,21 +97,33 @@
     </span>
     {#each leftItems as item}
       <span class="status-bar-item" data-status-item-id={item.id} title={item.pluginId}>
-        {item.label || item.id}
+        {#if item.handler}
+          <PluginBundleHost pluginId={item.pluginId} componentId={item.handler} componentProps={statusItemProps(item)} />
+        {:else}
+          {item.label || item.id}
+        {/if}
       </span>
     {/each}
   </div>
   <div class="status-bar-group status-center">
     {#each centerItems as item}
       <span class="status-bar-item" data-status-item-id={item.id} title={item.pluginId}>
-        {item.label || item.id}
+        {#if item.handler}
+          <PluginBundleHost pluginId={item.pluginId} componentId={item.handler} componentProps={statusItemProps(item)} />
+        {:else}
+          {item.label || item.id}
+        {/if}
       </span>
     {/each}
   </div>
   <div class="status-bar-group status-right">
     {#each rightItems as item}
       <span class="status-bar-item" data-status-item-id={item.id} title={item.pluginId}>
-        {item.label || item.id}
+        {#if item.handler}
+          <PluginBundleHost pluginId={item.pluginId} componentId={item.handler} componentProps={statusItemProps(item)} />
+        {:else}
+          {item.label || item.id}
+        {/if}
       </span>
     {/each}
     <div class="settings-menu-wrap">
