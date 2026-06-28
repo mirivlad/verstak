@@ -127,6 +127,90 @@ func TestReceiverAnnotatesCaptureWithCurrentWorkspace(t *testing.T) {
 	}
 }
 
+func TestReceiverRequiresTokenWhenPaired(t *testing.T) {
+	bus := events.NewBus()
+	received := make(chan events.Event, 1)
+	bus.Subscribe("browser.capture.page", func(event events.Event) {
+		received <- event
+	})
+	receiver := NewWithOptions(bus, Options{RequireToken: true, ReceiverToken: "pair-token"})
+	body := `{
+		"schemaVersion": 1,
+		"captureId": "capture-paired",
+		"capturedAt": "2026-06-27T00:00:00.000Z",
+		"source": "verstak-browser-extension",
+		"kind": "page",
+		"page": {
+			"url": "https://example.com/article",
+			"title": "Example Article"
+		}
+	}`
+
+	for _, tc := range []struct {
+		name      string
+		token     string
+		wantError string
+	}{
+		{name: "missing", token: "", wantError: "receiver token required"},
+		{name: "wrong", token: "wrong-token", wantError: "receiver token invalid"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodPost, "/api/browser-inbox/v1/captures", bytes.NewBufferString(body))
+			if tc.token != "" {
+				req.Header.Set("X-Verstak-Receiver-Token", tc.token)
+			}
+			rec := httptest.NewRecorder()
+
+			receiver.ServeHTTP(rec, req)
+
+			if rec.Code != http.StatusUnauthorized {
+				t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusUnauthorized, rec.Body.String())
+			}
+			if !bytes.Contains(rec.Body.Bytes(), []byte(tc.wantError)) {
+				t.Fatalf("response body = %q, want %q", rec.Body.String(), tc.wantError)
+			}
+			select {
+			case event := <-received:
+				t.Fatalf("unexpected event published for rejected capture: %#v", event)
+			default:
+			}
+		})
+	}
+}
+
+func TestReceiverAcceptsPairedToken(t *testing.T) {
+	bus := events.NewBus()
+	received := make(chan events.Event, 1)
+	bus.Subscribe("browser.capture.page", func(event events.Event) {
+		received <- event
+	})
+	receiver := NewWithOptions(bus, Options{RequireToken: true, ReceiverToken: "pair-token"})
+	body := `{
+		"schemaVersion": 1,
+		"captureId": "capture-paired",
+		"capturedAt": "2026-06-27T00:00:00.000Z",
+		"source": "verstak-browser-extension",
+		"kind": "page",
+		"page": {
+			"url": "https://example.com/article",
+			"title": "Example Article"
+		}
+	}`
+	req := httptest.NewRequest(http.MethodPost, "/api/browser-inbox/v1/captures", bytes.NewBufferString(body))
+	req.Header.Set("X-Verstak-Receiver-Token", "pair-token")
+	rec := httptest.NewRecorder()
+
+	receiver.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusAccepted {
+		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusAccepted, rec.Body.String())
+	}
+	event := <-received
+	if event.Name != "browser.capture.page" {
+		t.Fatalf("event name = %q, want browser.capture.page", event.Name)
+	}
+}
+
 func TestServerStartsOnLocalAddressAndAcceptsCapture(t *testing.T) {
 	bus := events.NewBus()
 	bus.Subscribe("browser.capture.page", func(event events.Event) {})

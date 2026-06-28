@@ -3,6 +3,7 @@ package browserreceiver
 
 import (
 	"context"
+	"crypto/subtle"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -17,13 +18,20 @@ import (
 
 const capturePath = "/api/browser-inbox/v1/captures"
 const DefaultAddr = "127.0.0.1:47731"
+const receiverTokenHeader = "X-Verstak-Receiver-Token"
 
 type Receiver struct {
 	bus               *events.Bus
 	workspaceProvider WorkspaceProvider
+	options           Options
 }
 
 type WorkspaceProvider func() string
+
+type Options struct {
+	RequireToken  bool
+	ReceiverToken string
+}
 
 type Server struct {
 	listener net.Listener
@@ -63,11 +71,15 @@ type CaptureBrowser struct {
 }
 
 func New(bus *events.Bus, providers ...WorkspaceProvider) *Receiver {
+	return NewWithOptions(bus, Options{}, providers...)
+}
+
+func NewWithOptions(bus *events.Bus, options Options, providers ...WorkspaceProvider) *Receiver {
 	var provider WorkspaceProvider
 	if len(providers) > 0 {
 		provider = providers[0]
 	}
-	return &Receiver{bus: bus, workspaceProvider: provider}
+	return &Receiver{bus: bus, workspaceProvider: provider, options: options}
 }
 
 func Start(addr string, receiver *Receiver) (*Server, error) {
@@ -119,6 +131,10 @@ func (r *Receiver) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "method not allowed"})
 		return
 	}
+	if err := r.validateReceiverToken(req); err != nil {
+		writeError(w, http.StatusUnauthorized, err.Error())
+		return
+	}
 
 	var payload CapturePayload
 	if err := json.NewDecoder(req.Body).Decode(&payload); err != nil {
@@ -148,6 +164,24 @@ func (r *Receiver) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		"status":    "accepted",
 		"captureId": payload.CaptureID,
 	})
+}
+
+func (r *Receiver) validateReceiverToken(req *http.Request) error {
+	if r == nil || !r.options.RequireToken {
+		return nil
+	}
+	expected := strings.TrimSpace(r.options.ReceiverToken)
+	if expected == "" {
+		return fmt.Errorf("receiver token required")
+	}
+	supplied := strings.TrimSpace(req.Header.Get(receiverTokenHeader))
+	if supplied == "" {
+		return fmt.Errorf("receiver token required")
+	}
+	if subtle.ConstantTimeCompare([]byte(supplied), []byte(expected)) != 1 {
+		return fmt.Errorf("receiver token invalid")
+	}
+	return nil
 }
 
 func (r *Receiver) annotateWorkspace(payload map[string]interface{}) {
