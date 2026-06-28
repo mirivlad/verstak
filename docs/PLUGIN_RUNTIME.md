@@ -554,6 +554,8 @@ bundled runtime. Это реальный runtime contract для cooperative bun
 | `api.files.showInFolder(relativePath)` | ✅ Работает | Показывает vault file/folder в системном файловом менеджере, требует `files.openExternal` |
 | `api.workbench.openResource(request)` | ✅ Работает | Routes vault resources to `openProviders` |
 | `api.workbench.editResource(request)` | ✅ Работает | Same routing, forcing `mode: "edit"` |
+| `api.sync.now()` | ✅ Работает | Push/pull с bounded retry/backoff для transient HTTP/network failures |
+| `api.sync.status()` | ✅ Работает | Возвращает configured/connected/error/revoked state, lastError, unpushed count |
 | `api.dispose()` | ✅ Работает | Очищает command handlers и event subscriptions текущего API instance |
 
 Ограничения:

@@ -61,6 +61,10 @@ type Client struct {
 	HTTP        *http.Client
 }
 
+var syncRetrySleep = time.Sleep
+
+const syncHTTPAttempts = 3
+
 // NewClient creates a sync client.
 func NewClient(serverURL, apiKey, deviceID, vaultRoot string) *Client {
 	return &Client{
@@ -318,50 +322,102 @@ func (c *Client) post(path string, body, result interface{}) error {
 			return err
 		}
 	}
-	req, err := http.NewRequest("POST", c.ServerURL+path, &b)
-	if err != nil {
-		return err
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+c.bearerToken())
+	payload := b.Bytes()
 
-	resp, err := c.HTTP.Do(req)
-	if err != nil {
-		return fmt.Errorf("http: %w", err)
-	}
-	defer resp.Body.Close()
+	var lastErr error
+	for attempt := 1; attempt <= syncHTTPAttempts; attempt++ {
+		req, err := http.NewRequest("POST", c.ServerURL+path, bytes.NewReader(payload))
+		if err != nil {
+			return err
+		}
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+c.bearerToken())
 
-	if resp.StatusCode >= 400 {
-		return c.readErrorBody(resp, resp.StatusCode)
-	}
+		resp, err := c.HTTP.Do(req)
+		if err != nil {
+			lastErr = fmt.Errorf("http: %w", err)
+			if attempt < syncHTTPAttempts {
+				syncRetrySleep(syncBackoffDelay(attempt))
+				continue
+			}
+			return lastErr
+		}
+		if resp.StatusCode >= 400 {
+			if isTransientHTTPStatus(resp.StatusCode) && attempt < syncHTTPAttempts {
+				_, _ = io.Copy(io.Discard, resp.Body)
+				_ = resp.Body.Close()
+				syncRetrySleep(syncBackoffDelay(attempt))
+				continue
+			}
+			err := c.readErrorBody(resp, resp.StatusCode)
+			_ = resp.Body.Close()
+			return err
+		}
 
-	if result != nil {
-		return json.NewDecoder(resp.Body).Decode(result)
+		if result != nil {
+			err := json.NewDecoder(resp.Body).Decode(result)
+			_ = resp.Body.Close()
+			return err
+		}
+		_ = resp.Body.Close()
+		return nil
 	}
-	return nil
+	return lastErr
 }
 
 func (c *Client) get(path string, result interface{}) error {
-	req, err := http.NewRequest("GET", c.ServerURL+path, nil)
-	if err != nil {
-		return err
-	}
-	req.Header.Set("Authorization", "Bearer "+c.bearerToken())
+	var lastErr error
+	for attempt := 1; attempt <= syncHTTPAttempts; attempt++ {
+		req, err := http.NewRequest("GET", c.ServerURL+path, nil)
+		if err != nil {
+			return err
+		}
+		req.Header.Set("Authorization", "Bearer "+c.bearerToken())
 
-	resp, err := c.HTTP.Do(req)
-	if err != nil {
-		return fmt.Errorf("http: %w", err)
-	}
-	defer resp.Body.Close()
+		resp, err := c.HTTP.Do(req)
+		if err != nil {
+			lastErr = fmt.Errorf("http: %w", err)
+			if attempt < syncHTTPAttempts {
+				syncRetrySleep(syncBackoffDelay(attempt))
+				continue
+			}
+			return lastErr
+		}
+		if resp.StatusCode >= 400 {
+			if isTransientHTTPStatus(resp.StatusCode) && attempt < syncHTTPAttempts {
+				_, _ = io.Copy(io.Discard, resp.Body)
+				_ = resp.Body.Close()
+				syncRetrySleep(syncBackoffDelay(attempt))
+				continue
+			}
+			err := c.readErrorBody(resp, resp.StatusCode)
+			_ = resp.Body.Close()
+			return err
+		}
 
-	if resp.StatusCode >= 400 {
-		return c.readErrorBody(resp, resp.StatusCode)
+		if result != nil {
+			err := json.NewDecoder(resp.Body).Decode(result)
+			_ = resp.Body.Close()
+			return err
+		}
+		_ = resp.Body.Close()
+		return nil
 	}
+	return lastErr
+}
 
-	if result != nil {
-		return json.NewDecoder(resp.Body).Decode(result)
+func syncBackoffDelay(attempt int) time.Duration {
+	return time.Duration(attempt) * 250 * time.Millisecond
+}
+
+func isTransientHTTPStatus(statusCode int) bool {
+	switch statusCode {
+	case http.StatusRequestTimeout, http.StatusTooManyRequests, http.StatusInternalServerError,
+		http.StatusBadGateway, http.StatusServiceUnavailable, http.StatusGatewayTimeout:
+		return true
+	default:
+		return false
 	}
-	return nil
 }
 
 func (c *Client) readErrorBody(resp *http.Response, statusCode int) error {
