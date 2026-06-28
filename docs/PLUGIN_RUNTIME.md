@@ -191,17 +191,20 @@ Icon fields use shell icon names rendered through the bundled Lucide SVG wrapper
 | Панели настроек | `settingsPanels` | Панели в Plugin Manager | ✅ PluginManager.svelte (кнопка Settings, открывает modal) |
 | Команды | `commands` | Команды для command palette | ✅ ContributionRegistry + CommandPalette UI |
 | Open/edit providers | `openProviders` | Провайдеры viewer/editor для Workbench routing | ✅ ContributionRegistry + минимальный Workbench host |
+| Действия над файлами | `fileActions` | Provider actions for Files surface | ✅ Files plugin context menu |
+| Действия над заметками | `noteActions` | Provider actions for Notes surface | ✅ Notes plugin row actions |
+| Контекстное меню | `contextMenuEntries` | Provider context menu entries | ✅ Files plugin context menu |
+| Провайдеры поиска | `searchProviders` | Search provider discovery | ✅ Contribution summary + Search plugin |
+| Провайдеры активности | `activityProviders` | Activity event subscriptions | ✅ Backend activity recorder |
+| Элементы status bar | `statusBarItems` | Status bar labels/actions | ✅ StatusBar.svelte host |
 
 ### Планируемые contribution points
 
 | Тип | Поле manifest | Статус |
 |---|---|---|
-| Действия над файлами | `fileActions` | Registry готов, UI не реализован |
-| Действия над заметками | `noteActions` | Registry готов, UI не реализован |
-| Контекстное меню | `contextMenuEntries` | Registry готов, UI не реализован |
-| Провайдеры поиска | `searchProviders` | Registry готов, UI не реализован |
-| Провайдеры активности | `activityProviders` | Registry готов, UI не реализован |
-| Элементы status bar | `statusBarItems` | ✅ StatusBar.svelte host |
+| Sidecar-backed command handlers | `commands` | Planned; bundled frontend handlers are current runtime |
+| Import/export providers | `importers` / `exporters` | Planned |
+| Protocol receivers | `protocol.receivers` | Planned |
 
 ### Структура contribution points в manifest
 
@@ -385,6 +388,9 @@ contributions summary.
 - `commands.execute(commandId, args)` — backend сначала проверяет plugin status,
   permission `commands.register` и что command объявлен в `contributes.commands`
   именно этим plugin. Затем frontend registry вызывает зарегистрированный handler.
+- `commands.executeFor(pluginId, commandId, args)` — то же выполнение, но для
+  command другого plugin-provider. Используется host surfaces вроде Files/Notes,
+  которые читают contribution action и вызывают объявленный provider handler.
 - Если command объявлен в manifest, но handler не зарегистрирован, API возвращает
   понятную ошибку `declared-but-unhandled`.
 - Handler registry очищается при component unmount, reload/disable flow и
@@ -403,6 +409,14 @@ contributions summary.
   `verstak:plugins-changed`.
 - `handler` is preserved in the contribution summary for future action routing;
   current host only renders status labels.
+
+`contributions`
+
+- `contributions.list()` — возвращает весь flattened contribution summary.
+- `contributions.list(point)` — возвращает массив contribution records для
+  конкретного поля (`fileActions`, `noteActions`, `contextMenuEntries`, etc).
+- Runtime records include `pluginId`, so consumer surfaces can call
+  `commands.executeFor(record.pluginId, record.handler, args)`.
 
 `events`
 
@@ -507,6 +521,8 @@ bundled runtime. Это реальный runtime contract для cooperative bun
 | `api.capabilities.has(id)` | ✅ Работает | Boolean wrapper над `get` |
 | `api.commands.register(id, handler)` | ✅ Работает | Регистрирует bundled frontend handler для объявленной command |
 | `api.commands.execute(id, args)` | ✅ Работает | Валидирует declaration/permission/backend state и вызывает bundled handler |
+| `api.commands.executeFor(pluginId, id, args)` | ✅ Работает | Выполняет handler другого plugin-provider после backend validation |
+| `api.contributions.list(point?)` | ✅ Работает | Возвращает flattened contribution summary или массив по point |
 | Command Palette UI | ✅ Работает | `Ctrl/Cmd+K`, фильтр enabled plugin commands, вызов registered frontend handlers |
 | `api.events.publish(type, payload)` | ✅ Работает | Валидирует permission и публикует во frontend event bus |
 | `api.events.subscribe(type, handler)` | ✅ Работает | Валидирует permission и подписывает handler на frontend event bus |
@@ -890,13 +906,19 @@ Deprecated compatibility APIs:
 
 ### Lifecycle Events
 
-**Planned (not yet implemented in runtime):**
-- `workspace.node.created`
-- `workspace.node.renamed`
-- `workspace.node.moved`
-- `workspace.node.archived`
-- `workspace.node.selected`
-- `workspace.error`
+Runtime publishes workspace lifecycle events after successful operations:
+
+- `workspace.created` — payload includes `operation: "create"`,
+  `workspaceRootPath`, `workspaceName`, and optional `templateId`.
+- `workspace.renamed` — payload includes `operation: "rename"`, new
+  `workspaceRootPath` / `workspaceName`, and previous workspace fields.
+- `workspace.trashed` — payload includes `operation: "trash"`,
+  `workspaceRootPath`, `workspaceName`, `trashId`, `trashPath`, and `deletedAt`.
+- `workspace.selected` — payload includes `operation: "select"`,
+  `workspaceRootPath`, and `workspaceName`.
+
+Official Activity subscribes to these events and stores them through the normal
+activity provider path.
 
 ### UI
 
