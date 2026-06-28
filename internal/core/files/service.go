@@ -396,6 +396,143 @@ func (s *Service) ListTrashEntries() ([]TrashEntry, error) {
 	return entries, nil
 }
 
+func (s *Service) RestoreTrashEntry(trashID string, options RestoreOptions) (string, error) {
+	root, err := s.vaultRoot()
+	if err != nil {
+		return "", err
+	}
+	if err := validateTrashID(trashID); err != nil {
+		return "", err
+	}
+	entry, err := readTrashEntry(root, trashID)
+	if err != nil {
+		return "", err
+	}
+
+	targetRel := entry.OriginalPath
+	if options.TargetPath != "" {
+		targetRel = options.TargetPath
+	}
+	targetRel, err = NormalizeRelativeFile(targetRel)
+	if err != nil {
+		return "", err
+	}
+	targetFull, err := s.resolve(root, targetRel)
+	if err != nil {
+		return "", err
+	}
+	if err := rejectSymlinkPath(root, targetRel, false); err != nil {
+		return "", err
+	}
+
+	trashDir := filepath.Join(root, ".verstak", "trash", "files", trashID)
+	payloadFull := filepath.Join(root, filepath.FromSlash(entry.TrashPath))
+	if !isInsideDir(trashDir, payloadFull) {
+		return "", fmt.Errorf("invalid-trash-entry: payload outside trash")
+	}
+	if info, err := os.Lstat(payloadFull); err != nil {
+		if os.IsNotExist(err) {
+			return "", fmt.Errorf("not-found: trash payload %s", trashID)
+		}
+		return "", err
+	} else if info.Mode()&os.ModeSymlink != 0 {
+		return "", fmt.Errorf("symlink-not-allowed: %s", entry.TrashPath)
+	}
+
+	parent := filepath.Dir(targetFull)
+	if info, err := os.Stat(parent); err != nil {
+		if os.IsNotExist(err) {
+			return "", fmt.Errorf("parent-not-found: %s", pathDir(targetRel))
+		}
+		return "", err
+	} else if !info.IsDir() {
+		return "", fmt.Errorf("parent-not-directory: %s", pathDir(targetRel))
+	}
+
+	if existing, err := os.Lstat(targetFull); err == nil {
+		if existing.Mode()&os.ModeSymlink != 0 {
+			return "", fmt.Errorf("symlink-not-allowed: %s", targetRel)
+		}
+		if !options.Overwrite {
+			return "", fmt.Errorf("conflict: %s", targetRel)
+		}
+		if err := os.RemoveAll(targetFull); err != nil {
+			return "", err
+		}
+	} else if err != nil && !os.IsNotExist(err) {
+		return "", err
+	}
+
+	if err := os.Rename(payloadFull, targetFull); err != nil {
+		return "", err
+	}
+	if err := os.RemoveAll(trashDir); err != nil {
+		return "", err
+	}
+	return targetRel, nil
+}
+
+func readTrashEntry(root, trashID string) (TrashEntry, error) {
+	if err := validateTrashID(trashID); err != nil {
+		return TrashEntry{}, err
+	}
+	data, err := os.ReadFile(filepath.Join(root, ".verstak", "trash", "files", trashID, "metadata.json"))
+	if err != nil {
+		if os.IsNotExist(err) {
+			return TrashEntry{}, fmt.Errorf("not-found: trash entry %s", trashID)
+		}
+		return TrashEntry{}, err
+	}
+	var raw struct {
+		OriginalPath string `json:"originalPath"`
+		TrashPath    string `json:"trashPath"`
+		TrashID      string `json:"trashId"`
+		DeletedAt    string `json:"deletedAt"`
+		OriginalType string `json:"originalType"`
+		Basename     string `json:"basename"`
+	}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return TrashEntry{}, err
+	}
+	if raw.OriginalPath == "" || raw.TrashPath == "" || raw.TrashID == "" || raw.DeletedAt == "" {
+		return TrashEntry{}, fmt.Errorf("invalid-trash-entry: missing metadata")
+	}
+	if raw.TrashID != trashID {
+		return TrashEntry{}, fmt.Errorf("invalid-trash-entry: mismatched trash id")
+	}
+	return TrashEntry{
+		OriginalPath: raw.OriginalPath,
+		TrashPath:    raw.TrashPath,
+		TrashID:      raw.TrashID,
+		DeletedAt:    raw.DeletedAt,
+		OriginalType: FileType(raw.OriginalType),
+		Basename:     raw.Basename,
+	}, nil
+}
+
+func validateTrashID(trashID string) error {
+	if trashID == "" || trashID == "." || trashID == ".." || strings.ContainsAny(trashID, "/\\\x00") {
+		return fmt.Errorf("invalid-trash-id")
+	}
+	return nil
+}
+
+func isInsideDir(parent, child string) bool {
+	absParent, err := filepath.Abs(parent)
+	if err != nil {
+		return false
+	}
+	absChild, err := filepath.Abs(child)
+	if err != nil {
+		return false
+	}
+	rel, err := filepath.Rel(absParent, absChild)
+	if err != nil {
+		return false
+	}
+	return rel != "." && rel != ".." && !strings.HasPrefix(rel, ".."+string(os.PathSeparator)) && !filepath.IsAbs(rel)
+}
+
 func (s *Service) vaultRoot() (string, error) {
 	if s == nil || s.vault == nil {
 		return "", fmt.Errorf("vault-not-initialized")

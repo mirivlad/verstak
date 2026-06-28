@@ -118,6 +118,10 @@ export function ListVaultFiles(arg1, arg2) {
   return window['go']['api']['App']['ListVaultFiles'](arg1, arg2);
 }
 
+export function ListVaultTrash(arg1) {
+  return window['go']['api']['App']['ListVaultTrash'](arg1);
+}
+
 export function ListWorkspaces() {
   return window['go']['api']['App']['ListWorkspaces']();
 }
@@ -198,6 +202,10 @@ export function ReloadPlugins() {
   return window['go']['api']['App']['ReloadPlugins']();
 }
 
+export function RestoreVaultTrash(arg1, arg2, arg3) {
+  return window['go']['api']['App']['RestoreVaultTrash'](arg1, arg2, arg3);
+}
+
 export function RenameWorkspace(arg1, arg2) {
   return window['go']['api']['App']['RenameWorkspace'](arg1, arg2);
 }
@@ -236,10 +244,6 @@ export function SubscribePluginEvent(arg1, arg2) {
 
 export function TrashVaultPath(arg1, arg2) {
   return window['go']['api']['App']['TrashVaultPath'](arg1, arg2);
-}
-
-export function ListVaultTrash(arg1) {
-  return window['go']['api']['App']['ListVaultTrash'](arg1);
 }
 
 export function TrashWorkspace(arg1) {

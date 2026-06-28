@@ -334,6 +334,96 @@ func TestListTrashEntriesReturnsMetadata(t *testing.T) {
 	}
 }
 
+func TestRestoreTrashEntryRestoresOriginalPathAndRemovesTrashMetadata(t *testing.T) {
+	s, root := newTestService(t)
+	if err := os.Mkdir(filepath.Join(root, "Docs"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "Docs", "restore.txt"), []byte("restore me"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	trash, err := s.TrashVaultPath("Docs/restore.txt")
+	if err != nil {
+		t.Fatalf("TrashVaultPath: %v", err)
+	}
+
+	restored, err := s.RestoreTrashEntry(trash.TrashID, RestoreOptions{})
+	if err != nil {
+		t.Fatalf("RestoreTrashEntry: %v", err)
+	}
+	if restored != "Docs/restore.txt" {
+		t.Fatalf("restored path = %q, want Docs/restore.txt", restored)
+	}
+	data, err := os.ReadFile(filepath.Join(root, "Docs", "restore.txt"))
+	if err != nil {
+		t.Fatalf("restored file missing: %v", err)
+	}
+	if string(data) != "restore me" {
+		t.Fatalf("restored content = %q", string(data))
+	}
+	if _, err := os.Stat(filepath.Join(root, trash.TrashPath)); !os.IsNotExist(err) {
+		t.Fatalf("trash payload should be removed, stat err = %v", err)
+	}
+	entries, err := s.ListTrashEntries()
+	if err != nil {
+		t.Fatalf("ListTrashEntries: %v", err)
+	}
+	if len(entries) != 0 {
+		t.Fatalf("trash entries after restore = %+v, want none", entries)
+	}
+}
+
+func TestRestoreTrashEntryConflictAndOverwrite(t *testing.T) {
+	s, root := newTestService(t)
+	if err := os.WriteFile(filepath.Join(root, "conflict.txt"), []byte("trashed"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	trash, err := s.TrashVaultPath("conflict.txt")
+	if err != nil {
+		t.Fatalf("TrashVaultPath: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "conflict.txt"), []byte("existing"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := s.RestoreTrashEntry(trash.TrashID, RestoreOptions{}); err == nil || !strings.Contains(err.Error(), "conflict: conflict.txt") {
+		t.Fatalf("restore conflict error = %v, want conflict", err)
+	}
+	data, err := os.ReadFile(filepath.Join(root, "conflict.txt"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(data) != "existing" {
+		t.Fatalf("conflicting file content = %q, want existing", string(data))
+	}
+
+	restored, err := s.RestoreTrashEntry(trash.TrashID, RestoreOptions{Overwrite: true})
+	if err != nil {
+		t.Fatalf("RestoreTrashEntry overwrite: %v", err)
+	}
+	if restored != "conflict.txt" {
+		t.Fatalf("restored path = %q, want conflict.txt", restored)
+	}
+	data, err = os.ReadFile(filepath.Join(root, "conflict.txt"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(data) != "trashed" {
+		t.Fatalf("overwritten content = %q, want trashed", string(data))
+	}
+}
+
+func TestRestoreTrashEntryRejectsInvalidTrashID(t *testing.T) {
+	s, _ := newTestService(t)
+	for _, trashID := range []string{"", "../escape", "bad/slash"} {
+		t.Run(trashID, func(t *testing.T) {
+			if _, err := s.RestoreTrashEntry(trashID, RestoreOptions{}); err == nil {
+				t.Fatal("expected invalid trash id error")
+			}
+		})
+	}
+}
+
 func TestSymlinkEscapeRejected(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("symlink creation requires privileges on many Windows test environments")

@@ -272,6 +272,12 @@ export function createPluginAPI(pluginId) {
           return App.ListVaultTrash(pluginId);
         });
       },
+      restoreTrash: function(trashId, options) {
+        assertActive('files.restoreTrash(' + trashId + ')');
+        return callBackend(pluginId, 'files.restoreTrash(' + trashId + ')', function() {
+          return App.RestoreVaultTrash(pluginId, trashId, options || {});
+        });
+      },
       openExternal: function(relativePath) {
         assertActive('files.openExternal(' + relativePath + ')');
         return callBackendErrorString(pluginId, 'files.openExternal(' + relativePath + ')', function() {

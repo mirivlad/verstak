@@ -66,6 +66,8 @@ export function ListPluginCapabilities(arg1:string):Promise<Array<capability.Ent
 
 export function ListVaultFiles(arg1:string,arg2:string):Promise<Array<files.FileEntry>|string>;
 
+export function ListVaultTrash(arg1:string):Promise<Array<files.TrashEntry>|string>;
+
 export function ListWorkspaces():Promise<Array<workspace.Workspace>|string>;
 
 export function MoveVaultPath(arg1:string,arg2:string,arg3:string,arg4:files.MoveOptions):Promise<string>;
@@ -106,6 +108,8 @@ export function RecordDesiredPlugin(arg1:string,arg2:string,arg3:string):Promise
 
 export function ReloadPlugins():Promise<number|string>;
 
+export function RestoreVaultTrash(arg1:string,arg2:string,arg3:files.RestoreOptions):Promise<string|string>;
+
 export function RenameWorkspace(arg1:string,arg2:string):Promise<string>;
 
 export function RenameWorkspaceNode(arg1:string,arg2:string):Promise<string>;
@@ -125,8 +129,6 @@ export function ShowVaultPathInFolder(arg1:string,arg2:string):Promise<string>;
 export function SubscribePluginEvent(arg1:string,arg2:string):Promise<string>;
 
 export function TrashVaultPath(arg1:string,arg2:string):Promise<files.TrashResult|string>;
-
-export function ListVaultTrash(arg1:string):Promise<any[]|string>;
 
 export function TrashWorkspace(arg1:string):Promise<workspace.TrashResult|string>;
 

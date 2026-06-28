@@ -219,6 +219,7 @@
   var vaultFiles = makeDefaultVaultFiles();
   var externalOpens = [];
   var trashEntries = [];
+  var trashPayloads = {};
   window.__wailsMockExternalOpens = [];
   var workspaceTree = makeDefaultWorkspaceTree();
   var reloadResponseMode = 'tuple';
@@ -1345,6 +1346,9 @@
       var trashPath = '.verstak/trash/files/' + trashId + '/' + baseName(norm.path);
       var originalType = vaultFiles[norm.path].type || 'file';
       var moving = Object.keys(vaultFiles).filter(function (path) { return path === norm.path || path.indexOf(norm.path + '/') === 0; });
+      trashPayloads[trashId] = moving.map(function (path) {
+        return { suffix: path.slice(norm.path.length), entry: Object.assign({}, vaultFiles[path]) };
+      });
       moving.forEach(function (path) { delete vaultFiles[path]; });
       var entry = { originalPath: norm.path, trashPath: trashPath, trashId: trashId, deletedAt: new Date().toISOString(), originalType: originalType, basename: baseName(norm.path) };
       trashEntries.unshift(entry);
@@ -1354,6 +1358,29 @@
       var err = requirePluginPermission(pluginId, 'files.delete');
       if (err) return Promise.resolve([[], err]);
       return Promise.resolve([trashEntries.slice(), '']);
+    },
+    RestoreVaultTrash: function (pluginId, trashId, options) {
+      var deleteErr = requirePluginPermission(pluginId, 'files.delete');
+      if (deleteErr) return Promise.resolve(['', deleteErr]);
+      var writeErr = requirePluginPermission(pluginId, 'files.write');
+      if (writeErr) return Promise.resolve(['', writeErr]);
+      options = options || {};
+      var entry = trashEntries.find(function (item) { return item.trashId === trashId; });
+      if (!entry) return Promise.resolve(['', 'not-found: trash entry ' + trashId]);
+      var target = normalizeVaultPath(options.targetPath || entry.originalPath, false);
+      if (target.error) return Promise.resolve(['', target.error]);
+      if (vaultFiles[target.path] && !options.overwrite) return Promise.resolve(['', 'conflict: ' + target.path]);
+      var parent = parentPath(target.path);
+      if (!vaultFiles[parent] || vaultFiles[parent].type !== 'folder') return Promise.resolve(['', 'parent-not-found: ' + parent]);
+      if (options.overwrite) {
+        Object.keys(vaultFiles).filter(function (path) { return path === target.path || path.indexOf(target.path + '/') === 0; }).forEach(function (path) { delete vaultFiles[path]; });
+      }
+      (trashPayloads[trashId] || []).forEach(function (item) {
+        vaultFiles[target.path + item.suffix] = Object.assign({}, item.entry, { modifiedAt: new Date().toISOString() });
+      });
+      delete trashPayloads[trashId];
+      trashEntries = trashEntries.filter(function (item) { return item.trashId !== trashId; });
+      return Promise.resolve([target.path, '']);
     },
     OpenVaultPathExternal: function (pluginId, relativePath) {
       var err = requirePluginPermission(pluginId, 'files.openExternal');
@@ -1722,6 +1749,8 @@
       pluginSettings = { 'verstak.platform-test': { savedText: 'initial value' } };
       vaultFiles = makeDefaultVaultFiles();
       externalOpens = [];
+      trashEntries = [];
+      trashPayloads = {};
       window.__wailsMockExternalOpens = [];
       workspaceTree = makeDefaultWorkspaceTree();
       reloadResponseMode = 'tuple';

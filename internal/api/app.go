@@ -987,6 +987,49 @@ func (a *App) ListVaultTrash(pluginID string) ([]corefiles.TrashEntry, string) {
 	return entries, ""
 }
 
+// RestoreVaultTrash restores a file or folder from internal trash for a plugin with files.delete and files.write.
+func (a *App) RestoreVaultTrash(pluginID, trashID string, options corefiles.RestoreOptions) (string, string) {
+	if _, err := a.requirePluginAccess(pluginID, "files.delete"); err != nil {
+		return "", err.Error()
+	}
+	if _, err := a.requirePluginAccess(pluginID, "files.write"); err != nil {
+		return "", err.Error()
+	}
+	if a.files == nil {
+		return "", "files service not initialized"
+	}
+	entries, err := a.files.ListTrashEntries()
+	if err != nil {
+		return "", err.Error()
+	}
+	var entry corefiles.TrashEntry
+	for _, candidate := range entries {
+		if candidate.TrashID == trashID {
+			entry = candidate
+			break
+		}
+	}
+	if entry.TrashID == "" {
+		return "", "not-found: trash entry " + trashID
+	}
+	restoredPath, err := a.files.RestoreTrashEntry(trashID, options)
+	if err != nil {
+		return "", err.Error()
+	}
+	if err := a.recordFileSyncOp(syncEntityTypeForFileType(entry.OriginalType), restoredPath, syncsvc.OpCreate, map[string]string{
+		"path": restoredPath,
+	}); err != nil {
+		return "", err.Error()
+	}
+	a.publishFileActivity("file.changed", pluginID, restoredPath, map[string]interface{}{
+		"operation": syncsvc.OpCreate,
+		"type":      string(entry.OriginalType),
+		"restored":  true,
+		"trashId":   trashID,
+	})
+	return restoredPath, ""
+}
+
 // OpenVaultPathExternal opens a vault-relative file or folder in the OS default app.
 func (a *App) OpenVaultPathExternal(pluginID, relativePath string) string {
 	if _, err := a.requirePluginAccess(pluginID, "files.openExternal"); err != nil {

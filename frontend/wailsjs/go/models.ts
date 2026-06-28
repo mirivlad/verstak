@@ -1,5 +1,51 @@
 export namespace api {
 	
+	export class FlatContextMenuEntry {
+	    pluginId: string;
+	    id: string;
+	    label: string;
+	    context: string;
+	    group?: string;
+	    capability?: string;
+	    handler?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new FlatContextMenuEntry(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.pluginId = source["pluginId"];
+	        this.id = source["id"];
+	        this.label = source["label"];
+	        this.context = source["context"];
+	        this.group = source["group"];
+	        this.capability = source["capability"];
+	        this.handler = source["handler"];
+	    }
+	}
+	export class FlatAction {
+	    pluginId: string;
+	    id: string;
+	    label: string;
+	    icon?: string;
+	    capability?: string;
+	    handler?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new FlatAction(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.pluginId = source["pluginId"];
+	        this.id = source["id"];
+	        this.label = source["label"];
+	        this.icon = source["icon"];
+	        this.capability = source["capability"];
+	        this.handler = source["handler"];
+	    }
+	}
 	export class FlatWorkspaceItem {
 	    pluginId: string;
 	    id: string;
@@ -80,24 +126,6 @@ export namespace api {
 		    return a;
 		}
 	}
-	export class FlatSearchProvider {
-	    pluginId: string;
-	    id: string;
-	    label: string;
-	    handler: string;
-	
-	    static createFrom(source: any = {}) {
-	        return new FlatSearchProvider(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.pluginId = source["pluginId"];
-	        this.id = source["id"];
-	        this.label = source["label"];
-	        this.handler = source["handler"];
-	    }
-	}
 	export class FlatStatusBarItem {
 	    pluginId: string;
 	    id: string;
@@ -160,6 +188,24 @@ export namespace api {
 	        this.component = source["component"];
 	    }
 	}
+	export class FlatSearchProvider {
+	    pluginId: string;
+	    id: string;
+	    label: string;
+	    handler: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new FlatSearchProvider(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.pluginId = source["pluginId"];
+	        this.id = source["id"];
+	        this.label = source["label"];
+	        this.handler = source["handler"];
+	    }
+	}
 	export class FlatCommand {
 	    pluginId: string;
 	    id: string;
@@ -209,6 +255,9 @@ export namespace api {
 	    statusBarItems: FlatStatusBarItem[];
 	    openProviders: FlatOpenProvider[];
 	    workspaceItems: FlatWorkspaceItem[];
+	    fileActions: FlatAction[];
+	    noteActions: FlatAction[];
+	    contextMenuEntries: FlatContextMenuEntry[];
 	
 	    static createFrom(source: any = {}) {
 	        return new ContributionSummary(source);
@@ -224,6 +273,9 @@ export namespace api {
 	        this.statusBarItems = this.convertValues(source["statusBarItems"], FlatStatusBarItem);
 	        this.openProviders = this.convertValues(source["openProviders"], FlatOpenProvider);
 	        this.workspaceItems = this.convertValues(source["workspaceItems"], FlatWorkspaceItem);
+	        this.fileActions = this.convertValues(source["fileActions"], FlatAction);
+	        this.noteActions = this.convertValues(source["noteActions"], FlatAction);
+	        this.contextMenuEntries = this.convertValues(source["contextMenuEntries"], FlatContextMenuEntry);
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -244,6 +296,9 @@ export namespace api {
 		    return a;
 		}
 	}
+	
+	
+	
 	
 	
 	
@@ -388,6 +443,42 @@ export namespace files {
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.overwrite = source["overwrite"];
+	    }
+	}
+	export class RestoreOptions {
+	    targetPath?: string;
+	    overwrite: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new RestoreOptions(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.targetPath = source["targetPath"];
+	        this.overwrite = source["overwrite"];
+	    }
+	}
+	export class TrashEntry {
+	    originalPath: string;
+	    trashPath: string;
+	    trashId: string;
+	    deletedAt: string;
+	    originalType: string;
+	    basename: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new TrashEntry(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.originalPath = source["originalPath"];
+	        this.trashPath = source["trashPath"];
+	        this.trashId = source["trashId"];
+	        this.deletedAt = source["deletedAt"];
+	        this.originalType = source["originalType"];
+	        this.basename = source["basename"];
 	    }
 	}
 	export class TrashResult {

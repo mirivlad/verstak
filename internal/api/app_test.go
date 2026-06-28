@@ -395,6 +395,17 @@ func TestFilesBridgeReadWriteListMoveTrash(t *testing.T) {
 	if len(trashEntries) != 1 || trashEntries[0].OriginalPath != "Docs/two.txt" || trashEntries[0].TrashID != trash.TrashID {
 		t.Fatalf("trash entries = %+v, want Docs/two.txt", trashEntries)
 	}
+
+	restored, errStr := app.RestoreVaultTrash("files.plugin", trash.TrashID, corefiles.RestoreOptions{})
+	if errStr != "" {
+		t.Fatalf("RestoreVaultTrash: %s", errStr)
+	}
+	if restored != "Docs/two.txt" {
+		t.Fatalf("restored path = %q, want Docs/two.txt", restored)
+	}
+	if _, err := os.Stat(filepath.Join(root, "Docs", "two.txt")); err != nil {
+		t.Fatalf("restored file missing: %v", err)
+	}
 }
 
 func TestFilesBridgeWritePublishesFileChangedActivityEvent(t *testing.T) {
@@ -609,6 +620,24 @@ func TestFilesBridgePermissions(t *testing.T) {
 			perms:      []string{"files.read", "files.write"},
 			call:       func(app *App) string { _, errStr := app.TrashVaultPath("files.plugin", "one.txt"); return errStr },
 			wantPhrase: "files.delete",
+		},
+		{
+			name:  "restore requires delete",
+			perms: []string{"files.read", "files.write"},
+			call: func(app *App) string {
+				_, errStr := app.RestoreVaultTrash("files.plugin", "missing", corefiles.RestoreOptions{})
+				return errStr
+			},
+			wantPhrase: "files.delete",
+		},
+		{
+			name:  "restore requires write",
+			perms: []string{"files.read", "files.delete"},
+			call: func(app *App) string {
+				_, errStr := app.RestoreVaultTrash("files.plugin", "missing", corefiles.RestoreOptions{})
+				return errStr
+			},
+			wantPhrase: "files.write",
 		},
 		{
 			name:       "open external requires openExternal",
