@@ -344,6 +344,19 @@ export function createPluginAPI(pluginId) {
       }
     },
 
+    contributions: {
+      list: async function(point) {
+        assertActive('contributions.list');
+        const summary = await callBackend(pluginId, 'contributions.list', function() {
+          return App.GetContributions();
+        });
+        if (!point) {
+          return summary || {};
+        }
+        return Array.isArray((summary || {})[point]) ? summary[point] : [];
+      }
+    },
+
     commands: {
       register: function(cmdId, handler) {
         assertActive('commands.register(' + cmdId + ')');
@@ -368,6 +381,10 @@ export function createPluginAPI(pluginId) {
       execute: async function(cmdId, args) {
         assertActive('commands.execute(' + cmdId + ')');
         return executePluginCommand(pluginId, cmdId, args || {});
+      },
+      executeFor: async function(targetPluginId, cmdId, args) {
+        assertActive('commands.executeFor(' + targetPluginId + ':' + cmdId + ')');
+        return executePluginCommand(targetPluginId, cmdId, args || {});
       }
     },
 

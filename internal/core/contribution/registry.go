@@ -307,6 +307,15 @@ func (r *Registry) NoteActions() []ContributionAction {
 	return result
 }
 
+func (r *Registry) ContextMenus() []ContributionContextMenuEntry {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	result := make([]ContributionContextMenuEntry, len(r.contextMenus))
+	copy(result, r.contextMenus)
+	sort.Slice(result, func(i, j int) bool { return result[i].Item.ID < result[j].Item.ID })
+	return result
+}
+
 func (r *Registry) SearchProviders() []ContributionSearchProvider {
 	r.mu.RLock()
 	defer r.mu.RUnlock()

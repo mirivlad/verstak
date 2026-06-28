@@ -1128,6 +1128,15 @@ func newBridgeTestApp(t *testing.T) *App {
 		Commands: []plugin.ContributionCommand{
 			{ID: "bridge.command", Title: "Bridge Command", Handler: "runBridgeCommand"},
 		},
+		FileActions: []plugin.ContributionAction{
+			{ID: "bridge.file.action", Label: "Bridge File Action", Icon: "zap", Handler: "bridge.command"},
+		},
+		NoteActions: []plugin.ContributionAction{
+			{ID: "bridge.note.action", Label: "Bridge Note Action", Icon: "zap", Handler: "bridge.command"},
+		},
+		ContextMenuEntries: []plugin.ContributionContextMenuEntry{
+			{ID: "bridge.file.context", Label: "Bridge File Context", Context: "file", Group: "open", Handler: "bridge.command"},
+		},
 		StatusBarItems: []plugin.ContributionStatusBarItem{
 			{ID: "bridge.status", Label: "Bridge Ready", Position: "right", Handler: "openBridgeStatus"},
 		},
@@ -1231,6 +1240,33 @@ func TestContributionSummaryIncludesSearchProviders(t *testing.T) {
 	provider := summary.SearchProviders[0]
 	if provider.PluginID != "bridge.plugin" || provider.ID != "bridge.search" || provider.Label != "Bridge Search" || provider.Handler != "searchVault" {
 		t.Fatalf("search provider = %+v", provider)
+	}
+}
+
+func TestContributionSummaryIncludesActionsAndContextMenus(t *testing.T) {
+	app := newBridgeTestApp(t)
+
+	summary := app.GetContributions()
+	if len(summary.FileActions) != 1 {
+		t.Fatalf("FileActions count = %d, want 1", len(summary.FileActions))
+	}
+	fileAction := summary.FileActions[0]
+	if fileAction.PluginID != "bridge.plugin" || fileAction.ID != "bridge.file.action" || fileAction.Label != "Bridge File Action" || fileAction.Handler != "bridge.command" {
+		t.Fatalf("file action = %+v", fileAction)
+	}
+	if len(summary.NoteActions) != 1 {
+		t.Fatalf("NoteActions count = %d, want 1", len(summary.NoteActions))
+	}
+	noteAction := summary.NoteActions[0]
+	if noteAction.PluginID != "bridge.plugin" || noteAction.ID != "bridge.note.action" || noteAction.Label != "Bridge Note Action" || noteAction.Handler != "bridge.command" {
+		t.Fatalf("note action = %+v", noteAction)
+	}
+	if len(summary.ContextMenuEntries) != 1 {
+		t.Fatalf("ContextMenuEntries count = %d, want 1", len(summary.ContextMenuEntries))
+	}
+	menuEntry := summary.ContextMenuEntries[0]
+	if menuEntry.PluginID != "bridge.plugin" || menuEntry.ID != "bridge.file.context" || menuEntry.Context != "file" || menuEntry.Handler != "bridge.command" {
+		t.Fatalf("context menu entry = %+v", menuEntry)
 	}
 }
 

@@ -419,16 +419,38 @@ type FlatWorkspaceItem struct {
 	Component string `json:"component"`
 }
 
+type FlatAction struct {
+	PluginID   string `json:"pluginId"`
+	ID         string `json:"id"`
+	Label      string `json:"label"`
+	Icon       string `json:"icon,omitempty"`
+	Capability string `json:"capability,omitempty"`
+	Handler    string `json:"handler,omitempty"`
+}
+
+type FlatContextMenuEntry struct {
+	PluginID   string `json:"pluginId"`
+	ID         string `json:"id"`
+	Label      string `json:"label"`
+	Context    string `json:"context"`
+	Group      string `json:"group,omitempty"`
+	Capability string `json:"capability,omitempty"`
+	Handler    string `json:"handler,omitempty"`
+}
+
 // ContributionSummary aggregates all contribution types for the frontend.
 type ContributionSummary struct {
-	Views           []FlatView           `json:"views"`
-	Commands        []FlatCommand        `json:"commands"`
-	SearchProviders []FlatSearchProvider `json:"searchProviders"`
-	SettingsPanels  []FlatSettingsPanel  `json:"settingsPanels"`
-	SidebarItems    []FlatSidebarItem    `json:"sidebarItems"`
-	StatusBarItems  []FlatStatusBarItem  `json:"statusBarItems"`
-	OpenProviders   []FlatOpenProvider   `json:"openProviders"`
-	WorkspaceItems  []FlatWorkspaceItem  `json:"workspaceItems"`
+	Views              []FlatView             `json:"views"`
+	Commands           []FlatCommand          `json:"commands"`
+	SearchProviders    []FlatSearchProvider   `json:"searchProviders"`
+	SettingsPanels     []FlatSettingsPanel    `json:"settingsPanels"`
+	SidebarItems       []FlatSidebarItem      `json:"sidebarItems"`
+	StatusBarItems     []FlatStatusBarItem    `json:"statusBarItems"`
+	OpenProviders      []FlatOpenProvider     `json:"openProviders"`
+	WorkspaceItems     []FlatWorkspaceItem    `json:"workspaceItems"`
+	FileActions        []FlatAction           `json:"fileActions"`
+	NoteActions        []FlatAction           `json:"noteActions"`
+	ContextMenuEntries []FlatContextMenuEntry `json:"contextMenuEntries"`
 }
 
 // buildContributionSummary creates a ContributionSummary from the registry.
@@ -444,6 +466,9 @@ func buildContributionSummary(r *contribution.Registry) ContributionSummary {
 	regStatusBar := r.StatusBarItems()
 	regOpenProviders := r.OpenProviders()
 	regWorkspaceItems := r.WorkspaceItems()
+	regFileActions := r.FileActions()
+	regNoteActions := r.NoteActions()
+	regContextMenus := r.ContextMenus()
 
 	views := make([]FlatView, len(regViews))
 	for i, v := range regViews {
@@ -488,7 +513,19 @@ func buildContributionSummary(r *contribution.Registry) ContributionSummary {
 	for i, v := range regWorkspaceItems {
 		workspaceItems[i] = FlatWorkspaceItem{PluginID: v.PluginID, ID: v.Item.ID, Title: v.Item.Title, Icon: v.Item.Icon, Component: v.Item.Component}
 	}
-	return ContributionSummary{Views: views, Commands: cmds, SearchProviders: searchProviders, SettingsPanels: panels, SidebarItems: sidebar, StatusBarItems: statusBarItems, OpenProviders: openProviders, WorkspaceItems: workspaceItems}
+	fileActions := make([]FlatAction, len(regFileActions))
+	for i, v := range regFileActions {
+		fileActions[i] = FlatAction{PluginID: v.PluginID, ID: v.Item.ID, Label: v.Item.Label, Icon: v.Item.Icon, Capability: v.Item.Capability, Handler: v.Item.Handler}
+	}
+	noteActions := make([]FlatAction, len(regNoteActions))
+	for i, v := range regNoteActions {
+		noteActions[i] = FlatAction{PluginID: v.PluginID, ID: v.Item.ID, Label: v.Item.Label, Icon: v.Item.Icon, Capability: v.Item.Capability, Handler: v.Item.Handler}
+	}
+	contextMenus := make([]FlatContextMenuEntry, len(regContextMenus))
+	for i, v := range regContextMenus {
+		contextMenus[i] = FlatContextMenuEntry{PluginID: v.PluginID, ID: v.Item.ID, Label: v.Item.Label, Context: v.Item.Context, Group: v.Item.Group, Capability: v.Item.Capability, Handler: v.Item.Handler}
+	}
+	return ContributionSummary{Views: views, Commands: cmds, SearchProviders: searchProviders, SettingsPanels: panels, SidebarItems: sidebar, StatusBarItems: statusBarItems, OpenProviders: openProviders, WorkspaceItems: workspaceItems, FileActions: fileActions, NoteActions: noteActions, ContextMenuEntries: contextMenus}
 }
 
 // GetContributions returns all registered contributions flattened for the frontend.
@@ -501,8 +538,8 @@ func (a *App) GetContributions() ContributionSummary {
 	}
 	summary := buildContributionSummary(a.contribRegistry)
 	if a.debug {
-		debug.Logf("[api] GetContributions: returning views=%d commands=%d searchProviders=%d sidebar=%d statusBar=%d settings=%d openProviders=%d",
-			len(summary.Views), len(summary.Commands), len(summary.SearchProviders), len(summary.SidebarItems), len(summary.StatusBarItems), len(summary.SettingsPanels), len(summary.OpenProviders))
+		debug.Logf("[api] GetContributions: returning views=%d commands=%d searchProviders=%d sidebar=%d statusBar=%d settings=%d openProviders=%d fileActions=%d noteActions=%d contextMenuEntries=%d",
+			len(summary.Views), len(summary.Commands), len(summary.SearchProviders), len(summary.SidebarItems), len(summary.StatusBarItems), len(summary.SettingsPanels), len(summary.OpenProviders), len(summary.FileActions), len(summary.NoteActions), len(summary.ContextMenuEntries))
 	}
 	return summary
 }
