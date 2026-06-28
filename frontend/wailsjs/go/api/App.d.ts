@@ -126,6 +126,8 @@ export function SubscribePluginEvent(arg1:string,arg2:string):Promise<string>;
 
 export function TrashVaultPath(arg1:string,arg2:string):Promise<files.TrashResult|string>;
 
+export function ListVaultTrash(arg1:string):Promise<any[]|string>;
+
 export function TrashWorkspace(arg1:string):Promise<workspace.TrashResult|string>;
 
 export function UpdateAppSettings(arg1:Record<string, any>):Promise<string>;

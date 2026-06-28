@@ -7,6 +7,7 @@ import (
 	"mime"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -335,6 +336,64 @@ func (s *Service) TrashVaultPath(relativePath string) (TrashResult, error) {
 		return TrashResult{}, err
 	}
 	return result, nil
+}
+
+func (s *Service) ListTrashEntries() ([]TrashEntry, error) {
+	root, err := s.vaultRoot()
+	if err != nil {
+		return nil, err
+	}
+	trashRoot := filepath.Join(root, ".verstak", "trash", "files")
+	dirs, err := os.ReadDir(trashRoot)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return []TrashEntry{}, nil
+		}
+		return nil, err
+	}
+
+	entries := make([]TrashEntry, 0, len(dirs))
+	for _, dir := range dirs {
+		if !dir.IsDir() {
+			continue
+		}
+		data, err := os.ReadFile(filepath.Join(trashRoot, dir.Name(), "metadata.json"))
+		if err != nil {
+			if os.IsNotExist(err) {
+				continue
+			}
+			return nil, err
+		}
+		var raw struct {
+			OriginalPath string `json:"originalPath"`
+			TrashPath    string `json:"trashPath"`
+			TrashID      string `json:"trashId"`
+			DeletedAt    string `json:"deletedAt"`
+			OriginalType string `json:"originalType"`
+			Basename     string `json:"basename"`
+		}
+		if err := json.Unmarshal(data, &raw); err != nil {
+			continue
+		}
+		if raw.OriginalPath == "" || raw.TrashPath == "" || raw.TrashID == "" || raw.DeletedAt == "" {
+			continue
+		}
+		entries = append(entries, TrashEntry{
+			OriginalPath: raw.OriginalPath,
+			TrashPath:    raw.TrashPath,
+			TrashID:      raw.TrashID,
+			DeletedAt:    raw.DeletedAt,
+			OriginalType: FileType(raw.OriginalType),
+			Basename:     raw.Basename,
+		})
+	}
+	sort.Slice(entries, func(i, j int) bool {
+		if entries[i].DeletedAt != entries[j].DeletedAt {
+			return entries[i].DeletedAt > entries[j].DeletedAt
+		}
+		return entries[i].TrashID > entries[j].TrashID
+	})
+	return entries, nil
 }
 
 func (s *Service) vaultRoot() (string, error) {

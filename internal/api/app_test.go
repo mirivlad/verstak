@@ -388,6 +388,13 @@ func TestFilesBridgeReadWriteListMoveTrash(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(root, trash.TrashPath)); err != nil {
 		t.Fatalf("trash path missing: %v", err)
 	}
+	trashEntries, errStr := app.ListVaultTrash("files.plugin")
+	if errStr != "" {
+		t.Fatalf("ListVaultTrash: %s", errStr)
+	}
+	if len(trashEntries) != 1 || trashEntries[0].OriginalPath != "Docs/two.txt" || trashEntries[0].TrashID != trash.TrashID {
+		t.Fatalf("trash entries = %+v, want Docs/two.txt", trashEntries)
+	}
 }
 
 func TestFilesBridgeWritePublishesFileChangedActivityEvent(t *testing.T) {

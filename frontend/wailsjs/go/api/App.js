@@ -238,6 +238,10 @@ export function TrashVaultPath(arg1, arg2) {
   return window['go']['api']['App']['TrashVaultPath'](arg1, arg2);
 }
 
+export function ListVaultTrash(arg1) {
+  return window['go']['api']['App']['ListVaultTrash'](arg1);
+}
+
 export function TrashWorkspace(arg1) {
   return window['go']['api']['App']['TrashWorkspace'](arg1);
 }

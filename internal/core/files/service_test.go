@@ -301,6 +301,39 @@ func TestTrashVaultPathMovesToReservedTrashAndHidesFromList(t *testing.T) {
 	}
 }
 
+func TestListTrashEntriesReturnsMetadata(t *testing.T) {
+	s, root := newTestService(t)
+	if err := os.WriteFile(filepath.Join(root, "old.txt"), []byte("old"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "new.txt"), []byte("new"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	oldResult, err := s.TrashVaultPath("old.txt")
+	if err != nil {
+		t.Fatalf("trash old: %v", err)
+	}
+	newResult, err := s.TrashVaultPath("new.txt")
+	if err != nil {
+		t.Fatalf("trash new: %v", err)
+	}
+
+	entries, err := s.ListTrashEntries()
+	if err != nil {
+		t.Fatalf("ListTrashEntries: %v", err)
+	}
+	if len(entries) != 2 {
+		t.Fatalf("trash entries count = %d, want 2: %+v", len(entries), entries)
+	}
+	if entries[0].TrashID != newResult.TrashID || entries[1].TrashID != oldResult.TrashID {
+		t.Fatalf("trash entries order = %+v, want newest first", entries)
+	}
+	if entries[0].OriginalPath != "new.txt" || entries[0].TrashPath != newResult.TrashPath || entries[0].OriginalType != FileTypeFile || entries[0].Basename != "new.txt" {
+		t.Fatalf("new trash entry = %+v", entries[0])
+	}
+}
+
 func TestSymlinkEscapeRejected(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("symlink creation requires privileges on many Windows test environments")

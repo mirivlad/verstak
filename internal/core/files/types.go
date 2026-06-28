@@ -60,3 +60,12 @@ type TrashResult struct {
 	TrashID      string `json:"trashId"`
 	DeletedAt    string `json:"deletedAt"`
 }
+
+type TrashEntry struct {
+	OriginalPath string   `json:"originalPath"`
+	TrashPath    string   `json:"trashPath"`
+	TrashID      string   `json:"trashId"`
+	DeletedAt    string   `json:"deletedAt"`
+	OriginalType FileType `json:"originalType"`
+	Basename     string   `json:"basename"`
+}

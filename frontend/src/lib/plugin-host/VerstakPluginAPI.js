@@ -266,6 +266,12 @@ export function createPluginAPI(pluginId) {
           return App.TrashVaultPath(pluginId, relativePath);
         });
       },
+      listTrash: function() {
+        assertActive('files.listTrash');
+        return callBackend(pluginId, 'files.listTrash', function() {
+          return App.ListVaultTrash(pluginId);
+        });
+      },
       openExternal: function(relativePath) {
         assertActive('files.openExternal(' + relativePath + ')');
         return callBackendErrorString(pluginId, 'files.openExternal(' + relativePath + ')', function() {

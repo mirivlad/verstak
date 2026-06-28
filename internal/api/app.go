@@ -972,6 +972,21 @@ func (a *App) TrashVaultPath(pluginID, relativePath string) (corefiles.TrashResu
 	return result, ""
 }
 
+// ListVaultTrash returns trash metadata entries for a plugin with files.delete.
+func (a *App) ListVaultTrash(pluginID string) ([]corefiles.TrashEntry, string) {
+	if _, err := a.requirePluginAccess(pluginID, "files.delete"); err != nil {
+		return nil, err.Error()
+	}
+	if a.files == nil {
+		return nil, "files service not initialized"
+	}
+	entries, err := a.files.ListTrashEntries()
+	if err != nil {
+		return nil, err.Error()
+	}
+	return entries, ""
+}
+
 // OpenVaultPathExternal opens a vault-relative file or folder in the OS default app.
 func (a *App) OpenVaultPathExternal(pluginID, relativePath string) string {
 	if _, err := a.requirePluginAccess(pluginID, "files.openExternal"); err != nil {
