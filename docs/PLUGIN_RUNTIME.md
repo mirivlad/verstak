@@ -427,6 +427,10 @@ contributions summary.
 - Handler получает envelope `{ name, pluginId, payload, timestamp }`.
 - Subscriptions очищаются при component unmount, reload/disable flow и
   `api.dispose()`.
+- Core publishes `file.changed` for Files API mutations and live vault watcher
+  changes. Watcher payloads use `operation: "external.create"`,
+  `"external.update"`, or `"external.delete"`, include vault-relative `path`,
+  `type`, `workspaceRootPath`, and `external: true`.
 
 `files`
 
@@ -461,8 +465,11 @@ contributions summary.
   `files.list` through a symlink directory and all read/write/move/trash
   operations through symlinks are forbidden in Milestone 6a.
 - Files API is text-only for read/write in Milestone 6a. `readText` is limited
-  to UTF-8 regular files up to 2 MB. Binary streaming and watcher support are
-  deferred.
+  to UTF-8 regular files up to 2 MB. Binary streaming is deferred.
+- Live watcher refresh is active while Verstak is running and a vault is open.
+  It performs an initial no-event snapshot, then publishes `file.changed` for
+  external creates, updates, and deletes outside `.verstak/`. It does not keep a
+  persistent snapshot or report what changed while Verstak was closed.
 
 `dispose`
 
