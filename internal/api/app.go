@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -34,6 +35,9 @@ var newSyncClient = syncsvc.NewClient
 var emitFrontendEvent = runtime.EventsEmit
 
 const pluginEventRuntimeName = "verstak:plugin-event"
+const activityGlobalKey = "events:global"
+const activityWorkspacePrefix = "events:workspace:"
+const maxActivityEvents = 250
 
 // App is the main application struct exposed to the Wails frontend.
 type App struct {
@@ -53,6 +57,7 @@ type App struct {
 	workspace       *workspace.Manager
 	syncSvc         *syncsvc.Service
 	debug           bool
+	activityEvents  map[string]bool
 }
 
 type externalOpenService interface {
@@ -76,7 +81,7 @@ func NewApp(
 	syncService *syncsvc.Service,
 	debugEnabled bool,
 ) *App {
-	return &App{
+	app := &App{
 		capRegistry:     capReg,
 		contribRegistry: contribReg,
 		permRegistry:    permReg,
@@ -92,7 +97,10 @@ func NewApp(
 		workspace:       workspaceMgr,
 		syncSvc:         syncService,
 		debug:           debugEnabled,
+		activityEvents:  make(map[string]bool),
 	}
+	app.ensureActivityProviderSubscriptions()
+	return app
 }
 
 func workbenchPrefsFromSettings(m *appsettings.Manager) coreworkbench.Preferences {
@@ -125,6 +133,7 @@ func (a *App) ensureWorkbench() *coreworkbench.Router {
 // Startup is called when the app starts. Sets the Wails context for dialogs.
 func (a *App) Startup(ctx context.Context) {
 	a.ctx = ctx
+	a.ensureActivityProviderSubscriptions()
 	log.Printf("[api] App.Startup: initialized with %d plugins", len(a.plugins))
 }
 
@@ -169,6 +178,135 @@ func hasString(items []string, want string) bool {
 		}
 	}
 	return false
+}
+
+func (a *App) ensureActivityProviderSubscriptions() {
+	if a.eventBus == nil || a.contribRegistry == nil {
+		return
+	}
+	if a.activityEvents == nil {
+		a.activityEvents = make(map[string]bool)
+	}
+	for _, provider := range a.contribRegistry.ActivityProviders() {
+		for _, eventName := range provider.Item.Events {
+			eventName = strings.TrimSpace(eventName)
+			if eventName == "" || a.activityEvents[eventName] {
+				continue
+			}
+			a.activityEvents[eventName] = true
+			a.eventBus.Subscribe(eventName, func(event events.Event) {
+				a.recordActivityProviderEvent(event)
+			})
+		}
+	}
+}
+
+func (a *App) recordActivityProviderEvent(event events.Event) {
+	if a.storage == nil || a.contribRegistry == nil {
+		return
+	}
+	for _, provider := range a.contribRegistry.ActivityProviders() {
+		if !hasString(provider.Item.Events, event.Name) {
+			continue
+		}
+		if _, err := a.requirePluginAccess(provider.PluginID, "storage.namespace"); err != nil {
+			continue
+		}
+		if err := a.appendActivityEvent(provider.PluginID, activityFromEvent(event)); err != nil {
+			log.Printf("[api] activity provider %s failed to record %s: %v", provider.PluginID, event.Name, err)
+		}
+	}
+}
+
+func (a *App) appendActivityEvent(pluginID string, activity map[string]interface{}) error {
+	settings, err := a.storage.ReadPluginSettings(pluginID)
+	if err != nil {
+		return err
+	}
+	key := activityGlobalKey
+	if workspace, _ := activity["workspaceRootPath"].(string); strings.TrimSpace(workspace) != "" {
+		key = activityWorkspacePrefix + url.QueryEscape(strings.TrimSpace(workspace))
+		key = strings.ReplaceAll(key, "+", "%20")
+	}
+	eventsList := []interface{}{activity}
+	if existing, ok := settings[key].([]interface{}); ok {
+		eventsList = append(eventsList, existing...)
+	} else if existingMaps, ok := settings[key].([]map[string]interface{}); ok {
+		for _, item := range existingMaps {
+			eventsList = append(eventsList, item)
+		}
+	}
+	if len(eventsList) > maxActivityEvents {
+		eventsList = eventsList[:maxActivityEvents]
+	}
+	settings[key] = eventsList
+	return a.storage.WritePluginSettings(pluginID, settings)
+}
+
+func activityFromEvent(event events.Event) map[string]interface{} {
+	payload := eventPayloadMap(event.Payload)
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	occurredAt := firstPayloadText(payload, "occurredAt", "capturedAt")
+	if occurredAt == "" {
+		occurredAt = event.Timestamp
+	}
+	if occurredAt == "" {
+		occurredAt = now
+	}
+	workspaceRoot := firstPayloadText(payload, "workspaceRootPath", "workspaceName", "workspaceNodeId")
+	if workspaceRoot == "" {
+		workspaceRoot = workspaceRootFromRelativePath(firstPayloadText(payload, "path"))
+	}
+	return map[string]interface{}{
+		"activityId":        fmt.Sprintf("activity-%d", time.Now().UnixNano()),
+		"type":              event.Name,
+		"title":             activityTitle(event.Name, payload),
+		"summary":           activitySummary(event.Name, payload),
+		"occurredAt":        occurredAt,
+		"receivedAt":        now,
+		"sourcePluginId":    firstPayloadText(payload, "pluginId", "sourcePluginId"),
+		"workspaceRootPath": workspaceRoot,
+		"payload":           payload,
+	}
+}
+
+func eventPayloadMap(payload interface{}) map[string]interface{} {
+	switch value := payload.(type) {
+	case map[string]interface{}:
+		return value
+	case map[string]string:
+		result := make(map[string]interface{}, len(value))
+		for key, item := range value {
+			result[key] = item
+		}
+		return result
+	default:
+		return map[string]interface{}{}
+	}
+}
+
+func firstPayloadText(payload map[string]interface{}, keys ...string) string {
+	for _, key := range keys {
+		value := strings.TrimSpace(fmt.Sprint(payload[key]))
+		if value != "" && value != "<nil>" {
+			return value
+		}
+	}
+	return ""
+}
+
+func activityTitle(eventName string, payload map[string]interface{}) string {
+	if title := firstPayloadText(payload, "title", "name", "path", "url", "captureId"); title != "" {
+		return title
+	}
+	return eventName
+}
+
+func activitySummary(eventName string, payload map[string]interface{}) string {
+	if summary := firstPayloadText(payload, "text", "summary", "description", "path", "url", "domain"); summary != "" {
+		return summary
+	}
+	return eventName
 }
 
 // ─── Plugin Manager API ─────────────────────────────────────
@@ -461,6 +599,7 @@ func (a *App) ReloadPlugins() (int, string) {
 	}
 
 	a.plugins = plugins
+	a.ensureActivityProviderSubscriptions()
 
 	var buf strings.Builder
 	buf.WriteString("discovery complete")
@@ -706,6 +845,9 @@ func (a *App) WriteVaultTextFile(pluginID, relativePath string, content string, 
 	}); err != nil {
 		return err.Error()
 	}
+	a.publishFileActivity("file.changed", pluginID, relativePath, map[string]interface{}{
+		"operation": opType,
+	})
 	return ""
 }
 
@@ -725,6 +867,10 @@ func (a *App) CreateVaultFolder(pluginID, relativePath string) string {
 	}); err != nil {
 		return err.Error()
 	}
+	a.publishFileActivity("file.changed", pluginID, relativePath, map[string]interface{}{
+		"operation": syncsvc.OpCreate,
+		"type":      string(corefiles.FileTypeFolder),
+	})
 	return ""
 }
 
@@ -749,6 +895,11 @@ func (a *App) MoveVaultPath(pluginID, fromRelativePath string, toRelativePath st
 	}); err != nil {
 		return err.Error()
 	}
+	a.publishFileActivity("file.changed", pluginID, toRelativePath, map[string]interface{}{
+		"operation": syncsvc.OpMove,
+		"fromPath":  fromRelativePath,
+		"type":      string(meta.Type),
+	})
 	return ""
 }
 
@@ -773,6 +924,10 @@ func (a *App) TrashVaultPath(pluginID, relativePath string) (corefiles.TrashResu
 	}); err != nil {
 		return corefiles.TrashResult{}, err.Error()
 	}
+	a.publishFileActivity("file.changed", pluginID, relativePath, map[string]interface{}{
+		"operation": syncsvc.OpDelete,
+		"type":      string(meta.Type),
+	})
 	return result, ""
 }
 
@@ -825,6 +980,38 @@ func (a *App) recordFileSyncOp(entityType, entityID, opType string, payload inte
 		return nil
 	}
 	return a.syncSvc.RecordOp(entityType, entityID, opType, payload)
+}
+
+func (a *App) publishFileActivity(eventName, pluginID, relativePath string, extra map[string]interface{}) {
+	if a.eventBus == nil {
+		return
+	}
+	path := strings.TrimSpace(filepath.ToSlash(relativePath))
+	payload := map[string]interface{}{
+		"path":              path,
+		"title":             path,
+		"workspaceRootPath": workspaceRootFromRelativePath(path),
+		"pluginId":          pluginID,
+	}
+	for key, value := range extra {
+		payload[key] = value
+	}
+	a.eventBus.Publish(events.Event{
+		Name:      eventName,
+		Timestamp: time.Now().UTC().Format(time.RFC3339Nano),
+		Payload:   payload,
+	})
+}
+
+func workspaceRootFromRelativePath(relativePath string) string {
+	path := strings.Trim(strings.TrimSpace(filepath.ToSlash(relativePath)), "/")
+	if path == "" {
+		return ""
+	}
+	if idx := strings.Index(path, "/"); idx >= 0 {
+		return path[:idx]
+	}
+	return path
 }
 
 func syncEntityTypeForFileType(fileType corefiles.FileType) string {

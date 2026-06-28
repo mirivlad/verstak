@@ -316,6 +316,20 @@ func (r *Registry) SearchProviders() []ContributionSearchProvider {
 	return result
 }
 
+func (r *Registry) ActivityProviders() []ContributionActivityProvider {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	result := make([]ContributionActivityProvider, len(r.activityProviders))
+	copy(result, r.activityProviders)
+	sort.Slice(result, func(i, j int) bool {
+		if result[i].PluginID != result[j].PluginID {
+			return result[i].PluginID < result[j].PluginID
+		}
+		return result[i].Item.ID < result[j].Item.ID
+	})
+	return result
+}
+
 func (r *Registry) OpenProviders() []ContributionOpenProvider {
 	r.mu.RLock()
 	defer r.mu.RUnlock()

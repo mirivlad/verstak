@@ -390,6 +390,111 @@ func TestFilesBridgeReadWriteListMoveTrash(t *testing.T) {
 	}
 }
 
+func TestFilesBridgeWritePublishesFileChangedActivityEvent(t *testing.T) {
+	app, _ := newFilesTestApp(t, []string{"files.write"})
+	bus := events.NewBus()
+	app.eventBus = bus
+
+	if errStr := app.CreateVaultFolder("files.plugin", "Project"); errStr != "" {
+		t.Fatalf("CreateVaultFolder Project: %s", errStr)
+	}
+	if errStr := app.CreateVaultFolder("files.plugin", "Project/Notes"); errStr != "" {
+		t.Fatalf("CreateVaultFolder Project/Notes: %s", errStr)
+	}
+
+	var received []events.Event
+	bus.Subscribe("file.changed", func(event events.Event) {
+		received = append(received, event)
+	})
+
+	if errStr := app.WriteVaultTextFile("files.plugin", "Project/Notes/one.txt", "hello", corefiles.WriteOptions{CreateIfMissing: true}); errStr != "" {
+		t.Fatalf("WriteVaultTextFile: %s", errStr)
+	}
+
+	if len(received) != 1 {
+		t.Fatalf("received %d file.changed events, want 1", len(received))
+	}
+	payload, ok := received[0].Payload.(map[string]interface{})
+	if !ok {
+		t.Fatalf("payload = %#v, want map[string]interface{}", received[0].Payload)
+	}
+	if payload["path"] != "Project/Notes/one.txt" {
+		t.Fatalf("payload path = %#v", payload["path"])
+	}
+	if payload["workspaceRootPath"] != "Project" {
+		t.Fatalf("payload workspaceRootPath = %#v, want Project", payload["workspaceRootPath"])
+	}
+	if payload["pluginId"] != "files.plugin" {
+		t.Fatalf("payload pluginId = %#v, want files.plugin", payload["pluginId"])
+	}
+	if received[0].Timestamp == "" {
+		t.Fatal("event timestamp is empty")
+	}
+}
+
+func TestActivityProviderRecordsFileChangedWithoutMountedView(t *testing.T) {
+	app, _ := newFilesTestApp(t, []string{"files.write"})
+	app.eventBus = events.NewBus()
+	app.storage = storage.New(app.vault)
+	app.contribRegistry = contribution.NewRegistry()
+	app.plugins = append(app.plugins, plugin.Plugin{
+		Manifest: plugin.Manifest{
+			ID:          "verstak.activity",
+			Name:        "Activity",
+			Version:     "1.0.0",
+			Provides:    []string{"activity.log"},
+			Permissions: []string{"storage.namespace"},
+		},
+		Status:  plugin.StatusLoaded,
+		Enabled: true,
+	})
+
+	if errStr := app.CreateVaultFolder("files.plugin", "Project"); errStr != "" {
+		t.Fatalf("CreateVaultFolder Project: %s", errStr)
+	}
+	if errStr := app.CreateVaultFolder("files.plugin", "Project/Notes"); errStr != "" {
+		t.Fatalf("CreateVaultFolder Project/Notes: %s", errStr)
+	}
+
+	app.contribRegistry.Register("verstak.activity", &plugin.Contributions{
+		ActivityProviders: []plugin.ContributionActivityProvider{{
+			ID:      "verstak.activity.log",
+			Events:  []string{"file.changed"},
+			Handler: "recordActivityEvent",
+		}},
+	})
+	app.ensureActivityProviderSubscriptions()
+
+	if errStr := app.WriteVaultTextFile("files.plugin", "Project/Notes/one.txt", "hello", corefiles.WriteOptions{CreateIfMissing: true}); errStr != "" {
+		t.Fatalf("WriteVaultTextFile: %s", errStr)
+	}
+
+	settings, err := app.storage.ReadPluginSettings("verstak.activity")
+	if err != nil {
+		t.Fatalf("ReadPluginSettings: %v", err)
+	}
+	stored, ok := settings["events:workspace:Project"].([]interface{})
+	if !ok {
+		t.Fatalf("events:workspace:Project = %#v, want []interface{}", settings["events:workspace:Project"])
+	}
+	if len(stored) != 1 {
+		t.Fatalf("stored %d activity events, want 1", len(stored))
+	}
+	activity, ok := stored[0].(map[string]interface{})
+	if !ok {
+		t.Fatalf("activity = %#v, want map[string]interface{}", stored[0])
+	}
+	if activity["type"] != "file.changed" {
+		t.Fatalf("activity type = %#v, want file.changed", activity["type"])
+	}
+	if activity["workspaceRootPath"] != "Project" {
+		t.Fatalf("activity workspaceRootPath = %#v, want Project", activity["workspaceRootPath"])
+	}
+	if activity["sourcePluginId"] != "files.plugin" {
+		t.Fatalf("activity sourcePluginId = %#v, want files.plugin", activity["sourcePluginId"])
+	}
+}
+
 func TestFilesBridgeOpenExternalUsesVaultPathPolicyAndPermission(t *testing.T) {
 	app, root := newFilesTestApp(t, []string{"files.openExternal"})
 	filePath := filepath.Join(root, "Docs", "one.txt")
