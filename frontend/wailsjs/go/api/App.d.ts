@@ -102,17 +102,19 @@ export function ReadPluginSetting(arg1:string,arg2:string):Promise<any>;
 
 export function ReadPluginSettings(arg1:string):Promise<Record<string, any>|string>;
 
+export function ReadVaultFileBytes(arg1:string,arg2:string):Promise<files.FileBytes|string>;
+
 export function ReadVaultTextFile(arg1:string,arg2:string):Promise<string|string>;
 
 export function RecordDesiredPlugin(arg1:string,arg2:string,arg3:string):Promise<string>;
 
 export function ReloadPlugins():Promise<number|string>;
 
-export function RestoreVaultTrash(arg1:string,arg2:string,arg3:files.RestoreOptions):Promise<string|string>;
-
 export function RenameWorkspace(arg1:string,arg2:string):Promise<string>;
 
 export function RenameWorkspaceNode(arg1:string,arg2:string):Promise<string>;
+
+export function RestoreVaultTrash(arg1:string,arg2:string,arg3:files.RestoreOptions):Promise<string|string>;
 
 export function SelectDirectory():Promise<string>;
 

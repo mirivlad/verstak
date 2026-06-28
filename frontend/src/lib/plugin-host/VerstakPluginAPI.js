@@ -242,6 +242,12 @@ export function createPluginAPI(pluginId) {
           return App.ReadVaultTextFile(pluginId, relativePath);
         });
       },
+      readBytes: function(relativePath) {
+        assertActive('files.readBytes(' + relativePath + ')');
+        return callBackend(pluginId, 'files.readBytes(' + relativePath + ')', function() {
+          return App.ReadVaultFileBytes(pluginId, relativePath);
+        });
+      },
       writeText: function(relativePath, content, options) {
         assertActive('files.writeText(' + relativePath + ')');
         return callBackendErrorString(pluginId, 'files.writeText(' + relativePath + ')', function() {

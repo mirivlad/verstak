@@ -1287,6 +1287,23 @@
       if (node.type !== 'file') return Promise.resolve(['', 'not-regular-file: ' + norm.path]);
       return Promise.resolve([node.content || '', '']);
     },
+    ReadVaultFileBytes: function (pluginId, relativePath) {
+      var err = requirePluginPermission(pluginId, 'files.read');
+      if (err) return Promise.resolve([{}, err]);
+      var norm = normalizeVaultPath(relativePath, false);
+      if (norm.error) return Promise.resolve([{}, norm.error]);
+      var node = vaultFiles[norm.path];
+      if (!node) return Promise.resolve([{}, 'not-found: ' + norm.path]);
+      if (node.type !== 'file') return Promise.resolve([{}, 'not-regular-file: ' + norm.path]);
+      var content = node.content || '';
+      var dataBase64 = typeof btoa === 'function' ? btoa(content) : '';
+      return Promise.resolve([{
+        relativePath: norm.path,
+        size: content.length,
+        mimeHint: norm.path.toLowerCase().endsWith('.png') ? 'image/png' : '',
+        dataBase64: dataBase64
+      }, '']);
+    },
     WriteVaultTextFile: function (pluginId, relativePath, content, options) {
       var err = requirePluginPermission(pluginId, 'files.write');
       if (err) return Promise.resolve(err);

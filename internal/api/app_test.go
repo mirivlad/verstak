@@ -360,11 +360,29 @@ func TestFilesBridgeReadWriteListMoveTrash(t *testing.T) {
 		t.Fatalf("text = %q", text)
 	}
 
+	if err := os.WriteFile(filepath.Join(root, "Docs", "image.png"), []byte{0x89, 0x50, 0x4e, 0x47}, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	bytesResult, errStr := app.ReadVaultFileBytes("files.plugin", "Docs/image.png")
+	if errStr != "" {
+		t.Fatalf("ReadVaultFileBytes: %s", errStr)
+	}
+	if bytesResult.RelativePath != "Docs/image.png" || bytesResult.MimeHint != "image/png" || bytesResult.DataBase64 != "iVBORw==" {
+		t.Fatalf("bytes result = %+v", bytesResult)
+	}
+
 	entries, errStr := app.ListVaultFiles("files.plugin", "Docs")
 	if errStr != "" {
 		t.Fatalf("ListVaultFiles: %s", errStr)
 	}
-	if len(entries) != 1 || entries[0].RelativePath != "Docs/one.txt" {
+	hasOne := false
+	for _, entry := range entries {
+		if entry.RelativePath == "Docs/one.txt" {
+			hasOne = true
+			break
+		}
+	}
+	if !hasOne {
 		t.Fatalf("entries = %+v", entries)
 	}
 
@@ -592,6 +610,12 @@ func TestFilesBridgePermissions(t *testing.T) {
 			name:       "read requires read",
 			perms:      []string{"files.write", "files.delete"},
 			call:       func(app *App) string { _, errStr := app.ReadVaultTextFile("files.plugin", "one.txt"); return errStr },
+			wantPhrase: "files.read",
+		},
+		{
+			name:       "read bytes requires read",
+			perms:      []string{"files.write", "files.delete"},
+			call:       func(app *App) string { _, errStr := app.ReadVaultFileBytes("files.plugin", "one.txt"); return errStr },
 			wantPhrase: "files.read",
 		},
 		{

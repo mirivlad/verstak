@@ -437,6 +437,8 @@ contributions summary.
 - `files.list(relativeDir)` — list directory using a vault-relative path.
 - `files.metadata(relativePath)` — returns file/folder/symlink metadata.
 - `files.readText(relativePath)` — reads a UTF-8 regular file, with a size limit.
+- `files.readBytes(relativePath)` — reads a regular file up to 8 MB and returns
+  `{ relativePath, size, mimeHint, dataBase64 }` for bounded binary preview use.
 - `files.writeText(relativePath, content, options)` — atomically writes text via
   temp-file-and-rename. `options.createIfMissing` and `options.overwrite`
   control conflicts.
@@ -464,8 +466,9 @@ contributions summary.
 - `files.metadata` may report a final symlink as `type: "symlink"`, but
   `files.list` through a symlink directory and all read/write/move/trash
   operations through symlinks are forbidden in Milestone 6a.
-- Files API is text-only for read/write in Milestone 6a. `readText` is limited
-  to UTF-8 regular files up to 2 MB. Binary streaming is deferred.
+- Files API writes are text-only. `readText` is limited to UTF-8 regular files
+  up to 2 MB. `readBytes` is a bounded read-only byte contract up to 8 MB;
+  write streaming is deferred.
 - Live watcher refresh is active while Verstak is running and a vault is open.
   It performs an initial no-event snapshot, then publishes `file.changed` for
   external creates, updates, and deletes outside `.verstak/`. It does not keep a
@@ -540,6 +543,7 @@ bundled runtime. Это реальный runtime contract для cooperative bun
 | `api.files.list(relativeDir)` | ✅ Работает | Список vault-relative директории, `.verstak` скрыта |
 | `api.files.metadata(relativePath)` | ✅ Работает | Metadata для файла/папки/symlink без чтения содержимого |
 | `api.files.readText(relativePath)` | ✅ Работает | Читает UTF-8 regular file до 2 MB |
+| `api.files.readBytes(relativePath)` | ✅ Работает | Читает regular file до 8 MB как base64 payload |
 | `api.files.writeText(relativePath, content, options)` | ✅ Работает | Atomic text write с явным create/overwrite policy |
 | `api.files.createFolder(relativePath)` | ✅ Работает | Создаёт vault-relative folder |
 | `api.files.move(from, to, options)` | ✅ Работает | Move file/folder с conflict и path-policy checks |

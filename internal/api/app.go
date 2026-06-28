@@ -876,6 +876,21 @@ func (a *App) ReadVaultTextFile(pluginID, relativePath string) (string, string) 
 	return text, ""
 }
 
+// ReadVaultFileBytes reads a bounded regular file as base64 for a plugin with files.read.
+func (a *App) ReadVaultFileBytes(pluginID, relativePath string) (corefiles.FileBytes, string) {
+	if _, err := a.requirePluginAccess(pluginID, "files.read"); err != nil {
+		return corefiles.FileBytes{}, err.Error()
+	}
+	if a.files == nil {
+		return corefiles.FileBytes{}, "files service not initialized"
+	}
+	data, err := a.files.ReadVaultFileBytes(relativePath)
+	if err != nil {
+		return corefiles.FileBytes{}, err.Error()
+	}
+	return data, ""
+}
+
 // WriteVaultTextFile atomically writes a UTF-8 text file for a plugin with files.write.
 func (a *App) WriteVaultTextFile(pluginID, relativePath string, content string, options corefiles.WriteOptions) string {
 	if _, err := a.requirePluginAccess(pluginID, "files.write"); err != nil {

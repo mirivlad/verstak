@@ -1,6 +1,7 @@
 package files
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io/fs"
@@ -146,6 +147,42 @@ func (s *Service) ReadVaultTextFile(relativePath string) (string, error) {
 		return "", fmt.Errorf("not-text-file: %s", rel)
 	}
 	return string(data), nil
+}
+
+func (s *Service) ReadVaultFileBytes(relativePath string) (FileBytes, error) {
+	root, rel, full, err := s.resolveFile(relativePath)
+	if err != nil {
+		return FileBytes{}, err
+	}
+	if err := rejectSymlinkPath(root, rel, true); err != nil {
+		return FileBytes{}, err
+	}
+	info, err := os.Lstat(full)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return FileBytes{}, fmt.Errorf("not-found: %s", rel)
+		}
+		return FileBytes{}, err
+	}
+	if info.Mode()&os.ModeSymlink != 0 {
+		return FileBytes{}, fmt.Errorf("symlink-not-allowed: %s", rel)
+	}
+	if !info.Mode().IsRegular() {
+		return FileBytes{}, fmt.Errorf("not-regular-file: %s", rel)
+	}
+	if info.Size() > MaxBinaryReadBytes {
+		return FileBytes{}, fmt.Errorf("file-too-large: %s", rel)
+	}
+	data, err := os.ReadFile(full)
+	if err != nil {
+		return FileBytes{}, err
+	}
+	return FileBytes{
+		RelativePath: rel,
+		Size:         int64(len(data)),
+		MimeHint:     mime.TypeByExtension(filepath.Ext(info.Name())),
+		DataBase64:   base64.StdEncoding.EncodeToString(data),
+	}, nil
 }
 
 func (s *Service) WriteVaultTextFile(relativePath string, content string, options WriteOptions) error {

@@ -87,6 +87,9 @@ func TestPathPolicyRejectsUnsafeOperations(t *testing.T) {
 			if _, err := s.ReadVaultTextFile(input); err == nil {
 				t.Fatal("read: expected error")
 			}
+			if _, err := s.ReadVaultFileBytes(input); err == nil {
+				t.Fatal("read bytes: expected error")
+			}
 			if err := s.WriteVaultTextFile(input, "x", WriteOptions{CreateIfMissing: true}); err == nil {
 				t.Fatal("write: expected error")
 			}
@@ -134,6 +137,47 @@ func TestReadVaultTextFileRules(t *testing.T) {
 	}
 	if _, err := s.ReadVaultTextFile("binary.bin"); err == nil || !strings.Contains(err.Error(), "not-text-file") {
 		t.Fatalf("read binary error = %v, want not-text-file", err)
+	}
+}
+
+func TestReadVaultFileBytesRules(t *testing.T) {
+	s, root := newTestService(t)
+	imageBytes := []byte{0x89, 0x50, 0x4e, 0x47}
+	if err := os.WriteFile(filepath.Join(root, "image.png"), imageBytes, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(filepath.Join(root, "Folder"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "huge.bin"), []byte(strings.Repeat("a", int(MaxBinaryReadBytes)+1)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := s.ReadVaultFileBytes("image.png")
+	if err != nil {
+		t.Fatalf("ReadVaultFileBytes image: %v", err)
+	}
+	if result.RelativePath != "image.png" {
+		t.Fatalf("relative path = %q, want image.png", result.RelativePath)
+	}
+	if result.Size != int64(len(imageBytes)) {
+		t.Fatalf("size = %d, want %d", result.Size, len(imageBytes))
+	}
+	if result.MimeHint != "image/png" {
+		t.Fatalf("mime hint = %q, want image/png", result.MimeHint)
+	}
+	if result.DataBase64 != "iVBORw==" {
+		t.Fatalf("dataBase64 = %q, want iVBORw==", result.DataBase64)
+	}
+
+	if _, err := s.ReadVaultFileBytes("Folder"); err == nil || !strings.Contains(err.Error(), "not-regular-file") {
+		t.Fatalf("read folder error = %v, want not-regular-file", err)
+	}
+	if _, err := s.ReadVaultFileBytes("missing.png"); err == nil || !strings.Contains(err.Error(), "not-found") {
+		t.Fatalf("read missing error = %v, want not-found", err)
+	}
+	if _, err := s.ReadVaultFileBytes("huge.bin"); err == nil || !strings.Contains(err.Error(), "file-too-large") {
+		t.Fatalf("read huge error = %v, want file-too-large", err)
 	}
 }
 

@@ -190,6 +190,10 @@ export function ReadPluginSettings(arg1) {
   return window['go']['api']['App']['ReadPluginSettings'](arg1);
 }
 
+export function ReadVaultFileBytes(arg1, arg2) {
+  return window['go']['api']['App']['ReadVaultFileBytes'](arg1, arg2);
+}
+
 export function ReadVaultTextFile(arg1, arg2) {
   return window['go']['api']['App']['ReadVaultTextFile'](arg1, arg2);
 }
@@ -202,16 +206,16 @@ export function ReloadPlugins() {
   return window['go']['api']['App']['ReloadPlugins']();
 }
 
-export function RestoreVaultTrash(arg1, arg2, arg3) {
-  return window['go']['api']['App']['RestoreVaultTrash'](arg1, arg2, arg3);
-}
-
 export function RenameWorkspace(arg1, arg2) {
   return window['go']['api']['App']['RenameWorkspace'](arg1, arg2);
 }
 
 export function RenameWorkspaceNode(arg1, arg2) {
   return window['go']['api']['App']['RenameWorkspaceNode'](arg1, arg2);
+}
+
+export function RestoreVaultTrash(arg1, arg2, arg3) {
+  return window['go']['api']['App']['RestoreVaultTrash'](arg1, arg2, arg3);
 }
 
 export function SelectDirectory() {

@@ -369,6 +369,24 @@ export namespace capability {
 
 export namespace files {
 	
+	export class FileBytes {
+	    relativePath: string;
+	    size: number;
+	    mimeHint: string;
+	    dataBase64: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new FileBytes(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.relativePath = source["relativePath"];
+	        this.size = source["size"];
+	        this.mimeHint = source["mimeHint"];
+	        this.dataBase64 = source["dataBase64"];
+	    }
+	}
 	export class FileEntry {
 	    name: string;
 	    relativePath: string;

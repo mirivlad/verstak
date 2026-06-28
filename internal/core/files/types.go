@@ -1,6 +1,7 @@
 package files
 
 const MaxTextFileBytes int64 = 2 * 1024 * 1024
+const MaxBinaryReadBytes int64 = 8 * 1024 * 1024
 
 type FileType string
 
@@ -37,6 +38,13 @@ type FileMetadata struct {
 	IsReserved   bool     `json:"isReserved"`
 	CanRead      bool     `json:"canRead"`
 	CanWrite     bool     `json:"canWrite"`
+}
+
+type FileBytes struct {
+	RelativePath string `json:"relativePath"`
+	Size         int64  `json:"size"`
+	MimeHint     string `json:"mimeHint"`
+	DataBase64   string `json:"dataBase64"`
 }
 
 type ExternalOpenTarget struct {
