@@ -474,6 +474,19 @@ contributions summary.
   external creates, updates, and deletes outside `.verstak/`. It does not keep a
   persistent snapshot or report what changed while Verstak was closed.
 
+`sync`
+
+- `sync.now()` pushes local operations, pulls remote operations, and returns
+  `{ pushed, pulled, serverSequence, conflicts?, applyErrors? }`.
+- `conflicts` is an array of server-reported sync conflicts. Conflict objects
+  may include `op_id`, `entity_type`, `entity_id`, `reason`, and additional
+  server fields. The Sync plugin must show conflict details instead of only a
+  count, and it must not silently resolve or overwrite local data.
+- `applyErrors` lists local apply failures for pulled operations. These are
+  user-visible warnings and do not imply that sync was fully successful.
+- Transport push/pull uses bounded retry/backoff for transient HTTP/network
+  failures. Client/auth errors are not retried.
+
 `dispose`
 
 - `dispose()` вызывается host'ом при cleanup. Plugin code обычно не вызывает его
