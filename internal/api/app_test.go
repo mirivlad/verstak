@@ -1645,6 +1645,55 @@ func TestPluginSyncBridgeRequiresDeclaredPermissions(t *testing.T) {
 	}
 }
 
+func TestPluginSyncStatusReportsPersistedError(t *testing.T) {
+	app := newBridgeTestApp(t)
+	app.plugins = append(app.plugins,
+		plugin.Plugin{
+			Manifest: plugin.Manifest{
+				ID:          "sync.local",
+				Name:        "Sync Local",
+				Version:     "1.0.0",
+				Provides:    []string{"sync/local/v1"},
+				Permissions: []string{"sync.participate"},
+			},
+			Status:  plugin.StatusLoaded,
+			Enabled: true,
+		},
+	)
+	app.syncSvc = syncsvc.NewService(app.vaultPath(), "local-device")
+	app.appSettings = appsettings.NewManager(filepath.Join(t.TempDir(), "config.json"))
+	if err := app.appSettings.Load(); err != nil {
+		t.Fatalf("settings Load: %v", err)
+	}
+	if err := app.syncSvc.SetState("https://sync.example.test", ""); err != nil {
+		t.Fatalf("SetState: %v", err)
+	}
+	cfg := app.appSettings.Get()
+	cfg.Sync.Enabled = true
+	cfg.Sync.ServerURL = "https://sync.example.test"
+	cfg.Sync.DeviceID = "device-1"
+	cfg.Sync.LastStatus = "error"
+	cfg.Sync.LastError = "push: server unavailable"
+	if err := app.appSettings.UpdateSync(cfg.Sync); err != nil {
+		t.Fatalf("settings UpdateSync: %v", err)
+	}
+	if err := syncsvc.SaveDeviceToken(app.vaultPath(), "secret-token"); err != nil {
+		t.Fatalf("SaveDeviceToken: %v", err)
+	}
+
+	status, errStr := app.PluginSyncStatus("sync.local")
+	if errStr != "" {
+		t.Fatalf("PluginSyncStatus: %s", errStr)
+	}
+	if status.StatusLabel != "error" || status.LastError != "push: server unavailable" {
+		t.Fatalf("status = %#v, want persisted sync error", status)
+	}
+	cfg = app.appSettings.Get()
+	if cfg.Sync.LastStatus != "error" || cfg.Sync.LastError != "push: server unavailable" {
+		t.Fatalf("persisted sync settings = %#v, want error preserved", cfg.Sync)
+	}
+}
+
 func TestPluginBridgeCapabilitiesCommandsAndEventsAreChecked(t *testing.T) {
 	app := newBridgeTestApp(t)
 

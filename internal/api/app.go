@@ -1944,6 +1944,8 @@ func (a *App) syncStatus() (*SyncStatusDTO, error) {
 	switch {
 	case dto.Revoked:
 		dto.StatusLabel = "revoked"
+	case dto.LastError != "":
+		dto.StatusLabel = "error"
 	case dto.Connected:
 		dto.StatusLabel = "connected"
 	case dto.Configured:
@@ -2002,6 +2004,7 @@ func (a *App) syncConfigure(serverURL, username, password string) error {
 	cfg.Sync.DeviceID = deviceID
 	cfg.Sync.DeviceName = hostname
 	cfg.Sync.LastStatus = "connected"
+	cfg.Sync.LastError = ""
 	_ = a.appSettings.UpdateSync(cfg.Sync)
 
 	return nil
