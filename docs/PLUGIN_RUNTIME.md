@@ -441,6 +441,10 @@ contributions summary.
   folder into itself and conflicts unless `options.overwrite` is true.
 - `files.trash(relativePath)` — moves a file/folder into internal
   `.verstak/trash/files/<trashId>/...` and returns trash metadata.
+- `files.listTrash()` — returns internal file trash metadata, newest first.
+- `files.restoreTrash(trashId, options)` — restores a file/folder from internal
+  trash to its original vault-relative path, or to `options.targetPath`.
+  Conflicts are rejected unless `options.overwrite` is true.
 - `files.openExternal(relativePath)` — opens a vault-relative file/folder in
   the OS default application.
 - `files.showInFolder(relativePath)` — reveals a vault-relative file/folder in
@@ -457,8 +461,8 @@ contributions summary.
   `files.list` through a symlink directory and all read/write/move/trash
   operations through symlinks are forbidden in Milestone 6a.
 - Files API is text-only for read/write in Milestone 6a. `readText` is limited
-  to UTF-8 regular files up to 2 MB. Binary streaming, watcher, restore,
-  external editor integration, and Files UI plugin are deferred.
+  to UTF-8 regular files up to 2 MB. Binary streaming and watcher support are
+  deferred.
 
 `dispose`
 
@@ -533,6 +537,8 @@ bundled runtime. Это реальный runtime contract для cooperative bun
 | `api.files.createFolder(relativePath)` | ✅ Работает | Создаёт vault-relative folder |
 | `api.files.move(from, to, options)` | ✅ Работает | Move file/folder с conflict и path-policy checks |
 | `api.files.trash(relativePath)` | ✅ Работает | Перемещает в internal trash, permanent delete нет |
+| `api.files.listTrash()` | ✅ Работает | Возвращает metadata internal file trash |
+| `api.files.restoreTrash(trashId, options)` | ✅ Работает | Восстанавливает из internal trash, conflict-safe по умолчанию |
 | `api.files.openExternal(relativePath)` | ✅ Работает | Открывает vault file/folder во внешнем приложении, требует `files.openExternal` |
 | `api.files.showInFolder(relativePath)` | ✅ Работает | Показывает vault file/folder в системном файловом менеджере, требует `files.openExternal` |
 | `api.workbench.openResource(request)` | ✅ Работает | Routes vault resources to `openProviders` |
