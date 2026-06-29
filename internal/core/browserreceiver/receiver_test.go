@@ -85,6 +85,69 @@ func TestReceiverAcceptsSelectionCaptureAndPublishesEvent(t *testing.T) {
 	}
 }
 
+func TestReceiverAcceptsFileCaptureAndPublishesEvent(t *testing.T) {
+	bus := events.NewBus()
+	received := make(chan events.Event, 1)
+	bus.Subscribe("browser.capture.file", func(event events.Event) {
+		received <- event
+	})
+
+	receiver := New(bus)
+	body := `{
+		"schemaVersion": 1,
+		"captureId": "capture-file",
+		"capturedAt": "2026-06-29T02:00:00.000Z",
+		"source": "verstak-browser-extension",
+		"kind": "file",
+		"page": {
+			"url": "https://example.com/files",
+			"title": "Example Files",
+			"domain": "example.com"
+		},
+		"file": {
+			"name": "notes.txt",
+			"mime": "text/plain",
+			"size": 11,
+			"text": "hello file"
+		},
+		"browser": {
+			"name": "Firefox"
+		}
+	}`
+
+	req := httptest.NewRequest(http.MethodPost, "/api/browser-inbox/v1/captures", bytes.NewBufferString(body))
+	rec := httptest.NewRecorder()
+
+	receiver.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusAccepted {
+		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusAccepted, rec.Body.String())
+	}
+	event := <-received
+	if event.Name != "browser.capture.file" {
+		t.Fatalf("event name = %q, want browser.capture.file", event.Name)
+	}
+	payload, ok := event.Payload.(map[string]interface{})
+	if !ok {
+		t.Fatalf("event payload type = %T, want map[string]interface{}", event.Payload)
+	}
+	if payload["kind"] != "file" {
+		t.Fatalf("payload kind = %v, want file", payload["kind"])
+	}
+	if payload["fileName"] != "notes.txt" {
+		t.Fatalf("payload fileName = %v, want notes.txt", payload["fileName"])
+	}
+	if payload["fileMime"] != "text/plain" {
+		t.Fatalf("payload fileMime = %v, want text/plain", payload["fileMime"])
+	}
+	if payload["fileSize"] != int64(11) {
+		t.Fatalf("payload fileSize = %v, want 11", payload["fileSize"])
+	}
+	if payload["fileText"] != "hello file" {
+		t.Fatalf("payload fileText = %v, want hello file", payload["fileText"])
+	}
+}
+
 func TestReceiverAnnotatesCaptureWithCurrentWorkspace(t *testing.T) {
 	bus := events.NewBus()
 	received := make(chan events.Event, 1)

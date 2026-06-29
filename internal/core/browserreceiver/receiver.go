@@ -47,6 +47,7 @@ type CapturePayload struct {
 	Page          CapturePage       `json:"page"`
 	Selection     *CaptureSelection `json:"selection,omitempty"`
 	Link          *CaptureLink      `json:"link,omitempty"`
+	File          *CaptureFile      `json:"file,omitempty"`
 	Browser       *CaptureBrowser   `json:"browser,omitempty"`
 	Context       interface{}       `json:"context,omitempty"`
 }
@@ -63,6 +64,13 @@ type CaptureSelection struct {
 
 type CaptureLink struct {
 	URL  string `json:"url"`
+	Text string `json:"text"`
+}
+
+type CaptureFile struct {
+	Name string `json:"name"`
+	Mime string `json:"mime"`
+	Size int64  `json:"size"`
 	Text string `json:"text"`
 }
 
@@ -209,7 +217,7 @@ func (p CapturePayload) Validate() error {
 	if strings.TrimSpace(p.CapturedAt) == "" {
 		return fmt.Errorf("capturedAt is required")
 	}
-	if p.Kind != "page" && p.Kind != "selection" && p.Kind != "link" {
+	if p.Kind != "page" && p.Kind != "selection" && p.Kind != "link" && p.Kind != "file" {
 		return fmt.Errorf("unsupported kind")
 	}
 	if strings.TrimSpace(p.Page.URL) == "" {
@@ -220,6 +228,12 @@ func (p CapturePayload) Validate() error {
 	}
 	if p.Kind == "link" && (p.Link == nil || strings.TrimSpace(p.Link.URL) == "") {
 		return fmt.Errorf("link.url is required")
+	}
+	if p.Kind == "file" && (p.File == nil || strings.TrimSpace(p.File.Name) == "") {
+		return fmt.Errorf("file.name is required")
+	}
+	if p.Kind == "file" && (p.File == nil || p.File.Text == "") {
+		return fmt.Errorf("file.text is required")
 	}
 	return nil
 }
@@ -250,6 +264,11 @@ func (p CapturePayload) EventPayload() map[string]interface{} {
 		result["url"] = linkURL
 		result["title"] = strings.TrimSpace(p.Link.Text)
 		result["domain"] = captureDomain(linkURL, "")
+	case "file":
+		result["fileName"] = strings.TrimSpace(p.File.Name)
+		result["fileMime"] = strings.TrimSpace(p.File.Mime)
+		result["fileSize"] = p.File.Size
+		result["fileText"] = p.File.Text
 	}
 	return result
 }
