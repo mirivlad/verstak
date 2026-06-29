@@ -174,6 +174,30 @@ export function PluginSyncTestConnection(arg1, arg2, arg3, arg4) {
   return window['go']['api']['App']['PluginSyncTestConnection'](arg1, arg2, arg3, arg4);
 }
 
+export function PluginSecretsCopyLink(arg1, arg2) {
+  return window['go']['api']['App']['PluginSecretsCopyLink'](arg1, arg2);
+}
+
+export function PluginSecretsList(arg1) {
+  return window['go']['api']['App']['PluginSecretsList'](arg1);
+}
+
+export function PluginSecretsRead(arg1, arg2) {
+  return window['go']['api']['App']['PluginSecretsRead'](arg1, arg2);
+}
+
+export function PluginSecretsStatus(arg1) {
+  return window['go']['api']['App']['PluginSecretsStatus'](arg1);
+}
+
+export function PluginSecretsUnlock(arg1, arg2) {
+  return window['go']['api']['App']['PluginSecretsUnlock'](arg1, arg2);
+}
+
+export function PluginSecretsWrite(arg1, arg2) {
+  return window['go']['api']['App']['PluginSecretsWrite'](arg1, arg2);
+}
+
 export function PublishPluginEvent(arg1, arg2, arg3) {
   return window['go']['api']['App']['PublishPluginEvent'](arg1, arg2, arg3);
 }

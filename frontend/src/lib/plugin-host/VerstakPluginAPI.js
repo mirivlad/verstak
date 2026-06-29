@@ -257,6 +257,53 @@ export function createPluginAPI(pluginId) {
       }
     },
 
+    secrets: {
+      status: function() {
+        assertActive('secrets.status');
+        return callBackend(pluginId, 'secrets.status', function() {
+          return App.PluginSecretsStatus(pluginId);
+        });
+      },
+      unlock: function(masterPassword) {
+        assertActive('secrets.unlock');
+        return callBackendErrorString(pluginId, 'secrets.unlock', function() {
+          return App.PluginSecretsUnlock(pluginId, String(masterPassword == null ? '' : masterPassword));
+        });
+      },
+      list: function() {
+        assertActive('secrets.list');
+        return callBackend(pluginId, 'secrets.list', function() {
+          return App.PluginSecretsList(pluginId);
+        }).then(function(records) {
+          return Array.isArray(records) ? records : [];
+        });
+      },
+      read: function(secretId) {
+        assertActive('secrets.read(' + secretId + ')');
+        if (!secretId) {
+          throw new Error('secrets.read requires a secret id');
+        }
+        return callBackend(pluginId, 'secrets.read(' + secretId + ')', function() {
+          return App.PluginSecretsRead(pluginId, secretId);
+        });
+      },
+      write: function(record) {
+        assertActive('secrets.write');
+        return callBackend(pluginId, 'secrets.write', function() {
+          return App.PluginSecretsWrite(pluginId, record || {});
+        });
+      },
+      copyLink: function(secretId) {
+        assertActive('secrets.copyLink(' + secretId + ')');
+        if (!secretId) {
+          throw new Error('secrets.copyLink requires a secret id');
+        }
+        return callBackend(pluginId, 'secrets.copyLink(' + secretId + ')', function() {
+          return App.PluginSecretsCopyLink(pluginId, secretId);
+        });
+      }
+    },
+
     files: {
       list: function(relativeDir) {
         assertActive('files.list');

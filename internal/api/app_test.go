@@ -1432,6 +1432,17 @@ func newBridgeTestApp(t *testing.T) *App {
 				Status:  plugin.StatusDisabled,
 				Enabled: false,
 			},
+			{
+				Manifest: plugin.Manifest{
+					ID:          "secrets.plugin",
+					Name:        "Secrets Plugin",
+					Version:     "1.0.0",
+					Provides:    []string{"secret-store", "secrets.read-ui", "secrets.write-ui"},
+					Permissions: []string{"secrets.read", "secrets.write", "workbench.open"},
+				},
+				Status:  plugin.StatusLoaded,
+				Enabled: true,
+			},
 		},
 	}
 }
@@ -1604,6 +1615,100 @@ func TestWorkbenchDisabledPluginProviderExcluded(t *testing.T) {
 	}
 	if result.ProviderID == "disabled.markdown" {
 		t.Fatal("disabled plugin provider should be excluded from selection")
+	}
+}
+
+func TestPluginSecretsRequirePermissionsAndUnlock(t *testing.T) {
+	app := newBridgeTestApp(t)
+
+	status, errStr := app.PluginSecretsStatus("secrets.plugin")
+	if errStr != "" {
+		t.Fatalf("PluginSecretsStatus: %s", errStr)
+	}
+	if status["unlocked"] == true {
+		t.Fatalf("new secret session should be locked: %+v", status)
+	}
+
+	if errStr := app.PluginSecretsUnlock("no.storage", "master password"); !strings.Contains(errStr, "secrets.read") {
+		t.Fatalf("PluginSecretsUnlock err = %q, want secrets.read permission error", errStr)
+	}
+	if _, errStr := app.PluginSecretsList("secrets.plugin"); !strings.Contains(errStr, "locked") {
+		t.Fatalf("PluginSecretsList before unlock err = %q, want locked", errStr)
+	}
+
+	if errStr := app.PluginSecretsUnlock("secrets.plugin", "master password"); errStr != "" {
+		t.Fatalf("PluginSecretsUnlock: %s", errStr)
+	}
+	status, errStr = app.PluginSecretsStatus("secrets.plugin")
+	if errStr != "" {
+		t.Fatalf("PluginSecretsStatus after unlock: %s", errStr)
+	}
+	if status["unlocked"] != true {
+		t.Fatalf("secret session not unlocked: %+v", status)
+	}
+
+	writeResult, errStr := app.PluginSecretsWrite("secrets.plugin", map[string]interface{}{
+		"id":       "client-a.database",
+		"title":    "Client A Database",
+		"value":    "workspace-secret-value",
+		"username": "app",
+		"scope": map[string]interface{}{
+			"kind":              "workspace",
+			"workspaceRootPath": "ClientA",
+		},
+	})
+	if errStr != "" {
+		t.Fatalf("PluginSecretsWrite: %s", errStr)
+	}
+	if writeResult["id"] != "client-a.database" || writeResult["value"] != nil {
+		t.Fatalf("write result = %+v", writeResult)
+	}
+
+	list, errStr := app.PluginSecretsList("secrets.plugin")
+	if errStr != "" {
+		t.Fatalf("PluginSecretsList: %s", errStr)
+	}
+	if len(list) != 1 {
+		t.Fatalf("PluginSecretsList len = %d, want 1: %+v", len(list), list)
+	}
+	if list[0]["value"] != nil {
+		t.Fatalf("PluginSecretsList leaked value: %+v", list[0])
+	}
+	scope, _ := list[0]["scope"].(map[string]interface{})
+	if scope["kind"] != "workspace" || scope["workspaceRootPath"] != "ClientA" {
+		t.Fatalf("list scope = %+v", scope)
+	}
+
+	readResult, errStr := app.PluginSecretsRead("secrets.plugin", "client-a.database")
+	if errStr != "" {
+		t.Fatalf("PluginSecretsRead: %s", errStr)
+	}
+	if readResult["value"] != "workspace-secret-value" {
+		t.Fatalf("read result = %+v", readResult)
+	}
+
+	link, errStr := app.PluginSecretsCopyLink("secrets.plugin", "client-a.database")
+	if errStr != "" {
+		t.Fatalf("PluginSecretsCopyLink: %s", errStr)
+	}
+	if link != "[Client A Database](verstak-secret://client-a.database)" {
+		t.Fatalf("link = %q", link)
+	}
+}
+
+func TestPluginSecretsRejectWrongMasterPasswordAcrossSessions(t *testing.T) {
+	app := newBridgeTestApp(t)
+	if errStr := app.PluginSecretsUnlock("secrets.plugin", "master password"); errStr != "" {
+		t.Fatalf("PluginSecretsUnlock first: %s", errStr)
+	}
+
+	next := newBridgeTestApp(t)
+	next.vault = app.vault
+	if errStr := next.PluginSecretsUnlock("secrets.plugin", "wrong password"); !strings.Contains(errStr, "invalid master password") {
+		t.Fatalf("wrong unlock err = %q, want invalid master password", errStr)
+	}
+	if errStr := next.PluginSecretsUnlock("secrets.plugin", "master password"); errStr != "" {
+		t.Fatalf("PluginSecretsUnlock correct: %s", errStr)
 	}
 }
 
