@@ -427,6 +427,26 @@ func TestSelectProviderKindMismatch(t *testing.T) {
 	}
 }
 
+func TestOpenResourceRoutesSecretResources(t *testing.T) {
+	r := NewRouter(Preferences{})
+	result, err := r.OpenResource(OpenResourceRequest{
+		Kind: "secret",
+		Path: "client-a.db",
+		Mode: "view",
+	}, []contribution.ContributionOpenProvider{
+		provider("verstak.secrets", "verstak.secrets.secret", 100, "SecretsView", plugin.OpenProviderSupport{
+			Kind:  "secret",
+			Modes: []string{"view"},
+		}),
+	})
+	if err != nil {
+		t.Fatalf("OpenResource: %v", err)
+	}
+	if result.Status != "opened" || result.ProviderPluginID != "verstak.secrets" || result.ProviderComponent != "SecretsView" {
+		t.Fatalf("secret open result = %+v", result)
+	}
+}
+
 func TestDetermineContextName(t *testing.T) {
 	tests := []struct {
 		name    string
