@@ -68,10 +68,11 @@ type CaptureLink struct {
 }
 
 type CaptureFile struct {
-	Name string `json:"name"`
-	Mime string `json:"mime"`
-	Size int64  `json:"size"`
-	Text string `json:"text"`
+	Name       string `json:"name"`
+	Mime       string `json:"mime"`
+	Size       int64  `json:"size"`
+	Text       string `json:"text"`
+	DataBase64 string `json:"dataBase64"`
 }
 
 type CaptureBrowser struct {
@@ -232,8 +233,8 @@ func (p CapturePayload) Validate() error {
 	if p.Kind == "file" && (p.File == nil || strings.TrimSpace(p.File.Name) == "") {
 		return fmt.Errorf("file.name is required")
 	}
-	if p.Kind == "file" && (p.File == nil || p.File.Text == "") {
-		return fmt.Errorf("file.text is required")
+	if p.Kind == "file" && (p.File == nil || (p.File.Text == "" && strings.TrimSpace(p.File.DataBase64) == "")) {
+		return fmt.Errorf("file.text or file.dataBase64 is required")
 	}
 	return nil
 }
@@ -269,6 +270,7 @@ func (p CapturePayload) EventPayload() map[string]interface{} {
 		result["fileMime"] = strings.TrimSpace(p.File.Mime)
 		result["fileSize"] = p.File.Size
 		result["fileText"] = p.File.Text
+		result["fileDataBase64"] = strings.TrimSpace(p.File.DataBase64)
 	}
 	return result
 }

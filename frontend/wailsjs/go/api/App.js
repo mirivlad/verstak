@@ -285,3 +285,7 @@ export function WritePluginSettings(arg1, arg2) {
 export function WriteVaultTextFile(arg1, arg2, arg3, arg4) {
   return window['go']['api']['App']['WriteVaultTextFile'](arg1, arg2, arg3, arg4);
 }
+
+export function WriteVaultFileBytes(arg1, arg2, arg3, arg4) {
+  return window['go']['api']['App']['WriteVaultFileBytes'](arg1, arg2, arg3, arg4);
+}

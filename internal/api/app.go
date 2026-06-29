@@ -253,6 +253,8 @@ func (a *App) appendActivityEvent(pluginID string, activity map[string]interface
 
 func activityFromEvent(event events.Event) map[string]interface{} {
 	payload := eventPayloadMap(event.Payload)
+	delete(payload, "fileDataBase64")
+	delete(payload, "dataBase64")
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	occurredAt := firstPayloadText(payload, "occurredAt", "capturedAt")
 	if occurredAt == "" {
@@ -281,7 +283,11 @@ func activityFromEvent(event events.Event) map[string]interface{} {
 func eventPayloadMap(payload interface{}) map[string]interface{} {
 	switch value := payload.(type) {
 	case map[string]interface{}:
-		return value
+		result := make(map[string]interface{}, len(value))
+		for key, item := range value {
+			result[key] = item
+		}
+		return result
 	case map[string]string:
 		result := make(map[string]interface{}, len(value))
 		for key, item := range value {
@@ -913,6 +919,37 @@ func (a *App) WriteVaultTextFile(pluginID, relativePath string, content string, 
 	if err := a.recordFileSyncOp(syncsvc.EntityFile, relativePath, opType, map[string]string{
 		"path":    relativePath,
 		"content": content,
+	}); err != nil {
+		return err.Error()
+	}
+	a.publishFileActivity("file.changed", pluginID, relativePath, map[string]interface{}{
+		"operation": opType,
+	})
+	return ""
+}
+
+// WriteVaultFileBytes atomically writes a bounded base64 file for a plugin with files.write.
+func (a *App) WriteVaultFileBytes(pluginID, relativePath string, dataBase64 string, options corefiles.WriteOptions) string {
+	if _, err := a.requirePluginAccess(pluginID, "files.write"); err != nil {
+		return err.Error()
+	}
+	if a.files == nil {
+		return "files service not initialized"
+	}
+	opType := syncsvc.OpUpdate
+	if _, err := a.files.GetVaultFileMetadata(relativePath); err != nil {
+		if isSyncNotFound(err) {
+			opType = syncsvc.OpCreate
+		} else {
+			return err.Error()
+		}
+	}
+	if err := a.files.WriteVaultFileBytes(relativePath, dataBase64, options); err != nil {
+		return err.Error()
+	}
+	if err := a.recordFileSyncOp(syncsvc.EntityFile, relativePath, opType, map[string]string{
+		"path":       relativePath,
+		"dataBase64": dataBase64,
 	}); err != nil {
 		return err.Error()
 	}
@@ -2280,10 +2317,11 @@ func (a *App) applyRemoteOp(op syncsvc.Op) error {
 }
 
 type syncFilePayload struct {
-	Path     string `json:"path"`
-	Content  string `json:"content"`
-	FromPath string `json:"fromPath"`
-	ToPath   string `json:"toPath"`
+	Path       string  `json:"path"`
+	Content    string  `json:"content"`
+	DataBase64 *string `json:"dataBase64"`
+	FromPath   string  `json:"fromPath"`
+	ToPath     string  `json:"toPath"`
 }
 
 func parseSyncFilePayload(payloadJSON string) (syncFilePayload, error) {
@@ -2304,11 +2342,17 @@ func (a *App) applyRemoteFileOp(op syncsvc.Op, payload syncFilePayload) error {
 		if path == "" {
 			return fmt.Errorf("missing file path")
 		}
+		if payload.DataBase64 != nil {
+			return a.files.WriteVaultFileBytes(path, *payload.DataBase64, corefiles.WriteOptions{CreateIfMissing: true})
+		}
 		return a.files.WriteVaultTextFile(path, payload.Content, corefiles.WriteOptions{CreateIfMissing: true})
 	case syncsvc.OpUpdate:
 		path := syncPayloadPath(op, payload)
 		if path == "" {
 			return fmt.Errorf("missing file path")
+		}
+		if payload.DataBase64 != nil {
+			return a.files.WriteVaultFileBytes(path, *payload.DataBase64, corefiles.WriteOptions{CreateIfMissing: true, Overwrite: true})
 		}
 		return a.files.WriteVaultTextFile(path, payload.Content, corefiles.WriteOptions{CreateIfMissing: true, Overwrite: true})
 	case syncsvc.OpDelete:

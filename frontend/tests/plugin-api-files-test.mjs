@@ -19,6 +19,10 @@ globalThis.window = {
           calls.push({ method: 'RestoreVaultTrash', pluginId, trashId, options });
           return Promise.resolve(['Docs/restored.txt', '']);
         },
+        WriteVaultFileBytes: (pluginId, relativePath, dataBase64, options) => {
+          calls.push({ method: 'WriteVaultFileBytes', pluginId, relativePath, dataBase64, options });
+          return Promise.resolve('');
+        },
       },
     },
   },
@@ -40,20 +44,28 @@ if (!api.files || typeof api.files.restoreTrash !== 'function') {
 if (typeof api.files.readBytes !== 'function') {
   throw new Error('api.files.readBytes is missing');
 }
+if (typeof api.files.writeBytes !== 'function') {
+  throw new Error('api.files.writeBytes is missing');
+}
 
 const bytes = await api.files.readBytes('Docs/image.png');
 if (bytes.dataBase64 !== 'iVBORw==' || bytes.mimeHint !== 'image/png') {
   throw new Error(`unexpected readBytes result: ${JSON.stringify(bytes)}`);
 }
 
+await api.files.writeBytes('Docs/copy.png', 'iVBORw==', { createIfMissing: true });
+
 const restored = await api.files.restoreTrash('trash-1', { overwrite: true });
 if (restored !== 'Docs/restored.txt') {
   throw new Error(`unexpected restore result: ${JSON.stringify(restored)}`);
 }
-if (calls.length !== 2 || calls[0].method !== 'ReadVaultFileBytes' || calls[0].pluginId !== 'verstak.files' || calls[0].relativePath !== 'Docs/image.png') {
+if (calls.length !== 3 || calls[0].method !== 'ReadVaultFileBytes' || calls[0].pluginId !== 'verstak.files' || calls[0].relativePath !== 'Docs/image.png') {
   throw new Error(`unexpected ReadVaultFileBytes call: ${JSON.stringify(calls)}`);
 }
-if (calls[1].method !== 'RestoreVaultTrash' || calls[1].pluginId !== 'verstak.files' || calls[1].trashId !== 'trash-1' || calls[1].options.overwrite !== true) {
+if (calls[1].method !== 'WriteVaultFileBytes' || calls[1].pluginId !== 'verstak.files' || calls[1].relativePath !== 'Docs/copy.png' || calls[1].dataBase64 !== 'iVBORw==' || calls[1].options.createIfMissing !== true) {
+  throw new Error(`unexpected WriteVaultFileBytes call: ${JSON.stringify(calls)}`);
+}
+if (calls[2].method !== 'RestoreVaultTrash' || calls[2].pluginId !== 'verstak.files' || calls[2].trashId !== 'trash-1' || calls[2].options.overwrite !== true) {
   throw new Error(`unexpected RestoreVaultTrash call: ${JSON.stringify(calls)}`);
 }
 

@@ -186,6 +186,21 @@ func (s *Service) ReadVaultFileBytes(relativePath string) (FileBytes, error) {
 }
 
 func (s *Service) WriteVaultTextFile(relativePath string, content string, options WriteOptions) error {
+	return s.writeVaultFileData(relativePath, []byte(content), options)
+}
+
+func (s *Service) WriteVaultFileBytes(relativePath string, dataBase64 string, options WriteOptions) error {
+	data, err := base64.StdEncoding.DecodeString(dataBase64)
+	if err != nil {
+		return fmt.Errorf("invalid-base64: %w", err)
+	}
+	if int64(len(data)) > MaxBinaryReadBytes {
+		return fmt.Errorf("file-too-large: %s", relativePath)
+	}
+	return s.writeVaultFileData(relativePath, data, options)
+}
+
+func (s *Service) writeVaultFileData(relativePath string, data []byte, options WriteOptions) error {
 	root, rel, full, err := s.resolveFile(relativePath)
 	if err != nil {
 		return err
@@ -234,7 +249,7 @@ func (s *Service) WriteVaultTextFile(relativePath string, content string, option
 			_ = os.Remove(tmpName)
 		}
 	}()
-	if _, err := tmp.WriteString(content); err != nil {
+	if _, err := tmp.Write(data); err != nil {
 		_ = tmp.Close()
 		return err
 	}

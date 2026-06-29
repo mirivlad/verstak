@@ -288,6 +288,12 @@ export function createPluginAPI(pluginId) {
           return App.WriteVaultTextFile(pluginId, relativePath, String(content == null ? '' : content), options || {});
         });
       },
+      writeBytes: function(relativePath, dataBase64, options) {
+        assertActive('files.writeBytes(' + relativePath + ')');
+        return callBackendErrorString(pluginId, 'files.writeBytes(' + relativePath + ')', function() {
+          return App.WriteVaultFileBytes(pluginId, relativePath, String(dataBase64 == null ? '' : dataBase64), options || {});
+        });
+      },
       createFolder: function(relativePath) {
         assertActive('files.createFolder(' + relativePath + ')');
         return callBackendErrorString(pluginId, 'files.createFolder(' + relativePath + ')', function() {

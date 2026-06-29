@@ -370,6 +370,16 @@ func TestFilesBridgeReadWriteListMoveTrash(t *testing.T) {
 	if bytesResult.RelativePath != "Docs/image.png" || bytesResult.MimeHint != "image/png" || bytesResult.DataBase64 != "iVBORw==" {
 		t.Fatalf("bytes result = %+v", bytesResult)
 	}
+	if errStr := app.WriteVaultFileBytes("files.plugin", "Docs/from-api.bin", "AQID", corefiles.WriteOptions{CreateIfMissing: true}); errStr != "" {
+		t.Fatalf("WriteVaultFileBytes: %s", errStr)
+	}
+	writtenBytes, errStr := app.ReadVaultFileBytes("files.plugin", "Docs/from-api.bin")
+	if errStr != "" {
+		t.Fatalf("ReadVaultFileBytes written: %s", errStr)
+	}
+	if writtenBytes.DataBase64 != "AQID" || writtenBytes.Size != 3 {
+		t.Fatalf("written bytes result = %+v", writtenBytes)
+	}
 
 	entries, errStr := app.ListVaultFiles("files.plugin", "Docs")
 	if errStr != "" {
@@ -532,6 +542,30 @@ func TestActivityProviderRecordsFileChangedWithoutMountedView(t *testing.T) {
 	}
 }
 
+func TestActivityFromEventRedactsBinaryPayload(t *testing.T) {
+	activity := activityFromEvent(events.Event{
+		Name:      "browser.capture.file",
+		Timestamp: "2026-06-29T00:00:00Z",
+		Payload: map[string]interface{}{
+			"captureId":         "capture-binary",
+			"title":             "logo.png",
+			"workspaceRootPath": "Project",
+			"fileDataBase64":    "iVBORw==",
+			"fileText":          "preview",
+		},
+	})
+	payload, ok := activity["payload"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("payload = %#v, want map", activity["payload"])
+	}
+	if _, ok := payload["fileDataBase64"]; ok {
+		t.Fatalf("activity payload leaked fileDataBase64: %#v", payload)
+	}
+	if payload["fileText"] != "preview" {
+		t.Fatalf("activity payload fileText = %#v, want preview", payload["fileText"])
+	}
+}
+
 func TestFilesBridgeOpenExternalUsesVaultPathPolicyAndPermission(t *testing.T) {
 	app, root := newFilesTestApp(t, []string{"files.openExternal"})
 	filePath := filepath.Join(root, "Docs", "one.txt")
@@ -623,6 +657,14 @@ func TestFilesBridgePermissions(t *testing.T) {
 			perms: []string{"files.read", "files.delete"},
 			call: func(app *App) string {
 				return app.WriteVaultTextFile("files.plugin", "one.txt", "x", corefiles.WriteOptions{CreateIfMissing: true})
+			},
+			wantPhrase: "files.write",
+		},
+		{
+			name:  "write bytes requires write",
+			perms: []string{"files.read", "files.delete"},
+			call: func(app *App) string {
+				return app.WriteVaultFileBytes("files.plugin", "one.bin", "AQID", corefiles.WriteOptions{CreateIfMissing: true})
 			},
 			wantPhrase: "files.write",
 		},
@@ -752,6 +794,14 @@ func TestApplyRemoteFileOps(t *testing.T) {
 			PayloadJSON: `{"path":"Docs/one.txt","content":"updated"}`,
 		},
 		{
+			OpID:        "binary-create",
+			DeviceID:    "remote-device",
+			EntityType:  syncsvc.EntityFile,
+			EntityID:    "Docs/image.bin",
+			OpType:      syncsvc.OpCreate,
+			PayloadJSON: `{"path":"Docs/image.bin","dataBase64":"AQID"}`,
+		},
+		{
 			OpID:        "file-move",
 			DeviceID:    "remote-device",
 			EntityType:  syncsvc.EntityFile,
@@ -772,6 +822,13 @@ func TestApplyRemoteFileOps(t *testing.T) {
 	}
 	if text != "updated" {
 		t.Fatalf("content = %q, want updated", text)
+	}
+	binaryBytes, errStr := app.ReadVaultFileBytes("files.plugin", "Docs/image.bin")
+	if errStr != "" {
+		t.Fatalf("ReadVaultFileBytes binary: %s", errStr)
+	}
+	if binaryBytes.DataBase64 != "AQID" {
+		t.Fatalf("binary dataBase64 = %q, want AQID", binaryBytes.DataBase64)
 	}
 	if _, errStr := app.GetVaultFileMetadata("files.plugin", "Docs/one.txt"); !strings.Contains(errStr, "not-found") {
 		t.Fatalf("old path metadata err = %q, want not-found", errStr)
@@ -869,6 +926,9 @@ func TestFileBridgeRecordsSyncOps(t *testing.T) {
 	if errStr := app.WriteVaultTextFile("files.plugin", "Docs/one.txt", "updated", corefiles.WriteOptions{Overwrite: true}); errStr != "" {
 		t.Fatalf("WriteVaultTextFile update: %s", errStr)
 	}
+	if errStr := app.WriteVaultFileBytes("files.plugin", "Docs/image.bin", "AQID", corefiles.WriteOptions{CreateIfMissing: true}); errStr != "" {
+		t.Fatalf("WriteVaultFileBytes create: %s", errStr)
+	}
 	if errStr := app.MoveVaultPath("files.plugin", "Docs/one.txt", "Docs/two.txt", corefiles.MoveOptions{}); errStr != "" {
 		t.Fatalf("MoveVaultPath: %s", errStr)
 	}
@@ -880,8 +940,8 @@ func TestFileBridgeRecordsSyncOps(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetUnpushedOps: %v", err)
 	}
-	if len(ops) != 5 {
-		t.Fatalf("ops len = %d, want 5: %#v", len(ops), ops)
+	if len(ops) != 6 {
+		t.Fatalf("ops len = %d, want 6: %#v", len(ops), ops)
 	}
 
 	want := []struct {
@@ -893,6 +953,7 @@ func TestFileBridgeRecordsSyncOps(t *testing.T) {
 		{syncsvc.EntityFolder, "Docs", syncsvc.OpCreate, `"path":"Docs"`},
 		{syncsvc.EntityFile, "Docs/one.txt", syncsvc.OpCreate, `"content":"hello"`},
 		{syncsvc.EntityFile, "Docs/one.txt", syncsvc.OpUpdate, `"content":"updated"`},
+		{syncsvc.EntityFile, "Docs/image.bin", syncsvc.OpCreate, `"dataBase64":"AQID"`},
 		{syncsvc.EntityFile, "Docs/one.txt", syncsvc.OpMove, `"toPath":"Docs/two.txt"`},
 		{syncsvc.EntityFile, "Docs/two.txt", syncsvc.OpDelete, `"path":"Docs/two.txt"`},
 	}

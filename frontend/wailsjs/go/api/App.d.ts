@@ -149,3 +149,5 @@ export function WritePluginSetting(arg1:string,arg2:string,arg3:any):Promise<str
 export function WritePluginSettings(arg1:string,arg2:Record<string, any>):Promise<string>;
 
 export function WriteVaultTextFile(arg1:string,arg2:string,arg3:string,arg4:files.WriteOptions):Promise<string>;
+
+export function WriteVaultFileBytes(arg1:string,arg2:string,arg3:string,arg4:files.WriteOptions):Promise<string>;

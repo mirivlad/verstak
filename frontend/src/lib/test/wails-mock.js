@@ -1327,6 +1327,22 @@
       vaultFiles[norm.path] = { type: 'file', content: String(content == null ? '' : content), modifiedAt: new Date().toISOString() };
       return Promise.resolve('');
     },
+    WriteVaultFileBytes: function (pluginId, relativePath, dataBase64, options) {
+      var err = requirePluginPermission(pluginId, 'files.write');
+      if (err) return Promise.resolve(err);
+      var norm = normalizeVaultPath(relativePath, false);
+      if (norm.error) return Promise.resolve(norm.error);
+      options = options || {};
+      var existing = vaultFiles[norm.path];
+      if (existing && existing.type !== 'file') return Promise.resolve('not-regular-file: ' + norm.path);
+      if (existing && !options.overwrite) return Promise.resolve('conflict: ' + norm.path);
+      if (!existing && !options.createIfMissing) return Promise.resolve('not-found: ' + norm.path);
+      var parent = parentPath(norm.path);
+      if (!vaultFiles[parent] || vaultFiles[parent].type !== 'folder') return Promise.resolve('parent-not-found: ' + parent);
+      var content = typeof atob === 'function' ? atob(String(dataBase64 || '')) : '';
+      vaultFiles[norm.path] = { type: 'file', content: content, modifiedAt: new Date().toISOString() };
+      return Promise.resolve('');
+    },
     CreateVaultFolder: function (pluginId, relativePath) {
       var err = requirePluginPermission(pluginId, 'files.write');
       if (err) return Promise.resolve(err);

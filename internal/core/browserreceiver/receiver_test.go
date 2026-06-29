@@ -108,7 +108,8 @@ func TestReceiverAcceptsFileCaptureAndPublishesEvent(t *testing.T) {
 			"name": "notes.txt",
 			"mime": "text/plain",
 			"size": 11,
-			"text": "hello file"
+			"text": "hello file",
+			"dataBase64": "aGVsbG8gZmlsZQ=="
 		},
 		"browser": {
 			"name": "Firefox"
@@ -145,6 +146,9 @@ func TestReceiverAcceptsFileCaptureAndPublishesEvent(t *testing.T) {
 	}
 	if payload["fileText"] != "hello file" {
 		t.Fatalf("payload fileText = %v, want hello file", payload["fileText"])
+	}
+	if payload["fileDataBase64"] != "aGVsbG8gZmlsZQ==" {
+		t.Fatalf("payload fileDataBase64 = %v, want aGVsbG8gZmlsZQ==", payload["fileDataBase64"])
 	}
 }
 

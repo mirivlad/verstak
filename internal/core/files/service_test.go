@@ -1,6 +1,7 @@
 package files
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -218,6 +219,55 @@ func TestWriteVaultTextFileAtomicAndConflictBehavior(t *testing.T) {
 
 	if err := s.WriteVaultTextFile("", "root", WriteOptions{CreateIfMissing: true}); err == nil || !strings.Contains(err.Error(), "empty path") {
 		t.Fatalf("write root error = %v, want empty path", err)
+	}
+}
+
+func TestWriteVaultFileBytesAtomicAndConflictBehavior(t *testing.T) {
+	s, root := newTestService(t)
+
+	if err := s.WriteVaultFileBytes("Images/logo.png", "iVBORw==", WriteOptions{CreateIfMissing: true}); err == nil {
+		t.Fatal("write bytes should fail when parent folder is missing")
+	}
+	if err := s.CreateVaultFolder("Images"); err != nil {
+		t.Fatalf("CreateVaultFolder: %v", err)
+	}
+	if err := s.WriteVaultFileBytes("Images/logo.png", "iVBORw==", WriteOptions{CreateIfMissing: true}); err != nil {
+		t.Fatalf("write bytes create: %v", err)
+	}
+	data, err := os.ReadFile(filepath.Join(root, "Images", "logo.png"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(data) != string([]byte{0x89, 0x50, 0x4e, 0x47}) {
+		t.Fatalf("file bytes = %v", data)
+	}
+	if err := s.WriteVaultFileBytes("Images/logo.png", "AQID", WriteOptions{CreateIfMissing: true}); err == nil || !strings.Contains(err.Error(), "conflict") {
+		t.Fatalf("write bytes conflict error = %v, want conflict", err)
+	}
+	if err := s.WriteVaultFileBytes("Images/logo.png", "AQID", WriteOptions{Overwrite: true}); err != nil {
+		t.Fatalf("write bytes overwrite: %v", err)
+	}
+	data, err = os.ReadFile(filepath.Join(root, "Images", "logo.png"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(data) != string([]byte{0x01, 0x02, 0x03}) {
+		t.Fatalf("overwritten bytes = %v", data)
+	}
+
+	matches, err := filepath.Glob(filepath.Join(root, "Images", ".verstak-write-*"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(matches) != 0 {
+		t.Fatalf("atomic byte write left temp files: %v", matches)
+	}
+	if err := s.WriteVaultFileBytes("Images/bad.bin", "not-base64!", WriteOptions{CreateIfMissing: true}); err == nil || !strings.Contains(err.Error(), "invalid-base64") {
+		t.Fatalf("invalid base64 error = %v, want invalid-base64", err)
+	}
+	tooLarge := base64.StdEncoding.EncodeToString([]byte(strings.Repeat("a", int(MaxBinaryReadBytes)+1)))
+	if err := s.WriteVaultFileBytes("Images/huge.bin", tooLarge, WriteOptions{CreateIfMissing: true}); err == nil || !strings.Contains(err.Error(), "file-too-large") {
+		t.Fatalf("oversized bytes error = %v, want file-too-large", err)
 	}
 }
 
