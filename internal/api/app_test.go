@@ -1628,12 +1628,19 @@ func TestPluginSecretsRequirePermissionsAndUnlock(t *testing.T) {
 	if status["unlocked"] == true {
 		t.Fatalf("new secret session should be locked: %+v", status)
 	}
+	if status["initialized"] == true {
+		t.Fatalf("new secret session should not be initialized: %+v", status)
+	}
 
 	if errStr := app.PluginSecretsUnlock("no.storage", "master password"); !strings.Contains(errStr, "secrets.read") {
 		t.Fatalf("PluginSecretsUnlock err = %q, want secrets.read permission error", errStr)
 	}
 	if _, errStr := app.PluginSecretsList("secrets.plugin"); !strings.Contains(errStr, "locked") {
 		t.Fatalf("PluginSecretsList before unlock err = %q, want locked", errStr)
+	}
+
+	if errStr := app.PluginSecretsUnlock("secrets.plugin", "123123"); !strings.Contains(errStr, "at least 8 characters") {
+		t.Fatalf("weak PluginSecretsUnlock err = %q, want minimum length error", errStr)
 	}
 
 	if errStr := app.PluginSecretsUnlock("secrets.plugin", "master password"); errStr != "" {
@@ -1645,6 +1652,9 @@ func TestPluginSecretsRequirePermissionsAndUnlock(t *testing.T) {
 	}
 	if status["unlocked"] != true {
 		t.Fatalf("secret session not unlocked: %+v", status)
+	}
+	if status["initialized"] != true {
+		t.Fatalf("secret session not initialized: %+v", status)
 	}
 
 	writeResult, errStr := app.PluginSecretsWrite("secrets.plugin", map[string]interface{}{
@@ -1693,6 +1703,17 @@ func TestPluginSecretsRequirePermissionsAndUnlock(t *testing.T) {
 	}
 	if link != "[Client A Database](verstak-secret://client-a.database)" {
 		t.Fatalf("link = %q", link)
+	}
+
+	if errStr := app.PluginSecretsDelete("secrets.plugin", "client-a.database"); errStr != "" {
+		t.Fatalf("PluginSecretsDelete: %s", errStr)
+	}
+	list, errStr = app.PluginSecretsList("secrets.plugin")
+	if errStr != "" {
+		t.Fatalf("PluginSecretsList after delete: %s", errStr)
+	}
+	if len(list) != 0 {
+		t.Fatalf("PluginSecretsList after delete = %+v, want empty", list)
 	}
 }
 

@@ -146,6 +146,34 @@ export function OpenWorkbenchResource(arg1, arg2) {
   return window['go']['api']['App']['OpenWorkbenchResource'](arg1, arg2);
 }
 
+export function PluginSecretsCopyLink(arg1, arg2) {
+  return window['go']['api']['App']['PluginSecretsCopyLink'](arg1, arg2);
+}
+
+export function PluginSecretsDelete(arg1, arg2) {
+  return window['go']['api']['App']['PluginSecretsDelete'](arg1, arg2);
+}
+
+export function PluginSecretsList(arg1) {
+  return window['go']['api']['App']['PluginSecretsList'](arg1);
+}
+
+export function PluginSecretsRead(arg1, arg2) {
+  return window['go']['api']['App']['PluginSecretsRead'](arg1, arg2);
+}
+
+export function PluginSecretsStatus(arg1) {
+  return window['go']['api']['App']['PluginSecretsStatus'](arg1);
+}
+
+export function PluginSecretsUnlock(arg1, arg2) {
+  return window['go']['api']['App']['PluginSecretsUnlock'](arg1, arg2);
+}
+
+export function PluginSecretsWrite(arg1, arg2) {
+  return window['go']['api']['App']['PluginSecretsWrite'](arg1, arg2);
+}
+
 export function PluginSyncConfigure(arg1, arg2, arg3, arg4) {
   return window['go']['api']['App']['PluginSyncConfigure'](arg1, arg2, arg3, arg4);
 }
@@ -172,30 +200,6 @@ export function PluginSyncStatus(arg1) {
 
 export function PluginSyncTestConnection(arg1, arg2, arg3, arg4) {
   return window['go']['api']['App']['PluginSyncTestConnection'](arg1, arg2, arg3, arg4);
-}
-
-export function PluginSecretsCopyLink(arg1, arg2) {
-  return window['go']['api']['App']['PluginSecretsCopyLink'](arg1, arg2);
-}
-
-export function PluginSecretsList(arg1) {
-  return window['go']['api']['App']['PluginSecretsList'](arg1);
-}
-
-export function PluginSecretsRead(arg1, arg2) {
-  return window['go']['api']['App']['PluginSecretsRead'](arg1, arg2);
-}
-
-export function PluginSecretsStatus(arg1) {
-  return window['go']['api']['App']['PluginSecretsStatus'](arg1);
-}
-
-export function PluginSecretsUnlock(arg1, arg2) {
-  return window['go']['api']['App']['PluginSecretsUnlock'](arg1, arg2);
-}
-
-export function PluginSecretsWrite(arg1, arg2) {
-  return window['go']['api']['App']['PluginSecretsWrite'](arg1, arg2);
 }
 
 export function PublishPluginEvent(arg1, arg2, arg3) {
@@ -306,10 +310,10 @@ export function WritePluginSettings(arg1, arg2) {
   return window['go']['api']['App']['WritePluginSettings'](arg1, arg2);
 }
 
-export function WriteVaultTextFile(arg1, arg2, arg3, arg4) {
-  return window['go']['api']['App']['WriteVaultTextFile'](arg1, arg2, arg3, arg4);
-}
-
 export function WriteVaultFileBytes(arg1, arg2, arg3, arg4) {
   return window['go']['api']['App']['WriteVaultFileBytes'](arg1, arg2, arg3, arg4);
+}
+
+export function WriteVaultTextFile(arg1, arg2, arg3, arg4) {
+  return window['go']['api']['App']['WriteVaultTextFile'](arg1, arg2, arg3, arg4);
 }

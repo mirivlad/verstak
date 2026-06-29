@@ -1322,8 +1322,13 @@ func (a *App) PluginSecretsStatus(pluginID string) (map[string]interface{}, stri
 	if err != nil {
 		return nil, err.Error()
 	}
+	initialized, err := session.Initialized()
+	if err != nil {
+		return nil, err.Error()
+	}
 	return map[string]interface{}{
-		"unlocked": session.Unlocked(),
+		"initialized": initialized,
+		"unlocked":    session.Unlocked(),
 	}, ""
 }
 
@@ -1395,6 +1400,20 @@ func (a *App) PluginSecretsWrite(pluginID string, rawRecord map[string]interface
 		return nil, err.Error()
 	}
 	return secretRecordMap(written, false), ""
+}
+
+func (a *App) PluginSecretsDelete(pluginID, secretID string) string {
+	if err := a.requirePluginSecretsAccess(pluginID, true); err != nil {
+		return err.Error()
+	}
+	store, err := a.requireUnlockedSecretStore()
+	if err != nil {
+		return err.Error()
+	}
+	if err := store.Delete(secretID); err != nil {
+		return err.Error()
+	}
+	return ""
 }
 
 func (a *App) PluginSecretsCopyLink(pluginID, secretID string) (string, string) {

@@ -25,6 +25,7 @@ const (
 	masterPBKDF2Iterations  = 200000
 	masterVerifierPlaintext = "verstak-secret-store:v1"
 	masterMetadataVersion   = 1
+	minMasterPasswordLength = 8
 	recordsDirName          = "records"
 	masterMetadataFileName  = "metadata.json"
 	ScopeGlobal             = "global"
@@ -182,6 +183,18 @@ func (s *Store) ReadRecord(id string) (SecretRecord, error) {
 		return SecretRecord{}, err
 	}
 	return decoded, nil
+}
+
+func (s *Store) Delete(id string) error {
+	if err := validateID(id); err != nil {
+		return err
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if err := os.Remove(s.pathForID(id)); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("delete secret %q: %w", id, err)
+	}
+	return nil
 }
 
 func (s *Store) ListRecords() ([]SecretRecord, error) {
@@ -350,6 +363,14 @@ func (s *VaultSession) Store() (*Store, error) {
 	return s.store, nil
 }
 
+func (s *VaultSession) Initialized() (bool, error) {
+	metadata, err := readMasterMetadata(s.root)
+	if err != nil {
+		return false, err
+	}
+	return metadata != nil, nil
+}
+
 func (s *VaultSession) Unlock(masterPassword string) (*Store, error) {
 	if strings.TrimSpace(masterPassword) == "" {
 		return nil, fmt.Errorf("master password is empty")
@@ -366,6 +387,9 @@ func (s *VaultSession) Unlock(masterPassword string) (*Store, error) {
 		return nil, err
 	}
 	if metadata == nil {
+		if err := validateInitialMasterPassword(masterPassword); err != nil {
+			return nil, err
+		}
 		created, key, err := createMasterMetadata(masterPassword)
 		if err != nil {
 			return nil, err
@@ -391,6 +415,13 @@ func (s *VaultSession) Unlock(masterPassword string) (*Store, error) {
 	}
 	s.store = store
 	return store, nil
+}
+
+func validateInitialMasterPassword(masterPassword string) error {
+	if len([]rune(masterPassword)) < minMasterPasswordLength {
+		return fmt.Errorf("master password must be at least %d characters", minMasterPasswordLength)
+	}
+	return nil
 }
 
 func readMasterMetadata(root string) (*masterMetadata, error) {

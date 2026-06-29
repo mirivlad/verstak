@@ -80,6 +80,20 @@ export function OpenVaultPathExternal(arg1:string,arg2:string):Promise<string>;
 
 export function OpenWorkbenchResource(arg1:string,arg2:Record<string, any>):Promise<workbench.OpenResourceResult|string>;
 
+export function PluginSecretsCopyLink(arg1:string,arg2:string):Promise<string|string>;
+
+export function PluginSecretsDelete(arg1:string,arg2:string):Promise<string>;
+
+export function PluginSecretsList(arg1:string):Promise<Array<Record<string, any>>|string>;
+
+export function PluginSecretsRead(arg1:string,arg2:string):Promise<Record<string, any>|string>;
+
+export function PluginSecretsStatus(arg1:string):Promise<Record<string, any>|string>;
+
+export function PluginSecretsUnlock(arg1:string,arg2:string):Promise<string>;
+
+export function PluginSecretsWrite(arg1:string,arg2:Record<string, any>):Promise<Record<string, any>|string>;
+
 export function PluginSyncConfigure(arg1:string,arg2:string,arg3:string,arg4:string):Promise<string>;
 
 export function PluginSyncDisconnect(arg1:string):Promise<string>;
@@ -93,18 +107,6 @@ export function PluginSyncSetInterval(arg1:string,arg2:number):Promise<string>;
 export function PluginSyncStatus(arg1:string):Promise<api.SyncStatusDTO|string>;
 
 export function PluginSyncTestConnection(arg1:string,arg2:string,arg3:string,arg4:string):Promise<string>;
-
-export function PluginSecretsCopyLink(arg1:string,arg2:string):Promise<string|string>;
-
-export function PluginSecretsList(arg1:string):Promise<Array<Record<string, any>>|string>;
-
-export function PluginSecretsRead(arg1:string,arg2:string):Promise<Record<string, any>|string>;
-
-export function PluginSecretsStatus(arg1:string):Promise<Record<string, any>|string>;
-
-export function PluginSecretsUnlock(arg1:string,arg2:string):Promise<string>;
-
-export function PluginSecretsWrite(arg1:string,arg2:Record<string, any>):Promise<Record<string, any>|string>;
 
 export function PublishPluginEvent(arg1:string,arg2:string,arg3:Record<string, any>):Promise<string>;
 
@@ -160,6 +162,6 @@ export function WritePluginSetting(arg1:string,arg2:string,arg3:any):Promise<str
 
 export function WritePluginSettings(arg1:string,arg2:Record<string, any>):Promise<string>;
 
-export function WriteVaultTextFile(arg1:string,arg2:string,arg3:string,arg4:files.WriteOptions):Promise<string>;
-
 export function WriteVaultFileBytes(arg1:string,arg2:string,arg3:string,arg4:files.WriteOptions):Promise<string>;
+
+export function WriteVaultTextFile(arg1:string,arg2:string,arg3:string,arg4:files.WriteOptions):Promise<string>;

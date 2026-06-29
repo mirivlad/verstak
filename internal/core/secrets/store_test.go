@@ -106,6 +106,30 @@ func TestStoreRejectsUnsafeIDs(t *testing.T) {
 	}
 }
 
+func TestStoreDeletesSecretRecord(t *testing.T) {
+	store, err := NewStore(t.TempDir(), testKey(0x11))
+	if err != nil {
+		t.Fatalf("NewStore: %v", err)
+	}
+	if err := store.Write("server.password", "s3cr3t-value"); err != nil {
+		t.Fatalf("Write: %v", err)
+	}
+
+	if err := store.Delete("server.password"); err != nil {
+		t.Fatalf("Delete: %v", err)
+	}
+	if _, err := store.Read("server.password"); err == nil {
+		t.Fatal("Read after Delete succeeded")
+	}
+	list, err := store.ListRecords()
+	if err != nil {
+		t.Fatalf("ListRecords: %v", err)
+	}
+	if len(list) != 0 {
+		t.Fatalf("ListRecords after Delete = %+v, want empty", list)
+	}
+}
+
 func TestStoreListsScopedRecordsWithoutPlaintextOnDisk(t *testing.T) {
 	root := t.TempDir()
 	store, err := NewStore(root, testKey(0x11))
@@ -222,5 +246,32 @@ func TestVaultSessionUnlocksWithMasterPasswordOnce(t *testing.T) {
 		if bytes.Contains(raw, []byte(plaintext)) {
 			t.Fatalf("vault session storage contains plaintext %q", plaintext)
 		}
+	}
+}
+
+func TestVaultSessionReportsInitializationAndRejectsWeakInitialPassword(t *testing.T) {
+	root := t.TempDir()
+	session := NewVaultSession(root)
+
+	initialized, err := session.Initialized()
+	if err != nil {
+		t.Fatalf("Initialized: %v", err)
+	}
+	if initialized {
+		t.Fatal("new secret session is initialized")
+	}
+	if _, err := session.Unlock("123123"); err == nil || !strings.Contains(err.Error(), "at least 8 characters") {
+		t.Fatalf("weak initial Unlock err = %v, want minimum length error", err)
+	}
+
+	if _, err := session.Unlock("strong password"); err != nil {
+		t.Fatalf("Unlock strong initial password: %v", err)
+	}
+	initialized, err = session.Initialized()
+	if err != nil {
+		t.Fatalf("Initialized after unlock: %v", err)
+	}
+	if !initialized {
+		t.Fatal("secret session was not initialized")
 	}
 }

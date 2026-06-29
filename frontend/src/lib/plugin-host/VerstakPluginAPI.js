@@ -293,6 +293,15 @@ export function createPluginAPI(pluginId) {
           return App.PluginSecretsWrite(pluginId, record || {});
         });
       },
+      delete: function(secretId) {
+        assertActive('secrets.delete(' + secretId + ')');
+        if (!secretId) {
+          throw new Error('secrets.delete requires a secret id');
+        }
+        return callBackendErrorString(pluginId, 'secrets.delete(' + secretId + ')', function() {
+          return App.PluginSecretsDelete(pluginId, secretId);
+        });
+      },
       copyLink: function(secretId) {
         assertActive('secrets.copyLink(' + secretId + ')');
         if (!secretId) {
