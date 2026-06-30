@@ -16,6 +16,12 @@
   $: hasBrowserInbox = hasTool('browser inbox') || hasTool('inbox');
   $: hasActivity = hasTool('activity');
   $: hasFiles = hasTool('files');
+  $: summaryItems = [
+    { key: 'captures', label: 'Captured', count: captures.length },
+    { key: 'activity', label: 'Activity', count: activity.length },
+    { key: 'worklog', label: 'Worklog', count: worklogSuggestions.length },
+  ];
+  $: resumeItem = nextResumeItem(captures, worklogSuggestions, activity, hasActivity);
 
   onMount(() => {
     loadToday();
@@ -66,6 +72,37 @@
     return item.title || item.summary || item.date || item.entryId || 'Worklog item';
   }
 
+  function nextResumeItem(captureRows, worklogRows, activityRows, activityAvailable) {
+    if (captureRows.length > 0) {
+      const capture = captureRows[0];
+      return {
+        title: captureTitle(capture),
+        meta: capture.url || capture.domain || capture.kind || 'Browser capture',
+        kind: 'browser-inbox',
+        action: 'Open Inbox',
+      };
+    }
+    if (worklogRows.length > 0) {
+      const item = worklogRows[0];
+      return {
+        title: worklogTitle(item),
+        meta: item.minutes ? item.minutes + ' min suggested' : item.date || 'Suggested worklog',
+        kind: 'activity',
+        action: activityAvailable ? 'Review Activity' : 'Refresh',
+      };
+    }
+    if (activityRows.length > 0) {
+      const item = activityRows[0];
+      return {
+        title: activityTitle(item),
+        meta: item.occurredAt || item.receivedAt || item.type || 'Activity event',
+        kind: 'activity',
+        action: 'Open Activity',
+      };
+    }
+    return null;
+  }
+
   async function loadToday() {
     loading = true;
     const [browserSettings, activitySettings, journalSettings] = await Promise.all([
@@ -109,6 +146,36 @@
     </div>
     <button type="button" on:click={loadToday}>Refresh</button>
   </div>
+
+  <div class="today-summary" aria-label="Today summary">
+    {#each summaryItems as item}
+      <div class="today-summary-item" data-today-summary={item.key}>
+        <strong>{loading ? '...' : item.count}</strong>
+        <span>{item.label}</span>
+      </div>
+    {/each}
+  </div>
+
+  <section class="today-resume" data-today-section="resume">
+    <div class="today-resume-copy">
+      <span>Resume next</span>
+      {#if loading}
+        <strong>Loading workspace signals...</strong>
+        <p>Recent captures, activity, and worklog suggestions will appear here.</p>
+      {:else if resumeItem}
+        <strong>{resumeItem.title}</strong>
+        <p>{resumeItem.meta}</p>
+      {:else}
+        <strong>No pending workspace signals</strong>
+        <p>Start with files, capture something from the browser, or review plugin activity.</p>
+      {/if}
+    </div>
+    {#if resumeItem}
+      <button type="button" data-today-action="resume-primary" on:click={() => openTool(resumeItem.kind)}>{resumeItem.action}</button>
+    {:else if hasFiles}
+      <button type="button" data-today-action="resume-primary" on:click={() => openTool('files')}>Open Files</button>
+    {/if}
+  </section>
 
   <div class="today-grid">
     <section class="today-panel" data-today-section="captured">
@@ -231,6 +298,83 @@
     padding: 0.75rem;
   }
 
+  .today-summary {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.5rem;
+    padding: 0.75rem 0.75rem 0;
+  }
+
+  .today-summary-item {
+    min-width: 0;
+    display: grid;
+    gap: 0.15rem;
+    padding: 0.65rem 0.75rem;
+    border: 1px solid rgba(78, 204, 163, 0.16);
+    border-radius: 8px;
+    background: #121a2c;
+  }
+
+  .today-summary-item strong {
+    color: #f4f7fb;
+    font-size: 1rem;
+    line-height: 1;
+  }
+
+  .today-summary-item span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: #8b8ba8;
+    font-size: 0.74rem;
+  }
+
+  .today-resume {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    margin: 0.75rem 0.75rem 0;
+    padding: 0.85rem 1rem;
+    border: 1px solid rgba(78, 204, 163, 0.24);
+    border-radius: 8px;
+    background: linear-gradient(135deg, rgba(78, 204, 163, 0.11), rgba(15, 52, 96, 0.14));
+  }
+
+  .today-resume-copy {
+    min-width: 0;
+    display: grid;
+    gap: 0.22rem;
+  }
+
+  .today-resume-copy span {
+    color: #4ecca3;
+    font-size: 0.72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  .today-resume-copy strong {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: #f4f7fb;
+    font-size: 0.98rem;
+  }
+
+  .today-resume-copy p {
+    min-width: 0;
+    margin: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: #9aa4bd;
+    font-size: 0.8rem;
+  }
+
   .today-panel {
     min-width: 0;
     min-height: 10rem;
@@ -322,6 +466,19 @@
   @media (max-width: 860px) {
     .today-grid {
       grid-template-columns: 1fr;
+    }
+
+    .today-summary {
+      grid-template-columns: 1fr;
+    }
+
+    .today-resume {
+      align-items: stretch;
+      flex-direction: column;
+    }
+
+    .today-resume button {
+      width: 100%;
     }
   }
 </style>
