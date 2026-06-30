@@ -979,11 +979,55 @@
           window.addEventListener('auxclick', mouseHistory, true);
           window.addEventListener('keydown', keyHistory);
           c.addEventListener('keydown', function (ev) {
+            if (ev.target && ['INPUT', 'SELECT', 'TEXTAREA', 'BUTTON'].indexOf(ev.target.tagName) !== -1) return;
             var ctrl = ev.ctrlKey || ev.metaKey;
-            if (ctrl && ev.key.toLowerCase() === 'a') { ev.preventDefault(); selected = {}; visible().forEach(function (item) { selected[item.relativePath] = true; }); render(); }
-            if (ctrl && ev.key.toLowerCase() === 'x') { ev.preventDefault(); cutSelection(); }
-            if (ctrl && ev.key.toLowerCase() === 'c') { ev.preventDefault(); copySelection(); }
-            if (ctrl && ev.key.toLowerCase() === 'v') { ev.preventDefault(); paste(); }
+            var key = ev.key || '';
+
+            function currentIndex(shown) {
+              if (lastClicked) {
+                for (var i = 0; i < shown.length; i++) {
+                  if (shown[i].relativePath === lastClicked) return i;
+                }
+              }
+              var keys = Object.keys(selected);
+              if (keys.length) {
+                for (var j = 0; j < shown.length; j++) {
+                  if (selected[shown[j].relativePath]) return j;
+                }
+              }
+              return 0;
+            }
+
+            function moveSelection(delta) {
+              var shown = visible();
+              if (!shown.length) return;
+              var index = currentIndex(shown) + delta;
+              if (index < 0) index = 0;
+              if (index >= shown.length) index = shown.length - 1;
+              selected = {};
+              selected[shown[index].relativePath] = true;
+              lastClicked = shown[index].relativePath;
+              render();
+              var rows = list.querySelectorAll('.files-item');
+              if (rows[index]) rows[index].scrollIntoView({ block: 'nearest' });
+            }
+
+            if (key === 'Escape') {
+              ev.preventDefault();
+              selected = {};
+              lastClicked = '';
+              render();
+              return;
+            }
+            if (key === 'ArrowDown' || key === 'ArrowUp') {
+              ev.preventDefault();
+              moveSelection(key === 'ArrowDown' ? 1 : -1);
+              return;
+            }
+            if (ctrl && key.toLowerCase() === 'a') { ev.preventDefault(); selected = {}; visible().forEach(function (item) { selected[item.relativePath] = true; }); render(); }
+            if (ctrl && key.toLowerCase() === 'x') { ev.preventDefault(); cutSelection(); }
+            if (ctrl && key.toLowerCase() === 'c') { ev.preventDefault(); copySelection(); }
+            if (ctrl && key.toLowerCase() === 'v') { ev.preventDefault(); paste(); }
           });
           c.__filesCleanup = function () {
             window.removeEventListener('mousedown', mouseHistory, true);

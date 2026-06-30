@@ -174,6 +174,29 @@ test.describe('G: Files Plugin', () => {
     await expect(page.locator('[data-file-name="DragTwo.txt"]')).toBeVisible();
   });
 
+  test('files explorer supports keyboard row selection and clearing selection', async ({ page }) => {
+    await page.locator('.wt-label').filter({ hasText: 'Project' }).click();
+    await openFilesTool(page);
+    await expect(page.locator('.files-breadcrumb')).toContainText('Project', { timeout: 10000 });
+
+    const rows = page.locator('.files-item');
+    await expect(rows.nth(1)).toBeVisible();
+
+    await rows.nth(0).click();
+    await expect(rows.nth(0)).toHaveClass(/selected/);
+
+    await page.locator('.files-root').focus();
+    await page.keyboard.press('ArrowDown');
+    await expect(rows.nth(1)).toHaveClass(/selected/);
+    await expect(rows.nth(0)).not.toHaveClass(/selected/);
+
+    await page.keyboard.press('ArrowUp');
+    await expect(rows.nth(0)).toHaveClass(/selected/);
+
+    await page.keyboard.press('Escape');
+    await expect(page.locator('.files-item.selected')).toHaveCount(0);
+  });
+
   test('files history persists in workspace context and handles mouse back forward buttons', async ({ page }) => {
     await page.locator('.wt-label').filter({ hasText: 'Project' }).click();
     await openFilesTool(page);
