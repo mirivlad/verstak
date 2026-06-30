@@ -46,6 +46,47 @@ test.describe('UX follow-up fixes', () => {
     await expect(page.locator('.files-item')).toContainText('Overview.md');
   });
 
+  test('global search opens indexed browser inbox results', async ({ page }) => {
+    await page.evaluate(async () => {
+      await window.go.api.App.WritePluginSettings('verstak.browser-inbox', {
+        'captures:workspace:Project': [{
+          captureId: 'capture-search-1',
+          capturedAt: '2026-06-30T08:00:00.000Z',
+          kind: 'page',
+          url: 'https://example.com/research',
+          title: 'Research Search Result',
+          domain: 'example.com',
+          text: 'Searchable captured browser text',
+          workspaceRootPath: 'Project',
+          browserName: 'Firefox',
+        }],
+      });
+    });
+
+    const search = page.locator('[data-global-search-input]');
+    await search.fill('Research Search Result');
+    const result = page.locator('[data-global-search-result-type="Browser Inbox"]').filter({ hasText: 'Research Search Result' });
+    await expect(result).toBeVisible({ timeout: 10000 });
+    await result.click();
+
+    await expect(page.locator('.browser-inbox-root')).toBeVisible({ timeout: 10000 });
+    await expect(page.locator('.browser-inbox-detail-title')).toHaveText('Research Search Result');
+  });
+
+  test('workspace Search input keeps focus while typing', async ({ page }) => {
+    await page.locator('.wt-label').filter({ hasText: 'Project' }).click();
+    await page.getByRole('tab', { name: 'Search' }).click();
+    const searchInput = page.locator('[data-search-input="query"]');
+    await expect(searchInput).toBeVisible({ timeout: 10000 });
+
+    await searchInput.click();
+    await page.keyboard.press('p');
+    await expect(searchInput).toBeFocused();
+    await page.keyboard.press('r');
+    await expect(searchInput).toBeFocused();
+    await expect(searchInput).toHaveValue('pr');
+  });
+
   test('plugin settings modal gives complex panels enough space', async ({ page }) => {
     await openPluginManager(page);
     await page.locator('.plugin-card').filter({ hasText: 'verstak.platform-test' }).getByRole('button', { name: 'Settings' }).click();

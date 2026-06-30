@@ -15,6 +15,7 @@
   let focused = false;
   let loading = true;
   let searchTimer = null;
+  let buildSeq = 0;
 
   $: scheduleSearch(query);
 
@@ -114,7 +115,14 @@
     return String(text || '').slice(0, 900);
   }
 
-  async function indexPluginSettings(pluginId, label, rank) {
+  function pluginToolKind(pluginId, label) {
+    if (pluginId === 'verstak.browser-inbox') return 'browser-inbox';
+    if (pluginId === 'verstak.activity') return 'activity';
+    if (pluginId === 'verstak.journal') return 'journal';
+    return String(label || pluginId || '').toLowerCase();
+  }
+
+  async function indexPluginSettings(pluginId, label, rank, view, nodes) {
     const settings = await resultOrEmpty(App.ReadPluginSettings(pluginId), {});
     const items = [];
     Object.keys(settings || {}).forEach(key => {
@@ -123,12 +131,19 @@
       rows.forEach(row => {
         if (!row || typeof row !== 'object') return;
         const title = row.title || row.summary || row.url || row.captureId || row.activityId || row.entryId || label;
+        const workspaceName = row.workspaceRootPath || row.workspaceName || '';
         items.push({
           type: label,
           title,
           subtitle: row.url || row.summary || row.workspaceRootPath || key,
           keywords: JSON.stringify(row),
           rank,
+          action: workspaceName ? 'workspace-tool' : (view ? 'view' : ''),
+          viewId: view?.id || '',
+          pluginId,
+          workspaceName,
+          toolKind: pluginToolKind(pluginId, label),
+          nodes,
         });
       });
     });
@@ -136,6 +151,7 @@
   }
 
   async function buildIndex() {
+    const seq = ++buildSeq;
     loading = true;
     const next = [];
 
@@ -155,6 +171,10 @@
     });
 
     const contributions = await resultOrEmpty(App.GetContributions(), {});
+    const viewByPluginId = new Map();
+    (contributions.views || []).forEach(view => {
+      if (view.pluginId && !viewByPluginId.has(view.pluginId)) viewByPluginId.set(view.pluginId, view);
+    });
     (contributions.sidebarItems || []).forEach(item => {
       next.push({
         type: 'Tool',
@@ -185,14 +205,20 @@
     }
 
     const pluginItems = await Promise.all([
-      indexPluginSettings('verstak.journal', 'Journal', 50),
-      indexPluginSettings('verstak.browser-inbox', 'Browser Inbox', 55),
-      indexPluginSettings('verstak.activity', 'Activity', 60),
+      indexPluginSettings('verstak.journal', 'Journal', 50, viewByPluginId.get('verstak.journal'), nodes),
+      indexPluginSettings('verstak.browser-inbox', 'Browser Inbox', 55, viewByPluginId.get('verstak.browser-inbox'), nodes),
+      indexPluginSettings('verstak.activity', 'Activity', 60, viewByPluginId.get('verstak.activity'), nodes),
     ]);
 
+    if (seq !== buildSeq) return;
     index = next.concat(pluginItems.flat());
     loading = false;
     runSearch(query);
+  }
+
+  function handleFocus() {
+    focused = true;
+    buildIndex();
   }
 
   async function openResult(item) {
@@ -208,6 +234,18 @@
       window.dispatchEvent(new CustomEvent('verstak:open-view', {
         detail: { viewId: item.viewId, pluginId: item.pluginId }
       }));
+      return;
+    }
+    if (item.action === 'workspace-tool') {
+      const workspaceName = item.workspaceName || '';
+      if (workspaceName) {
+        window.dispatchEvent(new CustomEvent('verstak:workspace-selected', {
+          detail: { workspaceName, nodes: item.nodes || [] }
+        }));
+        window.dispatchEvent(new CustomEvent('verstak:workspace-open-tool', {
+          detail: { kind: item.toolKind || item.type || '' }
+        }));
+      }
       return;
     }
     if (item.action === 'file-folder') {
@@ -252,7 +290,7 @@
     <Icon name="search" size={14} class="global-search-icon" />
     <input
       bind:value={query}
-      on:focus={() => focused = true}
+      on:focus={handleFocus}
       on:blur={() => setTimeout(() => focused = false, 120)}
       type="search"
       placeholder={loading ? 'Индексируем...' : 'Поиск'}

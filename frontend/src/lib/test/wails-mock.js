@@ -220,8 +220,11 @@
         icon: 'search',
         provides: ['verstak/search/v1', 'search.provider'],
         requires: ['verstak/core/files/v1', 'verstak/core/workbench/v1'],
-        permissions: ['files.read', 'workbench.open', 'storage.namespace', 'ui.register'],
+        permissions: ['files.read', 'workbench.open', 'storage.namespace', 'ui.register', 'events.subscribe', 'commands.register'],
+        frontend: { entry: 'frontend/dist/index.js' },
         contributes: {
+          workspaceItems: [{ id: 'verstak.search.workspace', title: 'Search', icon: 'search', component: 'SearchView' }],
+          commands: [{ id: 'verstak.search.searchVaultText', title: 'Search Vault Text', handler: 'verstak.search.searchVaultText' }],
           searchProviders: [{ id: 'verstak.search.vault-text', label: 'Vault Text Search', handler: 'verstak.search.searchVaultText' }]
         }
       },
@@ -1422,6 +1425,102 @@
     }.toString() + ')();';
   }
 
+  function searchPluginBundle() {
+    return '(' + function () {
+      function el(tag, attrs, children) {
+        var node = document.createElement(tag);
+        attrs = attrs || {};
+        Object.keys(attrs).forEach(function (key) {
+          if (attrs[key] == null) return;
+          if (key === 'className') node.className = attrs[key];
+          else if (key.indexOf('on') === 0) node.addEventListener(key.slice(2).toLowerCase(), attrs[key]);
+          else if (key === 'textContent') node.textContent = attrs[key];
+          else node.setAttribute(key, attrs[key]);
+        });
+        (children || []).forEach(function (child) {
+          if (child == null) return;
+          node.appendChild(typeof child === 'string' ? document.createTextNode(child) : child);
+        });
+        return node;
+      }
+      function clean(path) { return String(path || '').split('/').filter(Boolean).join('/'); }
+      function SearchView(containerEl, props, api) {
+        if (!document.getElementById('mock-search-style')) {
+          var style = document.createElement('style');
+          style.id = 'mock-search-style';
+          style.textContent = '.search-root{height:100%;min-height:0;display:flex;flex-direction:column;background:#0d0d1a;color:#e0e0e0}.search-toolbar{display:flex;gap:.5rem;padding:.55rem .75rem;border-bottom:1px solid #16213e;background:#12122a}.search-input{flex:1;min-width:180px;font-size:.86rem;padding:.42rem .55rem;border:1px solid #333;border-radius:4px;background:#0d0d1a;color:#e0e0e0;outline:none}.search-input:focus{border-color:#4ecca3}.search-btn{font-size:.8rem;padding:.42rem .7rem;border:1px solid #333;border-radius:4px;background:#1a1a2e;color:#ddd}.search-scope,.search-status{font-size:.78rem;color:#8b8ba8}.search-status{padding:.45rem .75rem;border-bottom:1px solid rgba(22,33,62,.55)}.search-results{flex:1;min-height:0;overflow:auto}.search-empty{padding:2rem;color:#666;text-align:center}.search-result{padding:.7rem .85rem;border-bottom:1px solid rgba(22,33,62,.55)}.search-path{color:#4ecca3}.search-snippet{margin-top:.25rem;color:#cfcfe0;font-size:.8rem}';
+          document.head.appendChild(style);
+        }
+        containerEl.innerHTML = '';
+        containerEl.className = 'search-root';
+        containerEl.setAttribute('data-plugin-id', 'verstak.search');
+        var rootPath = clean(props && (props.workspaceRootPath || props.workspaceName));
+        var query = '';
+        var timer = null;
+        var results = [];
+        var input = el('input', { className: 'search-input', type: 'search', placeholder: 'Search files, folders, text', 'data-search-input': 'query' });
+        var button = el('button', { className: 'search-btn', 'data-search-action': 'run', textContent: 'Search' });
+        var status = el('div', { className: 'search-status', textContent: 'Enter at least 2 characters.' });
+        var list = el('div', { className: 'search-results' });
+        containerEl.appendChild(el('div', { className: 'search-toolbar' }, [
+          input,
+          button,
+          el('span', { className: 'search-scope', title: rootPath || 'Vault' }, [rootPath || 'Vault'])
+        ]));
+        containerEl.appendChild(status);
+        containerEl.appendChild(list);
+        function render() {
+          list.innerHTML = '';
+          if (!results.length) {
+            list.appendChild(el('div', { className: 'search-empty' }, [query.length < 2 ? 'Enter at least 2 characters.' : 'No results']));
+            return;
+          }
+          results.forEach(function (item) {
+            list.appendChild(el('div', { className: 'search-result' }, [
+              el('div', { className: 'search-path', textContent: item.relativePath }),
+              el('div', { className: 'search-snippet', textContent: item.name })
+            ]));
+          });
+        }
+        async function run() {
+          query = input.value.trim();
+          if (query.length < 2) {
+            results = [];
+            status.textContent = 'Enter at least 2 characters.';
+            render();
+            return;
+          }
+          var entries = await api.files.list(rootPath);
+          var needle = query.toLowerCase();
+          results = (Array.isArray(entries) ? entries : []).filter(function (item) {
+            return String(item.name || item.relativePath || '').toLowerCase().indexOf(needle) !== -1;
+          });
+          status.textContent = results.length + ' result' + (results.length === 1 ? '' : 's');
+          render();
+        }
+        function schedule() {
+          if (timer) clearTimeout(timer);
+          timer = setTimeout(run, 100);
+        }
+        input.addEventListener('input', schedule);
+        button.addEventListener('click', run);
+        render();
+        containerEl.__searchMockCleanup = function () { if (timer) clearTimeout(timer); };
+      }
+      window.VerstakPluginRegister('verstak.search', {
+        components: {
+          SearchView: {
+            mount: SearchView,
+            unmount: function (containerEl) {
+              if (containerEl.__searchMockCleanup) containerEl.__searchMockCleanup();
+              containerEl.innerHTML = '';
+            }
+          }
+        }
+      });
+    }.toString() + ')();';
+  }
+
   function platformTestBundle() {
     return [
       "(function(){",
@@ -1664,6 +1763,9 @@
       }
       if (pluginId === 'verstak.browser-inbox' && assetPath === 'frontend/dist/index.js') {
         return Promise.resolve(browserInboxBundle());
+      }
+      if (pluginId === 'verstak.search' && assetPath === 'frontend/dist/index.js') {
+        return Promise.resolve(searchPluginBundle());
       }
       return Promise.resolve('');
     },
@@ -2226,8 +2328,11 @@
             icon: 'search',
             provides: ['verstak/search/v1', 'search.provider'],
             requires: ['verstak/core/files/v1', 'verstak/core/workbench/v1'],
-            permissions: ['files.read', 'workbench.open', 'storage.namespace', 'ui.register'],
+            permissions: ['files.read', 'workbench.open', 'storage.namespace', 'ui.register', 'events.subscribe', 'commands.register'],
+            frontend: { entry: 'frontend/dist/index.js' },
             contributes: {
+              workspaceItems: [{ id: 'verstak.search.workspace', title: 'Search', icon: 'search', component: 'SearchView' }],
+              commands: [{ id: 'verstak.search.searchVaultText', title: 'Search Vault Text', handler: 'verstak.search.searchVaultText' }],
               searchProviders: [{ id: 'verstak.search.vault-text', label: 'Vault Text Search', handler: 'verstak.search.searchVaultText' }]
             }
           },
