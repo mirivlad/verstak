@@ -2,6 +2,7 @@
   import PluginBundleHost from '../plugin-host/PluginBundleHost.svelte';
   import TodaySurface from './TodaySurface.svelte';
   import * as App from '../../../wailsjs/go/api/App';
+  import { onDestroy, onMount } from 'svelte';
 
   export let selectedWorkspaceName = '';
   export let nodes = [];
@@ -11,6 +12,7 @@
   let plugins = [];
   let workspaceTools = [];
   let toolsLoaded = false;
+  let requestedToolKind = '';
   const todayTool = { id: '__today', title: 'Today', pluginId: 'verstak.shell', component: 'TodaySurface', shell: true };
 
   const toolOrder = new Map([
@@ -31,7 +33,22 @@
   $: if (displayedTools.length > 0 && (!activeToolKey || (toolsLoaded && !displayedTools.some(tool => toolKey(tool) === activeToolKey)))) {
     activeToolKey = toolKey(todayTool);
   }
+  $: if (requestedToolKind && workspaceTools.length > 0) {
+    const match = findWorkspaceTool(requestedToolKind);
+    if (match) {
+      requestedToolKind = '';
+      selectTool(match);
+    }
+  }
   $: if (selectedWorkspaceName) loadTools();
+
+  onMount(() => {
+    window.addEventListener('verstak:workspace-open-tool', handleWorkspaceOpenTool);
+  });
+
+  onDestroy(() => {
+    window.removeEventListener('verstak:workspace-open-tool', handleWorkspaceOpenTool);
+  });
 
   function toolKey(tool) {
     return `${tool?.pluginId || ''}:${tool?.id || ''}`;
@@ -64,14 +81,27 @@
     }));
   }
 
-  function openWorkspaceTool(event) {
-    const kind = String(event?.detail?.kind || '').toLowerCase();
-    const match = workspaceTools.find(tool => {
+  function findWorkspaceTool(kind) {
+    kind = String(kind || '').toLowerCase();
+    return workspaceTools.find(tool => {
       const text = `${tool?.title || ''} ${tool?.id || ''} ${tool?.pluginId || ''}`.toLowerCase();
       if (kind === 'browser-inbox') return text.includes('browser') || text.includes('inbox');
       return text.includes(kind);
     });
+  }
+
+  function requestWorkspaceTool(kind) {
+    requestedToolKind = String(kind || '').toLowerCase();
+    const match = findWorkspaceTool(requestedToolKind);
     if (match) selectTool(match);
+  }
+
+  function openWorkspaceTool(event) {
+    requestWorkspaceTool(event?.detail?.kind);
+  }
+
+  function handleWorkspaceOpenTool(event) {
+    requestWorkspaceTool(event?.detail?.kind);
   }
 
   async function loadTools() {

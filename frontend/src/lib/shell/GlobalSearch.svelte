@@ -180,6 +180,7 @@
         rank: entry.type === 'folder' ? 30 : 40,
         action: entry.type === 'folder' ? 'file-folder' : 'file',
         path,
+        nodes,
       });
     }
 
@@ -207,6 +208,28 @@
       window.dispatchEvent(new CustomEvent('verstak:open-view', {
         detail: { viewId: item.viewId, pluginId: item.pluginId }
       }));
+      return;
+    }
+    if (item.action === 'file-folder') {
+      const parts = String(item.path || '').split('/').filter(Boolean);
+      const workspaceName = parts[0] || '';
+      const localPath = parts.slice(1).join('/');
+      if (workspaceName) {
+        window.__filesHistoryByWorkspace = window.__filesHistoryByWorkspace || {};
+        window.__filesHistoryByWorkspace[workspaceName] = {
+          stack: [localPath],
+          index: 0,
+          currentPath: localPath,
+        };
+        const detail = { workspaceName };
+        if (Array.isArray(item.nodes) && item.nodes.length > 0) detail.nodes = item.nodes;
+        window.dispatchEvent(new CustomEvent('verstak:workspace-selected', {
+          detail
+        }));
+        window.dispatchEvent(new CustomEvent('verstak:workspace-open-tool', {
+          detail: { kind: 'files' }
+        }));
+      }
       return;
     }
     if (item.action === 'file') {
@@ -241,7 +264,13 @@
     <div class="global-search-results" data-global-search-results>
       {#if results.length}
         {#each results as item}
-          <button type="button" class="global-search-result" on:mousedown|preventDefault={() => openResult(item)}>
+          <button
+            type="button"
+            class="global-search-result"
+            data-global-search-result-type={item.type}
+            data-global-search-result-path={item.path || ''}
+            on:mousedown|preventDefault={() => openResult(item)}
+          >
             <span class="global-search-result-title">{item.title}</span>
             <span class="global-search-result-meta">{item.type} · {item.subtitle}</span>
           </button>
