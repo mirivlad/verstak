@@ -773,10 +773,14 @@
           createPanel.appendChild(e('button', { className: 'files-toolbar-btn', onClick: function () { createPanel.style.display = 'none'; } }, ['Cancel']));
           c.appendChild(createPanel);
           var renamePanel = e('div', { className: 'files-panel', style: 'display:none' }, []);
+          var renameField = e('div', { style: { display: 'flex', flex: '1', flexDirection: 'column', gap: '.25rem' } }, []);
           var renameInput = e('input', { className: 'files-rename-input', 'data-files-rename-input': '' }, []);
-          renamePanel.appendChild(renameInput);
+          var renameError = e('div', { 'data-files-rename-error': '', role: 'alert', style: { display: 'none', color: '#ff8a8a', fontSize: '.72rem', lineHeight: '1.2' } }, []);
+          renameField.appendChild(renameInput);
+          renameField.appendChild(renameError);
+          renamePanel.appendChild(renameField);
           renamePanel.appendChild(e('button', { className: 'files-toolbar-btn', 'data-files-rename-confirm': '', onClick: confirmRename }, ['Rename']));
-          renamePanel.appendChild(e('button', { className: 'files-toolbar-btn', onClick: function () { renamePanel.style.display = 'none'; } }, ['Cancel']));
+          renamePanel.appendChild(e('button', { className: 'files-toolbar-btn', onClick: cancelRename }, ['Cancel']));
           c.appendChild(renamePanel);
           function entryByPath(path) { return entries.find(function (item) { return item.relativePath === path; }) || null; }
           function selectedEntries() { return Object.keys(selected).map(entryByPath).filter(Boolean); }
@@ -870,12 +874,22 @@
             var path = scoped(current ? current + '/' + name : name);
             (mode === 'folder' ? api.files.createFolder(path) : api.files.writeText(path, '', { createIfMissing: true, overwrite: false })).then(function () { createPanel.style.display = 'none'; load(); });
           }
-          function startRename(item) { if (!item) return; renaming = item; renameInput.value = item.name; renamePanel.style.display = 'flex'; renameInput.focus(); renameInput.select(); }
+          function setRenameError(message) {
+            renameError.textContent = message || '';
+            renameError.style.display = message ? 'block' : 'none';
+            renameInput.setAttribute('aria-invalid', message ? 'true' : 'false');
+          }
+          function cancelRename() { renaming = null; setRenameError(''); renamePanel.style.display = 'none'; }
+          function startRename(item) { if (!item) return; renaming = item; renameInput.value = item.name; setRenameError(''); renamePanel.style.display = 'flex'; renameInput.focus(); renameInput.select(); }
           function confirmRename() {
             if (!renaming) return;
+            var newName = renameInput.value.trim();
+            if (!newName || newName === renaming.name) { cancelRename(); return; }
+            if (/[\\/:*?"<>|\x00-\x1f]/.test(newName)) { setRenameError('Invalid characters in name'); return; }
+            if (newName === '.' || newName === '..' || newName[0] === ' ' || newName[newName.length - 1] === ' ' || newName[newName.length - 1] === '.') { setRenameError('Invalid name'); return; }
             var to = parent(renaming.relativePath);
-            to = to ? to + '/' + renameInput.value.trim() : renameInput.value.trim();
-            api.files.move(renaming.relativePath, to, { overwrite: false }).then(function () { renamePanel.style.display = 'none'; renaming = null; load(); });
+            to = to ? to + '/' + newName : newName;
+            api.files.move(renaming.relativePath, to, { overwrite: false }).then(function () { cancelRename(); load(); }).catch(function (err) { setRenameError('Error: ' + ((err && err.message) ? err.message : String(err))); });
           }
           function trash(item) { if (!item || !window.confirm('Move "' + item.name + '" to trash?')) return; api.files.trash(item.relativePath).then(load); }
           function trashSelection() { var items = selectedEntries(); if (items.length === 1) return trash(items[0]); if (!items.length || !window.confirm('Move ' + items.length + ' items to trash?')) return; Promise.all(items.map(function (item) { return api.files.trash(item.relativePath); })).then(load); }
@@ -918,7 +932,8 @@
             menu.style.display = 'block'; menu.style.left = x + 'px'; menu.style.top = y + 'px';
           }
           createInput.addEventListener('keydown', function (ev) { if (ev.key === 'Enter') confirmCreate(); });
-          renameInput.addEventListener('keydown', function (ev) { if (ev.key === 'Enter') confirmRename(); });
+          renameInput.addEventListener('input', function () { setRenameError(''); });
+          renameInput.addEventListener('keydown', function (ev) { if (ev.key === 'Enter') confirmRename(); if (ev.key === 'Escape') cancelRename(); });
           list.addEventListener('contextmenu', function (ev) { ev.preventDefault(); var row = ev.target.closest('.files-item'); showMenu(ev.clientX, ev.clientY, row ? entryByPath(row.getAttribute('data-file-path')) : null); });
           list.addEventListener('dragover', function (ev) { ev.preventDefault(); var row = ev.target.closest('.files-item'); if (row) row.classList.add('files-drag-over'); });
           list.addEventListener('dragleave', function (ev) { var row = ev.target.closest('.files-item'); if (row) row.classList.remove('files-drag-over'); });
