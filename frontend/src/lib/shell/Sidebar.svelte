@@ -6,6 +6,8 @@
   import Icon from '../ui/Icon.svelte';
   import { debug } from '../log/debug.js';
 
+  export let showGlobalSearch = true;
+
   function flog(msg) {
     App.WriteFrontendLog('Sidebar', msg);
   }
@@ -77,7 +79,7 @@
     <span class="sidebar-title">Verstak</span>
   </div>
 
-  {#if vaultOpen}
+  {#if vaultOpen && showGlobalSearch}
     <GlobalSearch />
   {/if}
 
@@ -222,5 +224,28 @@
   }
   :global(.sidebar-error-icon) {
     color: #e94560;
+  }
+
+  @media (max-width: 720px) {
+    .sidebar {
+      width: 100%;
+      min-width: 0;
+      max-height: 14rem;
+      border-right: 0;
+      border-bottom: 1px solid #0f3460;
+    }
+
+    .sidebar-header {
+      padding: 0.75rem 1rem;
+    }
+
+    .sidebar-section {
+      max-height: 5.5rem;
+      overflow: auto;
+    }
+
+    .sidebar-footer {
+      display: none;
+    }
   }
 </style>

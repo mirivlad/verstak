@@ -385,7 +385,7 @@
   <VaultSelection />
 {:else}
   <main>
-    <Sidebar />
+    <Sidebar showGlobalSearch={currentView !== 'workspace' && currentView !== 'workspace-empty'} />
     <CommandPalette />
 
     <section class="content-shell">
@@ -575,5 +575,15 @@
     display: flex;
     flex-direction: column;
     padding: clamp(1rem, 2vw, 1.5rem);
+  }
+
+  @media (max-width: 720px) {
+    main {
+      flex-direction: column;
+    }
+
+    .content {
+      padding: 0.75rem;
+    }
   }
 </style>

@@ -11,10 +11,12 @@ test.describe('UX follow-up fixes', () => {
   test('global search stays available after opening tool sidebar views', async ({ page }) => {
     const search = page.locator('[data-global-search-input]');
     await expect(search).toBeVisible();
+    await expect(page.locator('.workspace-header [data-global-search-input]')).toBeVisible();
 
     await page.locator('.sidebar .nav-item').filter({ hasText: 'Activity' }).click();
     await expect(page.locator('.activity-root')).toBeVisible({ timeout: 10000 });
     await expect(search).toBeVisible();
+    await expect(page.locator('.sidebar [data-global-search-input]')).toBeVisible();
 
     await page.locator('.sidebar .nav-item').filter({ hasText: 'Browser Inbox' }).click();
     await expect(page.locator('.browser-inbox-root')).toBeVisible({ timeout: 10000 });
@@ -85,6 +87,22 @@ test.describe('UX follow-up fixes', () => {
     await page.keyboard.press('r');
     await expect(searchInput).toBeFocused();
     await expect(searchInput).toHaveValue('pr');
+  });
+
+  test('mobile workspace layout gives content full width below the sidebar', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.reload();
+    await waitForAppReady(page);
+
+    const workspaceBox = await page.locator('.workspace-host').boundingBox();
+    const sidebarBox = await page.locator('.sidebar').boundingBox();
+    expect(workspaceBox.width).toBeGreaterThan(340);
+    expect(workspaceBox.y).toBeGreaterThan(sidebarBox.y + sidebarBox.height - 1);
+    await expect(page.locator('.workspace-header [data-global-search-input]')).toBeVisible();
+    await expect(page.getByRole('tab', { name: 'Today' })).toBeVisible();
+
+    const hasHorizontalOverflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);
+    expect(hasHorizontalOverflow).toBe(false);
   });
 
   test('plugin settings modal gives complex panels enough space', async ({ page }) => {

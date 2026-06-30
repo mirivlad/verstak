@@ -1,5 +1,6 @@
 <script>
   import PluginBundleHost from '../plugin-host/PluginBundleHost.svelte';
+  import GlobalSearch from './GlobalSearch.svelte';
   import TodaySurface from './TodaySurface.svelte';
   import * as App from '../../../wailsjs/go/api/App';
   import { onDestroy, onMount } from 'svelte';
@@ -134,6 +135,9 @@
         <span class="workspace-title">{workspaceTitle}</span>
         <span class="workspace-type">{workspaceType}</span>
       </div>
+      <div class="workspace-search" aria-label="Workspace search">
+        <GlobalSearch />
+      </div>
     </div>
 
     {#if displayedTools.length > 0}
@@ -196,9 +200,9 @@
   .workspace-header {
     display: flex;
     align-items: center;
-    justify-content: flex-start;
-    gap: 0.75rem;
-    padding: 0.75rem 1rem;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.65rem 1rem;
     border-bottom: 1px solid #16213e;
     flex-shrink: 0;
   }
@@ -224,10 +228,37 @@
     background: #1a2a3a;
   }
 
+  .workspace-search {
+    width: min(27rem, 46vw);
+    min-width: 16rem;
+    flex-shrink: 1;
+  }
+
+  .workspace-search :global(.global-search) {
+    padding: 0;
+    border-bottom: 0;
+  }
+
+  .workspace-search :global(.global-search-box) {
+    background: #101626;
+    border-color: #243957;
+  }
+
+  .workspace-search :global(.global-search-results) {
+    left: 0;
+    right: 0;
+    top: calc(100% + 0.35rem);
+  }
+
   @media (max-width: 720px) {
     .workspace-header {
       align-items: stretch;
       flex-direction: column;
+    }
+
+    .workspace-search {
+      width: 100%;
+      min-width: 0;
     }
   }
 
@@ -239,9 +270,12 @@
     background: #12122a;
     border-bottom: 1px solid #16213e;
     flex-shrink: 0;
+    overflow-x: auto;
+    scrollbar-gutter: auto;
   }
 
   .workspace-tabs button {
+    flex-shrink: 0;
     min-height: 2rem;
     padding: 0.35rem 0.8rem;
     border: 1px solid transparent;
