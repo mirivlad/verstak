@@ -76,9 +76,6 @@
         <span class="workspace-title">{workspaceTitle}</span>
         <span class="workspace-type">{workspaceType}</span>
       </div>
-      <div class="workspace-search" data-workspace-search>
-        <input type="search" placeholder="Search workspace" aria-label="Search workspace" />
-      </div>
     </div>
 
     {#if workspaceTools.length > 0}
@@ -107,13 +104,14 @@
       </div>
     {:else}
       <div class="workspace-empty">
-        <p>No workspace tools available</p>
-        <p class="workspace-hint">Install plugins that contribute workspaceItems to see tools here.</p>
+        <p>Для этого рабочего пространства пока нет инструментов</p>
+        <p class="workspace-hint">Включите плагины с workspace-инструментами или откройте Plugin Manager через меню настроек.</p>
       </div>
     {/if}
   {:else}
     <div class="workspace-empty">
-      <p>Select a workspace node from the sidebar</p>
+      <p>Создайте рабочее пространство или выберите существующее в боковой панели</p>
+      <p class="workspace-hint">Нажмите «+» в разделе Workspaces, чтобы добавить первый проект.</p>
     </div>
   {/if}
 </div>
@@ -131,7 +129,7 @@
   .workspace-header {
     display: flex;
     align-items: center;
-    justify-content: space-between;
+    justify-content: flex-start;
     gap: 0.75rem;
     padding: 0.75rem 1rem;
     border-bottom: 1px solid #16213e;
@@ -159,37 +157,10 @@
     background: #1a2a3a;
   }
 
-  .workspace-search {
-    flex: 0 1 22rem;
-    min-width: 12rem;
-  }
-
-  .workspace-search input {
-    width: 100%;
-    height: 2rem;
-    padding: 0.25rem 0.55rem;
-    border: 1px solid #283653;
-    border-radius: 4px;
-    background: #101626;
-    color: #e0e0f0;
-    font: inherit;
-    font-size: 0.82rem;
-    outline: none;
-  }
-
-  .workspace-search input:focus {
-    border-color: #4ecca3;
-  }
-
   @media (max-width: 720px) {
     .workspace-header {
       align-items: stretch;
       flex-direction: column;
-    }
-
-    .workspace-search {
-      flex-basis: auto;
-      min-width: 0;
     }
   }
 
@@ -241,6 +212,8 @@
     justify-content: center;
     color: #666;
     gap: 0.5rem;
+    padding: 2rem;
+    text-align: center;
   }
 
   .workspace-hint {

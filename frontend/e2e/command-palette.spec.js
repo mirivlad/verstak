@@ -43,6 +43,6 @@ test.describe('Command Palette', () => {
     await page.keyboard.press('Escape');
 
     await expect(page.locator('.command-palette')).not.toBeVisible();
-    await expect(page.locator('.plugin-manager')).toBeVisible();
+    await expect(page.locator('.workspace-host')).toBeVisible();
   });
 });

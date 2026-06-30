@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { waitForAppReady, setupConsoleCollector, resetMockState } from './helpers.js';
+import { waitForAppReady, setupConsoleCollector, resetMockState, openPluginManager } from './helpers.js';
 
 test.describe('E: Plugin Manager layout', () => {
   let consoleCollector;
@@ -16,6 +16,7 @@ test.describe('E: Plugin Manager layout', () => {
   });
 
   test('plugin list scrolls through the global main scroll surface and stays responsive', async ({ page }) => {
+    await openPluginManager(page);
     const basePluginCount = await page.locator('.plugin-card').count();
     await page.evaluate(() => window.__wailsMock.addSyntheticPlugins(18));
     await page.locator('button.reload-btn').click();

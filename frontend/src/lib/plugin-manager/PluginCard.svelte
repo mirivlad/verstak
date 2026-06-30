@@ -98,16 +98,8 @@
       <span>{m.name || '-'}</span>
     </div>
     <div class="meta-row">
-      <span class="label">API Version:</span>
-      <span>{m.apiVersion || '-'}</span>
-    </div>
-    <div class="meta-row">
       <span class="label">Source:</span>
       <span>{m.source || 'unknown'}</span>
-    </div>
-    <div class="meta-row">
-      <span class="label">Root:</span>
-      <span class="path">{p.rootPath || '-'}</span>
     </div>
     <div class="meta-row">
       <span class="label">Contributions:</span>
@@ -115,17 +107,29 @@
     </div>
   </div>
 
-  <!-- Capabilities -->
-  <div class="section">
-    <span class="section-title">Provides</span>
-    <div class="tags">
-      {#each m.provides || [] as cap}
-        <span class="tag provides">{cap}</span>
-      {/each}
+  <details class="plugin-details">
+    <summary>Technical details</summary>
+    <div class="card-meta technical-meta">
+      <div class="meta-row">
+        <span class="label">API Version:</span>
+        <span>{m.apiVersion || '-'}</span>
+      </div>
+      <div class="meta-row">
+        <span class="label">Root:</span>
+        <span class="path">{p.rootPath || '-'}</span>
+      </div>
     </div>
-  </div>
 
-  {#if m.requires && m.requires.length > 0}
+    <div class="section">
+      <span class="section-title">Provides</span>
+      <div class="tags">
+        {#each m.provides || [] as cap}
+          <span class="tag provides">{cap}</span>
+        {/each}
+      </div>
+    </div>
+
+    {#if m.requires && m.requires.length > 0}
     <div class="section">
       <span class="section-title">Requires</span>
       <div class="tags">
@@ -141,9 +145,9 @@
         <p class="warning"><Icon name="warning" size={12} /> Missing required capabilities: {missingRequired.join(', ')}</p>
       {/if}
     </div>
-  {/if}
+    {/if}
 
-  {#if m.optionalRequires && m.optionalRequires.length > 0}
+    {#if m.optionalRequires && m.optionalRequires.length > 0}
     <div class="section">
       <span class="section-title">Optional Requires</span>
       <div class="tags">
@@ -159,10 +163,9 @@
         <p class="info"><Icon name="warning" size={12} /> Optional capabilities not available — plugin running in degraded mode</p>
       {/if}
     </div>
-  {/if}
+    {/if}
 
-  <!-- Permissions -->
-  {#if m.permissions && m.permissions.length > 0}
+    {#if m.permissions && m.permissions.length > 0}
     <div class="section">
       <span class="section-title">Permissions</span>
       <div class="tags">
@@ -175,7 +178,8 @@
         {/each}
       </div>
     </div>
-  {/if}
+    {/if}
+  </details>
 
   <!-- Error -->
   {#if p.error}
@@ -287,6 +291,24 @@
     gap: 0.3rem;
     margin-bottom: 0.75rem;
     font-size: 0.8rem;
+  }
+
+  .technical-meta {
+    margin-top: 0.55rem;
+  }
+
+  .plugin-details {
+    margin: 0.6rem 0;
+    padding: 0.45rem 0;
+    border-top: 1px solid rgba(15, 52, 96, 0.75);
+    border-bottom: 1px solid rgba(15, 52, 96, 0.75);
+  }
+
+  .plugin-details summary {
+    cursor: pointer;
+    color: #8b8ba8;
+    font-size: 0.78rem;
+    font-weight: 600;
   }
 
   .meta-row {

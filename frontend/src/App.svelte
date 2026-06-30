@@ -12,7 +12,7 @@
   import { onMount } from 'svelte';
   import { tick } from 'svelte';
 
-  let currentView = 'plugin-manager';
+  let currentView = 'workspace';
   let vaultStatus = { status: 'unknown', path: '', vaultId: '' };
   let needsVaultSelection = false;
   let loading = true;
@@ -33,6 +33,75 @@
 
   function flog(msg) {
     App.WriteFrontendLog('App', msg);
+  }
+
+  function resultOrError(response, fallbackValue) {
+    return typeof response === 'string' ? [fallbackValue, response] : [response, ''];
+  }
+
+  function workspaceName(workspace) {
+    return String(workspace?.name || workspace?.rootPath || workspace?.id || '');
+  }
+
+  function workspaceAsNode(workspace, order) {
+    const name = workspaceName(workspace);
+    return {
+      id: name,
+      type: workspace?.type || 'space',
+      title: workspace?.title || name,
+      name,
+      rootPath: workspace?.rootPath || name,
+      status: workspace?.status || 'active',
+      order,
+    };
+  }
+
+  function emitWorkspaceActive(name) {
+    window.dispatchEvent(new CustomEvent('verstak:workspace-active-changed', {
+      detail: { workspaceName: name || '' }
+    }));
+  }
+
+  function clearWorkspaceSelection() {
+    selectedWorkspaceName = '';
+    emitWorkspaceActive('');
+  }
+
+  async function openDefaultWorkspaceRoute() {
+    try {
+      const [workspaces, err] = resultOrError(await App.ListWorkspaces(), []);
+      if (err || !workspaces || workspaces.length === 0) {
+        workspaceNodes = [];
+        selectedWorkspaceName = '';
+        currentView = 'workspace-empty';
+        emitWorkspaceActive('');
+        return;
+      }
+
+      workspaceNodes = workspaces.map(workspaceAsNode);
+      let currentWorkspace = null;
+      try {
+        currentWorkspace = await App.GetCurrentWorkspace();
+      } catch {
+        currentWorkspace = null;
+      }
+      const currentName = workspaceName(currentWorkspace);
+      const selected = workspaces.find((workspace) => workspaceName(workspace) === currentName) || workspaces[0];
+      selectedWorkspaceName = workspaceName(selected);
+      if (selectedWorkspaceName) {
+        try { await App.SetCurrentWorkspace(selectedWorkspaceName); } catch {}
+        currentView = 'workspace';
+      } else {
+        currentView = 'workspace-empty';
+      }
+      emitWorkspaceActive(selectedWorkspaceName);
+    } catch (e) {
+      debug.log('[App] openDefaultWorkspaceRoute ERROR', String(e));
+      workspaceNodes = [];
+      selectedWorkspaceName = '';
+      currentView = 'workspace-empty';
+      emitWorkspaceActive('');
+    }
   }
 
   function currentSnapshot() {
@@ -70,6 +139,7 @@
     activeSettingsPanelId = snapshot.activeSettingsPanelId;
     openedResource = snapshot.openedResource;
     selectedWorkspaceName = snapshot.selectedWorkspaceName;
+    emitWorkspaceActive(currentView === 'workspace' ? selectedWorkspaceName : '');
     applyingNavigation = false;
   }
 
@@ -153,6 +223,7 @@
         debug.log('[App] checkVault: vault open, needsVaultSelection=false');
         flog('checkVault: needsVaultSelection=false');
         needsVaultSelection = false;
+        await openDefaultWorkspaceRoute();
       }
     } catch (e) {
       debug.log('[App] checkVault: ERROR', String(e));
@@ -166,15 +237,18 @@
     flog('checkVault: END, loading=false');
   }
 
-  function onVaultOpened() {
+  async function onVaultOpened() {
     debug.log('[App] onVaultOpened');
     needsVaultSelection = false;
     vaultStatus = { status: 'open', path: '', vaultId: '' };
+    await openDefaultWorkspaceRoute();
+    pushNavigation();
   }
 
   function onNav(e) {
     debug.log('[App] onNav:', e.detail.viewId);
     currentView = e.detail.viewId;
+    if (currentView !== 'workspace') clearWorkspaceSelection();
     pushNavigation();
   }
 
@@ -183,6 +257,7 @@
     activeView = e.detail.viewId;
     activeViewPluginId = e.detail.pluginId || '';
     currentView = 'plugin-view';
+    clearWorkspaceSelection();
     pushNavigation();
   }
 
@@ -191,6 +266,7 @@
     activeSettingsPluginId = e.detail.pluginId;
     activeSettingsPanelId = e.detail.panelId || '';
     currentView = 'plugin-manager';
+    clearWorkspaceSelection();
     pushNavigation();
   }
 
@@ -206,7 +282,13 @@
     selectedWorkspaceName = e.detail?.workspaceName || '';
     workspaceNodes = e.detail?.nodes || workspaceNodes;
     if (selectedWorkspaceName) {
+      activeView = null;
+      activeViewPluginId = '';
+      activeSettingsPluginId = '';
+      activeSettingsPanelId = '';
+      openedResource = null;
       currentView = 'workspace';
+      emitWorkspaceActive(selectedWorkspaceName);
       pushNavigation();
     }
   }
@@ -302,7 +384,7 @@
           <PluginManager {activeSettingsPluginId} {activeSettingsPanelId} />
         {:else if currentView === 'workbench'}
           <WorkbenchHost {openedResource} />
-        {:else if currentView === 'workspace'}
+        {:else if currentView === 'workspace' || currentView === 'workspace-empty'}
           <WorkspaceHost selectedWorkspaceName={selectedWorkspaceName} nodes={workspaceNodes} />
         {:else}
           <ViewContainer {activeView} {activeViewPluginId} />

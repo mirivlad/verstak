@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { waitForAppReady, setupConsoleCollector, resetMockState } from './helpers.js';
+import { waitForAppReady, setupConsoleCollector, resetMockState, openPluginManager } from './helpers.js';
 
 test.describe('D: Plugin API bridge', () => {
   let consoleCollector;
@@ -26,7 +26,7 @@ test.describe('D: Plugin API bridge', () => {
     await page.locator('.pt-save-setting').click();
     await expect(saved).toHaveText('Saved setting: persisted through bridge', { timeout: 10000 });
 
-    await page.locator('.sidebar .nav-item').filter({ hasText: 'Plugin Manager' }).click();
+    await openPluginManager(page);
     await expect.poll(() => page.evaluate(() => Object.keys(window.__VERSTAK_COMMAND_HANDLERS__ || {}).length)).toBe(0);
     await expect.poll(() => page.evaluate(() => (window.__VERSTAK_EVENT_HANDLERS__?.['verstak.platform-test.echo'] || []).length)).toBe(0);
     await page.locator('button.reload-btn').click();
@@ -155,7 +155,7 @@ test.describe('D: Plugin API bridge', () => {
     await expect.poll(() => page.evaluate(() => Object.keys(window.__VERSTAK_COMMAND_HANDLERS__ || {}).length)).toBe(1);
     await expect.poll(() => page.evaluate(() => (window.__VERSTAK_EVENT_HANDLERS__?.['verstak.platform-test.echo'] || []).length)).toBe(1);
 
-    await page.locator('.sidebar .nav-item').filter({ hasText: 'Plugin Manager' }).click();
+    await openPluginManager(page);
 
     await expect.poll(() => page.evaluate(() => Object.keys(window.__VERSTAK_COMMAND_HANDLERS__ || {}).length)).toBe(0);
     await expect.poll(() => page.evaluate(() => (window.__VERSTAK_EVENT_HANDLERS__?.['verstak.platform-test.echo'] || []).length)).toBe(0);
@@ -165,7 +165,7 @@ test.describe('D: Plugin API bridge', () => {
     await page.locator('.sidebar .plugin-item').filter({ hasText: 'Platform Test' }).click();
     await expect(page.locator('.pt-command-result')).toContainText('Command: handled', { timeout: 10000 });
 
-    await page.locator('.sidebar .nav-item').filter({ hasText: 'Plugin Manager' }).click();
+    await openPluginManager(page);
     const pluginCard = page.locator('.plugin-card').filter({ hasText: 'verstak.platform-test' });
     await pluginCard.locator('button.btn-disable').click();
     await expect(pluginCard.locator('button.btn-enable')).toBeVisible({ timeout: 10000 });
@@ -175,7 +175,7 @@ test.describe('D: Plugin API bridge', () => {
   });
 
   test('platform-test settings panel loads bundle content returned as raw string', async ({ page }) => {
-    await page.locator('.sidebar .nav-item').filter({ hasText: 'Plugin Manager' }).click();
+    await openPluginManager(page);
 
     const pluginCard = page.locator('.plugin-card').filter({ hasText: 'verstak.platform-test' });
     await pluginCard.locator('button.btn-settings').click();

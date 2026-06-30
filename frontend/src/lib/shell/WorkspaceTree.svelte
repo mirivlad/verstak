@@ -5,7 +5,7 @@
 </script>
 
 <script>
-  import { onMount } from 'svelte';
+  import { onDestroy, onMount } from 'svelte';
   import * as App from '../../../wailsjs/go/api/App';
   import Icon from '../ui/Icon.svelte';
 
@@ -20,7 +20,19 @@
   let renameValue = '';
   let busyId = '';
 
-  onMount(loadWorkspaces);
+  onMount(() => {
+    loadWorkspaces();
+    window.addEventListener('verstak:workspace-active-changed', onActiveWorkspaceChanged);
+  });
+
+  onDestroy(() => {
+    window.removeEventListener('verstak:workspace-active-changed', onActiveWorkspaceChanged);
+  });
+
+  function onActiveWorkspaceChanged(event) {
+    currentWorkspaceId = event.detail?.workspaceName || '';
+    activeWorkspaceId.set(currentWorkspaceId);
+  }
 
   function resultOrError(response, fallbackValue) {
     return typeof response === 'string' ? [fallbackValue, response] : [response, ''];
@@ -57,8 +69,19 @@
         workspaces = [];
       } else {
         workspaces = list || [];
-        if (!currentWorkspaceId || !workspaces.some((ws) => wsName(ws) === currentWorkspaceId)) {
-          currentWorkspaceId = wsName(workspaces[0] || {});
+        if (!currentWorkspaceId) {
+          let currentWorkspace = null;
+          try {
+            currentWorkspace = await App.GetCurrentWorkspace();
+          } catch {
+            currentWorkspace = null;
+          }
+          const currentName = wsName(currentWorkspace);
+          if (workspaces.some((ws) => wsName(ws) === currentName)) {
+            currentWorkspaceId = currentName;
+          }
+        } else if (!workspaces.some((ws) => wsName(ws) === currentWorkspaceId)) {
+          currentWorkspaceId = '';
         }
         activeWorkspaceId.set(currentWorkspaceId);
       }
@@ -215,9 +238,9 @@
 
 <style>
   .wt { display: flex; flex-direction: column; flex: 1; overflow: hidden; position: relative; }
-  .wt-header { display: flex; align-items: center; justify-content: space-between; padding: 0.4rem 0.6rem; border-bottom: 1px solid #0f3460; flex-shrink: 0; }
+  .wt-header { display: flex; align-items: center; justify-content: space-between; padding: 0.7rem 0.6rem 0.35rem; border-bottom: 1px solid #0f3460; flex-shrink: 0; }
   .wt-title { color: #a0a0b8; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600; }
-  .wt-list { min-height: 0; overflow-y: auto; padding: 0.2rem 0; }
+  .wt-list { min-height: 0; overflow-y: auto; padding: 0.2rem 0.6rem; }
   .wt-btn { min-height: 0; background: none; border: none; color: #666; cursor: pointer; font-size: 0.85rem; padding: 0.1rem 0.3rem; border-radius: 3px; }
   .wt-btn:hover:not(:disabled) { color: #4ecca3; background: rgba(78,204,163,0.1); }
   .wt-btn-small { font-size: 0.68rem; opacity: 0; }
@@ -225,12 +248,12 @@
   .wt-row:hover .wt-btn-small { opacity: 1; }
   .wt-loading, .wt-error { padding: 0.5rem; font-size: 0.75rem; color: #666; }
   .wt-error { color: #e94560; }
-  .wt-row { display: flex; align-items: center; gap: 0.25rem; padding: 0.15rem 0.45rem; min-height: 1.7rem; }
+  .wt-row { display: flex; align-items: center; gap: 0.45rem; padding: 0.15rem 0.45rem; min-height: 1.7rem; border-radius: 3px; }
   .wt-row:hover { background: rgba(15,52,96,0.4); }
   .wt-node.selected > .wt-row { background: rgba(78,204,163,0.1); }
   .wt-icon { width: 0.9rem; height: 0.9rem; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; color: #a0a0b8; }
   :global(.wt-node-icon) { display: block; }
-  .wt-label { flex: 1; min-width: 0; min-height: 0; justify-content: flex-start; background: none; border: none; color: #e0e0f0; font-size: 0.78rem; text-align: left; cursor: pointer; padding: 0.1rem 0.2rem; border-radius: 3px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .wt-label { flex: 1; min-width: 0; min-height: 0; justify-content: flex-start; background: none; border: none; color: #a0a0b8; font-size: 0.78rem; text-align: left; cursor: pointer; padding: 0.1rem 0; border-radius: 3px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .wt-label:hover { color: #4ecca3; }
   .wt-icon-btn { width: 1.25rem; height: 1.25rem; min-height: 0; padding: 0; border: none; background: transparent; color: #666; opacity: 0; flex-shrink: 0; cursor: pointer; border-radius: 3px; }
   .wt-row:hover .wt-icon-btn { opacity: 1; }

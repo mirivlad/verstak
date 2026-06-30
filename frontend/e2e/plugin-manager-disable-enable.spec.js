@@ -12,7 +12,7 @@
  * 8. Verify plugin sidebar item returns
  */
 import { test, expect } from '@playwright/test';
-import { waitForAppReady, setupConsoleCollector, resetMockState } from './helpers.js';
+import { waitForAppReady, setupConsoleCollector, resetMockState, openPluginManager } from './helpers.js';
 
 test.describe('A: Plugin Manager Disable/Enable refresh', () => {
   let consoleCollector;
@@ -22,6 +22,7 @@ test.describe('A: Plugin Manager Disable/Enable refresh', () => {
     await resetMockState(page);
     await page.goto('/');
     await waitForAppReady(page);
+    await openPluginManager(page);
   });
 
   test.afterEach(async () => {

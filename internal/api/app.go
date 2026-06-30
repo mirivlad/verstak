@@ -1444,7 +1444,28 @@ func decodeSecretRecord(raw map[string]interface{}) (coresecrets.SecretRecord, e
 	if err := json.Unmarshal(data, &record); err != nil {
 		return coresecrets.SecretRecord{}, err
 	}
+	if strings.TrimSpace(record.ID) == "" {
+		record.ID = generatedSecretID(record.Title)
+	}
 	return record, nil
+}
+
+func generatedSecretID(title string) string {
+	base := strings.ToLower(strings.TrimSpace(title))
+	base = strings.Map(func(r rune) rune {
+		if r >= 'a' && r <= 'z' || r >= '0' && r <= '9' || r == '.' || r == '_' || r == '-' {
+			return r
+		}
+		if r == ' ' || r == '\t' || r == '\n' || r == '\r' {
+			return '-'
+		}
+		return -1
+	}, base)
+	base = strings.Trim(base, ".-_")
+	if base == "" {
+		base = "secret"
+	}
+	return fmt.Sprintf("%s-%d", base, time.Now().UnixNano())
 }
 
 func secretRecordMap(record coresecrets.SecretRecord, includeValue bool) map[string]interface{} {

@@ -11,6 +11,13 @@ export async function waitForAppReady(page) {
   await page.waitForTimeout(1000);
 }
 
+/** Open the secondary Plugin Manager route from the status-bar settings menu. */
+export async function openPluginManager(page) {
+  await page.locator('[data-settings-menu-button]').click();
+  await page.locator('[data-settings-action="plugin-manager"]').click();
+  await page.waitForSelector('.plugin-manager', { state: 'visible', timeout: 10000 });
+}
+
 /** Collect all console errors since last reset */
 export function setupConsoleCollector(page) {
   const errors = [];

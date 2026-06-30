@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { waitForAppReady, setupConsoleCollector, resetMockState } from './helpers.js';
+import { waitForAppReady, setupConsoleCollector, resetMockState, openPluginManager } from './helpers.js';
 
 test.describe('G: Files Plugin', () => {
   let consoleCollector;
@@ -16,7 +16,7 @@ test.describe('G: Files Plugin', () => {
   });
 
   test('files plugin appears in Plugin Manager as loaded', async ({ page }) => {
-    await page.locator('.sidebar .nav-item').filter({ hasText: 'Plugin Manager' }).click();
+    await openPluginManager(page);
     const card = page.locator('.plugin-card').filter({ hasText: 'verstak.files' });
     await expect(card).toBeVisible({ timeout: 10000 });
     await expect(card.locator('.status-badge')).toHaveText('loaded');
@@ -88,7 +88,7 @@ test.describe('G: Files Plugin', () => {
     await expect(page.locator('.files-breadcrumb')).not.toContainText('Daily');
   });
 
-  test('files explorer uses icon controls and no row New Here action', async ({ page }) => {
+  test('files explorer uses labeled controls and no row New Here action', async ({ page }) => {
     await page.locator('.wt-label').filter({ hasText: 'Project' }).click();
     await expect(page.locator('.files-breadcrumb')).toContainText('Project', { timeout: 10000 });
 
@@ -96,13 +96,13 @@ test.describe('G: Files Plugin', () => {
       const button = page.locator(`[data-files-action="${action}"]`);
       await expect(button).toHaveAttribute('title', /.+/);
       await expect(button.locator('svg')).toBeVisible();
-      await expect(button).not.toHaveText(/\S/);
+      await expect(button).toHaveText(/\S/);
     }
 
     await expect(page.locator('.files-row-btn').filter({ hasText: 'New here' })).toHaveCount(0);
     const firstRowButton = page.locator('[data-file-name="Notes"] .files-row-btn').first();
     await expect(firstRowButton).toBeVisible();
-    await expect(firstRowButton).not.toHaveText(/\S/);
+    await expect(firstRowButton).toHaveText(/\S/);
     expect(await firstRowButton.evaluate((node) => node.innerHTML)).toContain('<svg');
   });
 

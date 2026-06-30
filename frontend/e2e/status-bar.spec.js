@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { waitForAppReady, setupConsoleCollector, resetMockState } from './helpers.js';
+import { waitForAppReady, setupConsoleCollector, resetMockState, openPluginManager } from './helpers.js';
 
 test.describe('Status Bar host', () => {
   let consoleCollector;
@@ -39,6 +39,7 @@ test.describe('Status Bar host', () => {
   test('refreshes statusBarItems after disabling plugin', async ({ page }) => {
     const pluginCard = page.locator('.plugin-card').filter({ hasText: 'verstak.platform-test' });
     await expect(page.locator('[data-status-item-id="verstak.platform-test.status"]')).toBeVisible();
+    await openPluginManager(page);
 
     await pluginCard.locator('button.btn-disable').click();
 

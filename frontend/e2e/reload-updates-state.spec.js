@@ -7,7 +7,7 @@
  * 3. Verify UI reflects the updated state
  */
 import { test, expect } from '@playwright/test';
-import { waitForAppReady, setupConsoleCollector, resetMockState, setPluginStatus } from './helpers.js';
+import { waitForAppReady, setupConsoleCollector, resetMockState, setPluginStatus, openPluginManager } from './helpers.js';
 
 test.describe('C: Reload updates UI state', () => {
   let consoleCollector;
@@ -17,6 +17,7 @@ test.describe('C: Reload updates UI state', () => {
     await resetMockState(page);
     await page.goto('/');
     await waitForAppReady(page);
+    await openPluginManager(page);
   });
 
   test.afterEach(async () => {

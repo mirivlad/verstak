@@ -2,6 +2,7 @@
   import { onDestroy, onMount } from 'svelte';
   import * as App from '../../../wailsjs/go/api/App';
   import WorkspaceTree from './WorkspaceTree.svelte';
+  import GlobalSearch from './GlobalSearch.svelte';
   import Icon from '../ui/Icon.svelte';
   import { debug } from '../log/debug.js';
 
@@ -76,6 +77,10 @@
     <span class="sidebar-title">Verstak</span>
   </div>
 
+  {#if vaultOpen}
+    <GlobalSearch />
+  {/if}
+
   {#if sidebarItems.length > 0}
     <div class="sidebar-section">
       <span class="section-label">Tools</span>
@@ -141,7 +146,7 @@
   .sidebar-section {
     display: flex;
     flex-direction: column;
-    padding: 0.5rem 0.75rem;
+    padding: 0.45rem 0.6rem 0.55rem;
     gap: 0.15rem;
     border-bottom: 1px solid #0f3460;
   }
@@ -154,38 +159,40 @@
   }
 
   .section-label {
-    color: #666;
+    color: #a0a0b8;
     font-size: 0.7rem;
     text-transform: uppercase;
     letter-spacing: 0.05em;
-    padding: 0.25rem 0.5rem;
+    padding: 0.25rem 0.45rem 0.35rem;
+    font-weight: 600;
   }
 
   .nav-item {
     display: flex;
     align-items: center;
     justify-content: flex-start;
-    gap: 0.6rem;
-    padding: 0.45rem 0.75rem;
+    gap: 0.45rem;
+    min-height: 1.7rem;
+    padding: 0.15rem 0.45rem;
     background: none;
     border: none;
     color: #a0a0b8;
-    font-size: 0.85rem;
+    font-size: 0.78rem;
     cursor: pointer;
-    border-radius: 6px;
+    border-radius: 3px;
     text-align: left;
     width: 100%;
     transition: background 0.15s, color 0.15s;
   }
 
   .nav-item:hover {
-    background: #0f3460;
+    background: rgba(15,52,96,0.4);
     color: #e0e0f0;
   }
 
   :global(.nav-icon) {
-    width: 1.2rem;
-    height: 1.2rem;
+    width: 0.9rem;
+    height: 0.9rem;
     flex-shrink: 0;
     color: currentColor;
   }

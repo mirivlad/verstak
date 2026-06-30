@@ -1,7 +1,6 @@
 <script>
   import { onDestroy, onMount } from 'svelte';
   import * as App from '../../../wailsjs/go/api/App';
-  import PluginBundleHost from '../plugin-host/PluginBundleHost.svelte';
   import Icon from '../ui/Icon.svelte';
 
   let items = [];
@@ -66,10 +65,6 @@
     settingsOpen = false;
   }
 
-  function statusItemProps(item) {
-    return { statusBarItem: item };
-  }
-
   onMount(() => {
     loadStatusBar();
     window.addEventListener('verstak:plugins-changed', loadStatusBar);
@@ -96,34 +91,40 @@
       {vaultLabel}
     </span>
     {#each leftItems as item}
-      <span class="status-bar-item" data-status-item-id={item.id} title={item.pluginId}>
-        {#if item.handler}
-          <PluginBundleHost pluginId={item.pluginId} componentId={item.handler} componentProps={statusItemProps(item)} />
-        {:else}
-          {item.label || item.id}
-        {/if}
+      <span
+        class:status-bar-warning={item.handler}
+        class="status-bar-item"
+        data-status-item-id={item.id}
+        title={item.handler ? `${item.pluginId}: compact status only` : item.pluginId}
+      >
+        {#if item.handler}<Icon name="warning" size={11} class="status-warning-icon" />{/if}
+        {item.label || item.id}
       </span>
     {/each}
   </div>
   <div class="status-bar-group status-center">
     {#each centerItems as item}
-      <span class="status-bar-item" data-status-item-id={item.id} title={item.pluginId}>
-        {#if item.handler}
-          <PluginBundleHost pluginId={item.pluginId} componentId={item.handler} componentProps={statusItemProps(item)} />
-        {:else}
-          {item.label || item.id}
-        {/if}
+      <span
+        class:status-bar-warning={item.handler}
+        class="status-bar-item"
+        data-status-item-id={item.id}
+        title={item.handler ? `${item.pluginId}: compact status only` : item.pluginId}
+      >
+        {#if item.handler}<Icon name="warning" size={11} class="status-warning-icon" />{/if}
+        {item.label || item.id}
       </span>
     {/each}
   </div>
   <div class="status-bar-group status-right">
     {#each rightItems as item}
-      <span class="status-bar-item" data-status-item-id={item.id} title={item.pluginId}>
-        {#if item.handler}
-          <PluginBundleHost pluginId={item.pluginId} componentId={item.handler} componentProps={statusItemProps(item)} />
-        {:else}
-          {item.label || item.id}
-        {/if}
+      <span
+        class:status-bar-warning={item.handler}
+        class="status-bar-item"
+        data-status-item-id={item.id}
+        title={item.handler ? `${item.pluginId}: compact status only` : item.pluginId}
+      >
+        {#if item.handler}<Icon name="warning" size={11} class="status-warning-icon" />{/if}
+        {item.label || item.id}
       </span>
     {/each}
     <div class="settings-menu-wrap">
@@ -207,12 +208,24 @@
   }
 
   .status-bar-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
     max-width: 18rem;
     overflow: hidden;
     padding: 0.12rem 0.35rem;
     border-radius: 4px;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+
+  .status-bar-warning {
+    color: #ffc857;
+  }
+
+  :global(.status-warning-icon) {
+    flex-shrink: 0;
+    color: currentColor;
   }
 
   .vault-status {

@@ -39,20 +39,20 @@
   async function createVault() {
     error = '';
     if (!newVaultPath.trim()) {
-      error = 'Please enter or select a path for the new vault';
+      error = 'Укажите или выберите папку для нового vault';
       return;
     }
     creating = true;
     try {
       const createErr = await App.CreateVault(newVaultPath.trim());
       if (createErr) {
-        error = 'Create vault: ' + createErr;
+        error = 'Не удалось создать vault: ' + createErr;
         creating = false;
         return;
       }
       const openErr = await App.OpenVault(newVaultPath.trim());
       if (openErr) {
-        error = 'Open vault: ' + openErr;
+        error = 'Не удалось открыть vault: ' + openErr;
         creating = false;
         return;
       }
@@ -70,14 +70,14 @@
   async function openExistingVault() {
     error = '';
     if (!openVaultPath.trim()) {
-      error = 'Please enter or select a path to an existing vault';
+      error = 'Укажите или выберите существующий vault';
       return;
     }
     opening = true;
     try {
       const openErr = await App.OpenVault(openVaultPath.trim());
       if (openErr) {
-        error = 'Open vault: ' + openErr;
+        error = 'Не удалось открыть vault: ' + openErr;
         opening = false;
         return;
       }
@@ -98,7 +98,7 @@
     try {
       const openErr = await App.OpenVault(path);
       if (openErr) {
-        error = 'Open vault: ' + openErr;
+        error = 'Не удалось открыть vault: ' + openErr;
         opening = false;
         return;
       }
@@ -117,7 +117,7 @@
 {#if loading}
   <div class="vault-selection">
     <div class="vault-selection-inner">
-      <p class="loading-text">Loading...</p>
+      <p class="loading-text">Загрузка...</p>
     </div>
   </div>
 {:else}
@@ -130,7 +130,7 @@
         <line x1="9" y1="14" x2="15" y2="14"/>
       </svg>
       <h1>Verstak</h1>
-      <p class="subtitle">Choose a vault to get started</p>
+      <p class="subtitle">Выберите vault для начала работы</p>
     </div>
 
     {#if error}
@@ -142,43 +142,43 @@
 
     <div class="actions">
       <div class="action-card">
-        <h3>Create New Vault</h3>
-        <p class="hint">Create a new vault folder. This will be your workspace.</p>
+        <h3>Создать новый vault</h3>
+        <p class="hint">Создайте локальную папку vault. В ней будут храниться рабочие пространства и проекты.</p>
         <div class="input-row">
           <input
             type="text"
             bind:value={newVaultPath}
-            placeholder="Select or type a path..."
+            placeholder="Выберите или введите путь..."
             disabled={creating}
           />
           <button class="btn-secondary" on:click={browseNewVault} type="button" disabled={creating}>
-            Browse…
+            Выбрать…
           </button>
         </div>
         <div class="button-row">
           <button class="btn-primary" on:click={createVault} type="button" disabled={creating}>
-            {creating ? 'Creating...' : 'Create & Open'}
+            {creating ? 'Создаём...' : 'Создать vault'}
           </button>
         </div>
       </div>
 
       <div class="action-card">
-        <h3>Open Existing Vault</h3>
-        <p class="hint">Open a vault that already exists on this computer.</p>
+        <h3>Открыть существующий vault</h3>
+        <p class="hint">Используйте vault, который уже есть на этом компьютере.</p>
         <div class="input-row">
           <input
             type="text"
             bind:value={openVaultPath}
-            placeholder="Select or type a path..."
+            placeholder="Выберите или введите путь..."
             disabled={opening}
           />
           <button class="btn-secondary" on:click={browseOpenVault} type="button" disabled={opening}>
-            Browse…
+            Выбрать…
           </button>
         </div>
         <div class="button-row">
-          <button class="btn-primary" on:click={openExistingVault} type="button" disabled={opening}>
-            {opening ? 'Opening...' : 'Open'}
+          <button class="btn-secondary open-existing-btn" on:click={openExistingVault} type="button" disabled={opening}>
+            {opening ? 'Открываем...' : 'Открыть существующий'}
           </button>
         </div>
       </div>
@@ -186,7 +186,7 @@
 
     {#if recentVaults.length > 0}
       <div class="recent-section">
-        <h3>Recent Vaults</h3>
+        <h3>Недавние vault</h3>
         <ul class="recent-list">
           {#each recentVaults as path}
             <li>

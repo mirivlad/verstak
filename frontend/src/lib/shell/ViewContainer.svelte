@@ -60,11 +60,6 @@
         <div class="view-header">
           <Icon name={currentView.icon || 'logo'} size={20} class="view-icon" />
           <h2>{currentView.title}</h2>
-          {#if hasFrontend}
-            <span class="frontend-badge">frontend bundle</span>
-          {:else}
-            <span class="no-frontend-badge">no frontend bundle</span>
-          {/if}
         </div>
         <div class="view-content">
           {#if hasFrontend}
@@ -133,26 +128,6 @@
     height: 1.3rem;
     color: #a78bfa;
     flex-shrink: 0;
-  }
-  .frontend-badge {
-    font-size: 0.7rem;
-    padding: 0.15rem 0.5rem;
-    background: rgba(78, 204, 163, 0.15);
-    color: #4ecca3;
-    border-radius: 8px;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.02em;
-  }
-  .no-frontend-badge {
-    font-size: 0.7rem;
-    padding: 0.15rem 0.5rem;
-    background: rgba(233, 69, 96, 0.1);
-    color: #e94560;
-    border-radius: 8px;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.02em;
   }
   .view-content {
     flex: 1;
@@ -235,6 +210,7 @@
     height: 100%;
     color: #555;
     font-size: 1rem;
+    text-align: center;
   }
   .empty .sub { font-size: 0.85rem; color: #444; margin-top: 0.5rem; }
 </style>

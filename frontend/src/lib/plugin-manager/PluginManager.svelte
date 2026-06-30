@@ -514,7 +514,7 @@
   }
   .modal {
     background: #16213e; border: 1px solid #0f3460; border-radius: 8px;
-    width: 480px; max-width: 90vw; max-height: 80vh; display: flex; flex-direction: column;
+    width: min(880px, calc(100vw - 4rem)); max-width: calc(100vw - 4rem); height: min(680px, calc(100vh - 4rem)); max-height: calc(100vh - 4rem); display: flex; flex-direction: column;
   }
   .modal-header {
     display: flex; align-items: center; justify-content: space-between;
@@ -523,7 +523,8 @@
   .modal-header h3 { margin: 0; color: #e0e0f0; font-size: 1.1rem; }
   .modal-close { background: none; border: none; color: #a0a0b8; font-size: 1.2rem; cursor: pointer; padding: 0.2rem 0.5rem; }
   .modal-close:hover { color: #e94560; }
-  .modal-body { padding: 1rem; overflow-y: auto; }
+  .modal-body { padding: 1rem; overflow: auto; min-height: 0; flex: 1; display: flex; flex-direction: column; }
+  .modal-body :global(.plugin-bundle-host) { flex: 1; min-height: 0; display: flex; flex-direction: column; }
   .settings-hint { color: #666; font-size: 0.8rem; margin: 0.25rem 0; }
   .settings-hint code { color: #4ecca3; }
 
@@ -542,7 +543,8 @@
     }
 
     .modal {
-      width: min(480px, calc(100vw - 2rem));
+      width: min(880px, calc(100vw - 2rem));
+      height: min(680px, calc(100vh - 2rem));
       max-height: calc(100vh - 2rem);
     }
   }

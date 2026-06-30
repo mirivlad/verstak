@@ -205,11 +205,33 @@
       },
       rootPath: '/tmp/verstak-test/plugins/browser-inbox',
       error: ''
+    },
+    'verstak.search': {
+      status: 'loaded',
+      enabled: true,
+      manifest: {
+        schemaVersion: 1,
+        id: 'verstak.search',
+        name: 'Search',
+        version: '0.1.0',
+        apiVersion: '0.1.0',
+        description: 'Workspace-scoped vault text search provider.',
+        source: 'official',
+        icon: 'search',
+        provides: ['verstak/search/v1', 'search.provider'],
+        requires: ['verstak/core/files/v1', 'verstak/core/workbench/v1'],
+        permissions: ['files.read', 'workbench.open', 'storage.namespace', 'ui.register'],
+        contributes: {
+          searchProviders: [{ id: 'verstak.search.vault-text', label: 'Vault Text Search', handler: 'verstak.search.searchVaultText' }]
+        }
+      },
+      rootPath: '/tmp/verstak-test/plugins/search',
+      error: ''
     }
   };
 
   var vaultStatus = { status: 'open', path: '/tmp/verstak-test/vault', vaultId: 'test-vault-001' };
-  var vaultPluginState = { enabledPlugins: ['verstak.platform-test', 'verstak.default-editor', 'verstak.files', 'verstak.sync', 'verstak.activity', 'verstak.browser-inbox'], disabledPlugins: [], desiredPlugins: [{ id: 'verstak.platform-test', version: '0.1.0', source: 'official' }, { id: 'verstak.default-editor', version: '0.1.0', source: 'official' }, { id: 'verstak.files', version: '0.1.0', source: 'official' }, { id: 'verstak.sync', version: '0.1.0', source: 'official' }, { id: 'verstak.activity', version: '0.1.0', source: 'official' }, { id: 'verstak.browser-inbox', version: '0.1.0', source: 'official' }] };
+  var vaultPluginState = { enabledPlugins: ['verstak.platform-test', 'verstak.default-editor', 'verstak.files', 'verstak.sync', 'verstak.activity', 'verstak.browser-inbox', 'verstak.search'], disabledPlugins: [], desiredPlugins: [{ id: 'verstak.platform-test', version: '0.1.0', source: 'official' }, { id: 'verstak.default-editor', version: '0.1.0', source: 'official' }, { id: 'verstak.files', version: '0.1.0', source: 'official' }, { id: 'verstak.sync', version: '0.1.0', source: 'official' }, { id: 'verstak.activity', version: '0.1.0', source: 'official' }, { id: 'verstak.browser-inbox', version: '0.1.0', source: 'official' }, { id: 'verstak.search', version: '0.1.0', source: 'official' }] };
   var appSettings = { currentVaultPath: '/tmp/verstak-test/vault', recentVaults: [] };
   var workbenchPreferences = {};
   var openedResources = [];
@@ -671,12 +693,18 @@
       function parent(path) { path = clean(path); var i = path.lastIndexOf('/'); return i < 0 ? '' : path.slice(0, i); }
       function ext(name) { var i = String(name || '').lastIndexOf('.'); return i > 0 ? name.slice(i + 1).toLowerCase() : ''; }
       function base(path) { path = clean(path); var i = path.lastIndexOf('/'); return i < 0 ? path : path.slice(i + 1); }
+      function formatDate(value) {
+        if (!value) return '';
+        var date = new Date(value);
+        if (Number.isNaN(date.getTime())) return String(value);
+        return new Intl.DateTimeFormat('ru-RU', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }).format(date);
+      }
       var FilesView = {
         mount: function (c, p, api) {
           if (!document.getElementById('mock-files-styles')) {
             var style = document.createElement('style');
             style.id = 'mock-files-styles';
-            style.textContent = '.files-root{display:flex;flex-direction:column;height:100%;min-height:0;background:#0d0d1a;color:#e0e0e0;outline:0}.files-toolbar{display:flex;align-items:center;gap:.4rem;padding:.5rem .75rem;background:#12122a;border-bottom:1px solid #16213e;flex-wrap:wrap}.files-toolbar-btn,.files-row-btn{display:inline-flex;align-items:center;justify-content:center;border:1px solid #333;border-radius:4px;background:#1a1a2e;color:#ccc;cursor:pointer}.files-toolbar-btn{width:2rem;height:2rem}.files-row-btn{width:1.75rem;height:1.75rem}.files-toolbar-btn svg,.files-row-btn svg{width:16px;height:16px}.files-breadcrumb{flex:1;min-width:150px;color:#8b8ba8}.files-breadcrumb-item{color:#4ecca3;cursor:pointer}.files-breadcrumb-current{color:#ddd}.files-filter,.files-sort,.files-create-input,.files-rename-input{font-size:.78rem;padding:.32rem .5rem;border:1px solid #333;border-radius:4px;background:#0d0d1a;color:#e0e0e0}.files-sort{appearance:none;background-color:#0d0d1a;padding-right:1rem}.files-list{flex:1;overflow:auto}.files-header,.files-item{display:grid;grid-template-columns:minmax(160px,1fr) 90px 90px 150px 160px;align-items:center;gap:.5rem;padding:.38rem .75rem;border-bottom:1px solid rgba(22,33,62,.55)}.files-header{background:#101028;color:#8b8ba8;font-size:.7rem;text-transform:uppercase}.files-item:hover{background:#17172d}.files-item.selected{background:#1a2a3a}.files-namecell{display:flex;align-items:center;gap:.5rem;min-width:0}.files-item-icon{width:1.25rem;color:#8b8ba8}.files-item-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.files-item-meta{font-size:.74rem;color:#777;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.files-row-actions{display:flex;justify-content:flex-end;gap:.35rem}.files-panel{display:flex;gap:.5rem;padding:.5rem .75rem;border-top:1px solid #16213e;background:#12122a}.files-create-input,.files-rename-input{flex:1}.files-ctx-menu{position:fixed;z-index:9999;min-width:170px;background:#1a1a2e;border:1px solid #333;border-radius:6px;padding:6px 0;box-shadow:0 8px 24px rgba(0,0,0,.5);font-size:.84rem;color:#e0e0e0}.files-ctx-menu-item{display:flex;align-items:center;gap:.5rem;padding:6px 16px;cursor:pointer}.files-ctx-menu-item:hover{background:#2a2a4e}.files-ctx-menu-item svg{width:14px;height:14px}.files-ctx-menu-sep{height:1px;background:#333;margin:4px 8px}.files-drag-over{outline:2px dashed #4ecca3;outline-offset:-2px}';
+            style.textContent = '.files-root{display:flex;flex-direction:column;height:100%;min-height:0;background:#0d0d1a;color:#e0e0e0;outline:0}.files-toolbar{display:flex;align-items:center;gap:.4rem;padding:.5rem .75rem;background:#12122a;border-bottom:1px solid #16213e;flex-wrap:wrap}.files-toolbar-btn,.files-row-btn{display:inline-flex;align-items:center;justify-content:center;gap:.3rem;border:1px solid #333;border-radius:4px;background:#1a1a2e;color:#ccc;cursor:pointer;white-space:nowrap}.files-toolbar-btn{min-height:2rem;padding:.35rem .55rem}.files-row-btn{min-height:1.75rem;padding:.25rem .45rem;font-size:.72rem}.files-toolbar-btn svg,.files-row-btn svg{width:15px;height:15px;flex-shrink:0}.files-btn-label{line-height:1}.files-breadcrumb{flex:1;min-width:150px;color:#8b8ba8}.files-breadcrumb-item{color:#4ecca3;cursor:pointer}.files-breadcrumb-current{color:#ddd}.files-filter,.files-sort,.files-create-input,.files-rename-input{font-size:.78rem;padding:.32rem .5rem;border:1px solid #333;border-radius:4px;background:#0d0d1a;color:#e0e0e0}.files-sort{appearance:none;background-color:#0d0d1a;padding-right:1rem}.files-list{flex:1;overflow:auto}.files-header,.files-item{display:grid;grid-template-columns:minmax(180px,1fr) 90px 80px 150px 210px;align-items:center;gap:.5rem;padding:.38rem .75rem;border-bottom:1px solid rgba(22,33,62,.55)}.files-header{background:#101028;color:#8b8ba8;font-size:.7rem;text-transform:uppercase}.files-item:hover{background:#17172d}.files-item.selected{background:#1a2a3a}.files-namecell{display:flex;align-items:center;gap:.5rem;min-width:0}.files-item-icon{width:1.25rem;color:#8b8ba8}.files-item-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.files-item-meta{font-size:.74rem;color:#777;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.files-row-actions{display:flex;justify-content:flex-end;gap:.35rem}.files-panel{display:flex;gap:.5rem;padding:.5rem .75rem;border-top:1px solid #16213e;background:#12122a}.files-create-input,.files-rename-input{flex:1}.files-ctx-menu{position:fixed;z-index:9999;min-width:170px;background:#1a1a2e;border:1px solid #333;border-radius:6px;padding:6px 0;box-shadow:0 8px 24px rgba(0,0,0,.5);font-size:.84rem;color:#e0e0e0}.files-ctx-menu-item{display:flex;align-items:center;gap:.5rem;padding:6px 16px;cursor:pointer}.files-ctx-menu-item:hover{background:#2a2a4e}.files-ctx-menu-item svg{width:14px;height:14px}.files-ctx-menu-sep{height:1px;background:#333;margin:4px 8px}.files-drag-over{outline:2px dashed #4ecca3;outline-offset:-2px}';
             document.head.appendChild(style);
           }
           c.innerHTML = '';
@@ -704,8 +732,8 @@
           function saveHistory() { window.__filesHistoryByWorkspace[historyKey] = { stack: history.slice(), index: historyIndex, currentPath: current }; }
           var toolbar = e('div', { className: 'files-toolbar' }, []);
           var breadcrumb = e('div', { className: 'files-breadcrumb' }, []);
-          function btn(title, action, fn) { return e('button', { className: 'files-toolbar-btn', 'data-files-action': action, title: title, 'aria-label': title, innerHTML: SVG, onClick: fn }, []); }
-          function rowBtn(title, action, fn) { return e('button', { className: 'files-row-btn', 'data-files-action': action, title: title, 'aria-label': title, innerHTML: SVG, onClick: fn }, []); }
+          function btn(title, action, fn) { return e('button', { className: 'files-toolbar-btn', 'data-files-action': action, title: title, 'aria-label': title, innerHTML: SVG + '<span class="files-btn-label">' + title + '</span>', onClick: fn }, []); }
+          function rowBtn(title, action, fn) { return e('button', { className: 'files-row-btn', 'data-files-action': action, title: title, 'aria-label': title, innerHTML: SVG + '<span class="files-btn-label">' + title + '</span>', onClick: fn }, []); }
           toolbar.appendChild(breadcrumb);
           toolbar.appendChild(btn('Back', 'back', goBack));
           toolbar.appendChild(btn('Forward', 'forward', goForward));
@@ -787,7 +815,7 @@
               row.appendChild(e('span', { className: 'files-namecell' }, [e('span', { className: 'files-item-icon', innerHTML: item.type === 'folder' ? FOLDER_SVG : SVG }, []), e('span', { className: 'files-item-name' }, [item.name])]));
               row.appendChild(e('span', { className: 'files-item-meta' }, [item.type === 'folder' ? 'folder' : (item.extension || ext(item.name) || 'file')]));
               row.appendChild(e('span', { className: 'files-item-meta' }, [item.size ? String(item.size) : '']));
-              row.appendChild(e('span', { className: 'files-item-meta' }, [item.modifiedAt || '']));
+              row.appendChild(e('span', { className: 'files-item-meta' }, [formatDate(item.modifiedAt)]));
               row.appendChild(e('span', { className: 'files-row-actions' }, [rowBtn('Open', 'row-open', function (ev) { ev.stopPropagation(); open(item); }), rowBtn('Rename', 'row-rename', function (ev) { ev.stopPropagation(); startRename(item); }), rowBtn('Move to trash', 'row-trash', function (ev) { ev.stopPropagation(); trash(item); })]));
               list.appendChild(row);
             });
@@ -1780,10 +1808,32 @@
           },
           rootPath: '/tmp/verstak-test/plugins/browser-inbox',
           error: ''
+        },
+        'verstak.search': {
+          status: 'loaded',
+          enabled: true,
+          manifest: {
+            schemaVersion: 1,
+            id: 'verstak.search',
+            name: 'Search',
+            version: '0.1.0',
+            apiVersion: '0.1.0',
+            description: 'Workspace-scoped vault text search provider.',
+            source: 'official',
+            icon: 'search',
+            provides: ['verstak/search/v1', 'search.provider'],
+            requires: ['verstak/core/files/v1', 'verstak/core/workbench/v1'],
+            permissions: ['files.read', 'workbench.open', 'storage.namespace', 'ui.register'],
+            contributes: {
+              searchProviders: [{ id: 'verstak.search.vault-text', label: 'Vault Text Search', handler: 'verstak.search.searchVaultText' }]
+            }
+          },
+          rootPath: '/tmp/verstak-test/plugins/search',
+          error: ''
         }
       };
       vaultStatus = { status: 'open', path: '/tmp/verstak-test/vault', vaultId: 'test-vault-001' };
-      vaultPluginState = { enabledPlugins: ['verstak.platform-test', 'verstak.default-editor', 'verstak.files', 'verstak.sync', 'verstak.activity', 'verstak.browser-inbox'], disabledPlugins: [], desiredPlugins: [{ id: 'verstak.platform-test', version: '0.1.0', source: 'official' }, { id: 'verstak.default-editor', version: '0.1.0', source: 'official' }, { id: 'verstak.files', version: '0.1.0', source: 'official' }, { id: 'verstak.sync', version: '0.1.0', source: 'official' }, { id: 'verstak.activity', version: '0.1.0', source: 'official' }, { id: 'verstak.browser-inbox', version: '0.1.0', source: 'official' }] };
+      vaultPluginState = { enabledPlugins: ['verstak.platform-test', 'verstak.default-editor', 'verstak.files', 'verstak.sync', 'verstak.activity', 'verstak.browser-inbox', 'verstak.search'], disabledPlugins: [], desiredPlugins: [{ id: 'verstak.platform-test', version: '0.1.0', source: 'official' }, { id: 'verstak.default-editor', version: '0.1.0', source: 'official' }, { id: 'verstak.files', version: '0.1.0', source: 'official' }, { id: 'verstak.sync', version: '0.1.0', source: 'official' }, { id: 'verstak.activity', version: '0.1.0', source: 'official' }, { id: 'verstak.browser-inbox', version: '0.1.0', source: 'official' }, { id: 'verstak.search', version: '0.1.0', source: 'official' }] };
       appSettings = { currentVaultPath: '/tmp/verstak-test/vault', recentVaults: [] };
       workbenchPreferences = {};
       openedResources = [];

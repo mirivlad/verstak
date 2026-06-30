@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { waitForAppReady, setupConsoleCollector, resetMockState } from './helpers.js';
+import { waitForAppReady, setupConsoleCollector, resetMockState, openPluginManager } from './helpers.js';
 
 test.describe('F: Default Editor Plugin', () => {
   let consoleCollector;
@@ -134,14 +134,14 @@ test.describe('F: Default Editor Plugin', () => {
   });
 
   test('default-editor plugin is listed as loaded in plugin manager', async ({ page }) => {
-    await page.locator('.sidebar .nav-item').filter({ hasText: 'Plugin Manager' }).click();
+    await openPluginManager(page);
     const card = page.locator('.plugin-card').filter({ hasText: 'verstak.default-editor' });
     await expect(card).toBeVisible({ timeout: 10000 });
     await expect(card.locator('.status-badge')).toHaveText('loaded');
   });
 
   test('disable default-editor plugin removes its providers', async ({ page }) => {
-    await page.locator('.sidebar .nav-item').filter({ hasText: 'Plugin Manager' }).click();
+    await openPluginManager(page);
     const card = page.locator('.plugin-card').filter({ hasText: 'verstak.default-editor' });
     await card.locator('button.btn-disable').click();
     await expect(card.locator('button.btn-enable')).toBeVisible({ timeout: 10000 });
@@ -161,7 +161,7 @@ test.describe('F: Default Editor Plugin', () => {
   });
 
   test('default-editor plugin card shows openProviders contribution count', async ({ page }) => {
-    await page.locator('.sidebar .nav-item').filter({ hasText: 'Plugin Manager' }).click();
+    await openPluginManager(page);
     const card = page.locator('.plugin-card').filter({ hasText: 'verstak.default-editor' });
     await expect(card).toBeVisible({ timeout: 10000 });
     await expect(card.locator('.meta-row').filter({ hasText: 'Contributions:' })).toContainText('3 openProviders');
