@@ -7,7 +7,6 @@
   import VaultSelection from './lib/shell/VaultSelection.svelte';
   import WorkbenchHost from './lib/shell/WorkbenchHost.svelte';
   import WorkspaceHost from './lib/shell/WorkspaceHost.svelte';
-  import TodaySurface from './lib/shell/TodaySurface.svelte';
   import * as App from '../wailsjs/go/api/App';
   import { debug } from './lib/log/debug.js';
   import { onMount } from 'svelte';
@@ -75,20 +74,33 @@
       if (err || !workspaces || workspaces.length === 0) {
         workspaceNodes = [];
         selectedWorkspaceName = '';
-        currentView = 'today';
+        currentView = 'workspace-empty';
         emitWorkspaceActive('');
         return;
       }
 
       workspaceNodes = workspaces.map(workspaceAsNode);
-      selectedWorkspaceName = '';
-      currentView = 'today';
-      emitWorkspaceActive('');
+      let currentWorkspace = null;
+      try {
+        currentWorkspace = await App.GetCurrentWorkspace();
+      } catch {
+        currentWorkspace = null;
+      }
+      const currentName = workspaceName(currentWorkspace);
+      const selected = workspaces.find((workspace) => workspaceName(workspace) === currentName) || workspaces[0];
+      selectedWorkspaceName = workspaceName(selected);
+      if (selectedWorkspaceName) {
+        try { await App.SetCurrentWorkspace(selectedWorkspaceName); } catch {}
+        currentView = 'workspace';
+      } else {
+        currentView = 'workspace-empty';
+      }
+      emitWorkspaceActive(selectedWorkspaceName);
     } catch (e) {
       debug.log('[App] openDefaultWorkspaceRoute ERROR', String(e));
       workspaceNodes = [];
       selectedWorkspaceName = '';
-      currentView = 'today';
+      currentView = 'workspace-empty';
       emitWorkspaceActive('');
     }
   }
@@ -382,12 +394,6 @@
           <PluginManager {activeSettingsPluginId} {activeSettingsPanelId} />
         {:else if currentView === 'workbench'}
           <WorkbenchHost {openedResource} />
-        {:else if currentView === 'today'}
-          <TodaySurface
-            workspaceRootPath=""
-            workspaceTitle=""
-            availableTools={[]}
-          />
         {:else if currentView === 'workspace' || currentView === 'workspace-empty'}
           <WorkspaceHost
             selectedWorkspaceName={selectedWorkspaceName}

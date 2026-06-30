@@ -83,20 +83,6 @@
     <GlobalSearch />
   {/if}
 
-  {#if vaultOpen}
-    <div class="sidebar-section">
-      <span class="section-label">Overview</span>
-      <button
-        class="nav-item today-item"
-        on:click={() => window.dispatchEvent(new CustomEvent('verstak:nav', { detail: { viewId: 'today' } }))}
-        type="button"
-      >
-        <span class="nav-icon-today">★</span>
-        <span class="nav-label">Today</span>
-      </button>
-    </div>
-  {/if}
-
   {#if sidebarItems.length > 0}
     <div class="sidebar-section">
       <span class="section-label">Tools</span>
@@ -214,21 +200,6 @@
   }
   :global(.nav-icon.icon-plugin) {
     color: #a78bfa;
-  }
-
-  .today-item {
-    gap: 0.55rem;
-  }
-
-  .nav-icon-today {
-    width: 0.9rem;
-    height: 0.9rem;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 0.85rem;
-    color: #4ecca3;
-    flex-shrink: 0;
   }
 
   .nav-label {

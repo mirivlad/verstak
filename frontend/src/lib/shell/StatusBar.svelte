@@ -95,7 +95,7 @@
         class:status-bar-warning={item.handler}
         class="status-bar-item"
         data-status-item-id={item.id}
-        title={item.handler ? `${item.pluginId}: click for details` : (item.label || item.id)}
+        title={item.handler ? `${item.pluginId}: compact status only` : item.pluginId}
       >
         {#if item.handler}<Icon name="warning" size={11} class="status-warning-icon" />{/if}
         {item.label || item.id}
@@ -108,7 +108,7 @@
         class:status-bar-warning={item.handler}
         class="status-bar-item"
         data-status-item-id={item.id}
-        title={item.handler ? `${item.pluginId}: click for details` : (item.label || item.id)}
+        title={item.handler ? `${item.pluginId}: compact status only` : item.pluginId}
       >
         {#if item.handler}<Icon name="warning" size={11} class="status-warning-icon" />{/if}
         {item.label || item.id}
@@ -121,7 +121,7 @@
         class:status-bar-warning={item.handler}
         class="status-bar-item"
         data-status-item-id={item.id}
-        title={item.handler ? `${item.pluginId}: click for details` : (item.label || item.id)}
+        title={item.handler ? `${item.pluginId}: compact status only` : item.pluginId}
       >
         {#if item.handler}<Icon name="warning" size={11} class="status-warning-icon" />{/if}
         {item.label || item.id}

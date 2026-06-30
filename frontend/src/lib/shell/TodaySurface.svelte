@@ -13,7 +13,6 @@
   let activity = [];
   let worklogSuggestions = [];
 
-  $: isGlobal = !workspaceRootPath || String(workspaceRootPath).trim() === '';
   $: hasBrowserInbox = hasTool('browser inbox') || hasTool('inbox');
   $: hasActivity = hasTool('activity');
   $: hasFiles = hasTool('files');
@@ -112,18 +111,24 @@
       readPluginSettings('verstak.journal'),
     ]);
 
-    if (isGlobal) {
-      captures = rowsFor(browserSettings, ['captures:global', 'captures']).slice(0, 4);
-      activity = rowsFor(activitySettings, ['events:global', 'events']).slice(0, 4);
-      worklogSuggestions = rowsFor(journalSettings, ['suggestions', 'worklog']).slice(0, 4);
-    } else {
-      captures = rowsFor(browserSettings, [workspaceKey('captures:workspace:')]).slice(0, 4);
-      activity = rowsFor(activitySettings, [workspaceKey('events:workspace:')]).slice(0, 4);
-      worklogSuggestions = rowsFor(journalSettings, [
-        workspaceKey('suggestions:workspace:'),
-        workspaceKey('worklog:workspace:'),
-      ]).slice(0, 4);
-    }
+    captures = rowsFor(browserSettings, [
+      workspaceKey('captures:workspace:'),
+      'captures:global',
+      'captures',
+    ]).slice(0, 4);
+
+    activity = rowsFor(activitySettings, [
+      workspaceKey('events:workspace:'),
+      'events:global',
+      'events',
+    ]).slice(0, 4);
+
+    worklogSuggestions = rowsFor(journalSettings, [
+      workspaceKey('suggestions:workspace:'),
+      workspaceKey('worklog:workspace:'),
+      'suggestions',
+      'worklog',
+    ]).slice(0, 4);
 
     loading = false;
   }

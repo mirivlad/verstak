@@ -502,15 +502,6 @@ export function createPluginAPI(pluginId) {
       }
     },
 
-    workspaces: {
-      list: function() {
-        assertActive('workspaces.list');
-        return callBackend(pluginId, 'workspaces.list', function() {
-          return App.ListWorkspaces();
-        });
-      }
-    },
-
     dispose: function() {
       if (disposed) return;
       disposed = true;
