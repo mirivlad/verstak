@@ -227,6 +227,25 @@
   $: totalPlugins = plugins.length;
   $: totalCaps = capabilities.length;
   $: totalPerms = permissions.length;
+  $: statusSummary = computeStatusSummary(plugins);
+  $: elevatedPermissionPluginCount = computeElevatedPermissionPluginCount(plugins, permissions);
+
+  function computeStatusSummary(pluginRows) {
+    return pluginRows.reduce((summary, plugin) => {
+      const status = plugin?.status || 'unknown';
+      if (status === 'loaded') summary.loaded += 1;
+      else if (status === 'degraded') summary.degraded += 1;
+      else if (status === 'failed' || status === 'incompatible' || status === 'missing-required-capability') summary.failed += 1;
+      else if (status === 'disabled' || plugin?.enabled === false) summary.disabled += 1;
+      else summary.other += 1;
+      return summary;
+    }, { loaded: 0, degraded: 0, failed: 0, disabled: 0, other: 0 });
+  }
+
+  function computeElevatedPermissionPluginCount(pluginRows, permissionRows) {
+    const dangerous = new Set((permissionRows || []).filter(permission => permission.dangerous).map(permission => permission.name));
+    return (pluginRows || []).filter(plugin => (plugin?.manifest?.permissions || []).some(permission => dangerous.has(permission))).length;
+  }
 
   function closeSettings() {
     settingsPanel = null;
@@ -278,6 +297,25 @@
       <span class="badge">{totalPlugins} plugin(s) discovered</span>
       <span class="badge">{totalCaps} capabilities registered</span>
       <span class="badge">{totalPerms} permissions known</span>
+    </div>
+
+    <div class="scan-summary" aria-label="Plugin scan summary">
+      <section class="scan-card" data-plugin-manager-summary="health">
+        <div class="scan-card-title">Plugin Health</div>
+        <div class="scan-metrics">
+          <span data-plugin-status-summary="loaded"><strong>{statusSummary.loaded}</strong> loaded</span>
+          <span data-plugin-status-summary="degraded"><strong>{statusSummary.degraded}</strong> degraded</span>
+          <span data-plugin-status-summary="failed"><strong>{statusSummary.failed}</strong> failed</span>
+          <span data-plugin-status-summary="disabled"><strong>{statusSummary.disabled}</strong> disabled</span>
+        </div>
+      </section>
+
+      <section class="scan-card" data-plugin-manager-summary="risk">
+        <div class="scan-card-title">Permission Risk</div>
+        <div class="scan-metrics">
+          <span data-plugin-risk-summary="elevated-permissions"><strong>{elevatedPermissionPluginCount}</strong> plugins request elevated permissions</span>
+        </div>
+      </section>
     </div>
 
     {#if plugins.length === 0 && missingInstalled.length === 0}
@@ -471,6 +509,47 @@
     background: #16213e; padding: 0.25rem 0.75rem; border-radius: 12px;
     font-size: 0.8rem; color: #a0a0b8; border: 1px solid #0f3460;
   }
+  .scan-summary {
+    display: grid;
+    grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+  }
+  .scan-card {
+    min-width: 0;
+    padding: 0.75rem;
+    border: 1px solid #0f3460;
+    border-radius: 8px;
+    background: #121a2c;
+  }
+  .scan-card-title {
+    color: #e0e0f0;
+    font-size: 0.82rem;
+    font-weight: 700;
+    margin-bottom: 0.5rem;
+  }
+  .scan-metrics {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.45rem;
+  }
+  .scan-metrics span {
+    min-height: 1.55rem;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0.18rem 0.5rem;
+    border: 1px solid rgba(78, 204, 163, 0.16);
+    border-radius: 5px;
+    color: #a0a0b8;
+    background: #101626;
+    font-size: 0.76rem;
+  }
+  .scan-metrics strong {
+    color: #f4f7fb;
+    font-size: 0.88rem;
+  }
   .empty {
     padding: 2rem; text-align: center; color: #a0a0b8;
     background: #16213e; border-radius: 8px; border: 1px dashed #0f3460;
@@ -540,6 +619,10 @@
 
     .reload-btn {
       width: 100%;
+    }
+
+    .scan-summary {
+      grid-template-columns: 1fr;
     }
 
     .modal {

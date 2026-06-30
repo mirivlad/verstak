@@ -73,6 +73,21 @@ test.describe('E: Plugin Manager layout', () => {
     expect(buttonStyle.borderRadius).toBe('6px');
   });
 
+  test('plugin manager summarizes plugin health and elevated permissions before the list', async ({ page }) => {
+    await openPluginManager(page);
+
+    const health = page.locator('[data-plugin-manager-summary="health"]');
+    await expect(health).toBeVisible();
+    await expect(health.locator('[data-plugin-status-summary="loaded"]')).toContainText('7');
+    await expect(health.locator('[data-plugin-status-summary="failed"]')).toContainText('0');
+    await expect(health.locator('[data-plugin-status-summary="disabled"]')).toContainText('0');
+
+    const risk = page.locator('[data-plugin-manager-summary="risk"]');
+    await expect(risk).toBeVisible();
+    await expect(risk.locator('[data-plugin-risk-summary="elevated-permissions"]')).toContainText('4');
+    await expect(risk).toContainText('elevated permissions');
+  });
+
   test('workspace selection keeps exactly one active node', async ({ page }) => {
     const selected = page.locator('.wt-node.selected .wt-label');
     await expect(selected).toHaveCount(1);
