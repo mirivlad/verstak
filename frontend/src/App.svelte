@@ -25,6 +25,7 @@
 
   let workspaceNodes = [];
   let selectedWorkspaceName = '';
+  let activeWorkspaceToolKey = '';
   let navigationStack = [];
   let navigationIndex = -1;
   let applyingNavigation = false;
@@ -113,6 +114,7 @@
       activeSettingsPanelId,
       openedResource,
       selectedWorkspaceName,
+      activeWorkspaceToolKey,
     };
   }
 
@@ -139,6 +141,7 @@
     activeSettingsPanelId = snapshot.activeSettingsPanelId;
     openedResource = snapshot.openedResource;
     selectedWorkspaceName = snapshot.selectedWorkspaceName;
+    activeWorkspaceToolKey = snapshot.activeWorkspaceToolKey || '';
     emitWorkspaceActive(currentView === 'workspace' ? selectedWorkspaceName : '');
     applyingNavigation = false;
   }
@@ -272,9 +275,15 @@
 
   function onWorkbenchOpened(e) {
     debug.log('[App] onWorkbenchOpened:', e.detail?.request?.path, e.detail?.providerId);
+    if (currentView === 'workspace') pushNavigation();
     openedResource = e.detail;
     currentView = 'workbench';
     pushNavigation();
+  }
+
+  function onWorkspaceToolSelected(e) {
+    activeWorkspaceToolKey = e.detail?.toolKey || '';
+    if (currentView === 'workspace') pushNavigation();
   }
 
   function onWorkspaceSelected(e) {
@@ -351,6 +360,7 @@
     window.addEventListener('verstak:close-settings', onCloseSettings);
     window.addEventListener('verstak:workbench-opened', onWorkbenchOpened);
     window.addEventListener('verstak:workspace-selected', onWorkspaceSelected);
+    window.addEventListener('verstak:workspace-tool-selected', onWorkspaceToolSelected);
     window.addEventListener('verstak:navigate-back', onNavigateBack);
     window.addEventListener('verstak:navigate-forward', onNavigateForward);
     window.addEventListener('verstak:close-workbench', onCloseWorkbench);
@@ -385,7 +395,11 @@
         {:else if currentView === 'workbench'}
           <WorkbenchHost {openedResource} />
         {:else if currentView === 'workspace' || currentView === 'workspace-empty'}
-          <WorkspaceHost selectedWorkspaceName={selectedWorkspaceName} nodes={workspaceNodes} />
+          <WorkspaceHost
+            selectedWorkspaceName={selectedWorkspaceName}
+            nodes={workspaceNodes}
+            bind:activeToolKey={activeWorkspaceToolKey}
+          />
         {:else}
           <ViewContainer {activeView} {activeViewPluginId} />
         {/if}

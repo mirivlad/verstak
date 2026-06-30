@@ -58,6 +58,7 @@ test.describe('UX quick wins', () => {
     await page.goto('/');
     await waitForAppReady(page);
     await page.locator('.wt-label').filter({ hasText: 'Project' }).click();
+    await page.getByRole('tab', { name: 'Files' }).click();
 
     const files = page.locator('.files-root');
     await expect(files).toBeVisible({ timeout: 10000 });

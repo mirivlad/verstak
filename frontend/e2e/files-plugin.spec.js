@@ -1,6 +1,11 @@
 import { test, expect } from '@playwright/test';
 import { waitForAppReady, setupConsoleCollector, resetMockState, openPluginManager } from './helpers.js';
 
+async function openFilesTool(page) {
+  await page.getByRole('tab', { name: 'Files' }).click();
+  await expect(page.locator('.files-root')).toBeVisible({ timeout: 10000 });
+}
+
 test.describe('G: Files Plugin', () => {
   let consoleCollector;
 
@@ -29,6 +34,7 @@ test.describe('G: Files Plugin', () => {
 
   test('workspace Files view is scoped to selected workspace folder', async ({ page }) => {
     await page.locator('.wt-label').filter({ hasText: 'Project' }).click();
+    await openFilesTool(page);
 
     await expect(page.locator('.workspace-host')).toBeVisible({ timeout: 10000 });
     await expect(page.locator('.files-item-name').filter({ hasText: 'project-only.txt' })).toBeVisible({ timeout: 10000 });
@@ -42,6 +48,7 @@ test.describe('G: Files Plugin', () => {
 
   test('files explorer supports create navigate rename filter sort open and trash', async ({ page }) => {
     await page.locator('.wt-label').filter({ hasText: 'Project' }).click();
+    await openFilesTool(page);
     await expect(page.locator('.files-breadcrumb')).toContainText('Project', { timeout: 10000 });
 
     await page.locator('[data-files-action="new-folder"]').click();
@@ -90,6 +97,7 @@ test.describe('G: Files Plugin', () => {
 
   test('files explorer uses labeled controls and no row New Here action', async ({ page }) => {
     await page.locator('.wt-label').filter({ hasText: 'Project' }).click();
+    await openFilesTool(page);
     await expect(page.locator('.files-breadcrumb')).toContainText('Project', { timeout: 10000 });
 
     for (const action of ['back', 'forward', 'up', 'refresh', 'new-folder', 'new-markdown', 'new-text', 'open', 'rename', 'trash', 'cut', 'copy', 'paste']) {
@@ -108,6 +116,7 @@ test.describe('G: Files Plugin', () => {
 
   test('files explorer supports empty-space context paste after cutting a folder', async ({ page }) => {
     await page.locator('.wt-label').filter({ hasText: 'Project' }).click();
+    await openFilesTool(page);
     await expect(page.locator('.files-breadcrumb')).toContainText('Project', { timeout: 10000 });
 
     await page.locator('[data-files-action="new-folder"]').click();
@@ -132,6 +141,7 @@ test.describe('G: Files Plugin', () => {
 
   test('files explorer supports multiselect and internal drag/drop move', async ({ page }) => {
     await page.locator('.wt-label').filter({ hasText: 'Project' }).click();
+    await openFilesTool(page);
     await expect(page.locator('.files-breadcrumb')).toContainText('Project', { timeout: 10000 });
 
     await page.locator('[data-files-action="new-folder"]').click();
@@ -166,6 +176,7 @@ test.describe('G: Files Plugin', () => {
 
   test('files history persists in workspace context and handles mouse back forward buttons', async ({ page }) => {
     await page.locator('.wt-label').filter({ hasText: 'Project' }).click();
+    await openFilesTool(page);
     await expect(page.locator('.files-breadcrumb')).toContainText('Project', { timeout: 10000 });
 
     await page.locator('[data-file-name="Notes"]').dblclick();
@@ -191,6 +202,7 @@ test.describe('G: Files Plugin', () => {
 
   test('workbench close and mouse back return from editor to the previous Files folder', async ({ page }) => {
     await page.locator('.wt-label').filter({ hasText: 'Project' }).click();
+    await openFilesTool(page);
     await expect(page.locator('.files-breadcrumb')).toContainText('Project', { timeout: 10000 });
 
     await page.locator('[data-file-name="Notes"]').dblclick();

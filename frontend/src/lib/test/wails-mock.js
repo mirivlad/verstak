@@ -1002,21 +1002,424 @@
   }
 
   function activityBundle() {
-    return [
-      "(function(){",
-      "var ActivityView={mount:function(containerEl){containerEl.innerHTML='';var root=document.createElement('div');root.className='activity-root';root.setAttribute('data-plugin-id','verstak.activity');var title=document.createElement('h2');title.textContent='Activity';var body=document.createElement('div');body.textContent='Global activity feed';root.appendChild(title);root.appendChild(body);containerEl.appendChild(root);},unmount:function(containerEl){containerEl.innerHTML='';}};",
-      "window.VerstakPluginRegister('verstak.activity',{components:{ActivityView:ActivityView}});",
-      "})();"
-    ].join('');
+    return '(' + function () {
+      var PLUGIN_ID = 'verstak.activity';
+
+      function injectStyles() {
+        if (document.getElementById('mock-activity-style')) return;
+        var style = document.createElement('style');
+        style.id = 'mock-activity-style';
+        style.textContent = [
+          '.activity-root{height:100%;min-height:0;display:flex;flex-direction:column;background:#0d0d1a;color:#e0e0f0}',
+          '.activity-toolbar{display:flex;align-items:center;gap:.5rem;padding:.55rem .75rem;border-bottom:1px solid #16213e;background:#12122a;flex-wrap:wrap}',
+          '.activity-title{font-size:.86rem;font-weight:600;color:#f0f0ff}.activity-count,.activity-status{font-size:.74rem;color:#8b8ba8}.activity-spacer{flex:1}',
+          '.activity-btn{min-height:1.85rem;padding:.3rem .65rem;border:1px solid #1a3a5c;border-radius:4px;background:#0f3460;color:#e0e0f0;font-size:.76rem;cursor:pointer}.activity-btn:hover{background:#1a4a7a}.activity-btn:disabled{opacity:.45;cursor:default}.activity-btn.danger{border-color:#633;color:#ffb0b0}',
+          '.activity-suggestions{display:grid;gap:.5rem;padding:.65rem .75rem;border-bottom:1px solid rgba(22,33,62,.75);background:#111126}.activity-suggestions-title{font-size:.76rem;font-weight:600;color:#8b8ba8;text-transform:uppercase}.activity-suggestion{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:.65rem;padding:.55rem .65rem;border:1px solid rgba(78,204,163,.24);border-radius:4px;background:#14142c}.activity-suggestion-title{font-size:.84rem;font-weight:600;color:#f4f7fb}.activity-suggestion-summary{margin-top:.22rem;color:#aaa;font-size:.76rem;line-height:1.4}.activity-suggestion-minutes{color:#4ecca3;font-size:.76rem;white-space:nowrap}',
+          '.activity-list{flex:1;min-height:0;overflow:auto;background:#101020}.activity-empty{height:100%;display:flex;align-items:center;justify-content:center;padding:1.5rem;color:#8b8ba8;font-size:.84rem;line-height:1.45;text-align:center}.activity-row{display:grid;grid-template-columns:9.5rem minmax(0,1fr);gap:.75rem;padding:.72rem .85rem;border-bottom:1px solid rgba(22,33,62,.7)}.activity-time{font-size:.72rem;color:#777;white-space:nowrap}.activity-main{min-width:0}.activity-row-head{display:flex;align-items:center;gap:.45rem;min-width:0}.activity-type{font-size:.68rem;color:#4ecca3;text-transform:uppercase;letter-spacing:.04em}.activity-title-text{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#e0e0f0;font-size:.86rem}.activity-summary{margin-top:.25rem;color:#aaa;font-size:.78rem;line-height:1.4}.activity-source{margin-top:.25rem;color:#777;font-size:.72rem}',
+          '@media(max-width:760px){.activity-row,.activity-suggestion{grid-template-columns:1fr;gap:.25rem}.activity-status{width:100%}}'
+        ].join('');
+        document.head.appendChild(style);
+      }
+
+      function el(tag, attrs, children) {
+        var node = document.createElement(tag);
+        attrs = attrs || {};
+        Object.keys(attrs).forEach(function (key) {
+          if (key === 'textContent') node.textContent = attrs[key];
+          else if (key === 'className') node.className = attrs[key];
+          else if (key === 'disabled') node.disabled = !!attrs[key];
+          else if (key.indexOf('data-') === 0) node.setAttribute(key, attrs[key]);
+          else if (key === 'onClick') node.addEventListener('click', attrs[key]);
+          else node[key] = attrs[key];
+        });
+        (children || []).forEach(function (child) {
+          if (child) node.appendChild(child);
+        });
+        return node;
+      }
+
+      function workspaceRoot(props) {
+        return String(
+          props.workspaceRootPath ||
+          (props.workspaceNode && (props.workspaceNode.rootPath || props.workspaceNode.name || props.workspaceNode.id)) ||
+          props.workspaceName ||
+          ''
+        ).trim();
+      }
+
+      function workspaceKey(root) {
+        return 'events:workspace:' + encodeURIComponent(root || '');
+      }
+
+      function rows(value) {
+        return Array.isArray(value) ? value.filter(function (item) { return item && typeof item === 'object'; }) : [];
+      }
+
+      function eventTime(value) {
+        var date = new Date(value || 0);
+        return isNaN(date.getTime()) ? 0 : date.getTime();
+      }
+
+      function eventDay(activity) {
+        var value = activity.occurredAt || activity.receivedAt || new Date().toISOString();
+        return String(value).slice(0, 10);
+      }
+
+      function formatDate(value) {
+        var date = new Date(value || 0);
+        if (isNaN(date.getTime())) return '-';
+        return date.toLocaleString(undefined, { month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+      }
+
+      function title(activity) {
+        return activity.title || activity.summary || activity.type || activity.activityId || 'Activity event';
+      }
+
+      function summarize(group) {
+        return group.map(title).filter(Boolean).slice(0, 3).join('; ') || group.length + ' activity events';
+      }
+
+      function suggestions(events, root) {
+        var groups = {};
+        events.forEach(function (activity) {
+          var workspace = activity.workspaceRootPath || root || 'Global';
+          var day = eventDay(activity);
+          var key = workspace + '|' + day;
+          groups[key] = groups[key] || { workspaceRootPath: workspace, date: day, events: [] };
+          groups[key].events.push(activity);
+        });
+        return Object.keys(groups).map(function (key) {
+          var group = groups[key];
+          var ordered = group.events.slice().sort(function (a, b) { return eventTime(a.occurredAt || a.receivedAt) - eventTime(b.occurredAt || b.receivedAt); });
+          return {
+            suggestionId: 'worklog:' + group.workspaceRootPath + ':' + group.date,
+            title: group.workspaceRootPath + ' work on ' + group.date,
+            summary: summarize(ordered),
+            minutes: Math.max(25, ordered.length * 25)
+          };
+        }).sort(function (a, b) { return b.suggestionId.localeCompare(a.suggestionId); });
+      }
+
+      function renderActivity(containerEl, props, api) {
+        injectStyles();
+        var rootPath = workspaceRoot(props || {});
+        var key = workspaceKey(rootPath);
+        var events = [];
+        var statusText = 'Listening for workspace activity';
+
+        containerEl.innerHTML = '';
+        var root = el('div', { className: 'activity-root', 'data-plugin-id': PLUGIN_ID });
+        var toolbar = el('div', { className: 'activity-toolbar' });
+        var titleEl = el('span', { className: 'activity-title', textContent: rootPath ? 'Activity · ' + rootPath : 'Activity' });
+        var countEl = el('span', { className: 'activity-count' });
+        var statusEl = el('span', { className: 'activity-status' });
+        var clearBtn = el('button', {
+          className: 'activity-btn danger',
+          'data-activity-action': 'clear',
+          textContent: 'Clear',
+          onClick: function () {
+            events = [];
+            persist().then(render);
+          }
+        });
+        var suggestionsEl = el('div', { className: 'activity-suggestions', 'data-activity-section': 'worklog-suggestions' });
+        var listEl = el('div', { className: 'activity-list' });
+
+        toolbar.appendChild(titleEl);
+        toolbar.appendChild(countEl);
+        toolbar.appendChild(el('span', { className: 'activity-spacer' }));
+        toolbar.appendChild(statusEl);
+        toolbar.appendChild(clearBtn);
+        root.appendChild(toolbar);
+        root.appendChild(suggestionsEl);
+        root.appendChild(listEl);
+        containerEl.appendChild(root);
+
+        function readSettings() {
+          if (!api || !api.settings || typeof api.settings.read !== 'function') return Promise.resolve({});
+          return api.settings.read().then(function (settings) { return settings || {}; }).catch(function () { return {}; });
+        }
+
+        function persist() {
+          if (!api || !api.settings || typeof api.settings.write !== 'function') return Promise.resolve();
+          return api.settings.write(key, events.slice()).catch(function (err) {
+            statusText = 'Could not save activity: ' + (err && err.message ? err.message : String(err));
+          });
+        }
+
+        function renderSuggestions() {
+          suggestionsEl.innerHTML = '';
+          var items = suggestions(events, rootPath);
+          if (!items.length) return;
+          suggestionsEl.appendChild(el('div', { className: 'activity-suggestions-title', textContent: 'Worklog suggestions' }));
+          items.forEach(function (item) {
+            suggestionsEl.appendChild(el('div', { className: 'activity-suggestion', 'data-worklog-suggestion': item.suggestionId }, [
+              el('div', {}, [
+                el('div', { className: 'activity-suggestion-title', textContent: item.title }),
+                el('div', { className: 'activity-suggestion-summary', textContent: item.summary })
+              ]),
+              el('div', { className: 'activity-suggestion-minutes', textContent: item.minutes + ' min' })
+            ]));
+          });
+        }
+
+        function renderList() {
+          listEl.innerHTML = '';
+          if (!events.length) {
+            listEl.appendChild(el('div', {
+              className: 'activity-empty',
+              textContent: 'No activity events yet. File changes, browser captures, and conversions will appear here.'
+            }));
+            return;
+          }
+          events.slice().sort(function (a, b) { return eventTime(b.occurredAt || b.receivedAt) - eventTime(a.occurredAt || a.receivedAt); }).forEach(function (activity) {
+            listEl.appendChild(el('div', { className: 'activity-row', 'data-activity-id': activity.activityId }, [
+              el('div', { className: 'activity-time', textContent: formatDate(activity.occurredAt || activity.receivedAt) }),
+              el('div', { className: 'activity-main' }, [
+                el('div', { className: 'activity-row-head' }, [
+                  el('span', { className: 'activity-type', textContent: activity.type || 'activity.event' }),
+                  el('span', { className: 'activity-title-text', textContent: title(activity) })
+                ]),
+                activity.summary ? el('div', { className: 'activity-summary', textContent: activity.summary }) : null,
+                activity.sourcePluginId ? el('div', { className: 'activity-source', textContent: activity.sourcePluginId }) : null
+              ])
+            ]));
+          });
+        }
+
+        function render() {
+          countEl.textContent = events.length + ' event' + (events.length === 1 ? '' : 's');
+          clearBtn.disabled = events.length === 0;
+          statusEl.textContent = statusText;
+          renderSuggestions();
+          renderList();
+        }
+
+        readSettings().then(function (settings) {
+          events = rows(settings[key]);
+          render();
+        });
+        render();
+      }
+
+      var ActivityView = {
+        mount: renderActivity,
+        unmount: function (containerEl) { containerEl.innerHTML = ''; }
+      };
+      window.VerstakPluginRegister('verstak.activity', { components: { ActivityView: ActivityView } });
+    }.toString() + ')();';
   }
 
   function browserInboxBundle() {
-    return [
-      "(function(){",
-      "var BrowserInboxView={mount:function(containerEl){containerEl.innerHTML='';var root=document.createElement('div');root.className='browser-inbox-root';root.setAttribute('data-plugin-id','verstak.browser-inbox');var title=document.createElement('h2');title.textContent='Browser Inbox';var body=document.createElement('div');body.textContent='Global browser inbox';root.appendChild(title);root.appendChild(body);containerEl.appendChild(root);},unmount:function(containerEl){containerEl.innerHTML='';}};",
-      "window.VerstakPluginRegister('verstak.browser-inbox',{components:{BrowserInboxView:BrowserInboxView}});",
-      "})();"
-    ].join('');
+    return '(' + function () {
+      var PLUGIN_ID = 'verstak.browser-inbox';
+
+      function injectStyles() {
+        if (document.getElementById('mock-browser-inbox-style')) return;
+        var style = document.createElement('style');
+        style.id = 'mock-browser-inbox-style';
+        style.textContent = [
+          '.browser-inbox-root{height:100%;min-height:0;display:flex;flex-direction:column;background:#0d0d1a;color:#e0e0f0}',
+          '.browser-inbox-toolbar{display:flex;align-items:center;gap:.5rem;padding:.55rem .75rem;border-bottom:1px solid #16213e;background:#12122a;flex-wrap:wrap}',
+          '.browser-inbox-title{font-size:.86rem;font-weight:600;color:#f0f0ff}.browser-inbox-count,.browser-inbox-status{font-size:.74rem;color:#8b8ba8}.browser-inbox-spacer{flex:1}',
+          '.browser-inbox-btn{min-height:1.85rem;padding:.3rem .65rem;border:1px solid #1a3a5c;border-radius:4px;background:#0f3460;color:#e0e0f0;font-size:.76rem;cursor:pointer}.browser-inbox-btn:hover{background:#1a4a7a}.browser-inbox-btn:disabled{opacity:.45;cursor:default}.browser-inbox-btn.danger{border-color:#633;color:#ffb0b0}',
+          '.browser-inbox-body{flex:1;min-height:0;display:grid;grid-template-columns:minmax(260px,360px) minmax(0,1fr)}.browser-inbox-list{min-height:0;overflow:auto;border-right:1px solid #16213e;background:#101020}.browser-inbox-detail{min-width:0;min-height:0;overflow:auto;padding:1rem;display:flex;flex-direction:column;gap:.75rem}',
+          '.browser-inbox-empty,.browser-inbox-detail-empty{height:100%;display:flex;align-items:center;justify-content:center;padding:1.5rem;color:#8b8ba8;font-size:.84rem;line-height:1.45;text-align:center}.browser-inbox-detail-empty{height:auto;margin:auto}',
+          '.browser-inbox-row{display:grid;gap:.25rem;padding:.65rem .75rem;border-bottom:1px solid rgba(22,33,62,.75);cursor:pointer}.browser-inbox-row:hover{background:#17172d}.browser-inbox-row.selected{background:#1a2a3a}.browser-inbox-row-head{display:flex;align-items:center;gap:.45rem;min-width:0}.browser-inbox-kind{color:#4ecca3;font-size:.68rem;text-transform:uppercase}.browser-inbox-row-title{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.86rem}.browser-inbox-row-url,.browser-inbox-row-text{min-width:0;overflow:hidden;text-overflow:ellipsis;color:#8b8ba8;font-size:.74rem}',
+          '.browser-inbox-detail-title{font-size:1rem;font-weight:600;color:#f4f7fb;overflow-wrap:anywhere}.browser-inbox-meta{display:grid;grid-template-columns:7rem minmax(0,1fr);gap:.35rem .75rem;font-size:.78rem}.browser-inbox-meta-label{color:#777}.browser-inbox-meta-value{color:#ccc;overflow-wrap:anywhere}.browser-inbox-text{padding:.75rem;border:1px solid #24304f;border-radius:6px;background:#101020;color:#ddd;font-size:.84rem;line-height:1.5;white-space:pre-wrap}.browser-inbox-detail-actions{display:flex;gap:.5rem;flex-wrap:wrap}',
+          '@media(max-width:760px){.browser-inbox-body{grid-template-columns:1fr}.browser-inbox-list{border-right:0;border-bottom:1px solid #16213e;max-height:45vh}.browser-inbox-meta{grid-template-columns:1fr}}'
+        ].join('');
+        document.head.appendChild(style);
+      }
+
+      function el(tag, attrs, children) {
+        var node = document.createElement(tag);
+        attrs = attrs || {};
+        Object.keys(attrs).forEach(function (key) {
+          if (key === 'textContent') node.textContent = attrs[key];
+          else if (key === 'className') node.className = attrs[key];
+          else if (key === 'disabled') node.disabled = !!attrs[key];
+          else if (key.indexOf('data-') === 0) node.setAttribute(key, attrs[key]);
+          else if (key === 'onClick') node.addEventListener('click', attrs[key]);
+          else node[key] = attrs[key];
+        });
+        (children || []).forEach(function (child) {
+          if (child) node.appendChild(child);
+        });
+        return node;
+      }
+
+      function workspaceRoot(props) {
+        return String(
+          props.workspaceRootPath ||
+          (props.workspaceNode && (props.workspaceNode.rootPath || props.workspaceNode.name || props.workspaceNode.id)) ||
+          props.workspaceName ||
+          ''
+        ).trim();
+      }
+
+      function workspaceKey(root) {
+        return 'captures:workspace:' + encodeURIComponent(root || '');
+      }
+
+      function rows(value) {
+        return Array.isArray(value) ? value.filter(function (item) { return item && typeof item === 'object'; }) : [];
+      }
+
+      function title(capture) {
+        return capture.title || capture.fileName || capture.url || capture.captureId || 'Untitled capture';
+      }
+
+      function renderBrowserInbox(containerEl, props, api) {
+        injectStyles();
+        var rootPath = workspaceRoot(props || {});
+        var key = workspaceKey(rootPath);
+        var captures = [];
+        var selectedId = '';
+        var statusText = 'Ready for browser captures';
+
+        containerEl.innerHTML = '';
+        var root = el('div', { className: 'browser-inbox-root', 'data-plugin-id': PLUGIN_ID });
+        var toolbar = el('div', { className: 'browser-inbox-toolbar' });
+        var titleEl = el('span', { className: 'browser-inbox-title', textContent: rootPath ? 'Browser Inbox · ' + rootPath : 'Browser Inbox' });
+        var countEl = el('span', { className: 'browser-inbox-count' });
+        var statusEl = el('span', { className: 'browser-inbox-status' });
+        var clearBtn = el('button', {
+          className: 'browser-inbox-btn danger',
+          'data-browser-inbox-action': 'clear',
+          textContent: 'Clear',
+          onClick: function () {
+            captures = [];
+            selectedId = '';
+            persist().then(render);
+          }
+        });
+        var body = el('div', { className: 'browser-inbox-body' });
+        var listEl = el('div', { className: 'browser-inbox-list' });
+        var detailEl = el('div', { className: 'browser-inbox-detail' });
+
+        toolbar.appendChild(titleEl);
+        toolbar.appendChild(countEl);
+        toolbar.appendChild(el('span', { className: 'browser-inbox-spacer' }));
+        toolbar.appendChild(statusEl);
+        toolbar.appendChild(clearBtn);
+        body.appendChild(listEl);
+        body.appendChild(detailEl);
+        root.appendChild(toolbar);
+        root.appendChild(body);
+        containerEl.appendChild(root);
+
+        function readSettings() {
+          if (!api || !api.settings || typeof api.settings.read !== 'function') return Promise.resolve({});
+          return api.settings.read().then(function (settings) { return settings || {}; }).catch(function () { return {}; });
+        }
+
+        function persist() {
+          if (!api || !api.settings || typeof api.settings.write !== 'function') return Promise.resolve();
+          return api.settings.write(key, captures.slice()).catch(function (err) {
+            statusText = 'Could not save inbox: ' + (err && err.message ? err.message : String(err));
+          });
+        }
+
+        function selectedCapture() {
+          for (var i = 0; i < captures.length; i += 1) {
+            if (captures[i].captureId === selectedId) return captures[i];
+          }
+          return captures[0] || null;
+        }
+
+        function removeCapture(captureId) {
+          captures = captures.filter(function (item) { return item.captureId !== captureId; });
+          selectedId = captures[0] ? captures[0].captureId : '';
+          statusText = 'Capture removed';
+          return persist().then(render);
+        }
+
+        function conversionAction(kind, capture) {
+          statusText = 'Ready to create ' + kind + ': ' + title(capture);
+          render();
+        }
+
+        function renderList() {
+          listEl.innerHTML = '';
+          if (captures.length === 0) {
+            listEl.appendChild(el('div', {
+              className: 'browser-inbox-empty',
+              textContent: 'No browser captures yet. Keep this view open, then send a page, selection, link, or file from the browser extension.'
+            }));
+            return;
+          }
+          captures.forEach(function (capture) {
+            var row = el('div', {
+              className: 'browser-inbox-row' + (capture.captureId === selectedId ? ' selected' : ''),
+              'data-browser-capture-id': capture.captureId,
+              onClick: function () {
+                selectedId = capture.captureId;
+                render();
+              }
+            }, [
+              el('div', { className: 'browser-inbox-row-head' }, [
+                el('span', { className: 'browser-inbox-kind', textContent: capture.kind || 'capture' }),
+                el('span', { className: 'browser-inbox-row-title', textContent: title(capture) })
+              ]),
+              el('div', { className: 'browser-inbox-row-url', textContent: capture.url || capture.domain || capture.captureId || '' })
+            ]);
+            if (capture.text) row.appendChild(el('div', { className: 'browser-inbox-row-text', textContent: capture.text }));
+            listEl.appendChild(row);
+          });
+        }
+
+        function renderDetail() {
+          detailEl.innerHTML = '';
+          var capture = selectedCapture();
+          if (!capture) {
+            detailEl.appendChild(el('div', { className: 'browser-inbox-detail-empty', textContent: 'Select a capture to inspect it.' }));
+            return;
+          }
+          selectedId = capture.captureId;
+          detailEl.appendChild(el('div', { className: 'browser-inbox-detail-title', textContent: title(capture) }));
+          detailEl.appendChild(el('div', { className: 'browser-inbox-meta' }, [
+            el('div', { className: 'browser-inbox-meta-label', textContent: 'Kind' }),
+            el('div', { className: 'browser-inbox-meta-value', textContent: capture.kind || '-' }),
+            el('div', { className: 'browser-inbox-meta-label', textContent: 'URL' }),
+            el('div', { className: 'browser-inbox-meta-value', textContent: capture.url || '-' }),
+            el('div', { className: 'browser-inbox-meta-label', textContent: 'Domain' }),
+            el('div', { className: 'browser-inbox-meta-value', textContent: capture.domain || '-' }),
+            el('div', { className: 'browser-inbox-meta-label', textContent: 'Browser' }),
+            el('div', { className: 'browser-inbox-meta-value', textContent: capture.browserName || capture.source || '-' })
+          ]));
+          if (capture.text) detailEl.appendChild(el('div', { className: 'browser-inbox-text', textContent: capture.text }));
+          if (capture.fileText) detailEl.appendChild(el('div', { className: 'browser-inbox-text', textContent: capture.fileText }));
+          detailEl.appendChild(el('div', { className: 'browser-inbox-detail-actions' }, [
+            el('button', { className: 'browser-inbox-btn', 'data-browser-inbox-action': 'create-note', textContent: 'Create Note', onClick: function () { conversionAction('note', capture); } }),
+            el('button', { className: 'browser-inbox-btn', 'data-browser-inbox-action': 'create-link', textContent: 'Create Link', onClick: function () { conversionAction('link', capture); } }),
+            el('button', { className: 'browser-inbox-btn', 'data-browser-inbox-action': 'create-file', textContent: 'Create File', onClick: function () { conversionAction('file', capture); } }),
+            el('button', { className: 'browser-inbox-btn danger', 'data-browser-inbox-action': 'remove', textContent: 'Remove', onClick: function () { removeCapture(capture.captureId); } })
+          ]));
+        }
+
+        function render() {
+          countEl.textContent = captures.length + ' item' + (captures.length === 1 ? '' : 's');
+          clearBtn.disabled = captures.length === 0;
+          statusEl.textContent = statusText;
+          renderList();
+          renderDetail();
+        }
+
+        readSettings().then(function (settings) {
+          captures = rows(settings[key]);
+          selectedId = captures[0] ? captures[0].captureId : '';
+          render();
+        });
+        render();
+      }
+
+      var BrowserInboxView = {
+        mount: renderBrowserInbox,
+        unmount: function (containerEl) { containerEl.innerHTML = ''; }
+      };
+      window.VerstakPluginRegister('verstak.browser-inbox', { components: { BrowserInboxView: BrowserInboxView } });
+    }.toString() + ')();';
   }
 
   function platformTestBundle() {

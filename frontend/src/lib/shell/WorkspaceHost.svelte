@@ -1,14 +1,17 @@
 <script>
   import PluginBundleHost from '../plugin-host/PluginBundleHost.svelte';
+  import TodaySurface from './TodaySurface.svelte';
   import * as App from '../../../wailsjs/go/api/App';
 
   export let selectedWorkspaceName = '';
   export let nodes = [];
+  export let activeToolKey = '';
 
   let contributions = {};
   let plugins = [];
   let workspaceTools = [];
-  let activeToolKey = '';
+  let toolsLoaded = false;
+  const todayTool = { id: '__today', title: 'Today', pluginId: 'verstak.shell', component: 'TodaySurface', shell: true };
 
   const toolOrder = new Map([
     ['notes', 10],
@@ -23,9 +26,10 @@
   $: workspaceRootPath = selectedWorkspace?.rootPath || selectedWorkspace?.name || selectedWorkspace?.id || '';
   $: workspaceTitle = selectedWorkspace?.title || selectedWorkspace?.name || selectedWorkspace?.id || selectedWorkspaceName;
   $: workspaceType = selectedWorkspace?.type || 'workspace';
-  $: activeTool = workspaceTools.find(tool => toolKey(tool) === activeToolKey) || workspaceTools[0] || null;
-  $: if (workspaceTools.length > 0 && (!activeToolKey || !workspaceTools.some(tool => toolKey(tool) === activeToolKey))) {
-    activeToolKey = toolKey(workspaceTools[0]);
+  $: displayedTools = selectedWorkspace ? [todayTool, ...workspaceTools] : [];
+  $: activeTool = displayedTools.find(tool => toolKey(tool) === activeToolKey) || displayedTools[0] || null;
+  $: if (displayedTools.length > 0 && (!activeToolKey || (toolsLoaded && !displayedTools.some(tool => toolKey(tool) === activeToolKey)))) {
+    activeToolKey = toolKey(todayTool);
   }
   $: if (selectedWorkspaceName) loadTools();
 
@@ -49,8 +53,30 @@
     });
   }
 
+  function selectTool(tool) {
+    activeToolKey = toolKey(tool);
+    window.dispatchEvent(new CustomEvent('verstak:workspace-tool-selected', {
+      detail: {
+        toolKey: activeToolKey,
+        toolId: tool?.id || '',
+        pluginId: tool?.pluginId || '',
+      },
+    }));
+  }
+
+  function openWorkspaceTool(event) {
+    const kind = String(event?.detail?.kind || '').toLowerCase();
+    const match = workspaceTools.find(tool => {
+      const text = `${tool?.title || ''} ${tool?.id || ''} ${tool?.pluginId || ''}`.toLowerCase();
+      if (kind === 'browser-inbox') return text.includes('browser') || text.includes('inbox');
+      return text.includes(kind);
+    });
+    if (match) selectTool(match);
+  }
+
   async function loadTools() {
     try {
+      toolsLoaded = false;
       const [c, p] = await Promise.all([
         App.GetContributions().catch(() => ({})),
         App.GetPlugins().catch(() => []),
@@ -65,6 +91,8 @@
       workspaceTools = sortWorkspaceTools((contributions.workspaceItems || []).filter(tool => enabledIds.has(tool.pluginId)));
     } catch (e) {
       console.error('[WorkspaceHost] loadTools error:', e);
+    } finally {
+      toolsLoaded = true;
     }
   }
 </script>
@@ -78,16 +106,16 @@
       </div>
     </div>
 
-    {#if workspaceTools.length > 0}
+    {#if displayedTools.length > 0}
       <div class="workspace-tabs" role="tablist" aria-label="Workspace tools">
-        {#each workspaceTools as tool (tool.id + tool.pluginId)}
+        {#each displayedTools as tool (tool.id + tool.pluginId)}
           <button
             class:active={toolKey(tool) === toolKey(activeTool)}
             role="tab"
             aria-selected={toolKey(tool) === toolKey(activeTool)}
             type="button"
             title={tool.pluginId}
-            on:click={() => activeToolKey = toolKey(tool)}
+            on:click={() => selectTool(tool)}
           >
             {tool.title || tool.id}
           </button>
@@ -95,11 +123,20 @@
       </div>
       <div class="workspace-tool-content" role="tabpanel" aria-label={activeTool?.title || activeTool?.id || 'Workspace tool'}>
         {#if activeTool}
-          <PluginBundleHost
-            pluginId={activeTool.pluginId}
-            componentId={activeTool.component}
-            componentProps={{ workspaceName: selectedWorkspaceName, workspaceNodeId: selectedWorkspaceName, workspaceNode: selectedWorkspace, workspaceRootPath }}
-          />
+          {#if activeTool.shell}
+            <TodaySurface
+              {workspaceRootPath}
+              {workspaceTitle}
+              availableTools={workspaceTools}
+              on:openTool={openWorkspaceTool}
+            />
+          {:else}
+            <PluginBundleHost
+              pluginId={activeTool.pluginId}
+              componentId={activeTool.component}
+              componentProps={{ workspaceName: selectedWorkspaceName, workspaceNodeId: selectedWorkspaceName, workspaceNode: selectedWorkspace, workspaceRootPath }}
+            />
+          {/if}
         {/if}
       </div>
     {:else}

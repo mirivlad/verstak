@@ -12,6 +12,17 @@
   let statusType = '';
 
   const inactiveStatuses = new Set(['disabled', 'failed', 'incompatible', 'missing-required-capability']);
+  const shellCommands = [
+    { id: 'verstak.shell.open-today', title: 'Open Today', pluginId: 'verstak.shell', pluginName: 'Verstak', priority: 10, shellAction: 'today' },
+    { id: 'verstak.shell.open-files', title: 'Open Files', pluginId: 'verstak.shell', pluginName: 'Verstak', priority: 20, shellAction: 'files' },
+    { id: 'verstak.shell.open-activity', title: 'Open Activity', pluginId: 'verstak.shell', pluginName: 'Verstak', priority: 30, shellAction: 'activity' },
+    { id: 'verstak.shell.open-browser-inbox', title: 'Open Browser Inbox', pluginId: 'verstak.shell', pluginName: 'Verstak', priority: 40, shellAction: 'browser-inbox' },
+    { id: 'verstak.shell.create-markdown', title: 'Create Markdown File', pluginId: 'verstak.shell', pluginName: 'Verstak', priority: 50, shellAction: 'create-markdown' },
+    { id: 'verstak.shell.create-text', title: 'Create Text File', pluginId: 'verstak.shell', pluginName: 'Verstak', priority: 60, shellAction: 'create-text' },
+    { id: 'verstak.shell.sync-now', title: 'Sync Now', pluginId: 'verstak.shell', pluginName: 'Verstak', priority: 70, shellAction: 'sync-now' },
+    { id: 'verstak.shell.open-sync-settings', title: 'Open Sync Settings', pluginId: 'verstak.shell', pluginName: 'Verstak', priority: 80, shellAction: 'sync-settings' },
+    { id: 'verstak.shell.open-plugin-manager', title: 'Open Plugin Manager', pluginId: 'verstak.shell', pluginName: 'Verstak', priority: 90, shellAction: 'plugin-manager' },
+  ];
 
   $: normalizedQuery = query.trim().toLowerCase();
   $: filteredCommands = commands.filter((command) => {
@@ -33,7 +44,7 @@
       App.GetContributions().catch(() => ({})),
     ]);
     const pluginById = new Map((plugins || []).map((plugin) => [plugin.manifest?.id, plugin]));
-    commands = (contributions.commands || [])
+    const pluginCommands = (contributions.commands || [])
       .filter((command) => {
         const plugin = pluginById.get(command.pluginId);
         if (!plugin) return false;
@@ -44,13 +55,16 @@
         return {
           ...command,
           pluginName: plugin?.manifest?.name || command.pluginId,
+          priority: 1000,
         };
-      })
-      .sort((a, b) => {
-        const title = String(a.title || a.id).localeCompare(String(b.title || b.id));
-        if (title) return title;
-        return String(a.pluginId).localeCompare(String(b.pluginId));
       });
+    commands = [...shellCommands, ...pluginCommands].sort((a, b) => {
+      const priority = (a.priority || 1000) - (b.priority || 1000);
+      if (priority) return priority;
+      const title = String(a.title || a.id).localeCompare(String(b.title || b.id));
+      if (title) return title;
+      return String(a.pluginId).localeCompare(String(b.pluginId));
+    });
   }
 
   async function openPalette() {
@@ -78,9 +92,87 @@
     }, 4000);
   }
 
+  function clickWorkspaceTool(label) {
+    const tabs = Array.from(document.querySelectorAll('.workspace-tabs [role="tab"]'));
+    const tab = tabs.find((node) => String(node.textContent || '').trim().toLowerCase() === label);
+    if (tab) {
+      tab.click();
+      return true;
+    }
+    return false;
+  }
+
+  async function openWorkspaceTool(label) {
+    if (clickWorkspaceTool(label)) return;
+    const selectedWorkspace = document.querySelector('.wt-node.selected .wt-label');
+    const firstWorkspace = document.querySelector('.wt-label');
+    const workspaceButton = selectedWorkspace || firstWorkspace;
+    if (workspaceButton) {
+      workspaceButton.click();
+      await tick();
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+    }
+    clickWorkspaceTool(label);
+  }
+
+  async function startFilesCreate(action) {
+    await openWorkspaceTool('files');
+    await tick();
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+    const button = document.querySelector(`[data-files-action="${action}"]`);
+    if (!button) {
+      throw new Error(`Files action not available: ${action}`);
+    }
+    button.click();
+  }
+
+  async function runShellCommand(command) {
+    if (command.shellAction === 'plugin-manager') {
+      window.dispatchEvent(new CustomEvent('verstak:open-settings', { detail: {} }));
+      return;
+    }
+    if (command.shellAction === 'sync-settings') {
+      window.dispatchEvent(new CustomEvent('verstak:open-settings', {
+        detail: { pluginId: 'verstak.sync', panelId: 'verstak.sync.settings' }
+      }));
+      return;
+    }
+    if (command.shellAction === 'sync-now') {
+      const result = await App.PluginSyncNow('verstak.sync');
+      if (typeof result === 'string' && result) {
+        throw new Error(result);
+      }
+      if (Array.isArray(result) && result[1]) {
+        throw new Error(result[1]);
+      }
+      return;
+    }
+    if (command.shellAction === 'create-markdown') {
+      await startFilesCreate('new-markdown');
+      return;
+    }
+    if (command.shellAction === 'create-text') {
+      await startFilesCreate('new-text');
+      return;
+    }
+    const actionToTab = {
+      today: 'today',
+      files: 'files',
+      activity: 'activity',
+      'browser-inbox': 'browser inbox',
+    };
+    await openWorkspaceTool(actionToTab[command.shellAction] || command.shellAction);
+  }
+
   async function runCommand(command) {
     if (!command) return;
     try {
+      if (command.shellAction) {
+        await runShellCommand(command);
+        closePalette();
+        setStatus('success', `${command.title || command.id} handled`);
+        return;
+      }
       const result = await executePluginCommand(command.pluginId, command.id, {
         source: 'command-palette',
       });
