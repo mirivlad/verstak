@@ -148,7 +148,7 @@
             role="tab"
             aria-selected={toolKey(tool) === toolKey(activeTool)}
             type="button"
-            title={tool.pluginId}
+            title={tool.title}
             on:click={() => selectTool(tool)}
           >
             {tool.title || tool.id}
