@@ -114,12 +114,36 @@ test.describe('G: Files Plugin', () => {
     await expect(page.locator('[data-file-name="bad"]')).toHaveCount(0);
   });
 
+  test('files explorer restores an item from trash metadata', async ({ page }) => {
+    await page.locator('.wt-label').filter({ hasText: 'Project' }).click();
+    await openFilesTool(page);
+    await expect(page.locator('.files-breadcrumb')).toContainText('Project', { timeout: 10000 });
+
+    await page.locator('[data-files-action="new-text"]').click();
+    await page.locator('[data-files-create-input]').fill('RestoreMe.txt');
+    await page.locator('[data-files-create-confirm]').click();
+    await expect(page.locator('[data-file-name="RestoreMe.txt"]')).toBeVisible();
+
+    await page.locator('[data-file-name="RestoreMe.txt"]').click();
+    await page.locator('[data-files-action="trash"]').click();
+    await page.locator('.files-modal-btn.confirm').click();
+    await expect(page.locator('[data-file-name="RestoreMe.txt"]')).toHaveCount(0);
+
+    await page.locator('[data-files-action="trash-view"]').click();
+    await expect(page.locator('.files-breadcrumb')).toContainText('Trash metadata');
+    await expect(page.locator('[data-files-trash-id]').filter({ hasText: 'Project/RestoreMe.txt' })).toBeVisible();
+
+    await page.locator('[data-files-restore-trash]').first().click();
+    await expect(page.locator('.files-breadcrumb')).toContainText('Project');
+    await expect(page.locator('[data-file-name="RestoreMe.txt"]')).toBeVisible();
+  });
+
   test('files explorer uses labeled controls and no row New Here action', async ({ page }) => {
     await page.locator('.wt-label').filter({ hasText: 'Project' }).click();
     await openFilesTool(page);
     await expect(page.locator('.files-breadcrumb')).toContainText('Project', { timeout: 10000 });
 
-    for (const action of ['back', 'forward', 'up', 'refresh', 'new-folder', 'new-markdown', 'new-text', 'open', 'rename', 'trash', 'cut', 'copy', 'paste']) {
+    for (const action of ['back', 'forward', 'up', 'refresh', 'new-folder', 'new-markdown', 'new-text', 'open', 'rename', 'trash', 'trash-view', 'cut', 'copy', 'paste']) {
       const button = page.locator(`[data-files-action="${action}"]`);
       await expect(button).toHaveAttribute('title', /.+/);
       await expect(button.locator('svg')).toBeVisible();

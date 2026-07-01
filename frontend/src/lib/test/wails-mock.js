@@ -730,6 +730,7 @@
           var sort = 'folder-name';
           var createMode = '';
           var renaming = null;
+          var showingTrash = false;
           function scoped(local) { local = clean(local); return root ? (local ? root + '/' + local : root) : local; }
           function local(full) { full = clean(full); return root && full.indexOf(root + '/') === 0 ? full.slice(root.length + 1) : full === root ? '' : full; }
           function saveHistory() { window.__filesHistoryByWorkspace[historyKey] = { stack: history.slice(), index: historyIndex, currentPath: current }; }
@@ -737,20 +738,22 @@
           var breadcrumb = e('div', { className: 'files-breadcrumb' }, []);
           function btn(title, action, fn) { return e('button', { className: 'files-toolbar-btn', 'data-files-action': action, title: title, 'aria-label': title, innerHTML: SVG + '<span class="files-btn-label">' + title + '</span>', onClick: fn }, []); }
           function rowBtn(title, action, fn) { return e('button', { className: 'files-row-btn', 'data-files-action': action, title: title, 'aria-label': title, innerHTML: SVG + '<span class="files-btn-label">' + title + '</span>', onClick: fn }, []); }
+          var backButton = btn('Back', 'back', goBack);
+          var forwardButton = btn('Forward', 'forward', goForward);
+          var upButton = btn('Up', 'up', function () { if (current) nav(parent(current)); });
+          var refreshButton = btn('Refresh', 'refresh', function () { if (showingTrash) loadTrash(); else load(); });
+          var newFolderButton = btn('New folder', 'new-folder', function () { startCreate('folder'); });
+          var newMarkdownButton = btn('New markdown file', 'new-markdown', function () { startCreate('markdown'); });
+          var newTextButton = btn('New text file', 'new-text', function () { startCreate('text'); });
+          var openButton = btn('Open', 'open', function () { open(firstSelected()); });
+          var renameButton = btn('Rename', 'rename', function () { startRename(firstSelected()); });
+          var trashButton = btn('Move to trash', 'trash', function () { trashSelection(); });
+          var trashViewButton = btn('Trash metadata', 'trash-view', loadTrash);
+          var cutButton = btn('Cut', 'cut', cutSelection);
+          var copyButton = btn('Copy', 'copy', copySelection);
+          var pasteButton = btn('Paste', 'paste', paste);
           toolbar.appendChild(breadcrumb);
-          toolbar.appendChild(btn('Back', 'back', goBack));
-          toolbar.appendChild(btn('Forward', 'forward', goForward));
-          toolbar.appendChild(btn('Up', 'up', function () { if (current) nav(parent(current)); }));
-          toolbar.appendChild(btn('Refresh', 'refresh', load));
-          toolbar.appendChild(btn('New folder', 'new-folder', function () { startCreate('folder'); }));
-          toolbar.appendChild(btn('New markdown file', 'new-markdown', function () { startCreate('markdown'); }));
-          toolbar.appendChild(btn('New text file', 'new-text', function () { startCreate('text'); }));
-          toolbar.appendChild(btn('Open', 'open', function () { open(firstSelected()); }));
-          toolbar.appendChild(btn('Rename', 'rename', function () { startRename(firstSelected()); }));
-          toolbar.appendChild(btn('Move to trash', 'trash', function () { trashSelection(); }));
-          toolbar.appendChild(btn('Cut', 'cut', cutSelection));
-          toolbar.appendChild(btn('Copy', 'copy', copySelection));
-          toolbar.appendChild(btn('Paste', 'paste', paste));
+          [backButton, forwardButton, upButton, refreshButton, newFolderButton, newMarkdownButton, newTextButton, openButton, renameButton, trashButton, trashViewButton, cutButton, copyButton, pasteButton].forEach(function (button) { toolbar.appendChild(button); });
           var filterInput = e('input', { className: 'files-filter', 'data-files-filter': '', placeholder: 'Filter current folder' }, []);
           filterInput.addEventListener('input', function () { filter = filterInput.value.toLowerCase(); render(); });
           toolbar.appendChild(filterInput);
@@ -802,6 +805,18 @@
               }, [part]));
             });
           }
+          function setToolbarTrashMode(isTrash) {
+            [upButton, newFolderButton, newMarkdownButton, newTextButton, openButton, renameButton, trashButton, cutButton, copyButton, pasteButton, filterInput, sortSelect].forEach(function (node) {
+              node.disabled = !!isTrash;
+              if (isTrash) {
+                node.style.setProperty('opacity', '.45', 'important');
+                node.style.setProperty('cursor', 'default', 'important');
+              } else {
+                node.style.removeProperty('opacity');
+                node.style.removeProperty('cursor');
+              }
+            });
+          }
           function visible() {
             return entries.filter(function (item) { return !item.isHidden && !item.isReserved && (!filter || item.name.toLowerCase().indexOf(filter) !== -1); }).sort(function (a, b) {
               if (sort === 'folder-name') { if (a.type === 'folder' && b.type !== 'folder') return -1; if (a.type !== 'folder' && b.type === 'folder') return 1; }
@@ -812,6 +827,8 @@
             });
           }
           function render() {
+            showingTrash = false;
+            setToolbarTrashMode(false);
             updateBreadcrumb();
             list.innerHTML = '';
             list.appendChild(e('div', { className: 'files-header' }, [e('span', {}, ['Name']), e('span', {}, ['Type']), e('span', {}, ['Size']), e('span', {}, ['Modified']), e('span', {}, ['Actions'])]));
@@ -839,6 +856,37 @@
               list.appendChild(row);
             });
           }
+          function renderTrash(items) {
+            showingTrash = true;
+            setToolbarTrashMode(true);
+            selected = {};
+            lastClicked = '';
+            breadcrumb.innerHTML = '';
+            breadcrumb.appendChild(e('span', { className: 'files-breadcrumb-current' }, ['Trash metadata']));
+            list.innerHTML = '';
+            list.appendChild(e('div', { className: 'files-header' }, [e('span', {}, ['Original path']), e('span', {}, ['Type']), e('span', {}, ['Deleted']), e('span', {}, ['Trash path']), e('span', {}, ['Actions'])]));
+            if (!items.length) {
+              list.appendChild(e('div', { className: 'files-empty' }, ['Trash is empty']));
+              return;
+            }
+            items.forEach(function (item) {
+              list.appendChild(e('div', { className: 'files-item', 'data-files-trash-id': item.trashId || '' }, [
+                e('span', { className: 'files-item-name', title: item.originalPath || '' }, [item.originalPath || item.basename || '']),
+                e('span', { className: 'files-item-meta' }, [item.originalType || '']),
+                e('span', { className: 'files-item-meta' }, [formatDate(item.deletedAt)]),
+                e('span', { className: 'files-item-meta', title: item.trashPath || '' }, [item.trashPath || '']),
+                e('span', { className: 'files-row-actions' }, [e('button', {
+                  className: 'files-row-btn',
+                  'data-files-action': 'restore-trash',
+                  'data-files-restore-trash': item.trashId || '',
+                  title: 'Restore',
+                  'aria-label': 'Restore',
+                  innerHTML: SVG + '<span class="files-btn-label">Restore</span>',
+                  onClick: function (ev) { ev.stopPropagation(); restoreTrash(item); }
+                }, [])])
+              ]));
+            });
+          }
           function select(item, ev) {
             if (ev && (ev.ctrlKey || ev.metaKey)) {
               if (selected[item.relativePath]) delete selected[item.relativePath]; else selected[item.relativePath] = true;
@@ -857,6 +905,17 @@
             render();
           }
           function load() { selected = {}; api.files.list(scoped(current)).then(function (result) { entries = result || []; render(); }).catch(function (err) { list.textContent = 'Error: ' + (err.message || err); }); }
+          function loadTrash() {
+            if (!api.files || typeof api.files.listTrash !== 'function') {
+              list.innerHTML = 'Trash metadata is unavailable';
+              return;
+            }
+            api.files.listTrash().then(function (result) { renderTrash(result || []); }).catch(function (err) { list.textContent = 'Error: ' + (err.message || err); });
+          }
+          function restoreTrash(item) {
+            if (!item || !item.trashId || !api.files || typeof api.files.restoreTrash !== 'function') return;
+            api.files.restoreTrash(item.trashId, { overwrite: false }).then(load).catch(function (err) { list.textContent = 'Error: ' + (err.message || err); });
+          }
           function nav(path, push) {
             current = clean(path);
             if (push !== false) {
