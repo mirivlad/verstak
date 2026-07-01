@@ -247,21 +247,53 @@ test.describe('G: Files Plugin', () => {
     await openFilesTool(page);
     await expect(page.locator('.files-breadcrumb')).toContainText('Project', { timeout: 10000 });
 
-    for (const action of ['back', 'forward', 'up', 'refresh', 'new-folder', 'new-markdown', 'new-text', 'open', 'rename', 'trash', 'trash-view', 'cut', 'copy', 'paste']) {
+    const actionIcons = {
+      back: 'back',
+      forward: 'forward',
+      up: 'up',
+      refresh: 'refresh',
+      'new-folder': 'folderAdd',
+      'new-markdown': 'markdownAdd',
+      'new-text': 'textAdd',
+      open: 'open',
+      rename: 'rename',
+      trash: 'trash',
+      'trash-view': 'trashView',
+      cut: 'cut',
+      copy: 'copy',
+      paste: 'paste',
+    };
+
+    const pathData = [];
+    for (const [action, icon] of Object.entries(actionIcons)) {
       const button = page.locator(`[data-files-action="${action}"]`);
       await expect(button).toHaveAttribute('title', /.+/);
       await expect(button).toHaveAttribute('aria-label', /.+/);
-      await expect(button).toHaveAttribute('data-files-icon', /.+/);
+      await expect(button).toHaveAttribute('data-files-icon', icon);
       await expect(button.locator('svg')).toBeVisible();
+      await expect(button).toHaveText('');
+      pathData.push(await button.locator('svg path').getAttribute('d'));
     }
+    expect(new Set(pathData).size).toBe(pathData.length);
 
     await expect(page.locator('.files-row-btn').filter({ hasText: 'New here' })).toHaveCount(0);
-    const firstRowButton = page.locator('[data-file-name="Notes"] .files-row-btn').first();
-    await expect(firstRowButton).toBeVisible();
-    await expect(firstRowButton).toHaveAttribute('title', /.+/);
-    await expect(firstRowButton).toHaveAttribute('aria-label', /.+/);
-    await expect(firstRowButton).toHaveAttribute('data-files-icon', /.+/);
-    expect(await firstRowButton.evaluate((node) => node.innerHTML)).toContain('<svg');
+    const rowIcons = {
+      'row-open': 'open',
+      'row-rename': 'rename',
+      'row-trash': 'trash',
+    };
+    const rowPathData = [];
+    for (const [action, icon] of Object.entries(rowIcons)) {
+      const rowButton = page.locator(`[data-file-name="Notes"] [data-files-action="${action}"]`);
+      await expect(rowButton).toBeVisible();
+      await expect(rowButton).toHaveAttribute('title', /.+/);
+      await expect(rowButton).toHaveAttribute('aria-label', /.+/);
+      await expect(rowButton).toHaveAttribute('data-files-icon', icon);
+      await expect(rowButton).toHaveText('');
+      expect(await rowButton.evaluate((node) => node.innerHTML)).toContain('<svg');
+      rowPathData.push(await rowButton.locator('svg path').getAttribute('d'));
+    }
+    expect(new Set(rowPathData).size).toBe(rowPathData.length);
   });
 
   test('files explorer supports empty-space context paste after cutting a folder', async ({ page }) => {

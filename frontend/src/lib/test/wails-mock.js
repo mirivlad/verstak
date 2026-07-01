@@ -699,6 +699,11 @@
         open: 'M14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3h-7zM5 5h6V3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2v-6h-2v6H5V5z',
         rename: 'M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34a.9959.9959 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z',
         trash: 'M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM8 9h8v10H8V9zm7.5-5-1-1h-5l-1 1H5v2h14V4z',
+        trashView: 'M4 4h16v2H4V4zm2 4h12v12H6V8zm2 2v8h8v-8H8zm2 1.5h4V13h-4v-1.5zm0 3h4V16h-4v-1.5zM9 1h6l1 2H8l1-2z',
+        external: 'M14 3h7v7h-2V6.41l-9.83 9.83-1.41-1.41L17.59 5H14V3zM5 5h6v2H7v10h10v-4h2v6H5V5z',
+        explorer: 'M3 5a2 2 0 0 1 2-2h5l2 3h7a2 2 0 0 1 2 2v1H3V5Zm0 6h18v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-7Z',
+        duplicate: 'M5 3h10v2H5v10H3V5c0-1.1.9-2 2-2zm4 4h10c1.1 0 2 .9 2 2v10c0 1.1-.9 2-2 2H9c-1.1 0-2-.9-2-2V9c0-1.1.9-2 2-2zm1 2v10h9V9h-9zm3 3h3v2h2v3h-2v2h-3v-2h-2v-3h2v-2z',
+        restore: 'M13 3a9 9 0 1 1-8.95 8H2l3-3 3 3H6.06A7 7 0 1 0 13 5V3zm-1 5h2v5h4v2h-6V8z',
         cut: 'M9.64 7.64c.23-.5.36-1.05.36-1.64 0-2.21-1.79-4-4-4S2 3.79 2 6s1.79 4 4 4c.59 0 1.14-.13 1.64-.36L10 12l-2.36 2.36C7.14 14.13 6.59 14 6 14c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4c0-.59-.13-1.14-.36-1.64L12 14l7 7h3L9.64 7.64zM6 8c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm0 12c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm6-8.5c-.28 0-.5.22-.5.5s.22.5.5.5.5-.22.5-.5-.22-.5-.5-.5zM19 3l-6 6 2 2 7-8h-3z',
         copy: 'M16 1H4c-1.1 0-2 .9-2 2v12h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z',
         paste: 'M19 2h-4.18C14.4.84 13.3 0 12 0S9.6.84 9.18 2H5c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-7 0c.55 0 1 .45 1 1s-.45 1-1 1-1-.45-1-1zm7 18H5V4h2v3h10V4h2v16z'
@@ -854,7 +859,7 @@
           var openButton = btn('Open', 'open', function () { open(firstSelected()); }, 'open');
           var renameButton = btn('Rename', 'rename', function () { startRename(firstSelected()); }, 'rename');
           var trashButton = btn('Move to trash', 'trash', function () { trashSelection(); }, 'trash');
-          var trashViewButton = btn('Trash metadata', 'trash-view', loadTrash, 'trash');
+          var trashViewButton = btn('Trash metadata', 'trash-view', loadTrash, 'trashView');
           var cutButton = btn('Cut', 'cut', cutSelection, 'cut');
           var copyButton = btn('Copy', 'copy', copySelection, 'copy');
           var pasteButton = btn('Paste', 'paste', paste, 'paste');
@@ -994,10 +999,11 @@
                 e('span', { className: 'files-row-actions' }, [e('button', {
                   className: 'files-row-btn',
                   'data-files-action': 'restore-trash',
+                  'data-files-icon': 'restore',
                   'data-files-restore-trash': item.trashId || '',
                   title: 'Restore',
                   'aria-label': 'Restore',
-                  innerHTML: SVG + '<span class="files-btn-label">Restore</span>',
+                  innerHTML: actionSvg('restore'),
                   onClick: function (ev) { ev.stopPropagation(); restoreTrash(item); }
                 }, [])])
               ]));
@@ -1215,22 +1221,30 @@
           }
           var menu = e('div', { className: 'files-ctx-menu', style: { display: 'none' } }, []);
           document.body.appendChild(menu);
-          function menuItem(label, action, fn) { return e('div', { className: 'files-ctx-menu-item', 'data-files-menu-action': action, onClick: function (ev) { ev.stopPropagation(); menu.style.display = 'none'; fn(); } }, [e('span', { innerHTML: SVG }, []), label]); }
+          function menuItem(label, action, fn, iconKey) {
+            iconKey = iconKey || action;
+            return e('div', {
+              className: 'files-ctx-menu-item',
+              'data-files-menu-action': action,
+              'data-files-menu-icon': iconKey,
+              onClick: function (ev) { ev.stopPropagation(); menu.style.display = 'none'; fn(); }
+            }, [e('span', { innerHTML: actionSvg(iconKey) }, []), label]);
+          }
           function showMenu(x, y, item) {
             menu.innerHTML = '';
             if (item) {
               if (!selected[item.relativePath]) { selected = {}; selected[item.relativePath] = true; render(); }
-              menu.appendChild(menuItem('Open', 'open', function () { open(item); }));
-              menu.appendChild(menuItem('Rename', 'rename', function () { startRename(item); }));
-              if (item.type !== 'folder') menu.appendChild(menuItem('Duplicate', 'duplicate', function () { duplicate(item); }));
-              menu.appendChild(menuItem('Cut', 'cut', cutSelection));
-              menu.appendChild(menuItem('Copy', 'copy', copySelection));
-              menu.appendChild(menuItem('Trash', 'trash', trashSelection));
+              menu.appendChild(menuItem('Open', 'open', function () { open(item); }, 'open'));
+              menu.appendChild(menuItem('Rename', 'rename', function () { startRename(item); }, 'rename'));
+              if (item.type !== 'folder') menu.appendChild(menuItem('Duplicate', 'duplicate', function () { duplicate(item); }, 'duplicate'));
+              menu.appendChild(menuItem('Cut', 'cut', cutSelection, 'cut'));
+              menu.appendChild(menuItem('Copy', 'copy', copySelection, 'copy'));
+              menu.appendChild(menuItem('Trash', 'trash', trashSelection, 'trash'));
             } else {
-              menu.appendChild(menuItem('New Folder', 'new-folder', function () { startCreate('folder'); }));
-              menu.appendChild(menuItem('New Markdown', 'new-markdown', function () { startCreate('markdown'); }));
-              menu.appendChild(menuItem('New Text', 'new-text', function () { startCreate('text'); }));
-              if (window.__filesClipboard && window.__filesClipboard.items && window.__filesClipboard.items.length) menu.appendChild(menuItem('Paste', 'paste', paste));
+              menu.appendChild(menuItem('New Folder', 'new-folder', function () { startCreate('folder'); }, 'folderAdd'));
+              menu.appendChild(menuItem('New Markdown', 'new-markdown', function () { startCreate('markdown'); }, 'markdownAdd'));
+              menu.appendChild(menuItem('New Text', 'new-text', function () { startCreate('text'); }, 'textAdd'));
+              if (window.__filesClipboard && window.__filesClipboard.items && window.__filesClipboard.items.length) menu.appendChild(menuItem('Paste', 'paste', paste, 'paste'));
             }
             menu.style.display = 'block'; menu.style.left = x + 'px'; menu.style.top = y + 'px';
           }
