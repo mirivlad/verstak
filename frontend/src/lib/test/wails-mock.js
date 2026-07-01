@@ -823,6 +823,27 @@
               ])
             ]);
           }
+          function noMatchesState() {
+            return e('div', { className: 'files-empty' }, [
+              e('div', {}, ['No matches']),
+              e('div', { className: 'files-empty-actions' }, [
+                e('button', {
+                  className: 'files-empty-btn',
+                  'data-files-empty-action': 'clear-filter',
+                  'data-files-icon': 'refresh',
+                  title: 'Clear filter',
+                  'aria-label': 'Clear filter',
+                  innerHTML: actionSvg('refresh') + '<span>Clear filter</span>',
+                  onClick: function () {
+                    filter = '';
+                    filterInput.value = '';
+                    render();
+                    list.focus();
+                  }
+                }, [])
+              ])
+            ]);
+          }
           var backButton = btn('Back', 'back', goBack, 'back');
           var forwardButton = btn('Forward', 'forward', goForward, 'forward');
           var upButton = btn('Up', 'up', function () { if (current) nav(parent(current)); }, 'up');
@@ -923,7 +944,7 @@
             list.appendChild(e('div', { className: 'files-header' }, [e('span', {}, ['Name']), e('span', {}, ['Type']), e('span', {}, ['Size']), e('span', {}, ['Modified']), e('span', {}, ['Actions'])]));
             var shown = visible();
             if (!shown.length) {
-              list.appendChild(filter ? e('div', { className: 'files-empty' }, ['No matches']) : emptyFolderState());
+              list.appendChild(filter ? noMatchesState() : emptyFolderState());
               return;
             }
             shown.forEach(function (item) {

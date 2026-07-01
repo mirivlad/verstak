@@ -199,6 +199,25 @@ test.describe('G: Files Plugin', () => {
     await expect(page.locator('.files-empty')).toHaveCount(0);
   });
 
+  test('files explorer shows no-match feedback while filtering', async ({ page }) => {
+    await page.locator('.wt-label').filter({ hasText: 'Project' }).click();
+    await openFilesTool(page);
+    await expect(page.locator('.files-breadcrumb')).toContainText('Project', { timeout: 10000 });
+
+    await page.locator('[data-files-filter]').fill('zzzz-no-matches');
+
+    const emptyState = page.locator('.files-empty');
+    await expect(emptyState).toBeVisible();
+    await expect(emptyState).toContainText('No matches');
+    await expect(emptyState.locator('[data-files-empty-action="clear-filter"]')).toBeVisible();
+    await expect(page.locator('[data-file-name="project-only.txt"]')).toHaveCount(0);
+
+    await emptyState.locator('[data-files-empty-action="clear-filter"]').click();
+    await expect(page.locator('[data-files-filter]')).toHaveValue('');
+    await expect(page.locator('.files-empty')).toHaveCount(0);
+    await expect(page.locator('[data-file-name="project-only.txt"]')).toBeVisible();
+  });
+
   test('files explorer restores an item from trash metadata', async ({ page }) => {
     await page.locator('.wt-label').filter({ hasText: 'Project' }).click();
     await openFilesTool(page);
