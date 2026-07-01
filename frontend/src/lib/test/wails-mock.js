@@ -903,8 +903,83 @@
             to = to ? to + '/' + newName : newName;
             api.files.move(renaming.relativePath, to, { overwrite: false }).then(function () { cancelRename(); load(); }).catch(function (err) { setRenameError('Error: ' + ((err && err.message) ? err.message : String(err))); });
           }
-          function trash(item) { if (!item || !window.confirm('Move "' + item.name + '" to trash?')) return; api.files.trash(item.relativePath).then(load); }
-          function trashSelection() { var items = selectedEntries(); if (items.length === 1) return trash(items[0]); if (!items.length || !window.confirm('Move ' + items.length + ' items to trash?')) return; Promise.all(items.map(function (item) { return api.files.trash(item.relativePath); })).then(load); }
+          function confirmModal(message, options) {
+            options = options || {};
+            return new Promise(function (resolve) {
+              var overlay = e('div', {
+                className: 'files-modal-overlay',
+                style: {
+                  position: 'fixed',
+                  inset: '0',
+                  background: 'rgba(0,0,0,.6)',
+                  zIndex: '10000',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }
+              }, []);
+              var modal = e('div', {
+                className: 'files-modal',
+                style: {
+                  width: '400px',
+                  maxWidth: '90vw',
+                  padding: '24px',
+                  background: '#1a1a2e',
+                  border: '1px solid #333',
+                  borderRadius: '8px',
+                  color: '#e0e0e0',
+                  boxShadow: '0 12px 40px rgba(0,0,0,.5)'
+                }
+              }, []);
+              var title = e('div', { className: 'files-modal-title', style: { marginBottom: '20px', lineHeight: '1.5' } }, [message]);
+              var actions = e('div', { className: 'files-modal-actions', style: { display: 'flex', justifyContent: 'flex-end', gap: '8px' } }, []);
+              function cleanup(value) {
+                document.removeEventListener('keydown', onKeydown);
+                if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
+                resolve(value);
+              }
+              function modalButton(label, className, value) {
+                return e('button', {
+                  className: className,
+                  style: {
+                    padding: '.4rem 1rem',
+                    border: '1px solid #333',
+                    borderRadius: '6px',
+                    background: className.indexOf('danger') !== -1 ? '#e74c3c' : '#2a2a4e',
+                    color: className.indexOf('danger') !== -1 ? '#fff' : '#ccc',
+                    cursor: 'pointer'
+                  },
+                  onClick: function () { cleanup(value); }
+                }, [label]);
+              }
+              function onKeydown(ev) {
+                if (ev.key === 'Escape') cleanup(false);
+              }
+              actions.appendChild(modalButton(options.cancelText || 'Cancel', 'files-modal-btn cancel', false));
+              actions.appendChild(modalButton(options.confirmText || 'Confirm', 'files-modal-btn confirm' + (options.danger ? ' danger' : ''), true));
+              modal.appendChild(title);
+              modal.appendChild(actions);
+              overlay.appendChild(modal);
+              document.body.appendChild(overlay);
+              document.addEventListener('keydown', onKeydown);
+              var first = overlay.querySelector('.files-modal-btn');
+              if (first) first.focus();
+            });
+          }
+          function trash(item) {
+            if (!item) return;
+            confirmModal('Move "' + item.name + '" to trash?', { danger: true, confirmText: 'Move to trash' }).then(function (ok) {
+              if (ok) api.files.trash(item.relativePath).then(load);
+            });
+          }
+          function trashSelection() {
+            var items = selectedEntries();
+            if (items.length === 1) return trash(items[0]);
+            if (!items.length) return;
+            confirmModal('Move ' + items.length + ' items to trash?', { danger: true, confirmText: 'Move to trash' }).then(function (ok) {
+              if (ok) Promise.all(items.map(function (item) { return api.files.trash(item.relativePath); })).then(load);
+            });
+          }
           function setClipboard(action, items) { if (!items.length) return; window.__filesClipboard = { action: action, workspaceRoot: root, items: items.map(function (item) { return { path: item.relativePath, name: item.name, type: item.type }; }) }; }
           function cutSelection() { setClipboard('cut', selectedEntries()); }
           function copySelection() { setClipboard('copy', selectedEntries().filter(function (item) { return item.type !== 'folder'; })); }

@@ -87,8 +87,10 @@ test.describe('G: Files Plugin', () => {
     await expect(page.locator('.files-breadcrumb')).toContainText('Daily', { timeout: 10000 });
     await expect(page.locator('[data-file-name="Journal.md"]')).toBeVisible({ timeout: 10000 });
     await page.locator('[data-file-name="Journal.md"]').click();
-    page.once('dialog', (dialog) => dialog.accept());
     await page.locator('[data-files-action="trash"]').click();
+    await expect(page.locator('.files-modal-overlay')).toBeVisible();
+    await expect(page.locator('.files-modal-title')).toContainText('Journal.md');
+    await page.locator('.files-modal-btn.confirm').click();
     await expect(page.locator('[data-file-name="Journal.md"]')).toHaveCount(0);
 
     await page.locator('[data-files-action="up"]').click();
