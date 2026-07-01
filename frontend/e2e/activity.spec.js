@@ -49,6 +49,15 @@ test.describe('Activity workflow', () => {
             sourcePluginId: 'verstak.files',
             workspaceRootPath: 'Project',
           },
+          {
+            activityId: 'activity-e2e-open',
+            occurredAt: '2026-06-30T08:30:00.000Z',
+            type: 'file.opened',
+            title: 'Selected file',
+            summary: 'Project/Notes/Research Capture.md',
+            sourcePluginId: 'verstak.files',
+            workspaceRootPath: 'Project',
+          },
         ],
       });
     });
@@ -59,6 +68,7 @@ test.describe('Activity workflow', () => {
     await expect(activity.locator('.activity-count')).toHaveText('2 events');
     await expect(activity.locator('[data-activity-id="activity-e2e-capture"]')).toContainText('Research Capture');
     await expect(activity.locator('[data-activity-id="activity-e2e-note"]')).toContainText('Saved note');
+    await expect(activity.locator('[data-activity-id="activity-e2e-open"]')).toHaveCount(0);
     await expect(activity.locator('[data-activity-section="worklog-suggestions"]')).toContainText('Worklog suggestions');
     await expect(activity.locator('[data-worklog-suggestion="worklog:Project:2026-06-30"]')).toContainText('Project work on 2026-06-30');
     await expect(activity.locator('[data-worklog-suggestion="worklog:Project:2026-06-30"]')).toContainText('50 min');

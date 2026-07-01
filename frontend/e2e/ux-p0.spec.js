@@ -97,9 +97,9 @@ test.describe('UX quick wins', () => {
     await page.goto('/');
     await page.waitForSelector('.vault-selection', { timeout: 10000 });
 
-    await expect(page.getByText('Выберите vault для начала работы')).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Создать vault' })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Открыть существующий' })).toBeVisible();
+    await expect(page.getByText('Choose a vault to start working')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Create vault' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Open existing' })).toBeVisible();
     await page.close();
   });
 });

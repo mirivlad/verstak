@@ -26,24 +26,24 @@
   }
 </script>
 
-<div class="workbench-host">
+<div class="workbench-host vt-page">
   {#if openedResource?.status === 'no-provider'}
-    <div class="workbench-header">
-      <span class="workbench-title">{resourcePath}</span>
-      <span class="workbench-provider">no-provider</span>
-      <button class="close-btn" type="button" title="Close" aria-label="Close" on:click={closeWorkbench}>
+    <div class="workbench-header vt-page-header">
+      <span class="workbench-title vt-page-title">{resourcePath}</span>
+      <span class="workbench-provider vt-badge">No provider</span>
+      <button class="close-btn btn-ghost btn-icon" type="button" title="Close" aria-label="Close" on:click={closeWorkbench}>
         <Icon name="x" size={18} />
       </button>
     </div>
-    <div class="workbench-empty no-provider" data-workbench-status="no-provider">
-      <p>No viewer/editor available</p>
+    <div class="workbench-empty no-provider vt-empty-state" data-workbench-status="no-provider">
+      <p class="vt-empty-title">No viewer/editor available</p>
       <p class="workbench-meta">{requestMode} · {requestContext}</p>
     </div>
   {:else if openedResource}
-    <div class="workbench-header">
-      <span class="workbench-title">{resourcePath}</span>
-      <span class="workbench-provider">{providerId}</span>
-      <button class="close-btn" type="button" title="Close" aria-label="Close" on:click={closeWorkbench}>
+    <div class="workbench-header vt-page-header">
+      <span class="workbench-title vt-page-title">{resourcePath}</span>
+      <span class="workbench-provider vt-badge accent">{providerId}</span>
+      <button class="close-btn btn-ghost btn-icon" type="button" title="Close" aria-label="Close" on:click={closeWorkbench}>
         <Icon name="x" size={18} />
       </button>
     </div>
@@ -57,8 +57,8 @@
       {/key}
     </div>
   {:else}
-    <div class="workbench-empty">
-      <p>No resource opened</p>
+    <div class="workbench-empty vt-empty-state">
+      <p class="vt-empty-title">No resource opened</p>
     </div>
   {/if}
 </div>
@@ -71,20 +71,20 @@
     height: 100%;
     display: flex;
     flex-direction: column;
-    background: #1a1a2e;
+    background: var(--vt-color-background);
   }
 
   .workbench-header {
     display: flex;
     align-items: center;
     gap: 0.75rem;
-    padding: 0.75rem 1rem;
-    border-bottom: 1px solid #16213e;
+    padding: var(--vt-space-2) var(--vt-space-4);
+    border-bottom: 1px solid var(--vt-color-border);
     flex-shrink: 0;
   }
 
   .workbench-title {
-    color: #e0e0f0;
+    color: var(--vt-color-text-primary);
     font-size: 0.95rem;
     font-weight: 600;
     min-width: 0;
@@ -98,21 +98,19 @@
     height: 2rem;
     min-height: 0;
     padding: 0;
-    border: 1px solid #1a3a5c;
-    border-radius: 4px;
-    background: #0f3460;
-    color: #a0a0b8;
+    border-radius: var(--vt-radius-md);
+    color: var(--vt-color-text-secondary);
     flex-shrink: 0;
     cursor: pointer;
   }
 
   .close-btn:hover {
-    color: #e0e0f0;
-    background: #1a4a7a;
+    color: var(--vt-color-text-primary);
+    background: var(--vt-color-surface-hover);
   }
 
   .workbench-provider {
-    color: #4ecca3;
+    color: var(--vt-color-accent);
     font-size: 0.75rem;
     margin-left: auto;
   }
@@ -132,7 +130,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    color: #666;
+    color: var(--vt-color-text-muted);
   }
 
   .workbench-empty.no-provider {
@@ -142,7 +140,7 @@
 
   .workbench-meta {
     margin: 0;
-    color: #8b8ba8;
+    color: var(--vt-color-text-muted);
     font-size: 0.8rem;
   }
 </style>

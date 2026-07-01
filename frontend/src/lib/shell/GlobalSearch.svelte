@@ -161,7 +161,7 @@
       next.push({
         type: 'Workspace',
         title: workspaceTitle(node),
-        subtitle: 'Рабочее пространство',
+        subtitle: 'Workspace',
         keywords: `${node.id || ''} ${node.rootPath || ''}`,
         rank: 10,
         action: 'workspace',
@@ -293,8 +293,8 @@
       on:focus={handleFocus}
       on:blur={() => setTimeout(() => focused = false, 120)}
       type="search"
-      placeholder={loading ? 'Индексируем...' : 'Поиск'}
-      aria-label="Глобальный поиск"
+      placeholder={loading ? 'Indexing...' : 'Search'}
+      aria-label="Global search"
       data-global-search-input
     />
   </div>
@@ -314,7 +314,7 @@
           </button>
         {/each}
       {:else}
-        <div class="global-search-empty">Ничего не найдено</div>
+        <div class="global-search-empty vt-empty-title">No results</div>
       {/if}
     </div>
   {/if}
@@ -324,7 +324,7 @@
   .global-search {
     position: relative;
     padding: 0.55rem 0.75rem;
-    border-bottom: 1px solid #0f3460;
+    border-bottom: 1px solid var(--vt-color-border);
     flex-shrink: 0;
   }
 
@@ -334,14 +334,14 @@
     gap: 0.35rem;
     height: 2rem;
     padding: 0 0.55rem;
-    border: 1px solid #263653;
-    border-radius: 5px;
-    background: #101626;
-    color: #8b8ba8;
+    border: 1px solid var(--vt-color-border-strong);
+    border-radius: var(--vt-radius-md);
+    background: #0f1424;
+    color: var(--vt-color-text-muted);
   }
 
   :global(.global-search-icon) {
-    color: #8b8ba8;
+    color: var(--vt-color-text-muted);
     flex-shrink: 0;
   }
 
@@ -351,17 +351,18 @@
     border: 0;
     outline: 0;
     background: transparent;
-    color: #e0e0f0;
+    color: var(--vt-color-text-primary);
     font: inherit;
     font-size: 0.78rem;
   }
 
   .global-search input::placeholder {
-    color: #6f7894;
+    color: var(--vt-color-text-muted);
   }
 
   .global-search-box:focus-within {
-    border-color: #4ecca3;
+    border-color: var(--vt-color-accent);
+    box-shadow: var(--vt-focus-ring);
   }
 
   .global-search-results {
@@ -372,10 +373,10 @@
     z-index: 400;
     max-height: 20rem;
     overflow: auto;
-    border: 1px solid #28466f;
-    border-radius: 6px;
-    background: #101626;
-    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.45);
+    border: 1px solid var(--vt-color-border-strong);
+    border-radius: var(--vt-radius-md);
+    background: var(--vt-color-surface);
+    box-shadow: var(--vt-elevation-menu);
   }
 
   .global-search-result {
@@ -387,13 +388,13 @@
     border: 0;
     border-bottom: 1px solid rgba(40, 70, 111, 0.55);
     background: transparent;
-    color: #d9e1ef;
+    color: var(--vt-color-text-primary);
     text-align: left;
     cursor: pointer;
   }
 
   .global-search-result:hover {
-    background: rgba(78, 204, 163, 0.1);
+    background: var(--vt-color-surface-hover);
   }
 
   .global-search-result-title {
@@ -406,7 +407,7 @@
 
   .global-search-result-meta,
   .global-search-empty {
-    color: #8b8ba8;
+    color: var(--vt-color-text-muted);
     font-size: 0.7rem;
   }
 

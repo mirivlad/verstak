@@ -128,12 +128,12 @@
   }
 </script>
 
-<div class="workspace-host">
+<div class="workspace-host vt-page">
   {#if selectedWorkspace}
-    <div class="workspace-header">
+    <div class="workspace-header vt-page-header">
       <div class="workspace-title-group">
-        <span class="workspace-title">{workspaceTitle}</span>
-        <span class="workspace-type">{workspaceType}</span>
+        <span class="workspace-title vt-page-title">{workspaceTitle}</span>
+        <span class="workspace-type vt-badge accent">{workspaceType}</span>
       </div>
       <div class="workspace-search" aria-label="Workspace search">
         <GlobalSearch />
@@ -141,10 +141,11 @@
     </div>
 
     {#if displayedTools.length > 0}
-      <div class="workspace-tabs" role="tablist" aria-label="Workspace tools">
+      <div class="workspace-tabs vt-tabbar" role="tablist" aria-label="Workspace tools">
         {#each displayedTools as tool (tool.id + tool.pluginId)}
           <button
-            class:active={toolKey(tool) === toolKey(activeTool)}
+            class="vt-tab"
+            class:is-active={toolKey(tool) === toolKey(activeTool)}
             role="tab"
             aria-selected={toolKey(tool) === toolKey(activeTool)}
             type="button"
@@ -174,15 +175,15 @@
         {/if}
       </div>
     {:else}
-      <div class="workspace-empty">
-        <p>Для этого рабочего пространства пока нет инструментов</p>
-        <p class="workspace-hint">Включите плагины с workspace-инструментами или откройте Plugin Manager через меню настроек.</p>
+      <div class="workspace-empty vt-empty-state">
+        <p class="vt-empty-title">No workspace tools available</p>
+        <p class="workspace-hint">Enable plugins with workspace tools or open Plugin Manager from settings.</p>
       </div>
     {/if}
   {:else}
-    <div class="workspace-empty">
-      <p>Создайте рабочее пространство или выберите существующее в боковой панели</p>
-      <p class="workspace-hint">Нажмите «+» в разделе Workspaces, чтобы добавить первый проект.</p>
+    <div class="workspace-empty vt-empty-state">
+      <p class="vt-empty-title">Select a workspace</p>
+      <p class="workspace-hint">Use the + button in Workspaces to add your first project.</p>
     </div>
   {/if}
 </div>
@@ -194,7 +195,7 @@
     display: flex;
     flex-direction: column;
     height: 100%;
-    background: #1a1a2e;
+    background: var(--vt-color-background);
   }
 
   .workspace-header {
@@ -202,8 +203,8 @@
     align-items: center;
     justify-content: space-between;
     gap: 1rem;
-    padding: 0.65rem 1rem;
-    border-bottom: 1px solid #16213e;
+    padding: var(--vt-space-2) var(--vt-space-4);
+    border-bottom: 1px solid var(--vt-color-border);
     flex-shrink: 0;
   }
 
@@ -215,17 +216,17 @@
   }
 
   .workspace-title {
-    color: #e0e0f0;
+    color: var(--vt-color-text-primary);
     font-size: 0.95rem;
     font-weight: 600;
   }
 
   .workspace-type {
-    color: #4ecca3;
+    color: var(--vt-color-accent);
     font-size: 0.75rem;
     padding: 0.1rem 0.4rem;
-    border-radius: 3px;
-    background: #1a2a3a;
+    border-radius: var(--vt-radius-sm);
+    background: var(--vt-color-accent-muted);
   }
 
   .workspace-search {
@@ -240,8 +241,8 @@
   }
 
   .workspace-search :global(.global-search-box) {
-    background: #101626;
-    border-color: #243957;
+    background: #0f1424;
+    border-color: var(--vt-color-border-strong);
   }
 
   .workspace-search :global(.global-search-results) {
@@ -266,9 +267,9 @@
     display: flex;
     align-items: center;
     gap: 0.25rem;
-    padding: 0.35rem 0.75rem 0;
-    background: #12122a;
-    border-bottom: 1px solid #16213e;
+    padding: var(--vt-space-1) var(--vt-space-3) 0;
+    background: #12162a;
+    border-bottom: 1px solid var(--vt-color-border);
     flex-shrink: 0;
     overflow-x: auto;
     scrollbar-gutter: auto;
@@ -280,23 +281,23 @@
     padding: 0.35rem 0.8rem;
     border: 1px solid transparent;
     border-bottom: none;
-    border-radius: 6px 6px 0 0;
+    border-radius: var(--vt-radius-md) var(--vt-radius-md) 0 0;
     background: transparent;
-    color: #8b8ba8;
+    color: var(--vt-color-text-muted);
     cursor: pointer;
     font: inherit;
     font-size: 0.8rem;
   }
 
   .workspace-tabs button:hover {
-    color: #e0e0f0;
-    background: rgba(15, 52, 96, 0.4);
+    color: var(--vt-color-text-primary);
+    background: var(--vt-color-surface-hover);
   }
 
-  .workspace-tabs button.active {
-    color: #4ecca3;
-    background: #1a1a2e;
-    border-color: #16213e;
+  .workspace-tabs button.is-active {
+    color: var(--vt-color-accent);
+    background: var(--vt-color-background);
+    border-color: var(--vt-color-border);
   }
 
   .workspace-tool-content {
@@ -311,7 +312,7 @@
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    color: #666;
+    color: var(--vt-color-text-muted);
     gap: 0.5rem;
     padding: 2rem;
     text-align: center;
@@ -319,7 +320,7 @@
 
   .workspace-hint {
     font-size: 0.8rem;
-    color: #555;
+    color: var(--vt-color-text-muted);
     max-width: 300px;
     text-align: center;
   }

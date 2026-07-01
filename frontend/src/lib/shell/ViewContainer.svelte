@@ -47,10 +47,13 @@
   {#if renderError}
     <div class="view-container">
       <div class="error-boundary">
-        <div class="error-fallback">
+        <div class="error-fallback vt-inline-alert error">
           <Icon name="warning" size={24} class="error-icon" />
           <p class="error-title">Plugin UI failed</p>
-          <p class="error-text">{renderError}</p>
+          <details class="error-details">
+            <summary>Details</summary>
+            <p class="error-text">{renderError}</p>
+          </details>
         </div>
       </div>
     </div>
@@ -69,11 +72,14 @@
             />
           {:else}
             <div class="placeholder">
-              <p class="placeholder-label">Plugin View Host</p>
-              <p class="placeholder-info"><span class="placeholder-key">Plugin:</span> <strong>{currentView.pluginId}</strong></p>
-              <p class="placeholder-info"><span class="placeholder-key">View ID:</span> <code>{currentView.id}</code></p>
-              <p class="placeholder-info"><span class="placeholder-key">Component:</span> <code>{currentView.component}</code></p>
-              <p class="placeholder-badge">frontend bundle not available</p>
+              <p class="placeholder-label">This plugin does not provide a visual view yet.</p>
+              <details class="placeholder-details">
+                <summary>Details</summary>
+                <p class="placeholder-info"><span class="placeholder-key">Plugin:</span> <strong>{currentView.pluginId}</strong></p>
+                <p class="placeholder-info"><span class="placeholder-key">View ID:</span> <code>{currentView.id}</code></p>
+                <p class="placeholder-info"><span class="placeholder-key">Component:</span> <code>{currentView.component}</code></p>
+              </details>
+              <p class="placeholder-badge vt-badge">Frontend bundle unavailable</p>
             </div>
           {/if}
         </div>
@@ -81,7 +87,7 @@
     </div>
   {:else if activeView}
     <div class="view-container empty">
-      <p>View "{activeView}" not found in contributions</p>
+      <p>View is unavailable.</p>
     </div>
   {:else}
     <div class="view-container empty">
@@ -97,7 +103,7 @@
     display: flex;
     flex-direction: column;
     min-width: 0;
-    background: #1a1a2e;
+    background: var(--vt-color-background);
   }
   .view {
     flex: 1;
@@ -107,7 +113,7 @@
     padding: 1.5rem;
   }
   .view.degraded {
-    border-left: 3px solid #ffc857;
+    border-left: 3px solid var(--vt-color-warning);
   }
   .view-header {
     display: flex;
@@ -115,18 +121,18 @@
     gap: 0.5rem;
     margin-bottom: 1rem;
     padding-bottom: 0.75rem;
-    border-bottom: 1px solid #16213e;
+    border-bottom: 1px solid var(--vt-color-border);
   }
   .view-header h2 {
     margin: 0;
     font-size: 1.2rem;
-    color: #e0e0f0;
+    color: var(--vt-color-text-primary);
     flex: 1;
   }
   :global(.view-icon) {
     width: 1.3rem;
     height: 1.3rem;
-    color: #a78bfa;
+    color: var(--vt-color-text-muted);
     flex-shrink: 0;
   }
   .view-content {
@@ -134,33 +140,33 @@
     min-width: 0;
   }
   .placeholder {
-    color: #666;
+    color: var(--vt-color-text-muted);
     font-style: italic;
     padding: 2rem;
     text-align: center;
-    border: 1px dashed #333;
-    border-radius: 8px;
+    border: 1px dashed var(--vt-color-border-strong);
+    border-radius: var(--vt-radius-lg);
   }
   .placeholder-label {
     font-size: 1rem;
-    color: #a0a0b8;
+    color: var(--vt-color-text-secondary);
     font-weight: 600;
     margin-bottom: 1rem;
     font-style: normal;
   }
   .placeholder-info {
     font-size: 0.85rem;
-    color: #666;
+    color: var(--vt-color-text-muted);
     margin: 0.3rem 0;
     font-style: normal;
   }
   .placeholder-key {
-    color: #a0a0b8;
+    color: var(--vt-color-text-muted);
   }
-  .placeholder-info strong { color: #4ecca3; }
+  .placeholder-info strong { color: var(--vt-color-accent); }
   .placeholder-info code {
-    color: #e0e0f0;
-    background: #16213e;
+    color: var(--vt-color-text-primary);
+    background: var(--vt-color-surface-muted);
     padding: 0.1rem 0.3rem;
     border-radius: 3px;
     font-size: 0.8rem;
@@ -169,8 +175,8 @@
     display: inline-block;
     margin-top: 1rem;
     padding: 0.25rem 0.75rem;
-    background: #533483;
-    color: #e0e0f0;
+    background: var(--vt-color-surface-muted);
+    color: var(--vt-color-text-secondary);
     border-radius: 12px;
     font-size: 0.75rem;
     font-weight: 600;
@@ -188,16 +194,16 @@
     padding: 2rem;
   }
   :global(.error-icon) {
-    color: #e94560;
+    color: var(--vt-color-danger);
   }
   .error-title {
-    color: #e94560;
+    color: var(--vt-color-danger);
     font-size: 1.1rem;
     font-weight: 600;
     margin: 0.5rem 0;
   }
   .error-text {
-    color: #a0a0b8;
+    color: var(--vt-color-text-secondary);
     font-size: 0.85rem;
     font-family: monospace;
     margin-top: 0.5rem;
@@ -208,9 +214,13 @@
     align-items: center;
     justify-content: center;
     height: 100%;
-    color: #555;
+    color: var(--vt-color-text-muted);
     font-size: 1rem;
     text-align: center;
   }
-  .empty .sub { font-size: 0.85rem; color: #444; margin-top: 0.5rem; }
+  .empty .sub { font-size: 0.85rem; color: var(--vt-color-text-muted); margin-top: 0.5rem; }
+  .placeholder-details,
+  .error-details { margin-top: 0.75rem; color: var(--vt-color-text-muted); }
+  .placeholder-details summary,
+  .error-details summary { cursor: pointer; color: var(--vt-color-text-secondary); }
 </style>

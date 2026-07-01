@@ -1384,6 +1384,13 @@
   function activityBundle() {
     return '(' + function () {
       var PLUGIN_ID = 'verstak.activity';
+      var LOW_VALUE_EVENT_TYPES = {
+        'workspace.selected': true,
+        'case.selected': true,
+        'file.selected': true,
+        'file.opened': true,
+        'note.opened': true
+      };
 
       function injectStyles() {
         if (document.getElementById('mock-activity-style')) return;
@@ -1433,6 +1440,12 @@
 
       function rows(value) {
         return Array.isArray(value) ? value.filter(function (item) { return item && typeof item === 'object'; }) : [];
+      }
+
+      function meaningfulRows(value) {
+        return rows(value).filter(function (activity) {
+          return !LOW_VALUE_EVENT_TYPES[String(activity.type || '').toLowerCase()];
+        });
       }
 
       function eventTime(value) {
@@ -1576,7 +1589,7 @@
         }
 
         readSettings().then(function (settings) {
-          events = rows(settings[key]);
+          events = meaningfulRows(settings[key]);
           render();
         });
         render();

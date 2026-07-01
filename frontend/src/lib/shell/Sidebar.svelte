@@ -88,7 +88,7 @@
       <span class="section-label">Tools</span>
       {#each sidebarItems as item}
         <button
-          class="nav-item plugin-item"
+          class="nav-item plugin-item vt-list-row"
           on:click={() => handleSidebarItem(item)}
           type="button"
         >
@@ -117,10 +117,10 @@
   .sidebar {
     width: 220px;
     min-width: 220px;
-    background: #16213e;
+    background: var(--vt-color-surface-muted);
     display: flex;
     flex-direction: column;
-    border-right: 1px solid #0f3460;
+    border-right: 1px solid var(--vt-color-border);
     overflow: hidden;
   }
 
@@ -129,18 +129,18 @@
     align-items: center;
     gap: 0.5rem;
     padding: 1rem 1.25rem;
-    border-bottom: 1px solid #0f3460;
+    border-bottom: 1px solid var(--vt-color-border);
   }
 
   :global(.sidebar-logo) {
     width: 1.2rem;
     height: 1.2rem;
-    color: #4ecca3;
+    color: var(--vt-color-accent);
     flex-shrink: 0;
   }
 
   .sidebar-title {
-    color: #e0e0f0;
+    color: var(--vt-color-text-primary);
     font-size: 1rem;
     font-weight: 600;
   }
@@ -150,7 +150,7 @@
     flex-direction: column;
     padding: 0.45rem 0.6rem 0.55rem;
     gap: 0.15rem;
-    border-bottom: 1px solid #0f3460;
+    border-bottom: 1px solid var(--vt-color-border);
   }
 
   :global(workspace-tree) {
@@ -161,7 +161,7 @@
   }
 
   .section-label {
-    color: #a0a0b8;
+    color: var(--vt-color-text-muted);
     font-size: 0.7rem;
     text-transform: uppercase;
     letter-spacing: 0.05em;
@@ -174,22 +174,22 @@
     align-items: center;
     justify-content: flex-start;
     gap: 0.45rem;
-    min-height: 1.7rem;
+    min-height: 1.85rem;
     padding: 0.15rem 0.45rem;
     background: none;
     border: none;
-    color: #a0a0b8;
+    color: var(--vt-color-text-secondary);
     font-size: 0.78rem;
     cursor: pointer;
-    border-radius: 3px;
+    border-radius: var(--vt-radius-sm);
     text-align: left;
     width: 100%;
     transition: background 0.15s, color 0.15s;
   }
 
   .nav-item:hover {
-    background: rgba(15,52,96,0.4);
-    color: #e0e0f0;
+    background: var(--vt-color-surface-hover);
+    color: var(--vt-color-text-primary);
   }
 
   :global(.nav-icon) {
@@ -199,7 +199,8 @@
     color: currentColor;
   }
   :global(.nav-icon.icon-plugin) {
-    color: #a78bfa;
+    color: var(--vt-color-text-muted);
+    opacity: 0.9;
   }
 
   .nav-label {
@@ -211,7 +212,7 @@
   .sidebar-footer {
     margin-top: auto;
     padding: 0.75rem 1.25rem;
-    border-top: 1px solid #0f3460;
+    border-top: 1px solid var(--vt-color-border);
   }
 
   .sidebar-error {
@@ -219,11 +220,11 @@
     align-items: center;
     gap: 0.25rem;
     font-size: 0.7rem;
-    color: #e94560;
+    color: var(--vt-color-danger);
     margin-bottom: 0.25rem;
   }
   :global(.sidebar-error-icon) {
-    color: #e94560;
+    color: var(--vt-color-danger);
   }
 
   @media (max-width: 720px) {
@@ -232,7 +233,7 @@
       min-width: 0;
       max-height: 14rem;
       border-right: 0;
-      border-bottom: 1px solid #0f3460;
+      border-bottom: 1px solid var(--vt-color-border);
     }
 
     .sidebar-header {

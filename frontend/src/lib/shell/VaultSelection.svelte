@@ -39,20 +39,20 @@
   async function createVault() {
     error = '';
     if (!newVaultPath.trim()) {
-      error = 'Укажите или выберите папку для нового vault';
+      error = 'Choose or enter a folder for the new vault.';
       return;
     }
     creating = true;
     try {
       const createErr = await App.CreateVault(newVaultPath.trim());
       if (createErr) {
-        error = 'Не удалось создать vault: ' + createErr;
+        error = 'Could not create vault: ' + createErr;
         creating = false;
         return;
       }
       const openErr = await App.OpenVault(newVaultPath.trim());
       if (openErr) {
-        error = 'Не удалось открыть vault: ' + openErr;
+        error = 'Could not open vault: ' + openErr;
         creating = false;
         return;
       }
@@ -70,14 +70,14 @@
   async function openExistingVault() {
     error = '';
     if (!openVaultPath.trim()) {
-      error = 'Укажите или выберите существующий vault';
+      error = 'Choose or enter an existing vault.';
       return;
     }
     opening = true;
     try {
       const openErr = await App.OpenVault(openVaultPath.trim());
       if (openErr) {
-        error = 'Не удалось открыть vault: ' + openErr;
+        error = 'Could not open vault: ' + openErr;
         opening = false;
         return;
       }
@@ -98,7 +98,7 @@
     try {
       const openErr = await App.OpenVault(path);
       if (openErr) {
-        error = 'Не удалось открыть vault: ' + openErr;
+        error = 'Could not open vault: ' + openErr;
         opening = false;
         return;
       }
@@ -117,7 +117,7 @@
 {#if loading}
   <div class="vault-selection">
     <div class="vault-selection-inner">
-      <p class="loading-text">Загрузка...</p>
+      <p class="loading-text">Loading...</p>
     </div>
   </div>
 {:else}
@@ -130,7 +130,7 @@
         <line x1="9" y1="14" x2="15" y2="14"/>
       </svg>
       <h1>Verstak</h1>
-      <p class="subtitle">Выберите vault для начала работы</p>
+      <p class="subtitle">Choose a vault to start working</p>
     </div>
 
     {#if error}
@@ -142,43 +142,43 @@
 
     <div class="actions">
       <div class="action-card">
-        <h3>Создать новый vault</h3>
-        <p class="hint">Создайте локальную папку vault. В ней будут храниться рабочие пространства и проекты.</p>
+        <h3>Create a new vault</h3>
+        <p class="hint">Create a local vault folder for workspaces and projects.</p>
         <div class="input-row">
           <input
             type="text"
             bind:value={newVaultPath}
-            placeholder="Выберите или введите путь..."
+            placeholder="Choose or enter a path..."
             disabled={creating}
           />
           <button class="btn-secondary" on:click={browseNewVault} type="button" disabled={creating}>
-            Выбрать…
+            Browse...
           </button>
         </div>
         <div class="button-row">
           <button class="btn-primary" on:click={createVault} type="button" disabled={creating}>
-            {creating ? 'Создаём...' : 'Создать vault'}
+            {creating ? 'Creating...' : 'Create vault'}
           </button>
         </div>
       </div>
 
       <div class="action-card">
-        <h3>Открыть существующий vault</h3>
-        <p class="hint">Используйте vault, который уже есть на этом компьютере.</p>
+        <h3>Open an existing vault</h3>
+        <p class="hint">Use a vault that is already on this computer.</p>
         <div class="input-row">
           <input
             type="text"
             bind:value={openVaultPath}
-            placeholder="Выберите или введите путь..."
+            placeholder="Choose or enter a path..."
             disabled={opening}
           />
           <button class="btn-secondary" on:click={browseOpenVault} type="button" disabled={opening}>
-            Выбрать…
+            Browse...
           </button>
         </div>
         <div class="button-row">
           <button class="btn-secondary open-existing-btn" on:click={openExistingVault} type="button" disabled={opening}>
-            {opening ? 'Открываем...' : 'Открыть существующий'}
+            {opening ? 'Opening...' : 'Open existing'}
           </button>
         </div>
       </div>
@@ -186,7 +186,7 @@
 
     {#if recentVaults.length > 0}
       <div class="recent-section">
-        <h3>Недавние vault</h3>
+        <h3>Recent vaults</h3>
         <ul class="recent-list">
           {#each recentVaults as path}
             <li>
@@ -209,7 +209,7 @@
     align-items: center;
     justify-content: center;
     height: 100vh;
-    background: #1a1a2e;
+    background: var(--vt-color-background);
     padding: 2rem;
   }
   .vault-selection-inner {
@@ -217,7 +217,7 @@
     width: 100%;
   }
   .loading-text {
-    color: #a0a0b8;
+    color: var(--vt-color-text-muted);
     text-align: center;
     font-size: 1rem;
   }
@@ -226,26 +226,26 @@
     margin-bottom: 2rem;
   }
   .logo h1 {
-    color: #e0e0f0;
+    color: var(--vt-color-text-primary);
     font-size: 1.8rem;
     margin: 0.5rem 0 0.25rem;
   }
   .subtitle {
-    color: #a0a0b8;
+    color: var(--vt-color-text-muted);
     font-size: 0.95rem;
     margin: 0;
   }
   .error-box {
-    background: rgba(233, 69, 96, 0.1);
-    border: 1px solid #e94560;
-    border-radius: 8px;
+    background: var(--vt-color-danger-muted);
+    border: 1px solid rgba(233, 69, 96, 0.5);
+    border-radius: var(--vt-radius-lg);
     padding: 0.75rem 1rem;
     margin-bottom: 1.5rem;
     display: flex;
     align-items: flex-start;
     gap: 0.5rem;
     font-size: 0.85rem;
-    color: #e94560;
+    color: #ffc6ce;
   }
   :global(.error-icon) { flex-shrink: 0; }
   .error-text { word-break: break-word; }
@@ -256,18 +256,18 @@
     margin-bottom: 1.5rem;
   }
   .action-card {
-    background: #16213e;
-    border: 1px solid #0f3460;
-    border-radius: 8px;
+    background: var(--vt-color-surface);
+    border: 1px solid var(--vt-color-border);
+    border-radius: var(--vt-radius-lg);
     padding: 1.25rem;
   }
   .action-card h3 {
-    color: #e0e0f0;
+    color: var(--vt-color-text-primary);
     font-size: 1rem;
     margin: 0 0 0.25rem;
   }
   .hint {
-    color: #a0a0b8;
+    color: var(--vt-color-text-muted);
     font-size: 0.8rem;
     margin: 0 0 0.75rem;
   }
@@ -278,27 +278,28 @@
   }
   .input-row input {
     flex: 1;
-    background: #0f3460;
-    border: 1px solid #1a3a5c;
-    color: #e0e0f0;
+    background: #0f1424;
+    border: 1px solid var(--vt-color-border-strong);
+    color: var(--vt-color-text-primary);
     padding: 0.5rem 0.75rem;
     border-radius: 6px;
     font-size: 0.9rem;
   }
   .input-row input:focus {
     outline: none;
-    border-color: #4ecca3;
+    border-color: var(--vt-color-accent);
+    box-shadow: var(--vt-focus-ring);
   }
   .input-row input::placeholder {
-    color: #666;
+    color: var(--vt-color-text-muted);
   }
   .button-row {
     display: flex;
     justify-content: flex-end;
   }
   .btn-primary {
-    background: #4ecca3;
-    color: #1a1a2e;
+    background: var(--vt-color-accent);
+    color: #101827;
     border: none;
     padding: 0.5rem 1.25rem;
     border-radius: 6px;
@@ -314,9 +315,9 @@
     cursor: not-allowed;
   }
   .btn-secondary {
-    background: #0f3460;
-    color: #a0a0b8;
-    border: 1px solid #1a3a5c;
+    background: var(--vt-color-surface-hover);
+    color: var(--vt-color-text-secondary);
+    border: 1px solid var(--vt-color-border-strong);
     padding: 0.5rem 0.75rem;
     border-radius: 6px;
     cursor: pointer;
@@ -324,21 +325,21 @@
     white-space: nowrap;
   }
   .btn-secondary:hover:not(:disabled) {
-    background: #1a3a5c;
-    color: #e0e0f0;
+    background: var(--vt-color-surface-hover);
+    color: var(--vt-color-text-primary);
   }
   .btn-secondary:disabled {
     opacity: 0.5;
     cursor: not-allowed;
   }
   .recent-section {
-    background: #16213e;
-    border: 1px solid #0f3460;
-    border-radius: 8px;
+    background: var(--vt-color-surface);
+    border: 1px solid var(--vt-color-border);
+    border-radius: var(--vt-radius-lg);
     padding: 1rem 1.25rem;
   }
   .recent-section h3 {
-    color: #a0a0b8;
+    color: var(--vt-color-text-muted);
     font-size: 0.8rem;
     text-transform: uppercase;
     letter-spacing: 0.05em;
@@ -356,14 +357,14 @@
     width: 100%;
     background: none;
     border: none;
-    color: #e0e0f0;
+    color: var(--vt-color-text-primary);
     padding: 0.4rem 0;
     cursor: pointer;
     text-align: left;
     font-size: 0.85rem;
   }
   .recent-item:hover {
-    color: #4ecca3;
+    color: var(--vt-color-accent);
   }
   .recent-item:disabled {
     opacity: 0.5;
