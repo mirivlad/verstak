@@ -64,11 +64,18 @@ test.describe('UX quick wins', () => {
     await expect(files).toBeVisible({ timeout: 10000 });
     await expect(files.getByText(/T\d{2}:\d{2}:\d{2}/)).toHaveCount(0);
 
-    const actions = ['New folder', 'New markdown file', 'New text file'];
-    for (const action of actions) {
-      const button = page.locator(`[data-files-action]`).filter({ hasText: action }).first();
+    const actions = [
+      ['new-folder', 'New folder'],
+      ['new-markdown', 'New markdown file'],
+      ['new-text', 'New text file'],
+    ];
+    for (const [action, label] of actions) {
+      const button = page.locator(`[data-files-action="${action}"]`).first();
       await expect(button).toBeVisible();
-      await expect(button).toHaveAttribute('title', action);
+      await expect(button).toHaveAttribute('title', label);
+      await expect(button).toHaveAttribute('aria-label', label);
+      await expect(button).toHaveAttribute('data-files-icon', /.+/);
+      await expect(button.locator('svg')).toBeVisible();
     }
   });
 

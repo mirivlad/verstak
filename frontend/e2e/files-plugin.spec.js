@@ -157,6 +157,30 @@ test.describe('G: Files Plugin', () => {
     await expect(iconFor('Photo.png')).toHaveAttribute('title', 'Image file');
   });
 
+  test('files explorer offers create actions in empty folders', async ({ page }) => {
+    await page.locator('.wt-label').filter({ hasText: 'Project' }).click();
+    await openFilesTool(page);
+    await expect(page.locator('.files-breadcrumb')).toContainText('Project', { timeout: 10000 });
+
+    await page.locator('[data-files-action="new-folder"]').click();
+    await page.locator('[data-files-create-input]').fill('EmptyQuickActions');
+    await page.locator('[data-files-create-confirm]').click();
+    await page.locator('[data-file-name="EmptyQuickActions"]').dblclick();
+
+    const emptyState = page.locator('.files-empty');
+    await expect(emptyState).toContainText('Empty folder');
+    await expect(emptyState.locator('[data-files-empty-action="new-folder"]')).toBeVisible();
+    await expect(emptyState.locator('[data-files-empty-action="new-markdown"]')).toBeVisible();
+    await expect(emptyState.locator('[data-files-empty-action="new-text"]')).toBeVisible();
+
+    await emptyState.locator('[data-files-empty-action="new-markdown"]').click();
+    await page.locator('[data-files-create-input]').fill('FromEmpty.md');
+    await page.locator('[data-files-create-confirm]').click();
+
+    await expect(page.locator('[data-file-name="FromEmpty.md"]')).toBeVisible();
+    await expect(page.locator('.files-empty')).toHaveCount(0);
+  });
+
   test('files explorer restores an item from trash metadata', async ({ page }) => {
     await page.locator('.wt-label').filter({ hasText: 'Project' }).click();
     await openFilesTool(page);
@@ -189,14 +213,17 @@ test.describe('G: Files Plugin', () => {
     for (const action of ['back', 'forward', 'up', 'refresh', 'new-folder', 'new-markdown', 'new-text', 'open', 'rename', 'trash', 'trash-view', 'cut', 'copy', 'paste']) {
       const button = page.locator(`[data-files-action="${action}"]`);
       await expect(button).toHaveAttribute('title', /.+/);
+      await expect(button).toHaveAttribute('aria-label', /.+/);
+      await expect(button).toHaveAttribute('data-files-icon', /.+/);
       await expect(button.locator('svg')).toBeVisible();
-      await expect(button).toHaveText(/\S/);
     }
 
     await expect(page.locator('.files-row-btn').filter({ hasText: 'New here' })).toHaveCount(0);
     const firstRowButton = page.locator('[data-file-name="Notes"] .files-row-btn').first();
     await expect(firstRowButton).toBeVisible();
-    await expect(firstRowButton).toHaveText(/\S/);
+    await expect(firstRowButton).toHaveAttribute('title', /.+/);
+    await expect(firstRowButton).toHaveAttribute('aria-label', /.+/);
+    await expect(firstRowButton).toHaveAttribute('data-files-icon', /.+/);
     expect(await firstRowButton.evaluate((node) => node.innerHTML)).toContain('<svg');
   });
 
