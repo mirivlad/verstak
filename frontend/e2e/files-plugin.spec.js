@@ -156,6 +156,22 @@ test.describe('G: Files Plugin', () => {
     await expect(page.locator('[data-file-name="CutMe"]')).toHaveCount(0);
   });
 
+  test('files explorer duplicates a file from the context menu', async ({ page }) => {
+    await page.locator('.wt-label').filter({ hasText: 'Project' }).click();
+    await openFilesTool(page);
+    await expect(page.locator('.files-breadcrumb')).toContainText('Project', { timeout: 10000 });
+
+    await page.locator('[data-file-name="project-only.txt"]').click({ button: 'right' });
+    await page.locator('[data-files-menu-action="duplicate"]').click();
+
+    await expect(page.locator('[data-file-name="project-only.txt"]')).toBeVisible();
+    await expect(page.locator('[data-file-name="project-only (copy).txt"]')).toBeVisible();
+
+    await page.locator('[data-file-name="project-only.txt"]').click({ button: 'right' });
+    await page.locator('[data-files-menu-action="duplicate"]').click();
+    await expect(page.locator('[data-file-name="project-only (copy 2).txt"]')).toBeVisible();
+  });
+
   test('files explorer supports multiselect and internal drag/drop move', async ({ page }) => {
     await page.locator('.wt-label').filter({ hasText: 'Project' }).click();
     await openFilesTool(page);

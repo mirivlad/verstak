@@ -897,6 +897,30 @@
           function cutSelection() { setClipboard('cut', selectedEntries()); }
           function copySelection() { setClipboard('copy', selectedEntries().filter(function (item) { return item.type !== 'folder'; })); }
           function uniqueName(name, occupied) { if (!occupied[name]) return name; var dot = name.lastIndexOf('.'); var b = dot > 0 ? name.slice(0, dot) : name; var x = dot > 0 ? name.slice(dot) : ''; for (var i = 2; i < 100; i++) { var c = b + ' (' + i + ')' + x; if (!occupied[c]) return c; } return b + ' (' + Date.now() + ')' + x; }
+          function duplicate(item) {
+            if (!item || item.type === 'folder') return;
+            var dot = item.name.lastIndexOf('.');
+            var stem = dot > 0 ? item.name.slice(0, dot) : item.name;
+            var extension = dot > 0 ? item.name.slice(dot) : '';
+            var folder = parent(item.relativePath);
+            var maxAttempts = 100;
+            function candidatePath(n) {
+              var name = n === 1 ? stem + ' (copy)' + extension : stem + ' (copy ' + n + ')' + extension;
+              return folder ? folder + '/' + name : name;
+            }
+            function tryDuplicate(n) {
+              var target = candidatePath(n);
+              return api.files.metadata(target).then(function () {
+                if (n >= maxAttempts) return Promise.reject(new Error('all duplicate names are taken'));
+                return tryDuplicate(n + 1);
+              }, function () {
+                return api.files.readText(item.relativePath).then(function (text) {
+                  return api.files.writeText(target, text, { createIfMissing: true, overwrite: false });
+                });
+              });
+            }
+            tryDuplicate(1).then(load).catch(function (err) { console.error('[files] Duplicate failed:', err); });
+          }
           function paste() {
             var clip = window.__filesClipboard;
             if (!clip || !clip.items || !clip.items.length) return;
@@ -920,6 +944,7 @@
               if (!selected[item.relativePath]) { selected = {}; selected[item.relativePath] = true; render(); }
               menu.appendChild(menuItem('Open', 'open', function () { open(item); }));
               menu.appendChild(menuItem('Rename', 'rename', function () { startRename(item); }));
+              if (item.type !== 'folder') menu.appendChild(menuItem('Duplicate', 'duplicate', function () { duplicate(item); }));
               menu.appendChild(menuItem('Cut', 'cut', cutSelection));
               menu.appendChild(menuItem('Copy', 'copy', copySelection));
               menu.appendChild(menuItem('Trash', 'trash', trashSelection));
