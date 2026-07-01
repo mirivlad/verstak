@@ -114,6 +114,21 @@ test.describe('G: Files Plugin', () => {
     await expect(page.locator('[data-file-name="bad"]')).toHaveCount(0);
   });
 
+  test('files explorer shows inline create validation errors', async ({ page }) => {
+    await page.locator('.wt-label').filter({ hasText: 'Project' }).click();
+    await openFilesTool(page);
+    await expect(page.locator('.files-breadcrumb')).toContainText('Project', { timeout: 10000 });
+
+    await page.locator('[data-files-action="new-folder"]').click();
+    await page.locator('[data-files-create-input]').fill('bad/name');
+    await page.locator('[data-files-create-confirm]').click();
+
+    await expect(page.locator('[data-files-create-error]')).toBeVisible();
+    await expect(page.locator('[data-files-create-error]')).toContainText('Invalid characters');
+    await expect(page.locator('[data-files-create-input]')).toBeVisible();
+    await expect(page.locator('[data-file-name="bad"]')).toHaveCount(0);
+  });
+
   test('files explorer restores an item from trash metadata', async ({ page }) => {
     await page.locator('.wt-label').filter({ hasText: 'Project' }).click();
     await openFilesTool(page);

@@ -770,10 +770,14 @@
           var list = e('div', { className: 'files-list', 'data-files-list': '' }, []);
           c.appendChild(list);
           var createPanel = e('div', { className: 'files-panel', style: 'display:none' }, []);
+          var createField = e('div', { style: { display: 'flex', flex: '1', flexDirection: 'column', gap: '.25rem' } }, []);
           var createInput = e('input', { className: 'files-create-input', 'data-files-create-input': '' }, []);
-          createPanel.appendChild(createInput);
+          var createError = e('div', { 'data-files-create-error': '', role: 'alert', style: { display: 'none', color: '#ff8a8a', fontSize: '.72rem', lineHeight: '1.2' } }, []);
+          createField.appendChild(createInput);
+          createField.appendChild(createError);
+          createPanel.appendChild(createField);
           createPanel.appendChild(e('button', { className: 'files-toolbar-btn', 'data-files-create-confirm': '', onClick: confirmCreate }, ['Create']));
-          createPanel.appendChild(e('button', { className: 'files-toolbar-btn', onClick: function () { createPanel.style.display = 'none'; } }, ['Cancel']));
+          createPanel.appendChild(e('button', { className: 'files-toolbar-btn', onClick: cancelCreate }, ['Cancel']));
           c.appendChild(createPanel);
           var renamePanel = e('div', { className: 'files-panel', style: 'display:none' }, []);
           var renameField = e('div', { style: { display: 'flex', flex: '1', flexDirection: 'column', gap: '.25rem' } }, []);
@@ -935,15 +939,28 @@
             if ((itemExt === '.md' || itemExt === '.markdown') && local(item.relativePath).split('/')[0] === 'Notes') { ctx.isInsideNotesFolder = true; ctx.notesMode = true; }
             api.workbench.openResource({ kind: 'vault-file', path: item.relativePath, mode: 'view', extension: itemExt, context: ctx });
           }
-          function startCreate(mode) { createMode = mode; createInput.value = ''; createPanel.style.display = 'flex'; createInput.focus(); }
+          function startCreate(mode) { createMode = mode; createInput.value = ''; setCreateError(''); createPanel.style.display = 'flex'; createInput.focus(); }
+          function setCreateError(message) {
+            createError.textContent = message || '';
+            createError.style.display = message ? 'block' : 'none';
+            createInput.setAttribute('aria-invalid', message ? 'true' : 'false');
+          }
+          function validateCreateName(name) {
+            if (!name) return 'Name is required';
+            if (/[\\/:*?"<>|\x00-\x1f]/.test(name)) return 'Invalid characters in name';
+            if (name === '.' || name === '..' || name[0] === ' ' || name[name.length - 1] === ' ' || name[name.length - 1] === '.') return 'Invalid name';
+            return '';
+          }
+          function cancelCreate() { createMode = ''; setCreateError(''); createPanel.style.display = 'none'; }
           function confirmCreate() {
             var name = createInput.value.trim();
             var mode = createMode;
-            if (!name) return;
+            var validationError = validateCreateName(name);
+            if (validationError) { setCreateError(validationError); return; }
             if (mode === 'markdown' && !/\.(md|markdown)$/i.test(name)) name += '.md';
             if (mode === 'text' && !/\.[^/.]+$/.test(name)) name += '.txt';
             var path = scoped(current ? current + '/' + name : name);
-            (mode === 'folder' ? api.files.createFolder(path) : api.files.writeText(path, '', { createIfMissing: true, overwrite: false })).then(function () { createPanel.style.display = 'none'; load(); });
+            (mode === 'folder' ? api.files.createFolder(path) : api.files.writeText(path, '', { createIfMissing: true, overwrite: false })).then(function () { cancelCreate(); load(); }).catch(function (err) { setCreateError('Error: ' + ((err && err.message) ? err.message : String(err))); });
           }
           function setRenameError(message) {
             renameError.textContent = message || '';
@@ -1102,7 +1119,8 @@
             }
             menu.style.display = 'block'; menu.style.left = x + 'px'; menu.style.top = y + 'px';
           }
-          createInput.addEventListener('keydown', function (ev) { if (ev.key === 'Enter') confirmCreate(); });
+          createInput.addEventListener('input', function () { setCreateError(''); });
+          createInput.addEventListener('keydown', function (ev) { if (ev.key === 'Enter') confirmCreate(); if (ev.key === 'Escape') cancelCreate(); });
           renameInput.addEventListener('input', function () { setRenameError(''); });
           renameInput.addEventListener('keydown', function (ev) { if (ev.key === 'Enter') confirmRename(); if (ev.key === 'Escape') cancelRename(); });
           list.addEventListener('contextmenu', function (ev) { ev.preventDefault(); var row = ev.target.closest('.files-item'); showMenu(ev.clientX, ev.clientY, row ? entryByPath(row.getAttribute('data-file-path')) : null); });
