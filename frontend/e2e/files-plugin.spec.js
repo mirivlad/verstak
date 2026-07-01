@@ -129,6 +129,34 @@ test.describe('G: Files Plugin', () => {
     await expect(page.locator('[data-file-name="bad"]')).toHaveCount(0);
   });
 
+  test('files explorer uses rich file icons by file type', async ({ page }) => {
+    await page.locator('.wt-label').filter({ hasText: 'Project' }).click();
+    await openFilesTool(page);
+    await expect(page.locator('.files-breadcrumb')).toContainText('Project', { timeout: 10000 });
+
+    async function createFile(action, name) {
+      await page.locator(`[data-files-action="${action}"]`).click();
+      await page.locator('[data-files-create-input]').fill(name);
+      await page.locator('[data-files-create-confirm]').click();
+      await expect(page.locator(`[data-file-name="${name}"]`)).toBeVisible();
+    }
+
+    await createFile('new-markdown', 'IconNote.md');
+    await createFile('new-text', 'Photo.png');
+    await createFile('new-text', 'Manual.pdf');
+    await createFile('new-text', 'Script.js');
+
+    const iconFor = (name) => page.locator(`[data-file-name="${name}"] .files-item-icon`);
+    await expect(iconFor('Notes')).toHaveAttribute('data-file-icon', 'folder');
+    await expect(iconFor('project-only.txt')).toHaveAttribute('data-file-icon', 'text');
+    await expect(iconFor('IconNote.md')).toHaveAttribute('data-file-icon', 'markdown');
+    await expect(iconFor('Photo.png')).toHaveAttribute('data-file-icon', 'image');
+    await expect(iconFor('Manual.pdf')).toHaveAttribute('data-file-icon', 'pdf');
+    await expect(iconFor('Script.js')).toHaveAttribute('data-file-icon', 'code');
+    await expect(iconFor('Manual.pdf')).toHaveAttribute('aria-label', 'PDF file');
+    await expect(iconFor('Photo.png')).toHaveAttribute('title', 'Image file');
+  });
+
   test('files explorer restores an item from trash metadata', async ({ page }) => {
     await page.locator('.wt-label').filter({ hasText: 'Project' }).click();
     await openFilesTool(page);

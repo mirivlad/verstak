@@ -679,6 +679,41 @@
     return '(' + function () {
       var SVG = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M6 2h9l5 5v15H6V2Zm8 1.5V8h4.5L14 3.5Z"/></svg>';
       var FOLDER_SVG = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M3 5a2 2 0 0 1 2-2h5l2 3h7a2 2 0 0 1 2 2v1H3V5Zm0 6h18v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-7Z"/></svg>';
+      var FILE_SVGS = {
+        folder: FOLDER_SVG,
+        generic: SVG,
+        markdown: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M5 3h10l4 4v14H5V3Zm9 1.5V8h3.5L14 4.5ZM8 11h8v2H8v-2Zm0 4h8v2H8v-2Z"/></svg>',
+        text: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M6 2h9l5 5v15H6V2Zm8 1.5V8h4.5L14 3.5ZM8 12h8v1.5H8V12Zm0 3h8v1.5H8V15Zm0 3h5v1.5H8V18Z"/></svg>',
+        image: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/></svg>',
+        pdf: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M20 2H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-8.5 7.5c0 .83-.67 1.5-1.5 1.5H9v2H7.5V7H10c.83 0 1.5.67 1.5 1.5v1zm5 2c0 .83-.67 1.5-1.5 1.5h-2.5V7H15c.83 0 1.5.67 1.5 1.5v3zm4-3H19v1h1.5V11H19v2h-1.5V7h3v1.5zM9 9.5h1v-1H9v1zm6 2h1v-3h-1v3z"/></svg>',
+        code: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M22 21H2V3h20v18zM4 5v14h16V5H4zm3 4h10v2H7V9zm0 4h6v2H7v-2z"/></svg>'
+      };
+      var ICON_EXTENSIONS = {
+        md: 'markdown', markdown: 'markdown',
+        txt: 'text', text: 'text', log: 'text', rtf: 'text',
+        jpg: 'image', jpeg: 'image', png: 'image', gif: 'image', webp: 'image', svg: 'image',
+        pdf: 'pdf',
+        js: 'code', jsx: 'code', mjs: 'code', cjs: 'code', ts: 'code', tsx: 'code',
+        py: 'code', go: 'code', rs: 'code', css: 'code', html: 'code', json: 'code'
+      };
+      function fileIconCategory(item) {
+        if (item.type === 'folder') return 'folder';
+        return ICON_EXTENSIONS[(item.extension || ext(item.name)).toLowerCase()] || 'generic';
+      }
+      function fileIconLabel(category) {
+        return {
+          folder: 'Folder',
+          markdown: 'Markdown file',
+          text: 'Text file',
+          image: 'Image file',
+          pdf: 'PDF file',
+          code: 'Code file',
+          generic: 'File'
+        }[category] || 'File';
+      }
+      function fileIcon(item) {
+        return FILE_SVGS[fileIconCategory(item)] || FILE_SVGS.generic;
+      }
       function e(tag, attrs, children) {
         var node = document.createElement(tag);
         attrs = attrs || {};
@@ -838,6 +873,8 @@
             list.appendChild(e('div', { className: 'files-header' }, [e('span', {}, ['Name']), e('span', {}, ['Type']), e('span', {}, ['Size']), e('span', {}, ['Modified']), e('span', {}, ['Actions'])]));
             var shown = visible();
             shown.forEach(function (item) {
+              var iconCategory = fileIconCategory(item);
+              var iconLabel = fileIconLabel(iconCategory);
               var row = e('div', {
                 className: 'files-item' + (selected[item.relativePath] ? ' selected' : ''),
                 'data-file-name': item.name,
@@ -852,7 +889,7 @@
                   ev.dataTransfer.effectAllowed = 'move';
                 }
               }, []);
-              row.appendChild(e('span', { className: 'files-namecell' }, [e('span', { className: 'files-item-icon', innerHTML: item.type === 'folder' ? FOLDER_SVG : SVG }, []), e('span', { className: 'files-item-name' }, [item.name])]));
+              row.appendChild(e('span', { className: 'files-namecell' }, [e('span', { className: 'files-item-icon', 'data-file-icon': iconCategory, title: iconLabel, 'aria-label': iconLabel, innerHTML: fileIcon(item) }, []), e('span', { className: 'files-item-name' }, [item.name])]));
               row.appendChild(e('span', { className: 'files-item-meta' }, [item.type === 'folder' ? 'folder' : (item.extension || ext(item.name) || 'file')]));
               row.appendChild(e('span', { className: 'files-item-meta' }, [item.size ? String(item.size) : '']));
               row.appendChild(e('span', { className: 'files-item-meta' }, [formatDate(item.modifiedAt)]));
