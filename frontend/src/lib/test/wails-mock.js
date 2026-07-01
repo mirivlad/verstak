@@ -787,8 +787,20 @@
           function firstSelected() { return selectedEntries()[0] || null; }
           function updateBreadcrumb() {
             breadcrumb.innerHTML = '';
-            breadcrumb.appendChild(e('span', { className: 'files-breadcrumb-item', onClick: function () { nav(''); } }, [workspaceName]));
-            if (current) breadcrumb.appendChild(e('span', { className: 'files-breadcrumb-current' }, [' / ' + current]));
+            breadcrumb.appendChild(e('span', { className: current ? 'files-breadcrumb-item' : 'files-breadcrumb-current', onClick: function () { nav(''); } }, [workspaceName]));
+            if (!current) return;
+            var parts = current.split('/');
+            var path = '';
+            parts.forEach(function (part, index) {
+              path = path ? path + '/' + part : part;
+              breadcrumb.appendChild(e('span', { className: 'files-breadcrumb-sep' }, [' / ']));
+              var target = path;
+              var isCurrent = index === parts.length - 1;
+              breadcrumb.appendChild(e('span', {
+                className: isCurrent ? 'files-breadcrumb-current' : 'files-breadcrumb-item',
+                onClick: function () { if (!isCurrent) nav(target); }
+              }, [part]));
+            });
           }
           function visible() {
             return entries.filter(function (item) { return !item.isHidden && !item.isReserved && (!filter || item.name.toLowerCase().indexOf(filter) !== -1); }).sort(function (a, b) {

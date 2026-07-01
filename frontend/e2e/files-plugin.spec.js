@@ -156,6 +156,29 @@ test.describe('G: Files Plugin', () => {
     await expect(page.locator('[data-file-name="CutMe"]')).toHaveCount(0);
   });
 
+  test('files explorer navigates by clicking breadcrumb segments', async ({ page }) => {
+    await page.locator('.wt-label').filter({ hasText: 'Project' }).click();
+    await openFilesTool(page);
+    await expect(page.locator('.files-breadcrumb')).toContainText('Project', { timeout: 10000 });
+
+    await page.locator('[data-files-action="new-folder"]').click();
+    await page.locator('[data-files-create-input]').fill('BreadcrumbParent');
+    await page.locator('[data-files-create-confirm]').click();
+    await page.locator('[data-file-name="BreadcrumbParent"]').dblclick();
+    await expect(page.locator('.files-breadcrumb')).toContainText('BreadcrumbParent');
+
+    await page.locator('[data-files-action="new-folder"]').click();
+    await page.locator('[data-files-create-input]').fill('BreadcrumbChild');
+    await page.locator('[data-files-create-confirm]').click();
+    await page.locator('[data-file-name="BreadcrumbChild"]').dblclick();
+    await expect(page.locator('.files-breadcrumb')).toContainText('BreadcrumbChild');
+
+    await page.locator('.files-breadcrumb-item').filter({ hasText: 'BreadcrumbParent' }).click();
+    await expect(page.locator('.files-breadcrumb')).toContainText('BreadcrumbParent');
+    await expect(page.locator('.files-breadcrumb')).not.toContainText('BreadcrumbChild');
+    await expect(page.locator('[data-file-name="BreadcrumbChild"]')).toBeVisible();
+  });
+
   test('files explorer duplicates a file from the context menu', async ({ page }) => {
     await page.locator('.wt-label').filter({ hasText: 'Project' }).click();
     await openFilesTool(page);
