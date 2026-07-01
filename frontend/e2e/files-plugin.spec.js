@@ -114,6 +114,24 @@ test.describe('G: Files Plugin', () => {
     await expect(page.locator('[data-file-name="bad"]')).toHaveCount(0);
   });
 
+  test('files explorer shows inline rename conflict errors', async ({ page }) => {
+    await page.locator('.wt-label').filter({ hasText: 'Project' }).click();
+    await openFilesTool(page);
+    await expect(page.locator('.files-breadcrumb')).toContainText('Project', { timeout: 10000 });
+
+    await page.locator('[data-file-name="project-only.txt"]').click();
+    await page.locator('[data-files-action="rename"]').click();
+    await page.locator('[data-files-rename-input]').fill('Notes');
+    await page.locator('[data-files-rename-confirm]').click();
+
+    await expect(page.locator('[data-files-rename-error]')).toBeVisible();
+    await expect(page.locator('[data-files-rename-error]')).toContainText('already exists');
+    await expect(page.locator('[data-files-rename-input]')).toBeVisible();
+    await expect(page.locator('[data-files-rename-input]')).toHaveValue('Notes');
+    await expect(page.locator('[data-file-name="project-only.txt"]')).toBeVisible();
+    await expect(page.locator('[data-file-name="Notes"]')).toBeVisible();
+  });
+
   test('files explorer shows inline create validation errors', async ({ page }) => {
     await page.locator('.wt-label').filter({ hasText: 'Project' }).click();
     await openFilesTool(page);

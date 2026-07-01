@@ -749,6 +749,10 @@
       function parent(path) { path = clean(path); var i = path.lastIndexOf('/'); return i < 0 ? '' : path.slice(0, i); }
       function ext(name) { var i = String(name || '').lastIndexOf('.'); return i > 0 ? name.slice(i + 1).toLowerCase() : ''; }
       function base(path) { path = clean(path); var i = path.lastIndexOf('/'); return i < 0 ? path : path.slice(i + 1); }
+      function isConflictError(err) {
+        var message = (err && err.message) ? err.message : String(err || '');
+        return /conflict|already exists|exists/i.test(message);
+      }
       function formatDate(value) {
         if (!value) return '';
         var date = new Date(value);
@@ -1064,7 +1068,10 @@
             if (newName === '.' || newName === '..' || newName[0] === ' ' || newName[newName.length - 1] === ' ' || newName[newName.length - 1] === '.') { setRenameError('Invalid name'); return; }
             var to = parent(renaming.relativePath);
             to = to ? to + '/' + newName : newName;
-            api.files.move(renaming.relativePath, to, { overwrite: false }).then(function () { cancelRename(); load(); }).catch(function (err) { setRenameError('Error: ' + ((err && err.message) ? err.message : String(err))); });
+            api.files.move(renaming.relativePath, to, { overwrite: false }).then(function () { cancelRename(); load(); }).catch(function (err) {
+              if (isConflictError(err)) { setRenameError('A file with that name already exists'); return; }
+              setRenameError('Error: ' + ((err && err.message) ? err.message : String(err)));
+            });
           }
           function confirmModal(message, options) {
             options = options || {};
