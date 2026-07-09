@@ -86,3 +86,36 @@ func TestPushDoesNotRetryClientErrors(t *testing.T) {
 		t.Fatalf("attempts = %d, want 1", attempts)
 	}
 }
+
+func TestPairDeviceSendsVaultID(t *testing.T) {
+	var pairedVaultID string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/client/pair" {
+			http.NotFound(w, r)
+			return
+		}
+		var request struct {
+			VaultID string `json:"vault_id"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		pairedVaultID = request.VaultID
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"device_id":    "device-1",
+			"device_token": "token-1",
+		})
+	}))
+	defer server.Close()
+
+	client := NewClient(server.URL, "", "", t.TempDir())
+	_, _, err := client.PairDevice(server.URL, "alice", "secret", "Desktop", "verstak-desktop/v2", "vault-123")
+	if err != nil {
+		t.Fatalf("PairDevice: %v", err)
+	}
+	if pairedVaultID != "vault-123" {
+		t.Fatalf("paired vault ID = %q, want vault-123", pairedVaultID)
+	}
+}

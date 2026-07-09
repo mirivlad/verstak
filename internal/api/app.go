@@ -108,6 +108,9 @@ func NewApp(
 		debug:           debugEnabled,
 		activityEvents:  make(map[string]bool),
 	}
+	if app.syncSvc == nil {
+		app.rebindSyncService()
+	}
 	app.ensureActivityProviderSubscriptions()
 	app.startFileWatcherForOpenVault()
 	return app
@@ -714,6 +717,7 @@ func (a *App) CreateVault(path string) error {
 	if err := a.vault.CreateVault(path); err != nil {
 		return err
 	}
+	a.rebindSyncService()
 	a.secretsSession = nil
 	a.startFileWatcherForOpenVault()
 	return nil
@@ -727,6 +731,7 @@ func (a *App) OpenVault(path string) error {
 	if err := a.vault.OpenVault(path); err != nil {
 		return err
 	}
+	a.rebindSyncService()
 	a.secretsSession = nil
 	a.startFileWatcherForOpenVault()
 	return nil
@@ -741,6 +746,7 @@ func (a *App) CloseVault() error {
 		a.fileWatcher.Stop()
 	}
 	a.vault.CloseVault()
+	a.syncSvc = nil
 	a.secretsSession = nil
 	return nil
 }
@@ -1656,6 +1662,7 @@ func (a *App) SetCurrentVault(path string) string {
 	a.secretsSession = nil
 	// Save the actual vault path (normalized by OpenVault, includes VerstakVault/)
 	vaultPath := a.vault.GetVaultPath()
+	a.rebindSyncService()
 	if err := a.appSettings.SetCurrentVault(vaultPath); err != nil {
 		return fmt.Sprintf("failed to save app settings: %v", err)
 	}
@@ -1683,6 +1690,16 @@ func (a *App) SetCurrentVault(path string) string {
 	}
 	a.startFileWatcherForOpenVault()
 	return ""
+}
+
+func (a *App) rebindSyncService() {
+	if a == nil || a.vault == nil || a.vault.GetVaultStatus() != vault.StatusOpen {
+		if a != nil {
+			a.syncSvc = nil
+		}
+		return
+	}
+	a.syncSvc = syncsvc.NewService(a.vault.GetVaultPath(), "")
 }
 
 func (a *App) startFileWatcherForOpenVault() {
@@ -2160,7 +2177,9 @@ func (a *App) syncStatus() (*SyncStatusDTO, error) {
 		LastError:    cfg.Sync.LastError,
 	}
 
-	if cfg.Sync.DeviceID != "" {
+	if deviceID := a.syncSvc.GetDeviceID(); deviceID != "" {
+		dto.DeviceID = deviceID
+	} else if cfg.Sync.DeviceID != "" {
 		dto.DeviceID = cfg.Sync.DeviceID
 	}
 
@@ -2170,10 +2189,13 @@ func (a *App) syncStatus() (*SyncStatusDTO, error) {
 	if deviceToken != "" {
 		client := newSyncClient(serverURL, "", "", vaultPath)
 		client.DeviceToken = deviceToken
-		if cfg.Sync.DeviceID != "" {
-			client.DeviceID = cfg.Sync.DeviceID
+		if dto.DeviceID != "" {
+			client.DeviceID = dto.DeviceID
 		}
 		if info, err := client.GetMe(); err == nil {
+			if info.DeviceID != "" {
+				_ = a.syncSvc.SetDeviceID(info.DeviceID)
+			}
 			dto.DeviceName = info.DeviceName
 			dto.DeviceID = info.DeviceID
 			dto.Connected = true
@@ -2224,19 +2246,24 @@ func (a *App) syncConfigure(serverURL, username, password string) error {
 	if err := a.requireVault(); err != nil {
 		return err
 	}
+	meta := a.vault.GetVaultMeta()
+	if meta == nil || strings.TrimSpace(meta.VaultID) == "" {
+		return fmt.Errorf("vault ID is unavailable")
+	}
 	vaultPath := a.vaultPath()
 	hostname, _ := os.Hostname()
 	if hostname == "" {
 		hostname = "unknown"
 	}
 	client := newSyncClient(serverURL, "", "", vaultPath)
-	deviceID, deviceToken, err := client.PairDevice(serverURL, username, password, hostname, "verstak-desktop/v2")
+	deviceID, deviceToken, err := client.PairDevice(serverURL, username, password, hostname, "verstak-desktop/v2", meta.VaultID)
 	if err != nil {
 		return fmt.Errorf("pair: %w", err)
 	}
 	if err := syncsvc.SaveDeviceToken(vaultPath, deviceToken); err != nil {
 		return fmt.Errorf("save token: %w", err)
 	}
+	a.syncSvc = syncsvc.NewService(vaultPath, deviceID)
 	if err := a.syncSvc.SetState(serverURL, ""); err != nil {
 		return err
 	}
@@ -2271,9 +2298,15 @@ func (a *App) syncDisconnect() error {
 	vaultPath := a.vaultPath()
 	deviceToken := syncsvc.LoadDeviceToken(vaultPath)
 	cfg := a.appSettings.Get()
+	serverURL := cfg.Sync.ServerURL
+	if a.syncSvc != nil {
+		if currentServerURL, _, _, _, err := a.syncSvc.GetState(); err == nil && currentServerURL != "" {
+			serverURL = currentServerURL
+		}
+	}
 
-	if deviceToken != "" {
-		client := newSyncClient(cfg.Sync.ServerURL, "", "", vaultPath)
+	if deviceToken != "" && serverURL != "" {
+		client := newSyncClient(serverURL, "", "", vaultPath)
 		client.DeviceToken = deviceToken
 		_ = client.RevokeCurrent()
 	}
@@ -2287,6 +2320,9 @@ func (a *App) syncDisconnect() error {
 	cfg.Sync.LastError = ""
 	if err := a.appSettings.UpdateSync(cfg.Sync); err != nil {
 		return err
+	}
+	if a.syncSvc == nil {
+		return nil
 	}
 	return a.syncSvc.SetState("", "")
 }
@@ -2350,6 +2386,7 @@ func (a *App) syncResetKey() error {
 		return err
 	}
 	vaultPath := a.vaultPath()
+	deviceToken := syncsvc.LoadDeviceToken(vaultPath)
 	if err := syncsvc.RemoveDeviceToken(vaultPath); err != nil && !os.IsNotExist(err) {
 		return err
 	}
@@ -2361,7 +2398,14 @@ func (a *App) syncResetKey() error {
 	cfg.Sync.LastStatus = "disconnected"
 	cfg.Sync.LastError = ""
 	if a.syncSvc != nil {
-		if err := a.syncSvc.SetState(cfg.Sync.ServerURL, ""); err != nil {
+		serverURL, _, _, _, err := a.syncSvc.GetState()
+		if err != nil {
+			return err
+		}
+		if serverURL == "" && deviceToken != "" {
+			serverURL = cfg.Sync.ServerURL
+		}
+		if err := a.syncSvc.SetState(serverURL, ""); err != nil {
 			return err
 		}
 	}
@@ -2384,6 +2428,12 @@ func (a *App) syncNow() (map[string]interface{}, error) {
 		return nil, err
 	}
 	vaultPath := a.vaultPath()
+	if a.syncSvc == nil {
+		a.rebindSyncService()
+	}
+	if a.syncSvc == nil {
+		return nil, fmt.Errorf("sync service not initialized")
+	}
 
 	serverURL, apiKey, lastPullSeq, _, err := a.syncSvc.GetState()
 	deviceToken := syncsvc.LoadDeviceToken(vaultPath)
@@ -2391,14 +2441,28 @@ func (a *App) syncNow() (map[string]interface{}, error) {
 		return nil, fmt.Errorf("sync not configured")
 	}
 
-	deviceID := ""
+	deviceID := a.syncSvc.GetDeviceID()
 	cfg := a.appSettings.Get()
-	if cfg.Sync.DeviceID != "" {
+	if deviceID == "" && deviceToken == "" && cfg.Sync.DeviceID != "" {
 		deviceID = cfg.Sync.DeviceID
 	}
 
 	client := newSyncClient(serverURL, apiKey, deviceID, vaultPath)
 	client.DeviceToken = deviceToken
+	if deviceID == "" && deviceToken != "" {
+		info, err := client.GetMe()
+		if err != nil {
+			return nil, fmt.Errorf("sync identity: %w", err)
+		}
+		if info.DeviceID == "" {
+			return nil, fmt.Errorf("sync identity: server returned an empty device ID")
+		}
+		if err := a.syncSvc.SetDeviceID(info.DeviceID); err != nil {
+			return nil, fmt.Errorf("save sync identity: %w", err)
+		}
+		deviceID = info.DeviceID
+		client.DeviceID = deviceID
+	}
 
 	unpushed, err := a.syncSvc.GetUnpushedOps()
 	if err != nil {
@@ -2637,13 +2701,18 @@ func syncPayloadPath(op syncsvc.Op, payload syncFilePayload) string {
 }
 
 func (a *App) localSyncDeviceID() string {
+	if a.syncSvc != nil {
+		if deviceID := a.syncSvc.GetDeviceID(); deviceID != "" {
+			return deviceID
+		}
+	}
+	if a.vault != nil && a.vault.GetVaultStatus() == vault.StatusOpen && syncsvc.LoadDeviceToken(a.vaultPath()) != "" {
+		return ""
+	}
 	if a.appSettings != nil {
 		if deviceID := a.appSettings.Get().Sync.DeviceID; deviceID != "" {
 			return deviceID
 		}
-	}
-	if a.syncSvc != nil {
-		return a.syncSvc.GetDeviceID()
 	}
 	return ""
 }

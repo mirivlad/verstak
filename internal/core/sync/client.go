@@ -77,12 +77,13 @@ func NewClient(serverURL, apiKey, deviceID, vaultRoot string) *Client {
 }
 
 // PairDevice calls POST /api/client/pair and returns device_id and device_token.
-func (c *Client) PairDevice(serverURL, username, password, deviceName, clientVersion string) (deviceID, deviceToken string, err error) {
+func (c *Client) PairDevice(serverURL, username, password, deviceName, clientVersion, vaultID string) (deviceID, deviceToken string, err error) {
 	body := map[string]string{
 		"login":          username,
 		"password":       password,
 		"device_name":    deviceName,
 		"client_version": clientVersion,
+		"vault_id":       vaultID,
 	}
 	var resp struct {
 		DeviceID    string `json:"device_id"`

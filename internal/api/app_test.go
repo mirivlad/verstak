@@ -1104,6 +1104,174 @@ func TestSyncNowPushesLocalOpsAndAppliesPulledFileOps(t *testing.T) {
 	}
 }
 
+func TestSyncConfigurePairsCurrentVaultID(t *testing.T) {
+	app, _ := newSyncFilesTestApp(t, []string{"files.read", "files.write", "files.delete"}, "local-device")
+	meta := app.vault.GetVaultMeta()
+	if meta == nil || meta.VaultID == "" {
+		t.Fatal("test vault must have an ID")
+	}
+
+	var pairedVaultID string
+	server := newLocalHTTPTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/client/pair" {
+			http.NotFound(w, r)
+			return
+		}
+		var request struct {
+			VaultID string `json:"vault_id"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		pairedVaultID = request.VaultID
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"device_id":    "paired-device",
+			"device_token": "paired-token",
+		})
+	}))
+	defer server.Close()
+
+	if err := app.syncConfigure(server.URL, "alice", "secret"); err != nil {
+		t.Fatalf("syncConfigure: %v", err)
+	}
+	if pairedVaultID != meta.VaultID {
+		t.Fatalf("paired vault ID = %q, want %q", pairedVaultID, meta.VaultID)
+	}
+}
+
+func TestSyncNowHydratesLegacyVaultDeviceID(t *testing.T) {
+	app, root := newSyncFilesTestApp(t, []string{"files.read", "files.write", "files.delete"}, "wrong-global-device")
+	var pushedDeviceID string
+	server := newLocalHTTPTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "Bearer vault-token" {
+			http.Error(w, "missing auth", http.StatusUnauthorized)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/api/client/me":
+			_ = json.NewEncoder(w).Encode(map[string]string{"device_id": "vault-device"})
+		case "/api/v1/sync/push":
+			var request struct {
+				DeviceID string `json:"device_id"`
+				Ops      []struct {
+					OpID string `json:"op_id"`
+				} `json:"ops"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+			pushedDeviceID = request.DeviceID
+			accepted := make([]string, 0, len(request.Ops))
+			for _, op := range request.Ops {
+				accepted = append(accepted, op.OpID)
+			}
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{
+				"accepted":  accepted,
+				"count":     len(accepted),
+				"conflicts": []map[string]interface{}{},
+			})
+		case "/api/v1/sync/pull":
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{
+				"server_sequence": 0,
+				"ops":             []map[string]interface{}{},
+			})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	app.syncSvc = syncsvc.NewService(root, "")
+	if err := app.syncSvc.SetState(server.URL, ""); err != nil {
+		t.Fatalf("SetState: %v", err)
+	}
+	if err := syncsvc.SaveDeviceToken(root, "vault-token"); err != nil {
+		t.Fatalf("SaveDeviceToken: %v", err)
+	}
+	if err := app.syncSvc.RecordOp(syncsvc.EntityFile, "Docs/one.txt", syncsvc.OpCreate, map[string]string{"path": "Docs/one.txt"}); err != nil {
+		t.Fatalf("RecordOp: %v", err)
+	}
+
+	if _, err := app.syncNow(); err != nil {
+		t.Fatalf("syncNow: %v", err)
+	}
+	if pushedDeviceID != "vault-device" {
+		t.Fatalf("pushed device ID = %q, want vault-device", pushedDeviceID)
+	}
+	if app.syncSvc.GetDeviceID() != "vault-device" {
+		t.Fatalf("persisted device ID = %q, want vault-device", app.syncSvc.GetDeviceID())
+	}
+}
+
+func TestVaultTransitionsRebindSyncService(t *testing.T) {
+	settings := appsettings.NewManager(filepath.Join(t.TempDir(), "config.json"))
+	if err := settings.Load(); err != nil {
+		t.Fatalf("settings Load: %v", err)
+	}
+	app := &App{
+		capRegistry: capability.NewRegistry(),
+		vault:       vault.NewVault(nil),
+		appSettings: settings,
+	}
+
+	if err := app.CreateVault(t.TempDir()); err != nil {
+		t.Fatalf("CreateVault: %v", err)
+	}
+	if app.syncSvc == nil {
+		t.Fatal("CreateVault must initialize the sync service")
+	}
+
+	vaultB := vault.NewVault(nil)
+	if err := vaultB.CreateVault(t.TempDir()); err != nil {
+		t.Fatalf("Create vault B: %v", err)
+	}
+	primeSyncState(t, vaultB.GetVaultPath(), "device-b", "https://sync-b.example.test", 22)
+	if err := app.OpenVault(vaultB.GetVaultPath()); err != nil {
+		t.Fatalf("OpenVault B: %v", err)
+	}
+	assertSyncState(t, app.syncSvc, "device-b", "https://sync-b.example.test", 22)
+
+	vaultC := vault.NewVault(nil)
+	if err := vaultC.CreateVault(t.TempDir()); err != nil {
+		t.Fatalf("Create vault C: %v", err)
+	}
+	primeSyncState(t, vaultC.GetVaultPath(), "device-c", "https://sync-c.example.test", 33)
+	if errStr := app.SetCurrentVault(vaultC.GetVaultPath()); errStr != "" {
+		t.Fatalf("SetCurrentVault C: %s", errStr)
+	}
+	assertSyncState(t, app.syncSvc, "device-c", "https://sync-c.example.test", 33)
+}
+
+func primeSyncState(t *testing.T, vaultRoot, deviceID, serverURL string, lastPullSeq int) {
+	t.Helper()
+	service := syncsvc.NewService(vaultRoot, deviceID)
+	if err := service.SetState(serverURL, ""); err != nil {
+		t.Fatalf("SetState: %v", err)
+	}
+	if err := service.SetLastPullSeq(lastPullSeq); err != nil {
+		t.Fatalf("SetLastPullSeq: %v", err)
+	}
+}
+
+func assertSyncState(t *testing.T, service *syncsvc.Service, wantDeviceID, wantServerURL string, wantLastPullSeq int) {
+	t.Helper()
+	if service == nil {
+		t.Fatal("sync service is nil")
+	}
+	serverURL, _, lastPullSeq, _, err := service.GetState()
+	if err != nil {
+		t.Fatalf("GetState: %v", err)
+	}
+	if service.GetDeviceID() != wantDeviceID || serverURL != wantServerURL || lastPullSeq != wantLastPullSeq {
+		t.Fatalf("sync state = device=%q server=%q cursor=%d, want device=%q server=%q cursor=%d",
+			service.GetDeviceID(), serverURL, lastPullSeq, wantDeviceID, wantServerURL, wantLastPullSeq)
+	}
+}
+
 func TestSetCurrentVaultInitializesWorkspaceWhenMissingAtStartup(t *testing.T) {
 	tmpDir := t.TempDir()
 	vaultParent := filepath.Join(tmpDir, "vault-parent")

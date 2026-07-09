@@ -60,7 +60,13 @@ type Service struct {
 
 // NewService creates a sync service.
 func NewService(vaultRoot, deviceID string) *Service {
-	return &Service{vaultRoot: vaultRoot, deviceID: deviceID}
+	service := &Service{vaultRoot: vaultRoot, deviceID: deviceID}
+	if deviceID == "" {
+		if state, err := service.loadState(); err == nil {
+			service.deviceID = state.DeviceID
+		}
+	}
+	return service
 }
 
 func (s *Service) syncDir() string {
@@ -212,6 +218,9 @@ func (s *Service) SetState(serverURL, apiKey string) error {
 	}
 	st.ServerURL = serverURL
 	st.APIKey = apiKey
+	if s.deviceID != "" {
+		st.DeviceID = s.deviceID
+	}
 	return s.saveState(st)
 }
 
@@ -238,6 +247,23 @@ func (s *Service) SetLastSyncAt(t string) error {
 // GetDeviceID returns the device ID used by this service.
 func (s *Service) GetDeviceID() string {
 	return s.deviceID
+}
+
+// SetDeviceID persists the device ID for this vault's sync state.
+func (s *Service) SetDeviceID(deviceID string) error {
+	if err := s.ensureDir(); err != nil {
+		return err
+	}
+	st, err := s.loadState()
+	if err != nil {
+		st = &syncState{}
+	}
+	st.DeviceID = deviceID
+	if err := s.saveState(st); err != nil {
+		return err
+	}
+	s.deviceID = deviceID
+	return nil
 }
 
 // --- file helpers ---
