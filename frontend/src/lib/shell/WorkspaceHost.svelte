@@ -14,7 +14,8 @@
   let workspaceTools = [];
   let toolsLoaded = false;
   let requestedToolKind = '';
-  const todayTool = { id: '__today', title: 'Today', pluginId: 'verstak.shell', component: 'TodaySurface', shell: true };
+  // TODO: Rename TodaySurface.svelte to OverviewSurface.svelte in a refactor-only follow-up.
+  const overviewTool = { id: '__overview', title: 'Overview', pluginId: 'verstak.shell', component: 'TodaySurface', shell: true };
 
   const toolOrder = new Map([
     ['notes', 10],
@@ -29,10 +30,10 @@
   $: workspaceRootPath = selectedWorkspace?.rootPath || selectedWorkspace?.name || selectedWorkspace?.id || '';
   $: workspaceTitle = selectedWorkspace?.title || selectedWorkspace?.name || selectedWorkspace?.id || selectedWorkspaceName;
   $: workspaceType = selectedWorkspace?.type || 'workspace';
-  $: displayedTools = selectedWorkspace ? [todayTool, ...workspaceTools] : [];
+  $: displayedTools = selectedWorkspace ? [overviewTool, ...workspaceTools] : [];
   $: activeTool = displayedTools.find(tool => toolKey(tool) === activeToolKey) || displayedTools[0] || null;
   $: if (displayedTools.length > 0 && (!activeToolKey || (toolsLoaded && !displayedTools.some(tool => toolKey(tool) === activeToolKey)))) {
-    activeToolKey = toolKey(todayTool);
+    activeToolKey = toolKey(overviewTool);
   }
   $: if (requestedToolKind && workspaceTools.length > 0) {
     const match = findWorkspaceTool(requestedToolKind);
@@ -161,8 +162,7 @@
           {#if activeTool.shell}
             <TodaySurface
               {workspaceRootPath}
-              {workspaceTitle}
-              availableTools={workspaceTools}
+              availableTools={displayedTools}
               on:openTool={openWorkspaceTool}
             />
           {:else}

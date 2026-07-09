@@ -13,7 +13,7 @@
 
   const inactiveStatuses = new Set(['disabled', 'failed', 'incompatible', 'missing-required-capability']);
   const shellCommands = [
-    { id: 'verstak.shell.open-today', title: 'Open Today', pluginId: 'verstak.shell', pluginName: 'Verstak', priority: 10, shellAction: 'today' },
+    { id: 'verstak.shell.open-overview', title: 'Open Overview', pluginId: 'verstak.shell', pluginName: 'Verstak', priority: 10, shellAction: 'overview' },
     { id: 'verstak.shell.open-files', title: 'Open Files', pluginId: 'verstak.shell', pluginName: 'Verstak', priority: 20, shellAction: 'files' },
     { id: 'verstak.shell.open-activity', title: 'Open Activity', pluginId: 'verstak.shell', pluginName: 'Verstak', priority: 30, shellAction: 'activity' },
     { id: 'verstak.shell.open-browser-inbox', title: 'Open Browser Inbox', pluginId: 'verstak.shell', pluginName: 'Verstak', priority: 40, shellAction: 'browser-inbox' },
@@ -156,7 +156,7 @@
       return;
     }
     const actionToTab = {
-      today: 'today',
+      overview: 'overview',
       files: 'files',
       activity: 'activity',
       'browser-inbox': 'browser inbox',

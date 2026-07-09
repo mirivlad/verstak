@@ -99,7 +99,7 @@ test.describe('UX follow-up fixes', () => {
     expect(workspaceBox.width).toBeGreaterThan(340);
     expect(workspaceBox.y).toBeGreaterThan(sidebarBox.y + sidebarBox.height - 1);
     await expect(page.locator('.workspace-header [data-global-search-input]')).toBeVisible();
-    await expect(page.getByRole('tab', { name: 'Today' })).toBeVisible();
+    await expect(page.getByRole('tab', { name: 'Overview' })).toBeVisible();
 
     const hasHorizontalOverflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);
     expect(hasHorizontalOverflow).toBe(false);

@@ -52,7 +52,7 @@ test.describe('Command Palette', () => {
     const palette = page.locator('.command-palette');
     await expect(palette).toBeVisible();
     const items = palette.locator('.command-palette-item');
-    await expect(items.nth(0)).toHaveAttribute('data-command-id', 'verstak.shell.open-today');
+    await expect(items.nth(0)).toHaveAttribute('data-command-id', 'verstak.shell.open-overview');
     await expect(items.nth(1)).toHaveAttribute('data-command-id', 'verstak.shell.open-files');
     await expect(items.nth(2)).toHaveAttribute('data-command-id', 'verstak.shell.open-activity');
     await expect(items.nth(3)).toHaveAttribute('data-command-id', 'verstak.shell.open-browser-inbox');

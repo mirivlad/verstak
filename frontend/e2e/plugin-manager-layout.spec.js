@@ -99,19 +99,19 @@ test.describe('E: Plugin Manager layout', () => {
     await expect(selected).toHaveText('Test');
   });
 
-  test('workspace tools render Today first with Files as one tab', async ({ page }) => {
+  test('workspace tools render Overview first with Files as one tab', async ({ page }) => {
     await page.locator('.wt-label').filter({ hasText: 'Project' }).click();
 
     const tabs = page.locator('.workspace-tabs');
     await expect(tabs).toBeVisible({ timeout: 10000 });
-    const todayTab = tabs.locator('[role="tab"]').filter({ hasText: 'Today' });
+    const overviewTab = tabs.locator('[role="tab"]').filter({ hasText: 'Overview' });
     const filesTab = tabs.locator('[role="tab"]').filter({ hasText: 'Files' });
-    await expect(todayTab).toBeVisible();
-    await expect(todayTab).toHaveAttribute('aria-selected', 'true');
+    await expect(overviewTab).toBeVisible();
+    await expect(overviewTab).toHaveAttribute('aria-selected', 'true');
     await expect(filesTab).toBeVisible();
     await expect(filesTab).toHaveAttribute('aria-selected', 'false');
     await expect(page.locator('.workspace-tool')).toHaveCount(0);
-    await expect(page.locator('.today-root')).toBeVisible();
+    await expect(page.locator('[data-overview-root]')).toBeVisible();
 
     await filesTab.click();
     await expect(page.locator('.files-root')).toBeVisible();
