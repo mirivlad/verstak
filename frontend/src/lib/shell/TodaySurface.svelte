@@ -33,27 +33,29 @@
   let journalEntries = [];
   let worklogSuggestions = [];
   let keyResources = [];
+  let totalNotes = 0;
   let loadedWorkspaceRoot = '';
   let toolProbe = 0;
 
   $: hasNotes = hasTool('notes');
-  $: hasBrowserInbox = hasTool('browser inbox') || hasTool('inbox');
-  $: hasActivity = hasTool('activity');
-  $: hasFiles = hasTool('files');
   $: recentChanges = buildRecentChanges(activityEvents, captures, journalEntries);
   $: filteredRecentChanges = activeFilter === 'all'
     ? recentChanges
     : recentChanges.filter(item => item.category === activeFilter);
-  $: needsAttention = buildNeedsAttention(captures, worklogSuggestions);
-  $: continueItems = buildContinueItems(activityEvents, captures);
-  $: primaryContinue = continueItems[0] || null;
+  $: noteRecentChanges = countCategory(recentChanges, 'notes');
+  $: fileRecentChanges = countCategory(recentChanges, 'files');
+  $: unprocessedCaptures = captures.filter(item => item?.processed !== true);
+  $: needsAttention = buildNeedsAttention(unprocessedCaptures, worklogSuggestions);
+  $: continueItems = buildContinueItems(activityEvents, unprocessedCaptures, journalEntries);
+  $: attentionActionKind = needsAttention[0]?.actionKind || 'browser-inbox';
   $: lastActive = lastActiveDate([...recentChanges, ...continueItems], captures, journalEntries);
   $: summaryItems = [
-    { key: 'notes', label: 'Notes', count: countCategory(recentChanges, 'notes'), detail: countLabel(countCategory(recentChanges, 'notes'), 'recent change') },
-    { key: 'files', label: 'Files', count: countCategory(recentChanges, 'files'), detail: countLabel(countCategory(recentChanges, 'files'), 'recent change') },
-    { key: 'captures', label: 'Captures', count: captures.length, detail: countLabel(captures.length, 'unprocessed capture') },
-    { key: 'journal', label: 'Journal / Activity', count: countCategory(recentChanges, 'journal'), detail: countLabel(countCategory(recentChanges, 'journal'), 'entry or event') },
-    { key: 'attention', label: 'Needs attention', count: needsAttention.length, detail: countLabel(needsAttention.length, 'pending item') },
+    { key: 'notes', label: 'Notes', count: totalNotes, detail: totalAndRecentLabel(totalNotes, noteRecentChanges), actionKind: 'notes', actionLabel: 'Open Notes' },
+    { key: 'files', label: 'Files', count: fileRecentChanges, detail: countLabel(fileRecentChanges, 'recent change'), actionKind: 'files', actionLabel: 'Open Files' },
+    { key: 'captures', label: 'Captures', count: unprocessedCaptures.length, detail: captureReviewLabel(unprocessedCaptures.length), actionKind: 'browser-inbox', actionLabel: 'Review Inbox' },
+    { key: 'activity', label: 'Activity', count: activityEvents.length, detail: countLabel(activityEvents.length, 'recorded event'), actionKind: 'activity', actionLabel: 'View Activity' },
+    { key: 'journal', label: 'Journal', count: journalEntries.length, detail: journalEntryLabel(journalEntries.length), actionKind: 'journal', actionLabel: 'Open Journal' },
+    { key: 'attention', label: 'Needs attention', count: needsAttention.length, detail: countLabel(needsAttention.length, 'pending item'), actionKind: attentionActionKind, actionLabel: 'Review pending items' },
   ];
 
   onMount(() => {
@@ -199,7 +201,7 @@
     if (type.startsWith('note.')) return 'notes';
     if (type.startsWith('file.')) return 'files';
     if (type.startsWith('browser.capture')) return 'captures';
-    if (type.startsWith('journal.') || type.startsWith('worklog.') || type.startsWith('action.')) return 'journal';
+    if (type.startsWith('journal.') || type.startsWith('worklog.')) return 'journal';
     return 'activity';
   }
 
@@ -228,7 +230,7 @@
     if (category === 'notes') return { kind: 'notes', label: 'Open Notes' };
     if (category === 'files') return { kind: 'files', label: 'Open Files' };
     if (category === 'captures') return { kind: 'browser-inbox', label: 'Review Inbox' };
-    if (category === 'journal') return { kind: 'activity', label: 'View Activity' };
+    if (category === 'journal') return { kind: 'journal', label: 'Open Journal' };
     return { kind: 'activity', label: 'View Activity' };
   }
 
@@ -266,8 +268,8 @@
       meta: `${itemTimeLabel(item)}${item.minutes ? ' · ' + item.minutes + ' min' : ''}`,
       time: timeValue(item),
       absolute: absoluteTime(timeValue(item)),
-      actionKind: 'activity',
-      actionLabel: 'View Activity',
+      actionKind: 'journal',
+      actionLabel: 'Open Journal',
     }));
     return sortByTime([...activityItems, ...captureItems, ...journalItems]).slice(0, 12);
   }
@@ -284,25 +286,25 @@
       type === 'browser.capture.converted';
   }
 
-  function buildContinueItems(events, captureRows) {
-    const fromEvents = sortByTime(events)
-      .filter(isResumeEvent)
-      .map(item => {
-        const category = activityCategory(item);
-        const action = actionForCategory(category);
-        return {
-          id: item.activityId || `${item.type}:${timeValue(item)}`,
-          title: activityTitle(item),
-          meta: itemTimeLabel(item),
-          time: timeValue(item),
-          absolute: absoluteTime(timeValue(item)),
-          actionKind: action.kind,
-          actionLabel: action.label,
-        };
-      });
-    if (fromEvents.length) return fromEvents.slice(0, 4);
-    return sortByTime(captureRows).slice(0, 3).map(item => ({
+  function continueItemFromActivity(item) {
+    const category = activityCategory(item);
+    const action = actionForCategory(category);
+    return {
+      id: item.activityId || `${item.type}:${timeValue(item)}`,
+      category,
+      title: activityTitle(item),
+      meta: itemTimeLabel(item),
+      time: timeValue(item),
+      absolute: absoluteTime(timeValue(item)),
+      actionKind: action.kind,
+      actionLabel: action.label,
+    };
+  }
+
+  function buildContinueItems(events, captureRows, journalRows) {
+    const captureCandidates = sortByTime(captureRows).map(item => ({
       id: item.captureId || `capture:${timeValue(item)}`,
+      category: 'captures',
       title: `Review capture ${quoted(captureTitle(item))}`,
       meta: `${itemTimeLabel(item)} · ${item.domain || item.kind || 'Browser capture'}`,
       time: timeValue(item),
@@ -310,6 +312,23 @@
       actionKind: 'browser-inbox',
       actionLabel: 'Review Inbox',
     }));
+    const noteCandidates = sortByTime(events)
+      .filter(item => isResumeEvent(item) && activityCategory(item) === 'notes')
+      .map(continueItemFromActivity);
+    const fileCandidates = sortByTime(events)
+      .filter(item => ['file.changed', 'file.created'].includes(String(item?.type || '').toLowerCase()))
+      .map(continueItemFromActivity);
+    const journalCandidates = sortByTime(journalRows).map(item => ({
+      id: item.entryId || `journal:${timeValue(item)}`,
+      category: 'journal',
+      title: `Continue journal entry ${quoted(journalTitle(item))}`,
+      meta: itemTimeLabel(item),
+      time: timeValue(item),
+      absolute: absoluteTime(timeValue(item)),
+      actionKind: 'journal',
+      actionLabel: 'Open Journal',
+    }));
+    return [...captureCandidates, ...noteCandidates, ...fileCandidates, ...journalCandidates].slice(0, 4);
   }
 
   function buildNeedsAttention(captureRows, suggestions) {
@@ -322,10 +341,10 @@
     }));
     const suggestionItems = sortByTime(suggestions).slice(0, 4).map(item => ({
       id: item.suggestionId || item.entryId || `suggestion:${timeValue(item)}`,
-      title: item.title || item.summary || 'Pending worklog suggestion',
+      title: item.title || item.summary || 'Possible journal entry',
       meta: `${item.minutes ? item.minutes + ' min · ' : ''}${item.date || itemTimeLabel(item)}`,
-      actionKind: 'activity',
-      actionLabel: 'View Activity',
+      actionKind: 'journal',
+      actionLabel: 'Review candidate',
     }));
     return [...captureItems, ...suggestionItems].slice(0, 6);
   }
@@ -338,36 +357,51 @@
     return `${count} ${singular}${count === 1 ? '' : 's'}`;
   }
 
+  function totalAndRecentLabel(total, recent) {
+    return `${total} total · ${countLabel(recent, 'recent change')}`;
+  }
+
+  function captureReviewLabel(count) {
+    return `${count} capture${count === 1 ? '' : 's'} to review`;
+  }
+
+  function journalEntryLabel(count) {
+    return `${count} journal entr${count === 1 ? 'y' : 'ies'}`;
+  }
+
   function lastActiveDate(items, captureRows, journalRows) {
     const source = sortByTime([...items, ...captureRows, ...journalRows])[0];
     return timeValue(source);
   }
 
-  async function listFiles(relativeDir) {
+  async function listFiles(pluginId, relativeDir) {
     if (!App.ListVaultFiles) return [];
     try {
-      return decodeTuple(await App.ListVaultFiles('verstak.files', relativeDir), []);
+      return decodeTuple(await App.ListVaultFiles(pluginId, relativeDir), []);
     } catch (_) {
       return [];
     }
   }
 
-  async function loadKeyResources() {
+  async function loadWorkspaceResources() {
     const workspace = String(workspaceRootPath || '').trim();
-    if (!workspace) return [];
+    if (!workspace) return { keyResources: [], totalNotes: 0 };
     const [rootEntries, notesEntries] = await Promise.all([
-      listFiles(workspace),
-      listFiles(`${workspace}/Notes`),
+      listFiles('verstak.files', workspace),
+      listFiles('verstak.notes', `${workspace}/Notes`),
     ]);
+    const noteFiles = notesEntries.filter(item => item?.type === 'file');
     const overview = [...notesEntries, ...rootEntries].find(item => /(^|\/)overview\.md$/i.test(String(item.relativePath || item.name || '')));
-    if (!overview) return [];
-    return [{
-      id: overview.relativePath || overview.name,
-      title: overview.name || fileName(overview.relativePath) || 'Overview.md',
-      meta: overview.relativePath || 'Workspace overview note',
-      actionKind: hasNotes ? 'notes' : 'files',
-      actionLabel: hasNotes ? 'Open Notes' : 'Open Files',
-    }];
+    return {
+      totalNotes: noteFiles.length,
+      keyResources: overview ? [{
+        id: overview.relativePath || overview.name,
+        title: overview.name || fileName(overview.relativePath) || 'Overview.md',
+        meta: overview.relativePath || 'Workspace overview note',
+        actionKind: hasNotes ? 'notes' : 'files',
+        actionLabel: hasNotes ? 'Open Notes' : 'Open Files',
+      }] : [],
+    };
   }
 
   async function loadOverview() {
@@ -378,7 +412,7 @@
       readPluginSettings('verstak.browser-inbox'),
       readPluginSettings('verstak.activity'),
       readPluginSettings('verstak.journal'),
-      loadKeyResources(),
+      loadWorkspaceResources(),
     ]);
     if (workspaceAtStart !== String(workspaceRootPath || '').trim()) return;
 
@@ -400,7 +434,8 @@
       workspaceKey('suggestions:workspace:'),
       'suggestions',
     ]);
-    keyResources = resources;
+    keyResources = resources.keyResources;
+    totalNotes = resources.totalNotes;
     loading = false;
   }
 
@@ -428,11 +463,20 @@
 
   <div class="today-summary overview-summary" aria-label="Workspace overview summary">
     {#each summaryItems as item}
-      <div class="today-summary-item overview-summary-item" data-overview-summary={item.key}>
+      <button
+        type="button"
+        class="today-summary-item overview-summary-item"
+        class:summary-attention={item.key === 'attention'}
+        data-overview-summary={item.key}
+        data-overview-action={item.actionKind}
+        aria-label={`${item.label}: ${item.actionLabel}`}
+        on:click={() => openTool(item.actionKind)}
+      >
         <strong>{loading ? '...' : item.count}</strong>
         <span>{item.label}</span>
         <small>{loading ? 'Loading...' : item.detail}</small>
-      </div>
+        <em>{item.actionLabel}</em>
+      </button>
     {/each}
   </div>
 
@@ -441,21 +485,33 @@
       <section class="today-resume overview-continue" data-overview-section="continue">
         <div class="today-resume-copy overview-continue-copy">
           <span>Continue working</span>
-          {#if loading}
-            <strong>Loading workspace signals...</strong>
-            <p>Recent files, notes, captures, and journal entries will appear here.</p>
-          {:else if primaryContinue}
-            <strong title={primaryContinue.title}>{primaryContinue.title}</strong>
-            <p title={primaryContinue.absolute}>{primaryContinue.meta}</p>
-          {:else}
-            <strong>No clear resume point yet</strong>
-            <p>Open files or notes to create a useful return point for this workspace.</p>
-          {/if}
+          <h3>Pick up the next useful item in this workspace.</h3>
         </div>
-        {#if primaryContinue}
-          <button type="button" data-overview-action="continue-primary" on:click={() => openTool(primaryContinue.actionKind)}>{primaryContinue.actionLabel}</button>
+        {#if loading}
+          <p class="today-empty compact">Loading workspace signals...</p>
+        {:else if continueItems.length}
+          <div class="overview-continue-list">
+            {#each continueItems as item}
+              <button
+                type="button"
+                class="overview-continue-item"
+                data-overview-continue-item={item.category}
+                data-overview-action={item.actionKind}
+                on:click={() => openTool(item.actionKind)}
+              >
+                <span class="overview-continue-item-copy">
+                  <strong title={item.title}>{item.title}</strong>
+                  <span title={item.absolute}>{item.meta}</span>
+                </span>
+                <span class="overview-continue-item-action">{item.actionLabel}</span>
+              </button>
+            {/each}
+          </div>
         {:else}
-          <button type="button" data-overview-action="continue-primary" on:click={() => openTool('files')}>Open Files</button>
+          <div class="overview-continue-empty">
+            <strong>No clear resume point yet</strong>
+            <p>Recent notes, files, captures, and journal entries will appear here.</p>
+          </div>
         {/if}
       </section>
 
@@ -484,13 +540,19 @@
         {:else if filteredRecentChanges.length}
           <div class="today-list overview-list">
             {#each filteredRecentChanges as item}
-              <div class="today-row overview-change-row" data-overview-recent-item={item.category}>
-                <div>
+              <button
+                type="button"
+                class="today-row overview-change-row"
+                data-overview-recent-item={item.category}
+                data-overview-action={item.actionKind}
+                on:click={() => openTool(item.actionKind)}
+              >
+                <span class="overview-change-copy">
                   <strong title={item.title}>{item.title}</strong>
                   <span title={item.absolute}>{item.meta}</span>
-                </div>
-                <button type="button" on:click={() => openTool(item.actionKind)}>{item.actionLabel}</button>
-              </div>
+                </span>
+                <span class="overview-row-action">{item.actionLabel}</span>
+              </button>
             {/each}
           </div>
         {:else}
@@ -505,7 +567,7 @@
           <div class="today-panel-head overview-panel-head">
             <div>
               <h3>Needs attention</h3>
-              <p>Pending captures and worklog suggestions.</p>
+              <p>Pending captures and possible journal entries.</p>
             </div>
           </div>
           {#if loading}
@@ -525,20 +587,6 @@
           {/if}
         </section>
       {/if}
-
-      <section class="today-panel overview-panel secondary" data-overview-section="quick-actions">
-        <div class="today-panel-head overview-panel-head">
-          <h3>Quick actions</h3>
-        </div>
-        <div class="today-actions overview-actions">
-          {#if hasNotes}
-            <button type="button" data-overview-action="notes" on:click={() => openTool('notes')}>Open Notes</button>
-          {/if}
-          <button type="button" data-overview-action="files" on:click={() => openTool('files')}>Open Files</button>
-          <button type="button" data-overview-action="activity" on:click={() => openTool('activity')}>Review Activity</button>
-          <button type="button" data-overview-action="browser-inbox" on:click={() => openTool('browser-inbox')}>Open Inbox</button>
-        </div>
-      </section>
 
       {#if keyResources.length}
         <section class="today-panel overview-panel secondary" data-overview-section="key-resources">
@@ -594,7 +642,7 @@
 
   .today-summary {
     display: grid;
-    grid-template-columns: repeat(5, minmax(0, 1fr));
+    grid-template-columns: repeat(6, minmax(0, 1fr));
     gap: 0.5rem;
     padding: 0.75rem 0.75rem 0;
   }
@@ -607,6 +655,17 @@
     border: 1px solid var(--vt-color-border);
     border-radius: var(--vt-radius-lg);
     background: var(--vt-color-surface);
+    color: inherit;
+    cursor: pointer;
+    font: inherit;
+    text-align: left;
+  }
+
+  .today-summary-item:hover,
+  .today-summary-item:focus-visible {
+    border-color: var(--vt-color-accent);
+    background: var(--vt-color-surface-hover);
+    outline: none;
   }
 
   .today-summary-item strong {
@@ -616,7 +675,8 @@
   }
 
   .today-summary-item span,
-  .today-summary-item small {
+  .today-summary-item small,
+  .today-summary-item em {
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -628,6 +688,21 @@
   .today-summary-item span {
     color: var(--vt-color-text-secondary);
     font-weight: 600;
+  }
+
+  .today-summary-item em {
+    color: var(--vt-color-accent);
+    font-size: 0.7rem;
+    font-style: normal;
+  }
+
+  .today-summary-item.summary-attention {
+    border-color: rgba(255, 200, 87, 0.5);
+    background: var(--vt-color-warning-muted);
+  }
+
+  .today-summary-item.summary-attention em {
+    color: var(--vt-color-warning);
   }
 
   .overview-layout {
@@ -647,14 +722,12 @@
   }
 
   .today-resume {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 1rem;
+    display: grid;
+    gap: 0.75rem;
     padding: 0.9rem 1rem;
     border: 1px solid rgba(78, 204, 163, 0.24);
     border-radius: var(--vt-radius-lg);
-    background: linear-gradient(135deg, rgba(78, 204, 163, 0.11), rgba(27, 36, 64, 0.6));
+    background: var(--vt-color-accent-muted);
   }
 
   .today-resume-copy {
@@ -671,23 +744,11 @@
     letter-spacing: 0.05em;
   }
 
-  .today-resume-copy strong {
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+  .today-resume-copy h3 {
+    margin: 0;
     color: var(--vt-color-text-primary);
     font-size: 0.98rem;
-  }
-
-  .today-resume-copy p {
-    min-width: 0;
-    margin: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    color: var(--vt-color-text-secondary);
-    font-size: 0.8rem;
+    font-weight: 600;
   }
 
   .today-panel {
@@ -705,6 +766,11 @@
 
   .overview-panel.secondary {
     background: var(--vt-color-surface-muted);
+  }
+
+  [data-overview-section='attention'] {
+    border-color: rgba(255, 200, 87, 0.45);
+    background: var(--vt-color-warning-muted);
   }
 
   .today-panel-head {
@@ -741,9 +807,8 @@
 
   .overview-filters button,
   .today-panel-head button,
-  .today-actions button,
   .today-header button,
-  .today-resume button,
+  .overview-continue-item,
   .overview-list button {
     min-height: 1.85rem;
     padding: 0.3rem 0.65rem;
@@ -765,9 +830,8 @@
   .overview-filters button.is-active,
   .overview-filters button:hover,
   .today-panel-head button:hover,
-  .today-actions button:hover,
   .today-header button:hover,
-  .today-resume button:hover,
+  .overview-continue-item:hover,
   .overview-list button:hover {
     border-color: var(--vt-color-accent);
     color: var(--vt-color-text-primary);
@@ -813,12 +877,51 @@
     border: 1px solid var(--vt-color-border);
     border-radius: var(--vt-radius-md);
     background: var(--vt-color-surface-muted);
+    color: inherit;
+    font: inherit;
+    text-align: left;
   }
 
   .overview-change-row {
     grid-template-columns: minmax(0, 1fr) auto;
     align-items: center;
     gap: 0.75rem;
+    width: 100%;
+    padding: 0.55rem 0.75rem;
+    border: 0;
+    border-bottom: 1px solid var(--vt-color-border);
+    border-radius: 0;
+    background: transparent;
+    cursor: pointer;
+  }
+
+  .overview-change-row:hover,
+  .overview-change-row:focus-visible {
+    background: var(--vt-color-surface-hover);
+    outline: none;
+  }
+
+  .overview-change-copy,
+  .overview-continue-item-copy {
+    min-width: 0;
+    display: grid;
+    gap: 0.2rem;
+  }
+
+  .overview-row-action,
+  .overview-continue-item-action {
+    color: var(--vt-color-text-muted);
+    font-size: 0.72rem;
+    white-space: nowrap;
+  }
+
+  .overview-recent .overview-list {
+    gap: 0;
+    padding: 0;
+  }
+
+  .overview-recent .overview-change-row:last-child {
+    border-bottom: 0;
   }
 
   .overview-attention-row,
@@ -844,16 +947,59 @@
     font-size: 0.75rem;
   }
 
-  .today-actions {
-    display: flex;
-    flex-wrap: wrap;
+  .overview-continue-list {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 0.5rem;
-    padding: 0.75rem;
+  }
+
+  .overview-continue-item {
+    min-width: 0;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 0.6rem;
+    text-align: left;
+  }
+
+  .overview-continue-item strong,
+  .overview-continue-item-copy span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .overview-continue-item strong {
+    color: var(--vt-color-text-primary);
+    font-size: 0.8rem;
+  }
+
+  .overview-continue-item-copy span {
+    color: var(--vt-color-text-muted);
+    font-size: 0.72rem;
+  }
+
+  .overview-continue-empty {
+    display: grid;
+    gap: 0.22rem;
+    color: var(--vt-color-text-secondary);
+  }
+
+  .overview-continue-empty p {
+    margin: 0;
+    color: var(--vt-color-text-muted);
+    font-size: 0.8rem;
+  }
+
+  @media (max-width: 1120px) {
+    .today-summary {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
   }
 
   @media (max-width: 980px) {
-    .overview-layout,
-    .today-summary {
+    .overview-layout {
       grid-template-columns: 1fr;
     }
 
@@ -867,18 +1013,28 @@
       justify-content: flex-start;
     }
 
-    .today-resume {
-      align-items: stretch;
-      flex-direction: column;
+    .overview-continue-list {
+      grid-template-columns: 1fr;
     }
 
-    .today-resume button {
+    .overview-continue-item {
       width: 100%;
     }
 
     .overview-change-row {
       grid-template-columns: 1fr;
       align-items: stretch;
+    }
+  }
+
+  @media (max-width: 620px) {
+    .today-summary {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .overview-change-row {
+      grid-template-columns: 1fr;
+      gap: 0.3rem;
     }
   }
 </style>

@@ -20,7 +20,7 @@ test.describe('UX Overview workspace flow', () => {
 
     const tabs = page.getByRole('tab');
     await expect(tabs.nth(0)).toHaveText('Overview');
-    await expect(tabs.nth(1)).toHaveText('Files');
+    await expect(tabs.nth(1)).toHaveText('Notes');
     await expect(page.getByRole('tab', { name: 'Overview' })).toHaveAttribute('aria-selected', 'true');
     await expect(page.getByRole('tab', { name: 'Today' })).toHaveCount(0);
 
@@ -29,18 +29,55 @@ test.describe('UX Overview workspace flow', () => {
     await expect(overview.locator('[data-overview-section="continue"]')).toContainText('Continue working');
     await expect(overview.locator('[data-overview-section="recent"]')).toContainText('Recent changes');
     await expect(overview.locator('[data-overview-section="attention"]')).toContainText('Needs attention');
-    await expect(overview.locator('[data-overview-section="quick-actions"]')).toContainText('Quick actions');
-    await expect(overview.locator('[data-overview-summary="notes"]')).toContainText('recent changes');
-    await expect(overview.locator('[data-overview-summary="captures"]')).toContainText('unprocessed captures');
+    await expect(overview.locator('[data-overview-section="quick-actions"]')).toHaveCount(0);
+
+    const summaryCards = overview.locator('button[data-overview-summary]');
+    await expect(summaryCards).toHaveCount(6);
+    await expect(overview.locator('[data-overview-summary="notes"]')).toContainText('1 total');
+    await expect(overview.locator('[data-overview-summary="notes"]')).toContainText('0 recent changes');
+    await expect(overview.locator('[data-overview-summary="captures"]')).toContainText('0 captures to review');
+    await expect(overview.locator('[data-overview-summary="activity"]')).toContainText('0 recorded events');
+    await expect(overview.locator('[data-overview-summary="journal"]')).toContainText('0 journal entries');
     await expect(overview).toContainText('No clear resume point yet');
     await expect(overview).toContainText('No meaningful changes for this filter yet');
   });
 
-  test('Overview quick action opens Browser Inbox workspace tool', async ({ page }) => {
-    await page.locator('[data-overview-action="browser-inbox"]').click();
+  test('Overview summary cards navigate to their corresponding workspace tools', async ({ page }) => {
+    const overview = page.locator('[data-overview-root]');
+    await overview.locator('[data-overview-summary="notes"]').click();
+    await expect(page.getByRole('tab', { name: 'Notes' })).toHaveAttribute('aria-selected', 'true');
+    await expect(page.locator('.notes-root')).toBeVisible({ timeout: 10000 });
+
+    await page.getByRole('tab', { name: 'Overview' }).click();
+    await overview.locator('[data-overview-summary="files"]').click();
+    await expect(page.getByRole('tab', { name: 'Files' })).toHaveAttribute('aria-selected', 'true');
+    await expect(page.locator('.files-root')).toBeVisible({ timeout: 10000 });
+
+    await page.getByRole('tab', { name: 'Overview' }).click();
+    await overview.locator('[data-overview-summary="captures"]').click();
 
     await expect(page.getByRole('tab', { name: 'Browser Inbox' })).toHaveAttribute('aria-selected', 'true');
     await expect(page.locator('.browser-inbox-root')).toBeVisible({ timeout: 10000 });
+
+    await page.getByRole('tab', { name: 'Overview' }).click();
+    await overview.locator('[data-overview-summary="activity"]').click();
+    await expect(page.getByRole('tab', { name: 'Activity' })).toHaveAttribute('aria-selected', 'true');
+
+    await page.getByRole('tab', { name: 'Overview' }).click();
+    await overview.locator('[data-overview-summary="journal"]').click();
+    await expect(page.getByRole('tab', { name: 'Journal' })).toHaveAttribute('aria-selected', 'true');
+    await expect(page.locator('.journal-root')).toBeVisible({ timeout: 10000 });
+
+    await page.getByRole('tab', { name: 'Overview' }).click();
+    await overview.locator('[data-overview-summary="attention"]').click();
+    await expect(page.getByRole('tab', { name: 'Browser Inbox' })).toHaveAttribute('aria-selected', 'true');
+  });
+
+  test('Overview keeps the Notes total factual when the Files plugin is unavailable', async ({ page }) => {
+    await page.evaluate(() => window.__wailsMock.setPluginStatus('verstak.files', 'disabled', false));
+    await page.locator('[data-overview-action="refresh"]').click();
+
+    await expect(page.locator('[data-overview-summary="notes"]')).toContainText('1 total');
   });
 
   test('Overview prioritizes resume work and filters meaningful recent changes', async ({ page }) => {
@@ -135,19 +172,25 @@ test.describe('UX Overview workspace flow', () => {
     await page.locator('[data-overview-action="refresh"]').click();
 
     const overview = page.locator('[data-overview-root]');
-    await expect(overview.locator('[data-overview-summary="notes"]')).toContainText('1');
-    await expect(overview.locator('[data-overview-summary="files"]')).toContainText('1');
+    await expect(overview.locator('[data-overview-summary="notes"]')).toContainText('1 total');
+    await expect(overview.locator('[data-overview-summary="notes"]')).toContainText('1 recent change');
+    await expect(overview.locator('[data-overview-summary="files"]')).toContainText('1 recent change');
     await expect(overview.locator('[data-overview-summary="captures"]')).toContainText('2');
+    await expect(overview.locator('[data-overview-summary="activity"]')).toContainText('5 recorded events');
     await expect(overview.locator('[data-overview-summary="journal"]')).toContainText('1');
     await expect(overview.locator('[data-overview-summary="attention"]')).toContainText('3');
 
     const resume = overview.locator('[data-overview-section="continue"]');
-    await expect(resume).toContainText('Opened file "draft.md"');
-    await expect(resume).not.toContainText('Research Report');
-    await resume.locator('[data-overview-action="continue-primary"]').click();
+    const candidates = resume.locator('[data-overview-continue-item]');
+    await expect(candidates).toHaveCount(4);
+    await expect(candidates.nth(0)).toContainText('Quote to process');
+    await expect(candidates.nth(1)).toContainText('Research Report');
+    await expect(candidates.nth(2)).toContainText('Edited note "Overview"');
+    await expect(candidates.nth(3)).toContainText('Changed file "draft.md"');
+    await candidates.nth(0).click();
 
-    await expect(page.getByRole('tab', { name: 'Files' })).toHaveAttribute('aria-selected', 'true');
-    await expect(page.locator('.files-root')).toBeVisible({ timeout: 10000 });
+    await expect(page.getByRole('tab', { name: 'Browser Inbox' })).toHaveAttribute('aria-selected', 'true');
+    await expect(page.locator('.browser-inbox-root')).toBeVisible({ timeout: 10000 });
 
     await page.getByRole('tab', { name: 'Overview' }).click();
     const recent = overview.locator('[data-overview-section="recent"]');
@@ -158,6 +201,8 @@ test.describe('UX Overview workspace flow', () => {
     await expect(recent).not.toContainText('Selected file');
     await expect(recent).not.toContainText('Workspace selected');
     await expect(recent).not.toContainText('file.opened');
+    await expect(recent.locator('[data-overview-recent-item]')).toHaveCount(5);
+    await expect(recent.locator('[data-overview-recent-item] button')).toHaveCount(0);
 
     await overview.locator('[data-overview-filter="notes"]').click();
     await expect(recent).toContainText('Edited note "Overview"');

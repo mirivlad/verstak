@@ -134,6 +134,29 @@
       rootPath: '/tmp/verstak-test/plugins/files',
       error: ''
     },
+    'verstak.notes': {
+      status: 'loaded',
+      enabled: true,
+      manifest: {
+        schemaVersion: 1,
+        id: 'verstak.notes',
+        name: 'Notes',
+        version: '0.1.0',
+        apiVersion: '0.1.0',
+        description: 'Workspace-scoped notes manager.',
+        source: 'official',
+        icon: 'edit',
+        provides: ['verstak/notes/v1'],
+        requires: ['verstak/core/files/v1', 'verstak/core/workbench/v1'],
+        permissions: ['files.read', 'files.write', 'files.delete', 'events.subscribe', 'workbench.open', 'ui.register'],
+        frontend: { entry: 'frontend/dist/index.js' },
+        contributes: {
+          workspaceItems: [{ id: 'verstak.notes.workspace', title: 'Notes', icon: 'edit', component: 'NotesView' }]
+        }
+      },
+      rootPath: '/tmp/verstak-test/plugins/notes',
+      error: ''
+    },
     'verstak.sync': {
       status: 'loaded',
       enabled: true,
@@ -180,6 +203,31 @@
         }
       },
       rootPath: '/tmp/verstak-test/plugins/activity',
+      error: ''
+    },
+    'verstak.journal': {
+      status: 'loaded',
+      enabled: true,
+      manifest: {
+        schemaVersion: 1,
+        id: 'verstak.journal',
+        name: 'Journal',
+        version: '0.1.0',
+        apiVersion: '0.1.0',
+        description: 'Workspace-scoped worklog journal.',
+        source: 'official',
+        icon: 'book-open',
+        provides: ['worklog', 'journal', 'report.worklog'],
+        optionalRequires: ['activity.reconstruction'],
+        permissions: ['storage.namespace', 'ui.register'],
+        frontend: { entry: 'frontend/dist/index.js' },
+        contributes: {
+          views: [{ id: 'verstak.journal.view', title: 'Journal', icon: 'book-open', component: 'JournalView' }],
+          sidebarItems: [{ id: 'verstak.journal.sidebar', title: 'Journal', icon: 'book-open', view: 'verstak.journal.view', position: 30 }],
+          workspaceItems: [{ id: 'verstak.journal.workspace', title: 'Journal', icon: 'book-open', component: 'JournalView' }]
+        }
+      },
+      rootPath: '/tmp/verstak-test/plugins/journal',
       error: ''
     },
     'verstak.browser-inbox': {
@@ -234,7 +282,7 @@
   };
 
   var vaultStatus = { status: 'open', path: '/tmp/verstak-test/vault', vaultId: 'test-vault-001' };
-  var vaultPluginState = { enabledPlugins: ['verstak.platform-test', 'verstak.default-editor', 'verstak.files', 'verstak.sync', 'verstak.activity', 'verstak.browser-inbox', 'verstak.search'], disabledPlugins: [], desiredPlugins: [{ id: 'verstak.platform-test', version: '0.1.0', source: 'official' }, { id: 'verstak.default-editor', version: '0.1.0', source: 'official' }, { id: 'verstak.files', version: '0.1.0', source: 'official' }, { id: 'verstak.sync', version: '0.1.0', source: 'official' }, { id: 'verstak.activity', version: '0.1.0', source: 'official' }, { id: 'verstak.browser-inbox', version: '0.1.0', source: 'official' }, { id: 'verstak.search', version: '0.1.0', source: 'official' }] };
+  var vaultPluginState = { enabledPlugins: ['verstak.platform-test', 'verstak.default-editor', 'verstak.files', 'verstak.notes', 'verstak.sync', 'verstak.activity', 'verstak.journal', 'verstak.browser-inbox', 'verstak.search'], disabledPlugins: [], desiredPlugins: [{ id: 'verstak.platform-test', version: '0.1.0', source: 'official' }, { id: 'verstak.default-editor', version: '0.1.0', source: 'official' }, { id: 'verstak.files', version: '0.1.0', source: 'official' }, { id: 'verstak.notes', version: '0.1.0', source: 'official' }, { id: 'verstak.sync', version: '0.1.0', source: 'official' }, { id: 'verstak.activity', version: '0.1.0', source: 'official' }, { id: 'verstak.journal', version: '0.1.0', source: 'official' }, { id: 'verstak.browser-inbox', version: '0.1.0', source: 'official' }, { id: 'verstak.search', version: '0.1.0', source: 'official' }] };
   var appSettings = { currentVaultPath: '/tmp/verstak-test/vault', recentVaults: [] };
   var workbenchPreferences = {};
   var openedResources = [];
@@ -1381,6 +1429,11 @@
     }.toString() + ')();';
   }
 
+  function simplePluginBundle(pluginId, componentName, rootClass, title) {
+    var markup = '<div class="' + rootClass + '"><h2>' + title + '</h2></div>';
+    return '(function(){var Component={mount:function(containerEl){containerEl.innerHTML=' + JSON.stringify(markup) + ';},unmount:function(containerEl){containerEl.innerHTML="";}};window.VerstakPluginRegister(' + JSON.stringify(pluginId) + ',{components:{' + componentName + ':Component}});})();';
+  }
+
   function activityBundle() {
     return '(' + function () {
       var PLUGIN_ID = 'verstak.activity';
@@ -2148,8 +2201,14 @@
       if (pluginId === 'verstak.files' && assetPath === 'frontend/dist/index.js') {
         return Promise.resolve(filesPluginBundle());
       }
+      if (pluginId === 'verstak.notes' && assetPath === 'frontend/dist/index.js') {
+        return Promise.resolve(simplePluginBundle('verstak.notes', 'NotesView', 'notes-root', 'Notes'));
+      }
       if (pluginId === 'verstak.activity' && assetPath === 'frontend/dist/index.js') {
         return Promise.resolve(activityBundle());
+      }
+      if (pluginId === 'verstak.journal' && assetPath === 'frontend/dist/index.js') {
+        return Promise.resolve(simplePluginBundle('verstak.journal', 'JournalView', 'journal-root', 'Journal'));
       }
       if (pluginId === 'verstak.browser-inbox' && assetPath === 'frontend/dist/index.js') {
         return Promise.resolve(browserInboxBundle());
@@ -2632,6 +2691,29 @@
           rootPath: '/tmp/verstak-test/plugins/files',
           error: ''
         },
+        'verstak.notes': {
+          status: 'loaded',
+          enabled: true,
+          manifest: {
+            schemaVersion: 1,
+            id: 'verstak.notes',
+            name: 'Notes',
+            version: '0.1.0',
+            apiVersion: '0.1.0',
+            description: 'Workspace-scoped notes manager.',
+            source: 'official',
+            icon: 'edit',
+            provides: ['verstak/notes/v1'],
+            requires: ['verstak/core/files/v1', 'verstak/core/workbench/v1'],
+            permissions: ['files.read', 'files.write', 'files.delete', 'events.subscribe', 'workbench.open', 'ui.register'],
+            frontend: { entry: 'frontend/dist/index.js' },
+            contributes: {
+              workspaceItems: [{ id: 'verstak.notes.workspace', title: 'Notes', icon: 'edit', component: 'NotesView' }]
+            }
+          },
+          rootPath: '/tmp/verstak-test/plugins/notes',
+          error: ''
+        },
         'verstak.sync': {
           status: 'loaded',
           enabled: true,
@@ -2678,6 +2760,31 @@
             }
           },
           rootPath: '/tmp/verstak-test/plugins/activity',
+          error: ''
+        },
+        'verstak.journal': {
+          status: 'loaded',
+          enabled: true,
+          manifest: {
+            schemaVersion: 1,
+            id: 'verstak.journal',
+            name: 'Journal',
+            version: '0.1.0',
+            apiVersion: '0.1.0',
+            description: 'Workspace-scoped worklog journal.',
+            source: 'official',
+            icon: 'book-open',
+            provides: ['worklog', 'journal', 'report.worklog'],
+            optionalRequires: ['activity.reconstruction'],
+            permissions: ['storage.namespace', 'ui.register'],
+            frontend: { entry: 'frontend/dist/index.js' },
+            contributes: {
+              views: [{ id: 'verstak.journal.view', title: 'Journal', icon: 'book-open', component: 'JournalView' }],
+              sidebarItems: [{ id: 'verstak.journal.sidebar', title: 'Journal', icon: 'book-open', view: 'verstak.journal.view', position: 30 }],
+              workspaceItems: [{ id: 'verstak.journal.workspace', title: 'Journal', icon: 'book-open', component: 'JournalView' }]
+            }
+          },
+          rootPath: '/tmp/verstak-test/plugins/journal',
           error: ''
         },
         'verstak.browser-inbox': {
@@ -2731,7 +2838,7 @@
         }
       };
       vaultStatus = { status: 'open', path: '/tmp/verstak-test/vault', vaultId: 'test-vault-001' };
-      vaultPluginState = { enabledPlugins: ['verstak.platform-test', 'verstak.default-editor', 'verstak.files', 'verstak.sync', 'verstak.activity', 'verstak.browser-inbox', 'verstak.search'], disabledPlugins: [], desiredPlugins: [{ id: 'verstak.platform-test', version: '0.1.0', source: 'official' }, { id: 'verstak.default-editor', version: '0.1.0', source: 'official' }, { id: 'verstak.files', version: '0.1.0', source: 'official' }, { id: 'verstak.sync', version: '0.1.0', source: 'official' }, { id: 'verstak.activity', version: '0.1.0', source: 'official' }, { id: 'verstak.browser-inbox', version: '0.1.0', source: 'official' }, { id: 'verstak.search', version: '0.1.0', source: 'official' }] };
+      vaultPluginState = { enabledPlugins: ['verstak.platform-test', 'verstak.default-editor', 'verstak.files', 'verstak.notes', 'verstak.sync', 'verstak.activity', 'verstak.journal', 'verstak.browser-inbox', 'verstak.search'], disabledPlugins: [], desiredPlugins: [{ id: 'verstak.platform-test', version: '0.1.0', source: 'official' }, { id: 'verstak.default-editor', version: '0.1.0', source: 'official' }, { id: 'verstak.files', version: '0.1.0', source: 'official' }, { id: 'verstak.notes', version: '0.1.0', source: 'official' }, { id: 'verstak.sync', version: '0.1.0', source: 'official' }, { id: 'verstak.activity', version: '0.1.0', source: 'official' }, { id: 'verstak.journal', version: '0.1.0', source: 'official' }, { id: 'verstak.browser-inbox', version: '0.1.0', source: 'official' }, { id: 'verstak.search', version: '0.1.0', source: 'official' }] };
       appSettings = { currentVaultPath: '/tmp/verstak-test/vault', recentVaults: [] };
       workbenchPreferences = {};
       openedResources = [];
