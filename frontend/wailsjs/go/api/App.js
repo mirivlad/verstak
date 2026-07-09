@@ -174,6 +174,14 @@ export function PluginSecretsWrite(arg1, arg2) {
   return window['go']['api']['App']['PluginSecretsWrite'](arg1, arg2);
 }
 
+export function PluginBrowserReceiverPairing(arg1) {
+  return window['go']['api']['App']['PluginBrowserReceiverPairing'](arg1);
+}
+
+export function PluginRotateBrowserReceiverToken(arg1) {
+  return window['go']['api']['App']['PluginRotateBrowserReceiverToken'](arg1);
+}
+
 export function PluginSyncConfigure(arg1, arg2, arg3, arg4) {
   return window['go']['api']['App']['PluginSyncConfigure'](arg1, arg2, arg3, arg4);
 }

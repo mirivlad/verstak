@@ -52,6 +52,43 @@ func TestLoad_CorruptConfig(t *testing.T) {
 	// Just verify no panic
 }
 
+func TestBrowserReceiverTokenPersistsAndRotates(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.json")
+
+	manager := NewManager(path)
+	if err := manager.Load(); err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	firstToken, err := manager.EnsureBrowserReceiverToken()
+	if err != nil {
+		t.Fatalf("EnsureBrowserReceiverToken: %v", err)
+	}
+	if firstToken == "" {
+		t.Fatal("EnsureBrowserReceiverToken returned an empty token")
+	}
+
+	reloaded := NewManager(path)
+	if err := reloaded.Load(); err != nil {
+		t.Fatalf("reload settings: %v", err)
+	}
+	persistedToken, err := reloaded.EnsureBrowserReceiverToken()
+	if err != nil {
+		t.Fatalf("EnsureBrowserReceiverToken after reload: %v", err)
+	}
+	if persistedToken != firstToken {
+		t.Fatalf("persisted token = %q, want %q", persistedToken, firstToken)
+	}
+
+	rotatedToken, err := reloaded.RotateBrowserReceiverToken()
+	if err != nil {
+		t.Fatalf("RotateBrowserReceiverToken: %v", err)
+	}
+	if rotatedToken == "" || rotatedToken == firstToken {
+		t.Fatalf("rotated token = %q, want new non-empty token", rotatedToken)
+	}
+}
+
 func TestSetCurrentVault(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.json")

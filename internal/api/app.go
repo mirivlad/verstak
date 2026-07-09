@@ -15,6 +15,7 @@ import (
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 
 	"github.com/verstak/verstak-desktop/internal/core/appsettings"
+	"github.com/verstak/verstak-desktop/internal/core/browserreceiver"
 	"github.com/verstak/verstak-desktop/internal/core/capability"
 	"github.com/verstak/verstak-desktop/internal/core/contribution"
 	"github.com/verstak/verstak-desktop/internal/core/events"
@@ -62,6 +63,7 @@ type App struct {
 	workbench       *coreworkbench.Router
 	workspace       *workspace.Manager
 	syncSvc         *syncsvc.Service
+	browserReceiver *browserreceiver.Receiver
 	secretsSession  *coresecrets.VaultSession
 	fileWatcher     *filewatcher.Service
 	debug           bool
@@ -87,6 +89,7 @@ func NewApp(
 	pluginStateMgr *pluginstate.Manager,
 	workspaceMgr *workspace.Manager,
 	syncService *syncsvc.Service,
+	browserReceiverService *browserreceiver.Receiver,
 	debugEnabled bool,
 ) *App {
 	app := &App{
@@ -104,6 +107,7 @@ func NewApp(
 		workbench:       coreworkbench.NewRouter(workbenchPrefsFromSettings(appSettingsMgr)),
 		workspace:       workspaceMgr,
 		syncSvc:         syncService,
+		browserReceiver: browserReceiverService,
 		fileWatcher:     filewatcher.NewService(bus, 0),
 		debug:           debugEnabled,
 		activityEvents:  make(map[string]bool),
@@ -2103,6 +2107,62 @@ func (a *App) GetPluginAssetContent(pluginID, assetPath string) (string, string)
 		return "", fmt.Sprintf("failed to read asset: %v", err)
 	}
 	return string(data), ""
+}
+
+// ─── Browser Receiver API ──────────────────────────────────
+
+func (a *App) requirePluginBrowserReceiverAccess(pluginID string) error {
+	_, err := a.requirePluginAccess(pluginID, "browser.receiver.manage")
+	return err
+}
+
+func (a *App) browserReceiverPairing() (map[string]string, error) {
+	if a.browserReceiver == nil {
+		return nil, fmt.Errorf("browser receiver is unavailable")
+	}
+	if a.appSettings == nil {
+		return nil, fmt.Errorf("app settings not initialized")
+	}
+	token := strings.TrimSpace(a.appSettings.Get().BrowserReceiver.Token)
+	if token == "" {
+		return nil, fmt.Errorf("browser receiver token is unavailable")
+	}
+	return map[string]string{
+		"receiverUrl":   browserreceiver.DefaultCaptureURL,
+		"receiverToken": token,
+	}, nil
+}
+
+// PluginBrowserReceiverPairing returns the local receiver settings for authorized plugins.
+func (a *App) PluginBrowserReceiverPairing(pluginID string) (map[string]string, string) {
+	if err := a.requirePluginBrowserReceiverAccess(pluginID); err != nil {
+		return nil, err.Error()
+	}
+	pairing, err := a.browserReceiverPairing()
+	if err != nil {
+		return nil, err.Error()
+	}
+	return pairing, ""
+}
+
+// PluginRotateBrowserReceiverToken invalidates previous extension pairings.
+func (a *App) PluginRotateBrowserReceiverToken(pluginID string) (map[string]string, string) {
+	if err := a.requirePluginBrowserReceiverAccess(pluginID); err != nil {
+		return nil, err.Error()
+	}
+	if _, err := a.browserReceiverPairing(); err != nil {
+		return nil, err.Error()
+	}
+	token, err := a.appSettings.RotateBrowserReceiverToken()
+	if err != nil {
+		return nil, err.Error()
+	}
+	a.browserReceiver.SetReceiverToken(token)
+	pairing, err := a.browserReceiverPairing()
+	if err != nil {
+		return nil, err.Error()
+	}
+	return pairing, ""
 }
 
 // ─── Sync API ──────────────────────────────────────────────

@@ -14,14 +14,18 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/verstak/verstak-desktop/internal/core/events"
 )
 
-const capturePath = "/api/browser-inbox/v1/captures"
-const DefaultAddr = "127.0.0.1:47731"
-const receiverTokenHeader = "X-Verstak-Receiver-Token"
+const (
+	capturePath         = "/api/browser-inbox/v1/captures"
+	DefaultAddr         = "127.0.0.1:47731"
+	DefaultCaptureURL   = "http://" + DefaultAddr + capturePath
+	receiverTokenHeader = "X-Verstak-Receiver-Token"
+)
 
 const (
 	maxCaptureBodyBytes    = 12 * 1024 * 1024
@@ -44,6 +48,7 @@ const (
 type Receiver struct {
 	bus               *events.Bus
 	workspaceProvider WorkspaceProvider
+	optionsMu         sync.RWMutex
 	options           Options
 }
 
@@ -110,6 +115,17 @@ func NewWithOptions(bus *events.Bus, options Options, providers ...WorkspaceProv
 		provider = providers[0]
 	}
 	return &Receiver{bus: bus, workspaceProvider: provider, options: options}
+}
+
+// SetReceiverToken updates the active token without restarting the local server.
+func (r *Receiver) SetReceiverToken(token string) {
+	if r == nil {
+		return
+	}
+	r.optionsMu.Lock()
+	defer r.optionsMu.Unlock()
+	r.options.RequireToken = true
+	r.options.ReceiverToken = strings.TrimSpace(token)
 }
 
 func Start(addr string, receiver *Receiver) (*Server, error) {
@@ -213,10 +229,16 @@ func (r *Receiver) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 }
 
 func (r *Receiver) validateReceiverToken(req *http.Request) error {
-	if r == nil || !r.options.RequireToken {
+	if r == nil {
 		return nil
 	}
+	r.optionsMu.RLock()
+	requireToken := r.options.RequireToken
 	expected := strings.TrimSpace(r.options.ReceiverToken)
+	r.optionsMu.RUnlock()
+	if !requireToken {
+		return nil
+	}
 	if expected == "" {
 		return fmt.Errorf("receiver token required")
 	}

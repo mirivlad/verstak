@@ -251,20 +251,36 @@ func main() {
 	if vaultService.GetVaultStatus() == vault.StatusOpen {
 		syncService = syncsvc.NewService(vaultService.GetVaultPath(), "")
 	}
-	app := api.NewApp(capRegistry, contribRegistry, permRegistry, eventBus, plugins, vaultService, storageService, filesService, appSettingsMgr, pluginStateMgr, workspaceMgr, syncService, debugEnabled)
-	browserReceiver := browserreceiver.New(eventBus, func() string {
-		current := app.GetCurrentWorkspace()
-		if root, ok := current["rootPath"].(string); ok {
-			return root
-		}
-		return ""
-	})
-	browserReceiverServer, err := browserreceiver.Start(browserreceiver.DefaultAddr, browserReceiver)
+	receiverToken, err := appSettingsMgr.EnsureBrowserReceiverToken()
 	if err != nil {
 		log.Printf("[browserreceiver] local receiver disabled: %v", err)
-	} else {
-		defer browserReceiverServer.Close()
-		log.Printf("[browserreceiver] local receiver listening at %s", browserReceiverServer.URL())
+	}
+	var app *api.App
+	var browserReceiver *browserreceiver.Receiver
+	if receiverToken != "" {
+		browserReceiver = browserreceiver.NewWithOptions(eventBus, browserreceiver.Options{
+			RequireToken:  true,
+			ReceiverToken: receiverToken,
+		}, func() string {
+			if app == nil {
+				return ""
+			}
+			current := app.GetCurrentWorkspace()
+			if root, ok := current["rootPath"].(string); ok {
+				return root
+			}
+			return ""
+		})
+	}
+	app = api.NewApp(capRegistry, contribRegistry, permRegistry, eventBus, plugins, vaultService, storageService, filesService, appSettingsMgr, pluginStateMgr, workspaceMgr, syncService, browserReceiver, debugEnabled)
+	if browserReceiver != nil {
+		browserReceiverServer, err := browserreceiver.Start(browserreceiver.DefaultAddr, browserReceiver)
+		if err != nil {
+			log.Printf("[browserreceiver] local receiver disabled: %v", err)
+		} else {
+			defer browserReceiverServer.Close()
+			log.Printf("[browserreceiver] paired local receiver listening at %s", browserReceiverServer.URL())
+		}
 	}
 
 	// ─── Wails App ───────────────────────────────────────────

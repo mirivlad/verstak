@@ -281,6 +281,38 @@ func TestReceiverAcceptsPairedToken(t *testing.T) {
 	}
 }
 
+func TestReceiverRotatesPairedToken(t *testing.T) {
+	bus := events.NewBus()
+	bus.Subscribe("browser.capture.page", func(event events.Event) {})
+	receiver := NewWithOptions(bus, Options{RequireToken: true, ReceiverToken: "old-token"})
+	body := `{
+		"schemaVersion": 1,
+		"captureId": "capture-rotated-token",
+		"capturedAt": "2026-06-27T00:00:00.000Z",
+		"kind": "page",
+		"page": {"url": "https://example.com"}
+	}`
+
+	request := func(token string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(http.MethodPost, capturePath, bytes.NewBufferString(body))
+		req.Header.Set(receiverTokenHeader, token)
+		res := httptest.NewRecorder()
+		receiver.ServeHTTP(res, req)
+		return res
+	}
+
+	if res := request("old-token"); res.Code != http.StatusAccepted {
+		t.Fatalf("old token before rotation status = %d, want %d", res.Code, http.StatusAccepted)
+	}
+	receiver.SetReceiverToken("new-token")
+	if res := request("old-token"); res.Code != http.StatusUnauthorized {
+		t.Fatalf("old token after rotation status = %d, want %d", res.Code, http.StatusUnauthorized)
+	}
+	if res := request("new-token"); res.Code != http.StatusAccepted {
+		t.Fatalf("new token after rotation status = %d, want %d", res.Code, http.StatusAccepted)
+	}
+}
+
 func TestServerStartsOnLocalAddressAndAcceptsCapture(t *testing.T) {
 	bus := events.NewBus()
 	bus.Subscribe("browser.capture.page", func(event events.Event) {})

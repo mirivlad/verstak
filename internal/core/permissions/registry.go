@@ -50,6 +50,7 @@ func (r *Registry) registerDefaults() {
 		{Name: "secrets.read", Description: "Read secrets from the secret store", Dangerous: true},
 		{Name: "secrets.write", Description: "Write secrets to the secret store", Dangerous: true},
 		{Name: "sync.participate", Description: "Participate in vault sync", Dangerous: true},
+		{Name: "browser.receiver.manage", Description: "View and rotate the local browser receiver pairing token", Dangerous: true},
 	}
 	for _, e := range defaults {
 		r.permissions[e.Name] = e

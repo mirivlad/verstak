@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/verstak/verstak-desktop/internal/core/appsettings"
+	"github.com/verstak/verstak-desktop/internal/core/browserreceiver"
 	"github.com/verstak/verstak-desktop/internal/core/capability"
 	"github.com/verstak/verstak-desktop/internal/core/contribution"
 	"github.com/verstak/verstak-desktop/internal/core/events"
@@ -1997,6 +1998,54 @@ func TestPluginSyncBridgeRequiresDeclaredPermissions(t *testing.T) {
 	}
 	if errStr := app.PluginSyncResetKey("no.storage"); !strings.Contains(errStr, "sync.participate") {
 		t.Fatalf("PluginSyncResetKey err = %q, want sync.participate permission error", errStr)
+	}
+}
+
+func TestPluginBrowserReceiverPairingRequiresPermissionAndRotatesToken(t *testing.T) {
+	app := newBridgeTestApp(t)
+	app.appSettings = appsettings.NewManager(filepath.Join(t.TempDir(), "config.json"))
+	if err := app.appSettings.Load(); err != nil {
+		t.Fatalf("settings Load: %v", err)
+	}
+	initialToken, err := app.appSettings.EnsureBrowserReceiverToken()
+	if err != nil {
+		t.Fatalf("EnsureBrowserReceiverToken: %v", err)
+	}
+	app.browserReceiver = browserreceiver.NewWithOptions(app.eventBus, browserreceiver.Options{
+		RequireToken:  true,
+		ReceiverToken: initialToken,
+	})
+	app.plugins = append(app.plugins, plugin.Plugin{
+		Manifest: plugin.Manifest{
+			ID:          "browser.local",
+			Name:        "Browser Local",
+			Version:     "1.0.0",
+			Permissions: []string{"browser.receiver.manage"},
+		},
+		Status:  plugin.StatusLoaded,
+		Enabled: true,
+	})
+
+	pairing, errStr := app.PluginBrowserReceiverPairing("browser.local")
+	if errStr != "" {
+		t.Fatalf("PluginBrowserReceiverPairing: %s", errStr)
+	}
+	if pairing["receiverToken"] != initialToken {
+		t.Fatalf("pairing token = %q, want %q", pairing["receiverToken"], initialToken)
+	}
+	if pairing["receiverUrl"] != browserreceiver.DefaultCaptureURL {
+		t.Fatalf("pairing receiver URL = %q, want %q", pairing["receiverUrl"], browserreceiver.DefaultCaptureURL)
+	}
+	if _, errStr := app.PluginBrowserReceiverPairing("no.storage"); !strings.Contains(errStr, "browser.receiver.manage") {
+		t.Fatalf("missing permission error = %q", errStr)
+	}
+
+	rotated, errStr := app.PluginRotateBrowserReceiverToken("browser.local")
+	if errStr != "" {
+		t.Fatalf("PluginRotateBrowserReceiverToken: %s", errStr)
+	}
+	if rotated["receiverToken"] == "" || rotated["receiverToken"] == initialToken {
+		t.Fatalf("rotated pairing token = %q, want new non-empty token", rotated["receiverToken"])
 	}
 }
 

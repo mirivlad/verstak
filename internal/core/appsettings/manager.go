@@ -4,26 +4,30 @@
 package appsettings
 
 import (
+	"crypto/rand"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 )
 
 // Config represents the application settings stored in ~/.config/verstak/config.json.
 type Config struct {
-	SchemaVersion    int                  `json:"schemaVersion"`
-	CurrentVaultPath string               `json:"currentVaultPath"`
-	RecentVaults     []string             `json:"recentVaults"`
-	Theme            string               `json:"theme"`
-	DevMode          bool                 `json:"devMode"`
-	UserPluginsDir   string               `json:"userPluginsDir"`
-	Workbench        WorkbenchPreferences `json:"workbench,omitempty"`
-	Sync             SyncSettings         `json:"sync,omitempty"`
-	WindowState      *WindowState         `json:"windowState,omitempty"`
-	LastOpenedAt     string               `json:"lastOpenedAt"`
+	SchemaVersion    int                     `json:"schemaVersion"`
+	CurrentVaultPath string                  `json:"currentVaultPath"`
+	RecentVaults     []string                `json:"recentVaults"`
+	Theme            string                  `json:"theme"`
+	DevMode          bool                    `json:"devMode"`
+	UserPluginsDir   string                  `json:"userPluginsDir"`
+	Workbench        WorkbenchPreferences    `json:"workbench,omitempty"`
+	Sync             SyncSettings            `json:"sync,omitempty"`
+	BrowserReceiver  BrowserReceiverSettings `json:"browserReceiver,omitempty"`
+	WindowState      *WindowState            `json:"windowState,omitempty"`
+	LastOpenedAt     string                  `json:"lastOpenedAt"`
 }
 
 type WorkbenchPreferences struct {
@@ -42,6 +46,11 @@ type SyncSettings struct {
 	LastStatus   string `json:"lastStatus"`
 	LastSyncAt   string `json:"lastSyncAt"`
 	LastError    string `json:"lastError,omitempty"`
+}
+
+// BrowserReceiverSettings holds the installation-local browser capture pairing secret.
+type BrowserReceiverSettings struct {
+	Token string `json:"token,omitempty"`
 }
 
 // WindowState stores the last window position and size.
@@ -205,6 +214,42 @@ func (m *Manager) UpdateSync(syncSettings SyncSettings) error {
 	return m.saveLocked()
 }
 
+// EnsureBrowserReceiverToken returns the persisted pairing token, creating it when absent.
+func (m *Manager) EnsureBrowserReceiverToken() (string, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.updateBrowserReceiverTokenLocked(false)
+}
+
+// RotateBrowserReceiverToken replaces the persisted pairing token.
+func (m *Manager) RotateBrowserReceiverToken() (string, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.updateBrowserReceiverTokenLocked(true)
+}
+
+func (m *Manager) updateBrowserReceiverTokenLocked(force bool) (string, error) {
+	if m.config == nil {
+		m.config = defaultConfig()
+	}
+	current := strings.TrimSpace(m.config.BrowserReceiver.Token)
+	if current != "" && !force {
+		return current, nil
+	}
+
+	bytes := make([]byte, 32)
+	if _, err := rand.Read(bytes); err != nil {
+		return "", fmt.Errorf("generate browser receiver token: %w", err)
+	}
+	token := base64.RawURLEncoding.EncodeToString(bytes)
+	m.config.BrowserReceiver.Token = token
+	if err := m.saveLocked(); err != nil {
+		m.config.BrowserReceiver.Token = current
+		return "", err
+	}
+	return token, nil
+}
+
 // SetCurrentVault updates the current vault path and adds to recents.
 func (m *Manager) SetCurrentVault(path string) error {
 	m.mu.Lock()
@@ -262,6 +307,7 @@ func copyConfig(c *Config) *Config {
 		UserPluginsDir:   c.UserPluginsDir,
 		Workbench:        c.Workbench,
 		Sync:             c.Sync,
+		BrowserReceiver:  c.BrowserReceiver,
 		LastOpenedAt:     c.LastOpenedAt,
 	}
 	if c.WindowState != nil {

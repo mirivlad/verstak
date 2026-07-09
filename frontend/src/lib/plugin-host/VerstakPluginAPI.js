@@ -439,6 +439,21 @@ export function createPluginAPI(pluginId) {
       }
     },
 
+    browserReceiver: {
+      pairing: function() {
+        assertActive('browserReceiver.pairing');
+        return callBackend(pluginId, 'browserReceiver.pairing', function() {
+          return App.PluginBrowserReceiverPairing(pluginId);
+        });
+      },
+      rotateToken: function() {
+        assertActive('browserReceiver.rotateToken');
+        return callBackend(pluginId, 'browserReceiver.rotateToken', function() {
+          return App.PluginRotateBrowserReceiverToken(pluginId);
+        });
+      }
+    },
+
     workbench: {
       openResource: async function(request) {
         assertActive('workbench.openResource');
