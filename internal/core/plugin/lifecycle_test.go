@@ -336,3 +336,102 @@ func TestLifecycle_DisabledPlugin(t *testing.T) {
 		t.Errorf("expected plugin ID 'test.lifecycle.disabled', got %q", plugins[0].Manifest.ID)
 	}
 }
+
+func TestResolveLifecycleResolvesRequiredCapabilitiesRegardlessOfDiscoveryOrder(t *testing.T) {
+	reg := capability.NewRegistry()
+	plugins := []Plugin{
+		{
+			Manifest: Manifest{
+				ID:          "consumer.plugin",
+				Provides:    []string{"consumer.capability"},
+				Requires:    []string{"provider.capability"},
+				Permissions: []string{"vault.read"},
+			},
+			Enabled: true,
+		},
+		{
+			Manifest: Manifest{
+				ID:          "provider.plugin",
+				Provides:    []string{"provider.capability"},
+				Permissions: []string{"vault.read"},
+			},
+			Enabled: true,
+		},
+	}
+
+	ResolveLifecycle(plugins, reg, nil)
+
+	if plugins[0].Status != StatusLoaded {
+		t.Fatalf("consumer status = %q, want %q; error=%q", plugins[0].Status, StatusLoaded, plugins[0].Error)
+	}
+	if plugins[1].Status != StatusLoaded {
+		t.Fatalf("provider status = %q, want %q; error=%q", plugins[1].Status, StatusLoaded, plugins[1].Error)
+	}
+	if !reg.Has("consumer.capability") || !reg.Has("provider.capability") {
+		t.Fatalf("resolved capabilities = %#v, want provider and consumer", reg.Available())
+	}
+}
+
+func TestResolveLifecycleDoesNotExposeCapabilitiesFromUnresolvedPlugin(t *testing.T) {
+	reg := capability.NewRegistry()
+	plugins := []Plugin{
+		{
+			Manifest: Manifest{
+				ID:          "dependent.plugin",
+				Provides:    []string{"dependent.capability"},
+				Requires:    []string{"unresolved.capability"},
+				Permissions: []string{"vault.read"},
+			},
+			Enabled: true,
+		},
+		{
+			Manifest: Manifest{
+				ID:          "unresolved.plugin",
+				Provides:    []string{"unresolved.capability"},
+				Requires:    []string{"missing.capability"},
+				Permissions: []string{"vault.read"},
+			},
+			Enabled: true,
+		},
+	}
+
+	ResolveLifecycle(plugins, reg, nil)
+
+	for _, p := range plugins {
+		if p.Status != StatusMissingRequiredCapability {
+			t.Fatalf("%s status = %q, want %q; error=%q", p.Manifest.ID, p.Status, StatusMissingRequiredCapability, p.Error)
+		}
+	}
+	if reg.Has("unresolved.capability") || reg.Has("dependent.capability") {
+		t.Fatalf("unresolved capabilities leaked into registry: %#v", reg.Available())
+	}
+}
+
+func TestResolveLifecycleEvaluatesOptionalCapabilitiesAfterProvidersLoad(t *testing.T) {
+	reg := capability.NewRegistry()
+	plugins := []Plugin{
+		{
+			Manifest: Manifest{
+				ID:               "optional.consumer",
+				Provides:         []string{"consumer.capability"},
+				OptionalRequires: []string{"optional.capability"},
+				Permissions:      []string{"vault.read"},
+			},
+			Enabled: true,
+		},
+		{
+			Manifest: Manifest{
+				ID:          "optional.provider",
+				Provides:    []string{"optional.capability"},
+				Permissions: []string{"vault.read"},
+			},
+			Enabled: true,
+		},
+	}
+
+	ResolveLifecycle(plugins, reg, nil)
+
+	if plugins[0].Status != StatusLoaded {
+		t.Fatalf("optional consumer status = %q, want %q; error=%q", plugins[0].Status, StatusLoaded, plugins[0].Error)
+	}
+}

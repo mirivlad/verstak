@@ -2,10 +2,8 @@ package main
 
 import (
 	"embed"
-	"fmt"
 	"log"
 	"os"
-	"strings"
 
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"
@@ -140,6 +138,9 @@ func main() {
 	if debugEnabled {
 		debug.Logf("[main] starting plugin lifecycle for %d plugins", len(plugins))
 	}
+	plugin.ResolveLifecycle(plugins, capRegistry, func(pluginID string) bool {
+		return pluginStateMgr != nil && pluginStateMgr.IsDisabled(pluginID)
+	})
 	for i := range plugins {
 		p := &plugins[i]
 
@@ -147,53 +148,11 @@ func main() {
 			debug.Logf("[main] lifecycle[%d]: id=%s status=%s enabled=%v", i, p.Manifest.ID, p.Status, p.Enabled)
 		}
 
-		// Check if plugin is disabled in vault plugin state
-		if pluginStateMgr != nil && pluginStateMgr.IsDisabled(p.Manifest.ID) {
-			log.Printf("[plugin] %s: disabled in vault plugin state — skipping", p.Manifest.ID)
-			if debugEnabled {
-				debug.Logf("[main] lifecycle: %s disabled in vault state, skipping", p.Manifest.ID)
+		if p.Status != plugin.StatusLoaded && p.Status != plugin.StatusDegraded {
+			if p.Error != "" {
+				log.Printf("[plugin] %s: status=%s: %s", p.Manifest.ID, p.Status, p.Error)
 			}
-			p.Status = plugin.StatusDisabled
-			p.Enabled = false
 			continue
-		}
-
-		// Register provided capabilities
-		if len(p.Manifest.Provides) > 0 {
-			if err := capRegistry.Register(p.Manifest.ID, p.Manifest.Provides); err != nil {
-				log.Printf("[plugin] %s: capability registration failed: %v", p.Manifest.ID, err)
-				if debugEnabled {
-					debug.Logf("[main] lifecycle: %s capability registration failed: %v", p.Manifest.ID, err)
-				}
-				p.Status = plugin.StatusFailed
-				p.Error = err.Error()
-				continue
-			}
-			log.Printf("[plugin] %s: registered %d capabilities", p.Manifest.ID, len(p.Manifest.Provides))
-		}
-
-		// Resolve required capabilities
-		missingRequired := capRegistry.CheckRequired(p.Manifest.Requires)
-		if len(missingRequired) > 0 {
-			log.Printf("[plugin] %s: missing required capabilities: %v", p.Manifest.ID, missingRequired)
-			if debugEnabled {
-				debug.Logf("[main] lifecycle: %s missing required: %v", p.Manifest.ID, missingRequired)
-			}
-			p.Status = plugin.StatusMissingRequiredCapability
-			p.Error = fmt.Sprintf("missing required: %s", strings.Join(missingRequired, ", "))
-			continue
-		}
-
-		// Check optional capabilities for degraded mode
-		missingOptional := capRegistry.CheckRequired(p.Manifest.OptionalRequires)
-		if len(missingOptional) > 0 {
-			log.Printf("[plugin] %s: missing optional capabilities (degraded): %v", p.Manifest.ID, missingOptional)
-			if debugEnabled {
-				debug.Logf("[main] lifecycle: %s missing optional (degraded): %v", p.Manifest.ID, missingOptional)
-			}
-			p.Status = plugin.StatusDegraded
-		} else {
-			p.Status = plugin.StatusLoaded
 		}
 
 		// Register contributions

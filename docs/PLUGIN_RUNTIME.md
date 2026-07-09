@@ -112,17 +112,25 @@ capRegistry.Register("verstak-desktop", []string{"verstak/core/vault/v1"})
 ### Plugin capability resolution
 
 ```
-foreach plugin:
-    1. зарегистрировать plugin.provides в capability registry
-    2. проверить plugin.requires — если есть missing → missing-required-capability
-    3. проверить plugin.optionalRequires — если есть missing → degraded
-    4. иначе → loaded
-    5. зарегистрировать plugin.contributes в contribution registry
+1. Исключить disabled plugins.
+2. Пока есть неразрешённые plugins:
+   - plugin с уже доступными `requires` атомарно регистрирует `provides`;
+   - при конфликте `provides` plugin получает `failed`;
+   - если за проход ничего не разрешилось, остальные получают
+     `missing-required-capability`.
+3. После разрешения всех обязательных зависимостей проверить
+   `optionalRequires`: отсутствующие переводят plugin в `degraded`.
+4. Зарегистрировать `contributes` только для `loaded` и `degraded` plugins.
 ```
+
+Таким образом, порядок discovery не влияет на обычные зависимости между
+plugins. При конкурирующих providers одного capability порядок discovery служит
+tie-breaker. `provides` плагина с неразрешённым `requires` или ошибкой
+регистрации не попадают в registry.
 
 ### Capability конфликт
 
-Два plugin не могут предоставлять один и тот же capability. При попытке повторной регистрации — ошибка и статус `failed` для второго плагина.
+Два plugin не могут предоставлять один и тот же capability. При попытке повторной регистрации второй plugin получает `failed`; регистрация атомарна, поэтому ни один capability такого plugin не остаётся в registry.
 
 ## Plugin Manifest Format
 
@@ -251,7 +259,7 @@ Icon fields use shell icon names rendered through the bundled Lucide SVG wrapper
 
 1. Plugin `Register(pluginID, contributions)` — все contributions регистрируются
 2. `Unregister(pluginID)` — удаляет все contributions указанного plugin
-3. Reload: `Unregister → Register` (предотвращает дублирование)
+3. Reload сначала удаляет contributions всех plugins предыдущего discovery, затем регистрирует только `loaded`/`degraded` plugins
 4. Disable plugin → `Unregister` (contributions исчезают из UI)
 5. Enable plugin → `Register` при следующем Reload
 6. Registry idempotent: Register удаляет старые записи перед добавлением новых
@@ -619,13 +627,12 @@ bundled runtime. Это реальный runtime contract для cooperative bun
 
 `ReloadPlugins()` в `internal/api/app.go` позволяет перезагрузить plugins без перезапуска приложения:
 
-1. Unregister all non-core capabilities.
-2. Re-register core capabilities + vault + workspace (если открыт).
-3. Re-scan discovery directories.
-4. For each plugin: re-run capability resolution.
-5. **Unregister contributions** before re-registering (предотвращает дубли).
-6. Register contributions for loaded/degraded plugins (disabled/failed — не регистрируются).
-7. Update plugins list.
+1. Unregister contributions всех plugins предыдущего discovery.
+2. Unregister all non-core capabilities.
+3. Re-register core capabilities + vault + workspace (если открыт).
+4. Re-scan discovery directories и повторить capability resolution.
+5. Register contributions для loaded/degraded plugins (disabled/failed — не регистрируются).
+6. Update plugins list.
 
 Frontend вызывает это при нажатии "Reload" в Plugin Manager.
 

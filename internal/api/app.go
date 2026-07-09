@@ -572,6 +572,13 @@ func (a *App) ReloadPlugins() (int, string) {
 	discoveryDirs := plugin.DefaultDiscoveryDirs()
 	log.Printf("[api] ReloadPlugins: scanning dirs: %v", discoveryDirs)
 
+	// Remove entries for plugins that may no longer be discovered.
+	if a.contribRegistry != nil {
+		for _, existing := range a.plugins {
+			a.contribRegistry.Unregister(existing.Manifest.ID)
+		}
+	}
+
 	// Unregister all non-core capabilities
 	a.capRegistry.UnregisterAll()
 
@@ -605,44 +612,23 @@ func (a *App) ReloadPlugins() (int, string) {
 
 	plugins, errs := plugin.DiscoverPlugins(discoveryDirs)
 
-	// Plugin lifecycle: register capabilities + contributions
+	plugin.ResolveLifecycle(plugins, a.capRegistry, func(pluginID string) bool {
+		return a.pluginState != nil && a.pluginState.IsDisabled(pluginID)
+	})
+
+	// Register contributions for plugins with a resolved lifecycle.
 	for i := range plugins {
 		p := &plugins[i]
 
-		// Skip disabled plugins
-		if a.pluginState != nil && a.pluginState.IsDisabled(p.Manifest.ID) {
-			log.Printf("[plugin] %s: disabled in vault plugin state — skipping", p.Manifest.ID)
-			p.Status = plugin.StatusDisabled
-			p.Enabled = false
-			continue
-		}
-
-		if len(p.Manifest.Provides) > 0 {
-			if err := a.capRegistry.Register(p.Manifest.ID, p.Manifest.Provides); err != nil {
-				log.Printf("[plugin] %s: capability registration failed: %v", p.Manifest.ID, err)
-				p.Status = plugin.StatusFailed
-				p.Error = err.Error()
-				continue
+		if p.Status != plugin.StatusLoaded && p.Status != plugin.StatusDegraded {
+			if p.Error != "" {
+				log.Printf("[plugin] %s: status=%s: %s", p.Manifest.ID, p.Status, p.Error)
 			}
-		}
-
-		missingRequired := a.capRegistry.CheckRequired(p.Manifest.Requires)
-		if len(missingRequired) > 0 {
-			p.Status = plugin.StatusMissingRequiredCapability
-			p.Error = fmt.Sprintf("missing required: %s", strings.Join(missingRequired, ", "))
 			continue
 		}
 
-		missingOptional := a.capRegistry.CheckRequired(p.Manifest.OptionalRequires)
-		if len(missingOptional) > 0 {
-			p.Status = plugin.StatusDegraded
-		} else {
-			p.Status = plugin.StatusLoaded
-		}
-
-		// Register contributions (unregister first to prevent duplicates)
+		// Register contributions after old discovery entries were removed.
 		if p.Manifest.Contributes != nil {
-			a.contribRegistry.Unregister(p.Manifest.ID)
 			a.contribRegistry.Register(p.Manifest.ID, p.Manifest.Contributes)
 		}
 

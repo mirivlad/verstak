@@ -33,10 +33,18 @@ func (r *Registry) Register(pluginID string, capabilities []string) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
+	pending := make(map[string]struct{}, len(capabilities))
 	for _, name := range capabilities {
 		if existing, ok := r.capabilities[name]; ok {
 			return fmt.Errorf("capability %q already registered by plugin %q", name, existing.PluginID)
 		}
+		if _, ok := pending[name]; ok {
+			return fmt.Errorf("capability %q is registered more than once by plugin %q", name, pluginID)
+		}
+		pending[name] = struct{}{}
+	}
+
+	for _, name := range capabilities {
 		r.capabilities[name] = &Entry{
 			Name:     name,
 			PluginID: pluginID,
