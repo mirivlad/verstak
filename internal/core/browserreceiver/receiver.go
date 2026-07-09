@@ -4,8 +4,11 @@ package browserreceiver
 import (
 	"context"
 	"crypto/subtle"
+	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"log"
 	"net"
 	"net/http"
@@ -19,6 +22,24 @@ import (
 const capturePath = "/api/browser-inbox/v1/captures"
 const DefaultAddr = "127.0.0.1:47731"
 const receiverTokenHeader = "X-Verstak-Receiver-Token"
+
+const (
+	maxCaptureBodyBytes    = 12 * 1024 * 1024
+	maxCaptureIDBytes      = 256
+	maxCapturedAtBytes     = 64
+	maxCaptureSourceBytes  = 128
+	maxPageURLBytes        = 4096
+	maxPageTitleBytes      = 512
+	maxPageDomainBytes     = 255
+	maxSelectionTextBytes  = 20 * 1024
+	maxLinkTextBytes       = 512
+	maxBrowserNameBytes    = 64
+	maxFileNameBytes       = 255
+	maxFileMimeBytes       = 128
+	maxFileTextBytes       = 2 * 1024 * 1024
+	maxFileBytes           = 8 * 1024 * 1024
+	maxFileDataBase64Bytes = 4 * ((maxFileBytes + 2) / 3)
+)
 
 type Receiver struct {
 	bus               *events.Bus
@@ -145,8 +166,24 @@ func (r *Receiver) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
+	defer req.Body.Close()
+	decoder := json.NewDecoder(http.MaxBytesReader(w, req.Body, maxCaptureBodyBytes))
 	var payload CapturePayload
-	if err := json.NewDecoder(req.Body).Decode(&payload); err != nil {
+	if err := decoder.Decode(&payload); err != nil {
+		var maxBytesErr *http.MaxBytesError
+		if errors.As(err, &maxBytesErr) {
+			writeError(w, http.StatusRequestEntityTooLarge, "capture payload exceeds limit")
+			return
+		}
+		writeError(w, http.StatusBadRequest, "invalid JSON")
+		return
+	}
+	if err := decoder.Decode(&struct{}{}); err != io.EOF {
+		var maxBytesErr *http.MaxBytesError
+		if errors.As(err, &maxBytesErr) {
+			writeError(w, http.StatusRequestEntityTooLarge, "capture payload exceeds limit")
+			return
+		}
 		writeError(w, http.StatusBadRequest, "invalid JSON")
 		return
 	}
@@ -215,8 +252,14 @@ func (p CapturePayload) Validate() error {
 	if strings.TrimSpace(p.CaptureID) == "" {
 		return fmt.Errorf("captureId is required")
 	}
+	if err := validateCaptureText(p.CaptureID, "captureId", maxCaptureIDBytes); err != nil {
+		return err
+	}
 	if strings.TrimSpace(p.CapturedAt) == "" {
 		return fmt.Errorf("capturedAt is required")
+	}
+	if err := validateCaptureText(p.CapturedAt, "capturedAt", maxCapturedAtBytes); err != nil {
+		return err
 	}
 	if p.Kind != "page" && p.Kind != "selection" && p.Kind != "link" && p.Kind != "file" {
 		return fmt.Errorf("unsupported kind")
@@ -224,17 +267,89 @@ func (p CapturePayload) Validate() error {
 	if strings.TrimSpace(p.Page.URL) == "" {
 		return fmt.Errorf("page.url is required")
 	}
+	if err := validateCaptureText(p.Source, "source", maxCaptureSourceBytes); err != nil {
+		return err
+	}
+	if err := validateCaptureText(p.Page.URL, "page.url", maxPageURLBytes); err != nil {
+		return err
+	}
+	if err := validateCaptureText(p.Page.Title, "page.title", maxPageTitleBytes); err != nil {
+		return err
+	}
+	if err := validateCaptureText(p.Page.Domain, "page.domain", maxPageDomainBytes); err != nil {
+		return err
+	}
+	if p.Browser != nil {
+		if err := validateCaptureText(p.Browser.Name, "browser.name", maxBrowserNameBytes); err != nil {
+			return err
+		}
+	}
 	if p.Kind == "selection" && (p.Selection == nil || strings.TrimSpace(p.Selection.Text) == "") {
 		return fmt.Errorf("selection.text is required")
 	}
-	if p.Kind == "link" && (p.Link == nil || strings.TrimSpace(p.Link.URL) == "") {
-		return fmt.Errorf("link.url is required")
+	if p.Kind == "selection" {
+		if err := validateCaptureText(p.Selection.Text, "selection.text", maxSelectionTextBytes); err != nil {
+			return err
+		}
 	}
-	if p.Kind == "file" && (p.File == nil || strings.TrimSpace(p.File.Name) == "") {
+	if p.Kind == "link" {
+		if p.Link == nil || strings.TrimSpace(p.Link.URL) == "" {
+			return fmt.Errorf("link.url is required")
+		}
+		if err := validateCaptureText(p.Link.URL, "link.url", maxPageURLBytes); err != nil {
+			return err
+		}
+		if err := validateCaptureText(p.Link.Text, "link.text", maxLinkTextBytes); err != nil {
+			return err
+		}
+	}
+	if p.Kind == "file" {
+		if err := p.validateFile(); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (p CapturePayload) validateFile() error {
+	if p.File == nil || strings.TrimSpace(p.File.Name) == "" {
 		return fmt.Errorf("file.name is required")
 	}
-	if p.Kind == "file" && (p.File == nil || (p.File.Text == "" && strings.TrimSpace(p.File.DataBase64) == "")) {
+	if p.File.Text == "" && strings.TrimSpace(p.File.DataBase64) == "" {
 		return fmt.Errorf("file.text or file.dataBase64 is required")
+	}
+	if p.File.Size < 0 || p.File.Size > maxFileBytes {
+		return fmt.Errorf("file.size exceeds limit")
+	}
+	if err := validateCaptureText(p.File.Name, "file.name", maxFileNameBytes); err != nil {
+		return err
+	}
+	if err := validateCaptureText(p.File.Mime, "file.mime", maxFileMimeBytes); err != nil {
+		return err
+	}
+	if err := validateCaptureText(p.File.Text, "file.text", maxFileTextBytes); err != nil {
+		return err
+	}
+	dataBase64 := strings.TrimSpace(p.File.DataBase64)
+	if dataBase64 == "" {
+		return nil
+	}
+	if len(dataBase64) > maxFileDataBase64Bytes {
+		return fmt.Errorf("file.dataBase64 exceeds limit")
+	}
+	data, err := base64.StdEncoding.DecodeString(dataBase64)
+	if err != nil {
+		return fmt.Errorf("file.dataBase64 is invalid")
+	}
+	if len(data) > maxFileBytes {
+		return fmt.Errorf("file.dataBase64 exceeds limit")
+	}
+	return nil
+}
+
+func validateCaptureText(value, field string, maxBytes int) error {
+	if len(value) > maxBytes {
+		return fmt.Errorf("%s exceeds limit", field)
 	}
 	return nil
 }

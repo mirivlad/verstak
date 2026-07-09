@@ -2,10 +2,13 @@ package browserreceiver
 
 import (
 	"bytes"
+	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/verstak/verstak-desktop/internal/core/events"
@@ -361,5 +364,98 @@ func TestReceiverRejectsInvalidCapturePayload(t *testing.T) {
 	}
 	if !bytes.Contains(rec.Body.Bytes(), []byte("link.url is required")) {
 		t.Fatalf("response body = %q, want validation error", rec.Body.String())
+	}
+}
+
+func TestReceiverRejectsOversizedCaptureBody(t *testing.T) {
+	bus := events.NewBus()
+	received := make(chan events.Event, 1)
+	bus.Subscribe("browser.capture.page", func(event events.Event) {
+		received <- event
+	})
+	receiver := New(bus)
+
+	const maxCaptureBodyBytes = 12 * 1024 * 1024
+	body := fmt.Sprintf(`{
+		"schemaVersion": 1,
+		"captureId": "capture-oversized",
+		"capturedAt": "2026-06-27T00:00:00.000Z",
+		"kind": "page",
+		"page": {"url": "https://example.com", "title": %q}
+	}`, strings.Repeat("x", maxCaptureBodyBytes))
+	req := httptest.NewRequest(http.MethodPost, "/api/browser-inbox/v1/captures", strings.NewReader(body))
+	rec := httptest.NewRecorder()
+
+	receiver.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusRequestEntityTooLarge {
+		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusRequestEntityTooLarge, rec.Body.String())
+	}
+	select {
+	case event := <-received:
+		t.Fatalf("unexpected event published for oversized capture: %#v", event)
+	default:
+	}
+}
+
+func TestCapturePayloadRejectsUnsafeFileContent(t *testing.T) {
+	const maxFileBytes = 8 * 1024 * 1024
+	const maxFileTextBytes = 2 * 1024 * 1024
+
+	newFilePayload := func() CapturePayload {
+		return CapturePayload{
+			SchemaVersion: 1,
+			CaptureID:     "capture-file-validation",
+			CapturedAt:    "2026-06-27T00:00:00.000Z",
+			Kind:          "file",
+			Page:          CapturePage{URL: "https://example.com"},
+			File:          &CaptureFile{Name: "attachment.bin", Size: 1, DataBase64: "AQ=="},
+		}
+	}
+
+	tests := []struct {
+		name string
+		edit func(*CapturePayload)
+		want string
+	}{
+		{
+			name: "oversized declared size",
+			edit: func(payload *CapturePayload) {
+				payload.File.Size = maxFileBytes + 1
+			},
+			want: "file.size exceeds limit",
+		},
+		{
+			name: "invalid base64",
+			edit: func(payload *CapturePayload) {
+				payload.File.DataBase64 = "not base64"
+			},
+			want: "file.dataBase64 is invalid",
+		},
+		{
+			name: "oversized decoded data",
+			edit: func(payload *CapturePayload) {
+				payload.File.DataBase64 = base64.StdEncoding.EncodeToString(make([]byte, maxFileBytes+1))
+			},
+			want: "file.dataBase64 exceeds limit",
+		},
+		{
+			name: "oversized text",
+			edit: func(payload *CapturePayload) {
+				payload.File.DataBase64 = ""
+				payload.File.Text = strings.Repeat("x", maxFileTextBytes+1)
+			},
+			want: "file.text exceeds limit",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			payload := newFilePayload()
+			tt.edit(&payload)
+			if err := payload.Validate(); err == nil || !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("Validate() error = %v, want %q", err, tt.want)
+			}
+		})
 	}
 }
