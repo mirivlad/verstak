@@ -130,6 +130,10 @@ export function ListWorkspaces() {
   return window['go']['api']['App']['ListWorkspaces']();
 }
 
+export function ListWorkspaceTemplates() {
+  return window['go']['api']['App']['ListWorkspaceTemplates']();
+}
+
 export function MoveVaultPath(arg1, arg2, arg3, arg4) {
   return window['go']['api']['App']['MoveVaultPath'](arg1, arg2, arg3, arg4);
 }

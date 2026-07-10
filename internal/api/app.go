@@ -1735,6 +1735,14 @@ func (a *App) ListWorkspaces() ([]workspace.Workspace, string) {
 	return workspaces, ""
 }
 
+// ListWorkspaceTemplates returns selectable built-in workspace templates.
+func (a *App) ListWorkspaceTemplates() ([]workspace.WorkspaceTemplate, string) {
+	if a.workspace == nil {
+		return nil, "workspace not initialized"
+	}
+	return a.workspace.ListWorkspaceTemplates(), ""
+}
+
 // CreateWorkspace creates a top-level physical workspace folder.
 func (a *App) CreateWorkspace(name, templateID string) (workspace.Workspace, string) {
 	if a.workspace == nil {

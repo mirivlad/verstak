@@ -78,7 +78,7 @@ test.describe('E: Plugin Manager layout', () => {
 
     const health = page.locator('[data-plugin-manager-summary="health"]');
     await expect(health).toBeVisible();
-    await expect(health.locator('[data-plugin-status-summary="loaded"]')).toContainText('11');
+    await expect(health.locator('[data-plugin-status-summary="loaded"]')).toContainText('12');
     await expect(health.locator('[data-plugin-status-summary="failed"]')).toContainText('0');
     await expect(health.locator('[data-plugin-status-summary="disabled"]')).toContainText('0');
 
@@ -119,8 +119,9 @@ test.describe('E: Plugin Manager layout', () => {
 
   test('workspace sidebar creates renames and trashes top-level workspaces', async ({ page }) => {
     await page.locator('button[title="New workspace"]').click();
-    await page.locator('.wt-create input').fill('ClientA');
-    await page.locator('.wt-btn-primary', { hasText: 'Create' }).click();
+    const modal = page.locator('[data-workspace-create-modal]');
+    await modal.locator('[data-workspace-name]').fill('ClientA');
+    await modal.getByRole('button', { name: 'Create workspace' }).click();
 
     await expect(page.locator('.wt-label').filter({ hasText: 'ClientA' })).toBeVisible();
 

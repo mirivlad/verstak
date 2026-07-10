@@ -1213,12 +1213,34 @@ export namespace workbench {
 }
 
 export namespace workspace {
+
+	export class WorkspaceTemplate {
+	    id: string;
+	    name: string;
+	    description: string;
+	    version: number;
+	    workspaceTools: string[];
 	
+	    static createFrom(source: any = {}) {
+	        return new WorkspaceTemplate(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.name = source["name"];
+	        this.description = source["description"];
+	        this.version = source["version"];
+	        this.workspaceTools = source["workspaceTools"];
+	    }
+	}
+
 	export class TemplateSnapshot {
 	    templateId: string;
 	    templateName: string;
 	    templateVersion: number;
 	    appliedAt: string;
+	    workspaceTools?: string[];
 	
 	    static createFrom(source: any = {}) {
 	        return new TemplateSnapshot(source);
@@ -1230,6 +1252,7 @@ export namespace workspace {
 	        this.templateName = source["templateName"];
 	        this.templateVersion = source["templateVersion"];
 	        this.appliedAt = source["appliedAt"];
+	        this.workspaceTools = source["workspaceTools"];
 	    }
 	}
 	export class Metadata {
@@ -1237,6 +1260,7 @@ export namespace workspace {
 	    createdFromTemplate?: TemplateSnapshot;
 	    features?: Record<string, boolean>;
 	    folders?: Record<string, string>;
+	    workspaceTools?: string[];
 	    updatedAt?: string;
 	
 	    static createFrom(source: any = {}) {
@@ -1249,6 +1273,7 @@ export namespace workspace {
 	        this.createdFromTemplate = this.convertValues(source["createdFromTemplate"], TemplateSnapshot);
 	        this.features = source["features"];
 	        this.folders = source["folders"];
+	        this.workspaceTools = source["workspaceTools"];
 	        this.updatedAt = source["updatedAt"];
 	    }
 	

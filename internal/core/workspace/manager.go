@@ -46,10 +46,21 @@ type Workspace struct {
 
 // TemplateSnapshot is copied into workspace metadata when a template is applied.
 type TemplateSnapshot struct {
-	TemplateID      string `json:"templateId"`
-	TemplateName    string `json:"templateName"`
-	TemplateVersion int    `json:"templateVersion"`
-	AppliedAt       string `json:"appliedAt"`
+	TemplateID      string   `json:"templateId"`
+	TemplateName    string   `json:"templateName"`
+	TemplateVersion int      `json:"templateVersion"`
+	AppliedAt       string   `json:"appliedAt"`
+	WorkspaceTools  []string `json:"workspaceTools,omitempty"`
+}
+
+// WorkspaceTemplate describes a selectable built-in template without exposing
+// its filesystem implementation details.
+type WorkspaceTemplate struct {
+	ID             string   `json:"id"`
+	Name           string   `json:"name"`
+	Description    string   `json:"description"`
+	Version        int      `json:"version"`
+	WorkspaceTools []string `json:"workspaceTools"`
 }
 
 // Metadata stores semantic workspace metadata that is not the source of truth
@@ -59,6 +70,7 @@ type Metadata struct {
 	CreatedFromTemplate *TemplateSnapshot `json:"createdFromTemplate,omitempty"`
 	Features            map[string]bool   `json:"features,omitempty"`
 	Folders             map[string]string `json:"folders,omitempty"`
+	WorkspaceTools      []string          `json:"workspaceTools,omitempty"`
 	UpdatedAt           string            `json:"updatedAt,omitempty"`
 }
 
@@ -102,35 +114,127 @@ type WorkspaceTree struct {
 }
 
 type templateDefinition struct {
-	ID       string
-	Name     string
-	Version  int
-	Features map[string]bool
-	Folders  map[string]string
-	Files    map[string]string
+	ID             string
+	Name           string
+	Description    string
+	Version        int
+	Features       map[string]bool
+	Folders        map[string]string
+	Files          map[string]string
+	WorkspaceTools []string
+	Selectable     bool
+	Order          int
 }
 
 var builtInTemplates = map[string]templateDefinition{
 	"default": {
-		ID:      "default",
-		Name:    "Default Workspace",
-		Version: 1,
+		ID:          "default",
+		Name:        "General",
+		Description: "Everyday workspace with notes, files, journal, activity, and browser captures.",
+		Version:     2,
 		Features: map[string]bool{
-			"files":    true,
-			"notes":    true,
-			"secrets":  false,
-			"activity": false,
+			"files":         true,
+			"notes":         true,
+			"secrets":       false,
+			"activity":      true,
+			"journal":       true,
+			"browser-inbox": true,
 		},
 		Folders: map[string]string{
 			"notes": "Notes",
 			"files": "Files",
 		},
-		Files: map[string]string{},
+		Files:          map[string]string{},
+		WorkspaceTools: []string{"verstak.notes", "verstak.files", "verstak.journal", "verstak.activity", "verstak.browser-inbox"},
+		Selectable:     true,
+		Order:          10,
+	},
+	"project": {
+		ID:          "project",
+		Name:        "Project",
+		Description: "Project planning with todos, journal, activity, and browser captures.",
+		Version:     1,
+		Features: map[string]bool{
+			"files":         true,
+			"notes":         true,
+			"todo":          true,
+			"journal":       true,
+			"activity":      true,
+			"browser-inbox": true,
+		},
+		Folders: map[string]string{
+			"notes": "Notes",
+			"files": "Files",
+		},
+		Files:          map[string]string{},
+		WorkspaceTools: []string{"verstak.notes", "verstak.files", "verstak.todo", "verstak.journal", "verstak.activity", "verstak.browser-inbox"},
+		Selectable:     true,
+		Order:          20,
+	},
+	"writing": {
+		ID:          "writing",
+		Name:        "Writing",
+		Description: "Focused notes, files, and journal workspace for documentation and writing.",
+		Version:     1,
+		Features: map[string]bool{
+			"files":   true,
+			"notes":   true,
+			"journal": true,
+		},
+		Folders: map[string]string{
+			"notes": "Notes",
+			"files": "Files",
+		},
+		Files:          map[string]string{},
+		WorkspaceTools: []string{"verstak.notes", "verstak.files", "verstak.journal"},
+		Selectable:     true,
+		Order:          30,
+	},
+	"admin": {
+		ID:          "admin",
+		Name:        "Admin",
+		Description: "Infrastructure workspace with secrets, todos, and journal.",
+		Version:     1,
+		Features: map[string]bool{
+			"files":   true,
+			"notes":   true,
+			"secrets": true,
+			"todo":    true,
+			"journal": true,
+		},
+		Folders: map[string]string{
+			"notes":   "Notes",
+			"files":   "Files",
+			"secrets": "Secrets",
+		},
+		Files:          map[string]string{},
+		WorkspaceTools: []string{"verstak.notes", "verstak.files", "verstak.secrets", "verstak.todo", "verstak.journal"},
+		Selectable:     true,
+		Order:          40,
+	},
+	"minimal": {
+		ID:          "minimal",
+		Name:        "Minimal",
+		Description: "Only notes and files for a lightweight workspace.",
+		Version:     1,
+		Features: map[string]bool{
+			"files": true,
+			"notes": true,
+		},
+		Folders: map[string]string{
+			"notes": "Notes",
+			"files": "Files",
+		},
+		Files:          map[string]string{},
+		WorkspaceTools: []string{"verstak.notes", "verstak.files"},
+		Selectable:     true,
+		Order:          50,
 	},
 	"client-project": {
-		ID:      "client-project",
-		Name:    "Client Project",
-		Version: 1,
+		ID:          "client-project",
+		Name:        "Client Project",
+		Description: "Legacy client project template retained for existing integrations.",
+		Version:     1,
 		Features: map[string]bool{
 			"files":    true,
 			"notes":    true,
@@ -142,7 +246,10 @@ var builtInTemplates = map[string]templateDefinition{
 			"files":   "Files",
 			"secrets": "Secrets",
 		},
-		Files: map[string]string{},
+		Files:          map[string]string{},
+		WorkspaceTools: []string{"verstak.notes", "verstak.files", "verstak.secrets"},
+		Selectable:     false,
+		Order:          0,
 	},
 }
 
@@ -243,10 +350,12 @@ func (m *Manager) CreateWorkspace(name, templateID string) (Workspace, error) {
 			TemplateName:    template.Name,
 			TemplateVersion: template.Version,
 			AppliedAt:       now,
+			WorkspaceTools:  cloneStringSlice(template.WorkspaceTools),
 		},
-		Features:  cloneBoolMap(template.Features),
-		Folders:   cloneStringMap(template.Folders),
-		UpdatedAt: now,
+		Features:       cloneBoolMap(template.Features),
+		Folders:        cloneStringMap(template.Folders),
+		WorkspaceTools: cloneStringSlice(template.WorkspaceTools),
+		UpdatedAt:      now,
 	}
 	if err := m.writeMetadata(name, meta); err != nil {
 		return Workspace{}, err
@@ -254,6 +363,27 @@ func (m *Manager) CreateWorkspace(name, templateID string) (Workspace, error) {
 
 	created = false
 	return Workspace{Name: name, RootPath: name}, nil
+}
+
+// ListWorkspaceTemplates returns selectable built-ins in their presentation order.
+func (m *Manager) ListWorkspaceTemplates() []WorkspaceTemplate {
+	templates := make([]WorkspaceTemplate, 0, len(builtInTemplates))
+	for _, template := range builtInTemplates {
+		if !template.Selectable {
+			continue
+		}
+		templates = append(templates, WorkspaceTemplate{
+			ID:             template.ID,
+			Name:           template.Name,
+			Description:    template.Description,
+			Version:        template.Version,
+			WorkspaceTools: cloneStringSlice(template.WorkspaceTools),
+		})
+	}
+	sort.SliceStable(templates, func(i, j int) bool {
+		return builtInTemplates[templates[i].ID].Order < builtInTemplates[templates[j].ID].Order
+	})
+	return templates
 }
 
 // RenameWorkspace physically renames a top-level workspace folder and metadata key.
@@ -746,6 +876,10 @@ func cloneStringMap(src map[string]string) map[string]string {
 		dst[k] = v
 	}
 	return dst
+}
+
+func cloneStringSlice(src []string) []string {
+	return append([]string(nil), src...)
 }
 
 func hasAnyTrueFeature(features map[string]bool) bool {

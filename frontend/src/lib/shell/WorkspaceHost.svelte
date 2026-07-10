@@ -11,7 +11,10 @@
 
   let contributions = {};
   let plugins = [];
+  let discoveredWorkspaceTools = [];
   let workspaceTools = [];
+  let workspaceMetadata = null;
+  let metadataWorkspaceRoot = '';
   let toolsLoaded = false;
   let requestedToolKind = '';
   let requestedToolRequest = null;
@@ -27,6 +30,7 @@
     ['activity', 40],
     ['browser', 50],
     ['inbox', 50],
+    ['secrets', 60],
     ['search', 90],
   ]);
 
@@ -34,6 +38,12 @@
   $: workspaceRootPath = selectedWorkspace?.rootPath || selectedWorkspace?.name || selectedWorkspace?.id || '';
   $: workspaceTitle = selectedWorkspace?.title || selectedWorkspace?.name || selectedWorkspace?.id || selectedWorkspaceName;
   $: workspaceType = selectedWorkspace?.type || 'workspace';
+  $: if (workspaceRootPath !== metadataWorkspaceRoot) {
+    metadataWorkspaceRoot = workspaceRootPath;
+    workspaceMetadata = null;
+    if (workspaceRootPath) loadWorkspaceMetadata(workspaceRootPath);
+  }
+  $: workspaceTools = sortWorkspaceTools(filterWorkspaceTools(discoveredWorkspaceTools, workspaceMetadata));
   $: if (workspaceRootPath !== requestedWorkspaceRoot) {
     requestedWorkspaceRoot = workspaceRootPath;
     requestedToolRequest = null;
@@ -81,6 +91,29 @@
       if (rankDiff !== 0) return rankDiff;
       return String(a.title || a.id).localeCompare(String(b.title || b.id));
     });
+  }
+
+  function filterWorkspaceTools(tools, metadata) {
+    if (!Array.isArray(metadata?.workspaceTools)) return tools;
+    const allowedPluginIds = new Set(metadata.workspaceTools);
+    return tools.filter(tool => allowedPluginIds.has(tool.pluginId));
+  }
+
+  function resultOrError(response, fallbackValue) {
+    if (Array.isArray(response) && typeof response[1] === 'string') {
+      return [response[0] || fallbackValue, response[1] || ''];
+    }
+    return typeof response === 'string' ? [fallbackValue, response] : [response || fallbackValue, ''];
+  }
+
+  async function loadWorkspaceMetadata(rootPath) {
+    try {
+      const [metadata, err] = resultOrError(await App.GetWorkspaceMetadata(rootPath), null);
+      if (rootPath !== workspaceRootPath) return;
+      workspaceMetadata = err ? null : metadata;
+    } catch (_) {
+      if (rootPath === workspaceRootPath) workspaceMetadata = null;
+    }
   }
 
   function selectTool(tool, toolRequest = null) {
@@ -137,7 +170,7 @@
         plugins.filter(pl => pl.enabled && (pl.status === 'loaded' || pl.status === 'degraded')).map(pl => pl.manifest?.id)
       );
 
-      workspaceTools = sortWorkspaceTools((contributions.workspaceItems || []).filter(tool => enabledIds.has(tool.pluginId)));
+      discoveredWorkspaceTools = (contributions.workspaceItems || []).filter(tool => enabledIds.has(tool.pluginId));
     } catch (e) {
       console.error('[WorkspaceHost] loadTools error:', e);
     } finally {

@@ -120,6 +120,45 @@ func TestCreateWorkspaceCreatesFolderDefaultTemplateAndMetadataSnapshot(t *testi
 	}
 }
 
+func TestListWorkspaceTemplatesExposesSelectableBuiltIns(t *testing.T) {
+	m := NewManager(newVaultDir(t))
+	templates := m.ListWorkspaceTemplates()
+
+	wantIDs := []string{"default", "project", "writing", "admin", "minimal"}
+	if len(templates) != len(wantIDs) {
+		t.Fatalf("templates = %+v, want %d selectable built-ins", templates, len(wantIDs))
+	}
+	gotIDs := make([]string, 0, len(templates))
+	for _, template := range templates {
+		gotIDs = append(gotIDs, template.ID)
+		if template.Name == "" || template.Description == "" || template.Version == 0 || len(template.WorkspaceTools) == 0 {
+			t.Fatalf("template is missing presentation or workspace tool data: %+v", template)
+		}
+	}
+	if strings.Join(gotIDs, ",") != strings.Join(wantIDs, ",") {
+		t.Fatalf("template ids = %v, want %v", gotIDs, wantIDs)
+	}
+}
+
+func TestCreateWorkspaceStoresWorkspaceToolSnapshot(t *testing.T) {
+	m := NewManager(newVaultDir(t))
+	if _, err := m.CreateWorkspace("Minimal", "minimal"); err != nil {
+		t.Fatalf("CreateWorkspace: %v", err)
+	}
+
+	meta, err := m.GetWorkspaceMetadata("Minimal")
+	if err != nil {
+		t.Fatalf("GetWorkspaceMetadata: %v", err)
+	}
+	wantTools := []string{"verstak.notes", "verstak.files"}
+	if strings.Join(meta.WorkspaceTools, ",") != strings.Join(wantTools, ",") {
+		t.Fatalf("metadata workspace tools = %v, want %v", meta.WorkspaceTools, wantTools)
+	}
+	if meta.CreatedFromTemplate == nil || strings.Join(meta.CreatedFromTemplate.WorkspaceTools, ",") != strings.Join(wantTools, ",") {
+		t.Fatalf("template snapshot workspace tools = %+v, want %v", meta.CreatedFromTemplate, wantTools)
+	}
+}
+
 func TestWorkspaceMetadataDoesNotRequireLiveTemplate(t *testing.T) {
 	vaultDir := newVaultDir(t)
 	m := NewManager(vaultDir)
@@ -135,6 +174,9 @@ func TestWorkspaceMetadataDoesNotRequireLiveTemplate(t *testing.T) {
 	}
 	if meta.CreatedFromTemplate == nil || meta.CreatedFromTemplate.TemplateID != "client-project" {
 		t.Fatalf("snapshot not preserved after registry clear: %+v", meta.CreatedFromTemplate)
+	}
+	if len(meta.WorkspaceTools) == 0 || len(meta.CreatedFromTemplate.WorkspaceTools) == 0 {
+		t.Fatalf("workspace tool snapshot not preserved after registry clear: %+v", meta)
 	}
 }
 

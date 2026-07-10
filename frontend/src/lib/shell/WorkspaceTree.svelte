@@ -15,6 +15,11 @@
   let currentWorkspaceId = '';
   let showCreate = false;
   let newWorkspaceName = '';
+  let workspaceTemplates = [];
+  let templatePluginNames = {};
+  let selectedTemplateId = 'default';
+  let createError = '';
+  let templatesLoading = false;
   let creating = false;
   let renamingId = '';
   let renameValue = '';
@@ -22,6 +27,7 @@
 
   onMount(() => {
     loadWorkspaces();
+    loadWorkspaceTemplates();
     window.addEventListener('verstak:workspace-active-changed', onActiveWorkspaceChanged);
   });
 
@@ -35,7 +41,47 @@
   }
 
   function resultOrError(response, fallbackValue) {
+    if (Array.isArray(response) && typeof response[1] === 'string') {
+      return [response[0] || fallbackValue, response[1] || ''];
+    }
     return typeof response === 'string' ? [fallbackValue, response] : [response, ''];
+  }
+
+  $: selectedTemplate = workspaceTemplates.find(template => template.id === selectedTemplateId) || workspaceTemplates[0] || null;
+
+  function toolLabel(pluginId) {
+    return templatePluginNames[pluginId] || String(pluginId || '').replace(/^verstak\./, '');
+  }
+
+  async function loadWorkspaceTemplates() {
+    templatesLoading = true;
+    try {
+      const [templates, plugins] = await Promise.all([
+        App.ListWorkspaceTemplates ? App.ListWorkspaceTemplates() : [],
+        App.GetPlugins ? App.GetPlugins() : [],
+      ]);
+      const [list, err] = resultOrError(templates, []);
+      if (err) {
+        createError = err;
+        workspaceTemplates = [];
+        return;
+      }
+      workspaceTemplates = Array.isArray(list) ? list : [];
+      templatePluginNames = (Array.isArray(plugins) ? plugins : []).reduce((names, plugin) => {
+        const id = plugin?.manifest?.id;
+        const name = plugin?.manifest?.name;
+        if (id && name) names[id] = name;
+        return names;
+      }, {});
+      if (!workspaceTemplates.some(template => template.id === selectedTemplateId)) {
+        selectedTemplateId = workspaceTemplates[0]?.id || '';
+      }
+    } catch (error) {
+      createError = String(error);
+      workspaceTemplates = [];
+    } finally {
+      templatesLoading = false;
+    }
   }
 
   function wsName(workspace) {
@@ -107,12 +153,19 @@
 
   async function doCreate() {
     const name = newWorkspaceName.trim();
-    if (!name) return;
+    if (!name) {
+      createError = 'Name is required';
+      return;
+    }
+    if (!selectedTemplate) {
+      createError = 'Choose a workspace template';
+      return;
+    }
     creating = true;
-    localError = '';
-    const [, err] = resultOrError(await App.CreateWorkspace(name, 'default'), null);
+    createError = '';
+    const [, err] = resultOrError(await App.CreateWorkspace(name, selectedTemplate.id), null);
     if (err) {
-      localError = err;
+      createError = err;
       creating = false;
       return;
     }
@@ -122,6 +175,20 @@
     await loadWorkspaces();
     const created = workspaces.find((ws) => wsName(ws) === name);
     if (created) await selectWorkspace(created);
+  }
+
+  function openCreateDialog() {
+    showCreate = true;
+    newWorkspaceName = '';
+    createError = '';
+    if (!workspaceTemplates.length && !templatesLoading) loadWorkspaceTemplates();
+  }
+
+  function closeCreateDialog() {
+    if (creating) return;
+    showCreate = false;
+    newWorkspaceName = '';
+    createError = '';
   }
 
   function startRename(workspace) {
@@ -180,7 +247,7 @@
 <div class="wt">
   <div class="wt-header">
     <span class="wt-title">Workspaces</span>
-    <button class="wt-btn" on:click={() => { showCreate = true; newWorkspaceName = ''; }} title="New workspace" type="button">+</button>
+    <button class="wt-btn" on:click={openCreateDialog} title="New workspace" type="button">+</button>
   </div>
 
   {#if loading}
@@ -222,15 +289,43 @@
   </div>
 
   {#if showCreate}
-    <div class="wt-create">
-      <div class="wt-create-header">
-        <span>New workspace</span>
-        <button class="wt-btn btn-ghost" on:click={() => { showCreate = false; newWorkspaceName = ''; }} type="button">Close</button>
-      </div>
-      <input type="text" bind:value={newWorkspaceName} placeholder="Name..." disabled={creating} />
-      <div class="wt-create-actions">
-        <button class="wt-btn-primary" on:click={doCreate} type="button" disabled={creating || !newWorkspaceName.trim()}>{creating ? '...' : 'Create'}</button>
-        <button class="wt-btn" on:click={() => { showCreate = false; newWorkspaceName = ''; }} type="button" disabled={creating}>Cancel</button>
+    <div class="workspace-create-overlay" data-workspace-create-modal role="dialog" aria-modal="true" aria-label="Create workspace">
+      <div class="workspace-create-modal">
+        <div class="workspace-create-header">
+          <div>
+            <h2>New workspace</h2>
+          </div>
+          <button class="wt-btn" on:click={closeCreateDialog} type="button" disabled={creating}>Close</button>
+        </div>
+        <label class="workspace-create-field">
+          <span>Name</span>
+          <input data-workspace-name type="text" bind:value={newWorkspaceName} placeholder="Workspace name" disabled={creating} on:keydown={(event) => event.key === 'Enter' && doCreate()} />
+        </label>
+        <label class="workspace-create-field">
+          <span>Template</span>
+          <select data-workspace-template bind:value={selectedTemplateId} disabled={creating || templatesLoading || !workspaceTemplates.length}>
+            {#each workspaceTemplates as template (template.id)}
+              <option value={template.id}>{template.name}</option>
+            {/each}
+          </select>
+        </label>
+        {#if selectedTemplate}
+          <div class="workspace-template-summary">
+            <p data-workspace-template-description>{selectedTemplate.description}</p>
+            <div class="workspace-template-tools" data-workspace-template-tools>
+              {#each selectedTemplate.workspaceTools || [] as pluginId (pluginId)}
+                <span>{toolLabel(pluginId)}</span>
+              {/each}
+            </div>
+          </div>
+        {/if}
+        {#if createError}
+          <p class="workspace-create-error" data-workspace-create-error role="alert">{createError}</p>
+        {/if}
+        <div class="workspace-create-actions">
+          <button class="wt-btn-primary" on:click={doCreate} type="button" disabled={creating || templatesLoading || !selectedTemplate}>{creating ? 'Creating...' : 'Create workspace'}</button>
+          <button class="wt-btn" on:click={closeCreateDialog} type="button" disabled={creating}>Cancel</button>
+        </div>
       </div>
     </div>
   {/if}
@@ -261,11 +356,19 @@
   .wt-icon-btn.danger:hover:not(:disabled) { color: var(--vt-color-danger); background: var(--vt-color-danger-muted); border-color: rgba(233,69,96,0.35); }
   .wt-rename { flex: 1; min-width: 0; background: #0f1424; border: 1px solid var(--vt-color-border-strong); color: var(--vt-color-text-primary); padding: 0.2rem 0.35rem; border-radius: var(--vt-radius-sm); font-size: 0.78rem; }
   .wt-rename:focus { outline: none; border-color: var(--vt-color-accent); box-shadow: var(--vt-focus-ring); }
-  .wt-create { position: absolute; bottom: 0; left: 0; right: 0; background: var(--vt-color-surface-muted); border-top: 1px solid var(--vt-color-border); padding: 0.6rem; z-index: 10; }
-  .wt-create-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.4rem; color: var(--vt-color-text-muted); font-size: 0.7rem; text-transform: uppercase; }
-  .wt-create input { width: 100%; background: #0f1424; border: 1px solid var(--vt-color-border-strong); color: var(--vt-color-text-primary); padding: 0.35rem 0.5rem; border-radius: var(--vt-radius-sm); font-size: 0.8rem; margin-bottom: 0.4rem; box-sizing: border-box; }
-  .wt-create input:focus { outline: none; border-color: var(--vt-color-accent); box-shadow: var(--vt-focus-ring); }
-  .wt-create-actions { display: flex; gap: 0.4rem; justify-content: flex-end; }
+  .workspace-create-overlay { position: fixed; inset: 0; z-index: 10000; display: flex; align-items: center; justify-content: center; padding: 1rem; background: rgba(4, 8, 18, 0.7); }
+  .workspace-create-modal { width: min(34rem, 100%); display: grid; gap: 0.85rem; padding: 1rem; border: 1px solid var(--vt-color-border-strong); border-radius: var(--vt-radius-lg); background: var(--vt-color-surface); box-shadow: 0 18px 44px rgba(0, 0, 0, 0.38); }
+  .workspace-create-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; }
+  .workspace-create-header h2 { margin: 0; font-size: 1rem; }
+  .workspace-create-field { display: grid; gap: 0.35rem; color: var(--vt-color-text-muted); font-size: 0.75rem; }
+  .workspace-create-field input, .workspace-create-field select { width: 100%; min-height: 2rem; box-sizing: border-box; border: 1px solid var(--vt-color-border-strong); border-radius: var(--vt-radius-sm); background: #0f1424; color: var(--vt-color-text-primary); padding: 0.35rem 0.5rem; font: inherit; font-size: 0.84rem; }
+  .workspace-create-field input:focus, .workspace-create-field select:focus { outline: none; border-color: var(--vt-color-accent); box-shadow: var(--vt-focus-ring); }
+  .workspace-template-summary { display: grid; gap: 0.55rem; padding: 0.75rem; border: 1px solid var(--vt-color-border); border-radius: var(--vt-radius-md); background: var(--vt-color-surface-muted); }
+  .workspace-template-summary p { margin: 0; color: var(--vt-color-text-secondary); font-size: 0.8rem; line-height: 1.45; }
+  .workspace-template-tools { display: flex; flex-wrap: wrap; gap: 0.35rem; }
+  .workspace-template-tools span { min-height: 1.35rem; display: inline-flex; align-items: center; padding: 0 0.35rem; border: 1px solid var(--vt-color-border-strong); border-radius: var(--vt-radius-sm); color: var(--vt-color-text-secondary); font-size: 0.72rem; }
+  .workspace-create-error { margin: 0; color: var(--vt-color-danger); font-size: 0.78rem; line-height: 1.4; }
+  .workspace-create-actions { display: flex; gap: 0.4rem; justify-content: flex-end; }
   .wt-btn-primary { background: var(--vt-color-accent); color: #101827; border: none; padding: 0.3rem 0.6rem; border-radius: var(--vt-radius-sm); cursor: pointer; font-size: 0.75rem; font-weight: 600; }
   .wt-btn-primary:hover:not(:disabled) { background: #3dbb92; }
   .wt-btn-primary:disabled, .wt-btn:disabled, .wt-icon-btn:disabled { opacity: 0.5; cursor: not-allowed; }

@@ -1448,6 +1448,25 @@ func TestWorkspaceAPIUsesTopLevelFoldersAndMetadataSnapshot(t *testing.T) {
 	}
 }
 
+func TestWorkspaceAPIListsSelectableTemplates(t *testing.T) {
+	app, vaultDir := newFilesTestApp(t, []string{"files.read"})
+	app.workspace = workspace.NewManager(vaultDir)
+	if err := app.workspace.Load(); err != nil {
+		t.Fatalf("workspace Load: %v", err)
+	}
+
+	templates, errStr := app.ListWorkspaceTemplates()
+	if errStr != "" {
+		t.Fatalf("ListWorkspaceTemplates: %s", errStr)
+	}
+	if len(templates) != 5 {
+		t.Fatalf("templates = %+v, want 5 selectable templates", templates)
+	}
+	if templates[0].ID != "default" || templates[1].ID != "project" || templates[4].ID != "minimal" {
+		t.Fatalf("template order = %+v", templates)
+	}
+}
+
 func TestWorkspaceAPIPublishesLifecycleEvents(t *testing.T) {
 	app, vaultDir := newFilesTestApp(t, []string{"files.read"})
 	app.workspace = workspace.NewManager(vaultDir)
