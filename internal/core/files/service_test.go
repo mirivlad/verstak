@@ -423,7 +423,7 @@ func TestListTrashEntriesReturnsMetadata(t *testing.T) {
 	if entries[0].TrashID != newResult.TrashID || entries[1].TrashID != oldResult.TrashID {
 		t.Fatalf("trash entries order = %+v, want newest first", entries)
 	}
-	if entries[0].OriginalPath != "new.txt" || entries[0].TrashPath != newResult.TrashPath || entries[0].OriginalType != FileTypeFile || entries[0].Basename != "new.txt" {
+	if entries[0].OriginalPath != "new.txt" || entries[0].TrashPath != newResult.TrashPath || entries[0].OriginalType != FileTypeFile || entries[0].Basename != "new.txt" || entries[0].Size != 3 {
 		t.Fatalf("new trash entry = %+v", entries[0])
 	}
 }
@@ -464,6 +464,34 @@ func TestRestoreTrashEntryRestoresOriginalPathAndRemovesTrashMetadata(t *testing
 	}
 	if len(entries) != 0 {
 		t.Fatalf("trash entries after restore = %+v, want none", entries)
+	}
+}
+
+func TestDeleteTrashEntryRemovesPayloadAndMetadata(t *testing.T) {
+	s, root := newTestService(t)
+	if err := os.WriteFile(filepath.Join(root, "delete-permanently.txt"), []byte("remove me"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	trash, err := s.TrashVaultPath("delete-permanently.txt")
+	if err != nil {
+		t.Fatalf("TrashVaultPath: %v", err)
+	}
+
+	if err := s.DeleteTrashEntry(trash.TrashID); err != nil {
+		t.Fatalf("DeleteTrashEntry: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(root, ".verstak", "trash", "files", trash.TrashID)); !os.IsNotExist(err) {
+		t.Fatalf("trash directory should be removed, stat err = %v", err)
+	}
+	entries, err := s.ListTrashEntries()
+	if err != nil {
+		t.Fatalf("ListTrashEntries: %v", err)
+	}
+	if len(entries) != 0 {
+		t.Fatalf("trash entries after permanent delete = %+v, want none", entries)
+	}
+	if err := s.DeleteTrashEntry(trash.TrashID); err == nil || !strings.Contains(err.Error(), "not-found: trash entry") {
+		t.Fatalf("second DeleteTrashEntry error = %v, want not found", err)
 	}
 }
 

@@ -1098,6 +1098,20 @@ func (a *App) RestoreVaultTrash(pluginID, trashID string, options corefiles.Rest
 	return restoredPath, ""
 }
 
+// DeleteVaultTrash permanently removes an internal trash entry for a plugin with files.delete.
+func (a *App) DeleteVaultTrash(pluginID, trashID string) string {
+	if _, err := a.requirePluginAccess(pluginID, "files.delete"); err != nil {
+		return err.Error()
+	}
+	if a.files == nil {
+		return "files service not initialized"
+	}
+	if err := a.files.DeleteTrashEntry(trashID); err != nil {
+		return err.Error()
+	}
+	return ""
+}
+
 // OpenVaultPathExternal opens a vault-relative file or folder in the OS default app.
 func (a *App) OpenVaultPathExternal(pluginID, relativePath string) string {
 	if _, err := a.requirePluginAccess(pluginID, "files.openExternal"); err != nil {

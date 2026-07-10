@@ -72,6 +72,7 @@ type TrashResult struct {
 	TrashPath    string `json:"trashPath"`
 	TrashID      string `json:"trashId"`
 	DeletedAt    string `json:"deletedAt"`
+	Size         int64  `json:"size"`
 }
 
 type TrashEntry struct {
@@ -81,4 +82,5 @@ type TrashEntry struct {
 	DeletedAt    string   `json:"deletedAt"`
 	OriginalType FileType `json:"originalType"`
 	Basename     string   `json:"basename"`
+	Size         int64    `json:"size"`
 }

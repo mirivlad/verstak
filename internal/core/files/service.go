@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -365,20 +366,24 @@ func (s *Service) TrashVaultPath(relativePath string) (TrashResult, error) {
 	if err := os.Rename(full, trashFull); err != nil {
 		return TrashResult{}, err
 	}
+	originalType := fileTypeFromInfo(info)
+	size := sizeForType(originalType, info)
 	result := TrashResult{
 		OriginalPath: rel,
 		TrashPath:    trashRel,
 		TrashID:      trashID,
 		DeletedAt:    deletedAt,
+		Size:         size,
 	}
 	meta := map[string]string{
 		"originalPath": rel,
 		"trashPath":    trashRel,
 		"trashId":      trashID,
 		"deletedAt":    deletedAt,
-		"originalType": string(fileTypeFromInfo(info)),
+		"originalType": string(originalType),
 		"basename":     filepath.Base(rel),
-		"type":         string(fileTypeFromInfo(info)),
+		"type":         string(originalType),
+		"size":         strconv.FormatInt(size, 10),
 	}
 	data, err := json.MarshalIndent(meta, "", "  ")
 	if err != nil {
@@ -423,6 +428,7 @@ func (s *Service) ListTrashEntries() ([]TrashEntry, error) {
 			DeletedAt    string `json:"deletedAt"`
 			OriginalType string `json:"originalType"`
 			Basename     string `json:"basename"`
+			Size         string `json:"size"`
 		}
 		if err := json.Unmarshal(data, &raw); err != nil {
 			continue
@@ -437,6 +443,7 @@ func (s *Service) ListTrashEntries() ([]TrashEntry, error) {
 			DeletedAt:    raw.DeletedAt,
 			OriginalType: FileType(raw.OriginalType),
 			Basename:     raw.Basename,
+			Size:         parseTrashSize(raw.Size),
 		})
 	}
 	sort.Slice(entries, func(i, j int) bool {
@@ -524,6 +531,21 @@ func (s *Service) RestoreTrashEntry(trashID string, options RestoreOptions) (str
 	return targetRel, nil
 }
 
+// DeleteTrashEntry permanently removes an internal trash entry.
+func (s *Service) DeleteTrashEntry(trashID string) error {
+	root, err := s.vaultRoot()
+	if err != nil {
+		return err
+	}
+	if err := validateTrashID(trashID); err != nil {
+		return err
+	}
+	if _, err := readTrashEntry(root, trashID); err != nil {
+		return err
+	}
+	return os.RemoveAll(filepath.Join(root, ".verstak", "trash", "files", trashID))
+}
+
 func readTrashEntry(root, trashID string) (TrashEntry, error) {
 	if err := validateTrashID(trashID); err != nil {
 		return TrashEntry{}, err
@@ -542,6 +564,7 @@ func readTrashEntry(root, trashID string) (TrashEntry, error) {
 		DeletedAt    string `json:"deletedAt"`
 		OriginalType string `json:"originalType"`
 		Basename     string `json:"basename"`
+		Size         string `json:"size"`
 	}
 	if err := json.Unmarshal(data, &raw); err != nil {
 		return TrashEntry{}, err
@@ -559,7 +582,19 @@ func readTrashEntry(root, trashID string) (TrashEntry, error) {
 		DeletedAt:    raw.DeletedAt,
 		OriginalType: FileType(raw.OriginalType),
 		Basename:     raw.Basename,
+		Size:         parseTrashSize(raw.Size),
 	}, nil
+}
+
+func parseTrashSize(value string) int64 {
+	if value == "" {
+		return 0
+	}
+	size, err := strconv.ParseInt(value, 10, 64)
+	if err != nil || size < 0 {
+		return 0
+	}
+	return size
 }
 
 func validateTrashID(trashID string) error {

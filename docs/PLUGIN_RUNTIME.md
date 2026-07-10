@@ -462,6 +462,8 @@ contributions summary.
 - `files.restoreTrash(trashId, options)` — restores a file/folder from internal
   trash to its original vault-relative path, or to `options.targetPath`.
   Conflicts are rejected unless `options.overwrite` is true.
+- `files.deleteTrash(trashId)` — permanently removes a file/folder already in
+  internal trash. This operation cannot be undone.
 - `files.openExternal(relativePath)` — opens a vault-relative file/folder in
   the OS default application.
 - `files.showInFolder(relativePath)` — reveals a vault-relative file/folder in
@@ -572,9 +574,10 @@ bundled runtime. Это реальный runtime contract для cooperative bun
 | `api.files.writeBytes(relativePath, dataBase64, options)` | ✅ Работает | Atomic bounded byte write до 8 MB с явным create/overwrite policy |
 | `api.files.createFolder(relativePath)` | ✅ Работает | Создаёт vault-relative folder |
 | `api.files.move(from, to, options)` | ✅ Работает | Move file/folder с conflict и path-policy checks |
-| `api.files.trash(relativePath)` | ✅ Работает | Перемещает в internal trash, permanent delete нет |
+| `api.files.trash(relativePath)` | ✅ Работает | Перемещает в internal trash и сохраняет metadata исходного объекта |
 | `api.files.listTrash()` | ✅ Работает | Возвращает metadata internal file trash |
 | `api.files.restoreTrash(trashId, options)` | ✅ Работает | Восстанавливает из internal trash, conflict-safe по умолчанию |
+| `api.files.deleteTrash(trashId)` | ✅ Работает | Необратимо удаляет запись и payload из internal trash |
 | `api.files.openExternal(relativePath)` | ✅ Работает | Открывает vault file/folder во внешнем приложении, требует `files.openExternal` |
 | `api.files.showInFolder(relativePath)` | ✅ Работает | Показывает vault file/folder в системном файловом менеджере, требует `files.openExternal` |
 | `api.workbench.openResource(request)` | ✅ Работает | Routes vault resources to `openProviders` |
