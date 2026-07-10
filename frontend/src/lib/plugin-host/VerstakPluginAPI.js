@@ -380,6 +380,12 @@ export function createPluginAPI(pluginId) {
           return App.RestoreVaultTrash(pluginId, trashId, options || {});
         });
       },
+      deleteTrash: function(trashId) {
+        assertActive('files.deleteTrash(' + trashId + ')');
+        return callBackendErrorString(pluginId, 'files.deleteTrash(' + trashId + ')', function() {
+          return App.DeleteVaultTrash(pluginId, trashId);
+        });
+      },
       openExternal: function(relativePath) {
         assertActive('files.openExternal(' + relativePath + ')');
         return callBackendErrorString(pluginId, 'files.openExternal(' + relativePath + ')', function() {

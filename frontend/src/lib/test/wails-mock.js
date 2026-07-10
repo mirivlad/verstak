@@ -2608,13 +2608,15 @@
       if (!vaultFiles[norm.path]) return Promise.resolve([{}, 'not-found: ' + norm.path]);
       var trashId = 'mock-' + Date.now() + '-' + Math.random().toString(16).slice(2);
       var trashPath = '.verstak/trash/files/' + trashId + '/' + baseName(norm.path);
-      var originalType = vaultFiles[norm.path].type || 'file';
+      var originalNode = vaultFiles[norm.path];
+      var originalType = originalNode.type || 'file';
+      var originalSize = originalType === 'file' ? String(originalNode.content || '').length : 0;
       var moving = Object.keys(vaultFiles).filter(function (path) { return path === norm.path || path.indexOf(norm.path + '/') === 0; });
       trashPayloads[trashId] = moving.map(function (path) {
         return { suffix: path.slice(norm.path.length), entry: Object.assign({}, vaultFiles[path]) };
       });
       moving.forEach(function (path) { delete vaultFiles[path]; });
-      var entry = { originalPath: norm.path, trashPath: trashPath, trashId: trashId, deletedAt: new Date().toISOString(), originalType: originalType, basename: baseName(norm.path) };
+      var entry = { originalPath: norm.path, trashPath: trashPath, trashId: trashId, deletedAt: new Date().toISOString(), originalType: originalType, basename: baseName(norm.path), size: originalSize };
       trashEntries.unshift(entry);
       return Promise.resolve([entry, '']);
     },
@@ -2645,6 +2647,15 @@
       delete trashPayloads[trashId];
       trashEntries = trashEntries.filter(function (item) { return item.trashId !== trashId; });
       return Promise.resolve([target.path, '']);
+    },
+    DeleteVaultTrash: function (pluginId, trashId) {
+      var err = requirePluginPermission(pluginId, 'files.delete');
+      if (err) return Promise.resolve(err);
+      var entry = trashEntries.find(function (item) { return item.trashId === trashId; });
+      if (!entry) return Promise.resolve('not-found: trash entry ' + trashId);
+      delete trashPayloads[trashId];
+      trashEntries = trashEntries.filter(function (item) { return item.trashId !== trashId; });
+      return Promise.resolve('');
     },
     OpenVaultPathExternal: function (pluginId, relativePath) {
       var err = requirePluginPermission(pluginId, 'files.openExternal');

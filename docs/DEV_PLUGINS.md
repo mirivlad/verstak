@@ -85,7 +85,7 @@ Frontend bundles are mounted with a plugin-scoped API created by
 - `capabilities.list/get/has`
 - `commands.register/execute` for handlers declared in `contributes.commands`
 - `events.publish/subscribe` using the bundled frontend event bus
-- `files.list/metadata/readText/readBytes/writeText/createFolder/move/trash/openExternal/showInFolder`
+- `files.list/metadata/readText/readBytes/writeText/createFolder/move/trash/listTrash/restoreTrash/deleteTrash/openExternal/showInFolder`
   for canonical vault-relative slash paths guarded by `files.read`,
   `files.write`, `files.delete`, and `files.openExternal`. Backslashes,
   Windows absolute paths, UNC paths, traversal, `.verstak` variants, and

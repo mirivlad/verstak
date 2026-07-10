@@ -26,6 +26,10 @@ export function CreateWorkspaceNode(arg1, arg2, arg3) {
   return window['go']['api']['App']['CreateWorkspaceNode'](arg1, arg2, arg3);
 }
 
+export function DeleteVaultTrash(arg1, arg2) {
+  return window['go']['api']['App']['DeleteVaultTrash'](arg1, arg2);
+}
+
 export function DisablePlugin(arg1) {
   return window['go']['api']['App']['DisablePlugin'](arg1);
 }
@@ -146,6 +150,14 @@ export function OpenWorkbenchResource(arg1, arg2) {
   return window['go']['api']['App']['OpenWorkbenchResource'](arg1, arg2);
 }
 
+export function PluginBrowserReceiverPairing(arg1) {
+  return window['go']['api']['App']['PluginBrowserReceiverPairing'](arg1);
+}
+
+export function PluginRotateBrowserReceiverToken(arg1) {
+  return window['go']['api']['App']['PluginRotateBrowserReceiverToken'](arg1);
+}
+
 export function PluginSecretsCopyLink(arg1, arg2) {
   return window['go']['api']['App']['PluginSecretsCopyLink'](arg1, arg2);
 }
@@ -172,14 +184,6 @@ export function PluginSecretsUnlock(arg1, arg2) {
 
 export function PluginSecretsWrite(arg1, arg2) {
   return window['go']['api']['App']['PluginSecretsWrite'](arg1, arg2);
-}
-
-export function PluginBrowserReceiverPairing(arg1) {
-  return window['go']['api']['App']['PluginBrowserReceiverPairing'](arg1);
-}
-
-export function PluginRotateBrowserReceiverToken(arg1) {
-  return window['go']['api']['App']['PluginRotateBrowserReceiverToken'](arg1);
 }
 
 export function PluginSyncConfigure(arg1, arg2, arg3, arg4) {

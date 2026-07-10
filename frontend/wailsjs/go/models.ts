@@ -484,6 +484,7 @@ export namespace files {
 	    deletedAt: string;
 	    originalType: string;
 	    basename: string;
+	    size: number;
 	
 	    static createFrom(source: any = {}) {
 	        return new TrashEntry(source);
@@ -497,6 +498,7 @@ export namespace files {
 	        this.deletedAt = source["deletedAt"];
 	        this.originalType = source["originalType"];
 	        this.basename = source["basename"];
+	        this.size = source["size"];
 	    }
 	}
 	export class TrashResult {
@@ -504,6 +506,7 @@ export namespace files {
 	    trashPath: string;
 	    trashId: string;
 	    deletedAt: string;
+	    size: number;
 	
 	    static createFrom(source: any = {}) {
 	        return new TrashResult(source);
@@ -515,6 +518,7 @@ export namespace files {
 	        this.trashPath = source["trashPath"];
 	        this.trashId = source["trashId"];
 	        this.deletedAt = source["deletedAt"];
+	        this.size = source["size"];
 	    }
 	}
 	export class WriteOptions {
@@ -1315,4 +1319,3 @@ export namespace workspace {
 	}
 
 }
-

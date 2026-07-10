@@ -125,6 +125,29 @@ test.describe('D: Plugin API bridge', () => {
     expect(result.disconnected.statusLabel).toBe('disabled');
   });
 
+  test('files API permanently deletes an existing trash entry through the bridge', async ({ page }) => {
+    const result = await page.evaluate(async () => {
+      const api = window.createPluginAPI('verstak.files');
+      await api.files.writeText('Project/bridge-trash.txt', 'remove me', { createIfMissing: true });
+      const trash = await api.files.trash('Project/bridge-trash.txt');
+      const before = await api.files.listTrash();
+      await api.files.deleteTrash(trash.trashId);
+      const after = await api.files.listTrash();
+      let readError = '';
+      try {
+        await api.files.readText('Project/bridge-trash.txt');
+      } catch (error) {
+        readError = String(error && error.message || error);
+      }
+      api.dispose();
+      return { before, after, readError };
+    });
+
+    expect(result.before).toHaveLength(1);
+    expect(result.after).toEqual([]);
+    expect(result.readError).toContain('not-found: Project/bridge-trash.txt');
+  });
+
   test('backend plugin events are dispatched to subscribed frontend handlers', async ({ page }) => {
     const result = await page.evaluate(async () => {
       const api = window.createPluginAPI('verstak.platform-test');

@@ -20,6 +20,8 @@ export function CreateWorkspace(arg1:string,arg2:string):Promise<workspace.Works
 
 export function CreateWorkspaceNode(arg1:string,arg2:string,arg3:string):Promise<Record<string, any>>;
 
+export function DeleteVaultTrash(arg1:string,arg2:string):Promise<string>;
+
 export function DisablePlugin(arg1:string):Promise<string>;
 
 export function EditWorkbenchResource(arg1:string,arg2:Record<string, any>):Promise<workbench.OpenResourceResult|string>;
@@ -80,6 +82,10 @@ export function OpenVaultPathExternal(arg1:string,arg2:string):Promise<string>;
 
 export function OpenWorkbenchResource(arg1:string,arg2:Record<string, any>):Promise<workbench.OpenResourceResult|string>;
 
+export function PluginBrowserReceiverPairing(arg1:string):Promise<Record<string, string>|string>;
+
+export function PluginRotateBrowserReceiverToken(arg1:string):Promise<Record<string, string>|string>;
+
 export function PluginSecretsCopyLink(arg1:string,arg2:string):Promise<string|string>;
 
 export function PluginSecretsDelete(arg1:string,arg2:string):Promise<string>;
@@ -93,10 +99,6 @@ export function PluginSecretsStatus(arg1:string):Promise<Record<string, any>|str
 export function PluginSecretsUnlock(arg1:string,arg2:string):Promise<string>;
 
 export function PluginSecretsWrite(arg1:string,arg2:Record<string, any>):Promise<Record<string, any>|string>;
-
-export function PluginBrowserReceiverPairing(arg1:string):Promise<Record<string, string>|string>;
-
-export function PluginRotateBrowserReceiverToken(arg1:string):Promise<Record<string, string>|string>;
 
 export function PluginSyncConfigure(arg1:string,arg2:string,arg3:string,arg4:string):Promise<string>;
 
