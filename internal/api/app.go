@@ -1621,6 +1621,7 @@ func (a *App) GetAppSettings() map[string]interface{} {
 		"currentVaultPath": cfg.CurrentVaultPath,
 		"recentVaults":     cfg.RecentVaults,
 		"theme":            cfg.Theme,
+		"language":         cfg.Language,
 		"devMode":          cfg.DevMode,
 		"userPluginsDir":   cfg.UserPluginsDir,
 		"lastOpenedAt":     cfg.LastOpenedAt,
@@ -1634,18 +1635,33 @@ func (a *App) UpdateAppSettings(patch map[string]interface{}) string {
 	}
 
 	cfg := &appsettings.Config{}
+	hasConfigPatch := false
 	if v, ok := patch["theme"].(string); ok && v != "" {
 		cfg.Theme = v
+		hasConfigPatch = true
 	}
 	if v, ok := patch["devMode"].(bool); ok {
 		cfg.DevMode = v
+		hasConfigPatch = true
 	}
 	if v, ok := patch["userPluginsDir"].(string); ok && v != "" {
 		cfg.UserPluginsDir = v
+		hasConfigPatch = true
 	}
 
-	if err := a.appSettings.Update(cfg); err != nil {
-		return err.Error()
+	if hasConfigPatch {
+		if err := a.appSettings.Update(cfg); err != nil {
+			return err.Error()
+		}
+	}
+	if value, exists := patch["language"]; exists {
+		language, ok := value.(string)
+		if !ok {
+			return "language must be a string"
+		}
+		if err := a.appSettings.UpdateLanguage(language); err != nil {
+			return err.Error()
+		}
 	}
 	return ""
 }

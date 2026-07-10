@@ -21,6 +21,7 @@ type Config struct {
 	CurrentVaultPath string                  `json:"currentVaultPath"`
 	RecentVaults     []string                `json:"recentVaults"`
 	Theme            string                  `json:"theme"`
+	Language         string                  `json:"language"`
 	DevMode          bool                    `json:"devMode"`
 	UserPluginsDir   string                  `json:"userPluginsDir"`
 	Workbench        WorkbenchPreferences    `json:"workbench,omitempty"`
@@ -28,6 +29,21 @@ type Config struct {
 	BrowserReceiver  BrowserReceiverSettings `json:"browserReceiver,omitempty"`
 	WindowState      *WindowState            `json:"windowState,omitempty"`
 	LastOpenedAt     string                  `json:"lastOpenedAt"`
+}
+
+const (
+	LanguageSystem  = "system"
+	LanguageEnglish = "en"
+	LanguageRussian = "ru"
+)
+
+func validLanguage(language string) bool {
+	switch language {
+	case LanguageSystem, LanguageEnglish, LanguageRussian:
+		return true
+	default:
+		return false
+	}
 }
 
 type WorkbenchPreferences struct {
@@ -121,6 +137,9 @@ func (m *Manager) Load() error {
 	if cfg.Theme == "" {
 		cfg.Theme = "dark"
 	}
+	if !validLanguage(cfg.Language) {
+		cfg.Language = LanguageSystem
+	}
 	if cfg.RecentVaults == nil {
 		cfg.RecentVaults = []string{}
 	}
@@ -179,6 +198,9 @@ func (m *Manager) Update(patch *Config) error {
 	if patch.Theme != "" {
 		m.config.Theme = patch.Theme
 	}
+	if patch.Language != "" && validLanguage(patch.Language) {
+		m.config.Language = patch.Language
+	}
 	if patch.UserPluginsDir != "" {
 		m.config.UserPluginsDir = patch.UserPluginsDir
 	}
@@ -196,6 +218,23 @@ func (m *Manager) Update(patch *Config) error {
 	}
 	m.config.DevMode = patch.DevMode
 
+	m.config.LastOpenedAt = time.Now().UTC().Format(time.RFC3339)
+	return m.saveLocked()
+}
+
+// UpdateLanguage validates and persists the installation-local UI language.
+func (m *Manager) UpdateLanguage(language string) error {
+	language = strings.TrimSpace(language)
+	if !validLanguage(language) {
+		return fmt.Errorf("unsupported language %q", language)
+	}
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.config == nil {
+		m.config = defaultConfig()
+	}
+	m.config.Language = language
 	m.config.LastOpenedAt = time.Now().UTC().Format(time.RFC3339)
 	return m.saveLocked()
 }
@@ -287,6 +326,7 @@ func defaultConfig() *Config {
 		CurrentVaultPath: "",
 		RecentVaults:     []string{},
 		Theme:            "dark",
+		Language:         LanguageSystem,
 		DevMode:          false,
 		UserPluginsDir:   filepath.Join(os.Getenv("HOME"), ".config", "verstak", "plugins"),
 		Workbench:        WorkbenchPreferences{},
@@ -303,6 +343,7 @@ func copyConfig(c *Config) *Config {
 		CurrentVaultPath: c.CurrentVaultPath,
 		RecentVaults:     recent,
 		Theme:            c.Theme,
+		Language:         c.Language,
 		DevMode:          c.DevMode,
 		UserPluginsDir:   c.UserPluginsDir,
 		Workbench:        c.Workbench,

@@ -25,6 +25,53 @@ func TestLoad_DefaultCreation(t *testing.T) {
 	if cfg.CurrentVaultPath != "" {
 		t.Errorf("CurrentVaultPath: got %q, want empty", cfg.CurrentVaultPath)
 	}
+	if cfg.Language != "system" {
+		t.Errorf("Language: got %q, want %q", cfg.Language, "system")
+	}
+}
+
+func TestLoad_MissingLanguageDefaultsToSystem(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.json")
+	if err := os.WriteFile(path, []byte(`{"schemaVersion":1,"theme":"dark","devMode":true}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	m := NewManager(path)
+	if err := m.Load(); err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if got := m.Get().Language; got != "system" {
+		t.Fatalf("Language = %q, want system", got)
+	}
+}
+
+func TestUpdateLanguagePersistsAndPreservesUnrelatedSettings(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.json")
+	m := NewManager(path)
+	if err := m.Load(); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.Update(&Config{Theme: "light", DevMode: true}); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.UpdateLanguage("ru"); err != nil {
+		t.Fatalf("UpdateLanguage: %v", err)
+	}
+
+	reloaded := NewManager(path)
+	if err := reloaded.Load(); err != nil {
+		t.Fatal(err)
+	}
+	cfg := reloaded.Get()
+	if cfg.Language != "ru" || cfg.Theme != "light" || !cfg.DevMode {
+		t.Fatalf("settings after language update = %+v", cfg)
+	}
+	if err := reloaded.UpdateLanguage("de"); err == nil {
+		t.Fatal("UpdateLanguage(de) succeeded, want validation error")
+	}
+	if got := reloaded.Get().Language; got != "ru" {
+		t.Fatalf("Language after rejected update = %q, want ru", got)
+	}
 }
 
 func TestLoad_CorruptConfig(t *testing.T) {

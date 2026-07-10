@@ -1294,6 +1294,34 @@ func assertSyncState(t *testing.T, service *syncsvc.Service, wantDeviceID, wantS
 	}
 }
 
+func TestAppSettingsLanguageAPI(t *testing.T) {
+	settings := appsettings.NewManager(filepath.Join(t.TempDir(), "config.json"))
+	if err := settings.Load(); err != nil {
+		t.Fatal(err)
+	}
+	if err := settings.Update(&appsettings.Config{Theme: "light", DevMode: true}); err != nil {
+		t.Fatal(err)
+	}
+	app := &App{appSettings: settings}
+
+	if got := app.GetAppSettings()["language"]; got != "system" {
+		t.Fatalf("initial language = %#v, want system", got)
+	}
+	if errStr := app.UpdateAppSettings(map[string]interface{}{"language": "ru"}); errStr != "" {
+		t.Fatalf("UpdateAppSettings language: %s", errStr)
+	}
+	got := app.GetAppSettings()
+	if got["language"] != "ru" || got["theme"] != "light" || got["devMode"] != true {
+		t.Fatalf("settings after language update = %#v", got)
+	}
+	if errStr := app.UpdateAppSettings(map[string]interface{}{"language": "de"}); errStr == "" {
+		t.Fatal("UpdateAppSettings accepted unsupported language")
+	}
+	if got := app.GetAppSettings()["language"]; got != "ru" {
+		t.Fatalf("language after rejected update = %#v, want ru", got)
+	}
+}
+
 func TestSetCurrentVaultInitializesWorkspaceWhenMissingAtStartup(t *testing.T) {
 	tmpDir := t.TempDir()
 	vaultParent := filepath.Join(tmpDir, "vault-parent")
