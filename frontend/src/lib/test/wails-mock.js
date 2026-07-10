@@ -254,6 +254,7 @@
       rootPath: '/tmp/verstak-test/plugins/browser-inbox',
       error: ''
     },
+    'verstak.todo': makeTodoPluginState(),
     'verstak.search': {
       status: 'loaded',
       enabled: true,
@@ -285,6 +286,8 @@
   var vaultPluginState = { enabledPlugins: ['verstak.platform-test', 'verstak.default-editor', 'verstak.files', 'verstak.notes', 'verstak.sync', 'verstak.activity', 'verstak.journal', 'verstak.browser-inbox', 'verstak.search'], disabledPlugins: [], desiredPlugins: [{ id: 'verstak.platform-test', version: '0.1.0', source: 'official' }, { id: 'verstak.default-editor', version: '0.1.0', source: 'official' }, { id: 'verstak.files', version: '0.1.0', source: 'official' }, { id: 'verstak.notes', version: '0.1.0', source: 'official' }, { id: 'verstak.sync', version: '0.1.0', source: 'official' }, { id: 'verstak.activity', version: '0.1.0', source: 'official' }, { id: 'verstak.journal', version: '0.1.0', source: 'official' }, { id: 'verstak.browser-inbox', version: '0.1.0', source: 'official' }, { id: 'verstak.search', version: '0.1.0', source: 'official' }] };
   vaultPluginState.enabledPlugins.push('verstak.trash');
   vaultPluginState.desiredPlugins.push({ id: 'verstak.trash', version: '0.1.0', source: 'official' });
+  vaultPluginState.enabledPlugins.push('verstak.todo');
+  vaultPluginState.desiredPlugins.push({ id: 'verstak.todo', version: '0.1.0', source: 'official' });
   var appSettings = { currentVaultPath: '/tmp/verstak-test/vault', recentVaults: [] };
   var workbenchPreferences = {};
   var openedResources = [];
@@ -371,6 +374,33 @@
         }
       },
       rootPath: '/tmp/verstak-test/plugins/trash',
+      error: ''
+    };
+  }
+
+  function makeTodoPluginState() {
+    return {
+      status: 'loaded',
+      enabled: true,
+      manifest: {
+        schemaVersion: 1,
+        id: 'verstak.todo',
+        name: 'Todos',
+        version: '0.1.0',
+        apiVersion: '0.1.0',
+        description: 'Global and workspace todo tracking with due and reminder metadata.',
+        source: 'official',
+        icon: 'list-todo',
+        provides: ['todo.list', 'todo.workspace'],
+        permissions: ['files.read', 'storage.namespace', 'ui.register'],
+        frontend: { entry: 'frontend/dist/index.js' },
+        contributes: {
+          views: [{ id: 'verstak.todo.view', title: 'Todos', icon: 'list-todo', component: 'TodoView' }],
+          sidebarItems: [{ id: 'verstak.todo.sidebar', title: 'Todos', icon: 'list-todo', view: 'verstak.todo.view', position: 35 }],
+          workspaceItems: [{ id: 'verstak.todo.workspace', title: 'Todos', icon: 'list-todo', component: 'TodoView' }]
+        }
+      },
+      rootPath: '/tmp/verstak-test/plugins/todo',
       error: ''
     };
   }
@@ -1942,6 +1972,19 @@
         };
       }
 
+      function completedTodoFromProps(props, root) {
+        var request = props && props.toolRequest;
+        var todo = request && request.type === 'completed-todo' ? request.todo : null;
+        if (!todo || todo.workspaceRootPath !== root || !todo.id || !todo.title) return null;
+        return {
+          id: String(todo.id),
+          title: String(todo.title),
+          description: String(todo.description || todo.body || ''),
+          workspaceRootPath: root,
+          completedAt: String(todo.completedAt || '')
+        };
+      }
+
       function candidateDate(value) {
         var date = new Date(value || '');
         return isNaN(date.getTime()) ? new Date().toISOString().slice(0, 10) : date.toISOString().slice(0, 10);
@@ -1984,12 +2027,13 @@
           return api.settings.write(key, entries);
         }
 
-        function showEntryModal(candidate) {
+        function showEntryModal(candidate, completedTodo) {
           var reviewing = !!candidate;
-          var titleInput = el('input', { className: 'journal-input', type: 'text', value: '', 'data-journal-input': 'title' });
-          var summaryInput = el('textarea', { className: 'journal-input textarea', value: '', 'data-journal-input': 'summary' });
-          var minutesInput = el('input', { className: 'journal-input', type: 'number', value: reviewing ? String(candidate.estimatedMinutes) : '30', 'data-journal-input': 'minutes' });
-          var dateInput = el('input', { className: 'journal-input', type: 'date', value: reviewing ? candidateDate(candidate.startedAt) : new Date().toISOString().slice(0, 10), 'data-journal-input': 'date' });
+          var reviewingTodo = !reviewing && !!completedTodo;
+          var titleInput = el('input', { className: 'journal-input', type: 'text', value: reviewingTodo ? completedTodo.title : '', 'data-journal-input': 'title' });
+          var summaryInput = el('textarea', { className: 'journal-input textarea', value: reviewingTodo ? completedTodo.description : '', 'data-journal-input': 'summary' });
+          var minutesInput = el('input', { className: 'journal-input', type: 'number', value: reviewing ? String(candidate.estimatedMinutes) : (reviewingTodo ? '0' : '30'), 'data-journal-input': 'minutes' });
+          var dateInput = el('input', { className: 'journal-input', type: 'date', value: reviewing ? candidateDate(candidate.startedAt) : (reviewingTodo ? candidateDate(completedTodo.completedAt) : new Date().toISOString().slice(0, 10)), 'data-journal-input': 'date' });
           var billableInput = el('input', { type: 'checkbox', checked: false, 'data-journal-input': 'billable' });
           var activityInputs = reviewing ? candidate.activities.map(function (activity) {
             return { activity: activity, input: el('input', { type: 'checkbox', checked: true, 'data-journal-candidate-activity': activity.activityId }) };
@@ -2001,6 +2045,11 @@
             el('div', { textContent: 'Estimated duration: ' + candidate.estimatedMinutes + ' min' }),
             el('div', { textContent: 'Activities: ' + candidate.activityCount })
           ]) : null;
+          var todoContext = reviewingTodo ? el('div', { className: 'journal-candidate-context', 'data-journal-todo': completedTodo.id }, [
+            el('strong', { textContent: 'Completed todo' }),
+            el('div', { textContent: 'Workspace: ' + completedTodo.workspaceRootPath }),
+            completedTodo.completedAt ? el('div', { textContent: 'Completed: ' + candidateTime(completedTodo.completedAt) }) : null
+          ]) : null;
           var linked = reviewing ? el('fieldset', { className: 'journal-candidate-activities' }, [
             el('legend', { textContent: 'Linked activities' })
           ].concat(activityInputs.map(function (item) {
@@ -2010,6 +2059,7 @@
           function save() {
             var title = String(titleInput.value || '').trim();
             if (!title) return;
+            if (reviewingTodo && entries.some(function (entry) { return entry.sourceTodoId === completedTodo.id; })) return;
             var entry = {
               entryId: 'journal:' + Date.now(),
               workspaceRootPath: rootPath,
@@ -2019,6 +2069,7 @@
               minutes: Number(minutesInput.value || 0),
               billable: billableInput.checked === true,
               sourceCandidateId: reviewing ? candidate.candidateId : '',
+              sourceTodoId: reviewingTodo ? completedTodo.id : '',
               activityIds: reviewing ? activityInputs.filter(function (item) { return item.input.checked; }).map(function (item) { return item.activity.activityId; }) : []
             };
             entries = [entry].concat(entries);
@@ -2030,8 +2081,9 @@
           modalHost.hidden = false;
           modalHost.appendChild(el('div', { className: 'journal-modal-overlay' }, [
             el('div', { className: 'journal-modal' }, [
-              el('div', { className: 'journal-modal-title', textContent: reviewing ? 'Review possible journal entry' : 'Add journal entry' }),
+              el('div', { className: 'journal-modal-title', textContent: reviewing ? 'Review possible journal entry' : (reviewingTodo ? 'Create journal entry from completed todo' : 'Add journal entry') }),
               context,
+              todoContext,
               el('div', { className: 'journal-modal-grid' }, [
                 el('label', { className: 'journal-field' }, ['Date', dateInput]),
                 el('label', { className: 'journal-field' }, ['Minutes', minutesInput]),
@@ -2063,7 +2115,7 @@
               el('div', {}, [
                 el('div', { className: 'journal-entry-title', textContent: entry.title }),
                 entry.summary ? el('div', { className: 'journal-summary', textContent: entry.summary }) : null,
-                el('div', { className: 'journal-meta', textContent: entry.workspaceRootPath + (activityIds.length ? ' · ' + activityIds.length + ' linked activities' : '') })
+                el('div', { className: 'journal-meta', textContent: entry.workspaceRootPath + (activityIds.length ? ' · ' + activityIds.length + ' linked activities' : '') + (entry.sourceTodoId ? ' · linked todo' : '') })
               ]),
               el('div', { className: 'journal-minutes', textContent: entry.minutes + ' min' })
             ]));
@@ -2074,7 +2126,9 @@
           entries = rows(stored);
           render();
           var candidate = candidateFromProps(props || {}, rootPath);
+          var completedTodo = completedTodoFromProps(props || {}, rootPath);
           if (candidate) showEntryModal(candidate);
+          else if (completedTodo) showEntryModal(null, completedTodo);
         }).catch(function () { render(); });
         render();
       };
@@ -2525,6 +2579,357 @@
     }.toString() + ')();';
   }
 
+  function todoBundle() {
+    return '(' + function () {
+      var PLUGIN_ID = 'verstak.todo';
+      var GLOBAL_KEY = 'todos:global';
+
+      function injectStyles() {
+        if (document.getElementById('mock-todo-style')) return;
+        var style = document.createElement('style');
+        style.id = 'mock-todo-style';
+        style.textContent = [
+          '.todo-root{height:100%;min-height:0;display:flex;flex-direction:column;background:#0d0d1a;color:#e0e0f0}',
+          '.todo-toolbar{display:flex;align-items:center;gap:.5rem;padding:.55rem .75rem;border-bottom:1px solid #16213e;background:#12122a;flex-wrap:wrap}.todo-title{font-size:.86rem;font-weight:600;color:#f0f0ff}.todo-count,.todo-status{font-size:.74rem;color:#8b8ba8}.todo-spacer{flex:1}.todo-filters{display:flex;align-items:center;gap:.35rem;flex-wrap:wrap}',
+          '.todo-input,.todo-select{min-height:1.85rem;box-sizing:border-box;border:1px solid #1a3a5c;border-radius:4px;background:#101020;color:#e0e0f0;padding:.28rem .42rem;font-size:.76rem}.todo-input.search{width:12rem}.todo-input.textarea{min-height:6rem;resize:vertical}',
+          '.todo-btn{min-height:1.85rem;padding:.3rem .65rem;border:1px solid #1a3a5c;border-radius:4px;background:#0f3460;color:#e0e0f0;font-size:.76rem;cursor:pointer}.todo-btn.primary{background:#4ecca3;border-color:#4ecca3;color:#102018}.todo-btn.danger{border-color:#633;color:#ffb0b0}',
+          '.todo-list{flex:1;min-height:0;overflow:auto;padding:.5rem .75rem}.todo-empty{padding:1.5rem;color:#8b8ba8}.todo-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:.7rem;padding:.7rem 0;border-bottom:1px solid rgba(22,33,62,.75)}.todo-row.done .todo-row-title{text-decoration:line-through;color:#8b8ba8}.todo-row-title{font-weight:600}.todo-row-description,.todo-row-meta{margin-top:.25rem;font-size:.76rem;color:#aaa}.todo-row-actions{display:flex;justify-content:flex-end;gap:.35rem;flex-wrap:wrap}.todo-badge{display:inline-flex;margin-right:.3rem;padding:.08rem .28rem;border:1px solid #24304f;border-radius:4px}.todo-badge.overdue,.todo-badge.reminder-due{border-color:#633;color:#ffb0b0}.todo-badge.due-soon{border-color:#7a6633;color:#f2d17b}',
+          '.todo-modal-host[hidden]{display:none}.todo-modal-overlay{position:fixed;inset:0;z-index:10000;display:flex;align-items:center;justify-content:center;padding:1rem;background:rgba(0,0,0,.58)}.todo-modal{width:540px;max-width:96vw;display:grid;gap:.75rem;padding:1rem;border:1px solid #2c456a;border-radius:8px;background:#15152c;box-shadow:0 18px 44px rgba(0,0,0,.38)}.todo-modal-title{font-size:.95rem;font-weight:600}.todo-form-grid{display:grid;grid-template-columns:1fr 1fr;gap:.6rem}.todo-field{display:grid;gap:.3rem;font-size:.72rem;color:#8b8ba8}.todo-field.wide{grid-column:1/-1}.todo-modal-actions{display:flex;justify-content:flex-end;gap:.5rem}'
+        ].join('');
+        document.head.appendChild(style);
+      }
+
+      function el(tag, attrs, children) {
+        var node = document.createElement(tag);
+        attrs = attrs || {};
+        Object.keys(attrs).forEach(function (key) {
+          if (key === 'textContent') node.textContent = attrs[key];
+          else if (key === 'className') node.className = attrs[key];
+          else if (key === 'value') node.value = attrs[key];
+          else if (key === 'checked') node.checked = !!attrs[key];
+          else if (key === 'disabled') node.disabled = !!attrs[key];
+          else if (key.indexOf('data-') === 0) node.setAttribute(key, attrs[key]);
+          else if (key === 'onClick') node.addEventListener('click', attrs[key]);
+          else if (key === 'onChange') node.addEventListener('change', attrs[key]);
+          else if (key === 'onInput') node.addEventListener('input', attrs[key]);
+          else node[key] = attrs[key];
+        });
+        (children || []).forEach(function (child) {
+          if (child) node.appendChild(typeof child === 'string' ? document.createTextNode(child) : child);
+        });
+        return node;
+      }
+
+      function text(value) { return String(value == null ? '' : value); }
+      function rootFromProps(props) {
+        return text((props && (props.workspaceRootPath || props.workspaceName || props.workspaceNodeId)) || (props && props.workspaceNode && (props.workspaceNode.rootPath || props.workspaceNode.name || props.workspaceNode.id))).trim();
+      }
+      function rows(value) { return Array.isArray(value) ? value.filter(function (item) { return item && typeof item === 'object'; }) : []; }
+      function now() { return new Date().toISOString(); }
+      function dateMs(value) {
+        value = text(value).trim();
+        if (!value) return 0;
+        var normalized = /^\d{4}-\d{2}-\d{2}$/.test(value) ? value + 'T00:00:00' : value;
+        var date = new Date(normalized);
+        return isNaN(date.getTime()) ? 0 : date.getTime();
+      }
+      function todoId(root, title) { return 'todo:' + (root || 'global') + ':' + Date.now() + ':' + text(title).trim().replace(/\s+/g, '-'); }
+      function normalizeTodo(value) {
+        value = value || {};
+        var status = ['open', 'done', 'cancelled'].indexOf(text(value.status).toLowerCase()) === -1 ? 'open' : text(value.status).toLowerCase();
+        var createdAt = text(value.createdAt).trim() || now();
+        return {
+          id: text(value.id).trim() || todoId(text(value.workspaceRootPath).trim(), value.title),
+          title: text(value.title).trim(),
+          description: text(value.description || value.body),
+          workspaceRootPath: text(value.workspaceRootPath || value.workspaceName).trim(),
+          workspaceName: text(value.workspaceName || value.workspaceRootPath).trim(),
+          status: status,
+          priority: ['low', 'normal', 'high'].indexOf(text(value.priority).toLowerCase()) === -1 ? 'normal' : text(value.priority).toLowerCase(),
+          dueAt: /^\d{4}-\d{2}-\d{2}$/.test(text(value.dueAt)) ? text(value.dueAt) : '',
+          reminderAt: text(value.reminderAt),
+          createdAt: createdAt,
+          updatedAt: text(value.updatedAt).trim() || createdAt,
+          completedAt: status === 'done' ? (text(value.completedAt).trim() || createdAt) : '',
+          sourceUrl: text(value.sourceUrl),
+          linkedJournalEntryId: text(value.linkedJournalEntryId)
+        };
+      }
+      function sortTodos(list, sortMode) {
+        return list.slice().sort(function (a, b) {
+          if (sortMode === 'updated') return text(b.updatedAt).localeCompare(text(a.updatedAt));
+          var aValue = dateMs(sortMode === 'reminder' ? a.reminderAt : a.dueAt) || Number.MAX_SAFE_INTEGER;
+          var bValue = dateMs(sortMode === 'reminder' ? b.reminderAt : b.dueAt) || Number.MAX_SAFE_INTEGER;
+          return aValue - bValue || text(b.updatedAt).localeCompare(text(a.updatedAt));
+        });
+      }
+      function dueState(todo) {
+        var dueAt = dateMs(todo.dueAt);
+        if (!dueAt || todo.status !== 'open') return '';
+        var nowMs = Date.now();
+        if (dueAt < nowMs) return 'overdue';
+        if (dueAt <= nowMs + 3 * 24 * 60 * 60 * 1000) return 'due-soon';
+        return '';
+      }
+      function reminderIsDue(todo) { return todo.status === 'open' && dateMs(todo.reminderAt) > 0 && dateMs(todo.reminderAt) <= Date.now(); }
+
+      function TodoView() {}
+
+      TodoView.mount = function (containerEl, props, api) {
+        injectStyles();
+        var workspaceRoot = rootFromProps(props || {});
+        var isWorkspace = !!workspaceRoot;
+        var todos = [];
+        var statusFilter = 'all';
+        var workspaceFilter = '';
+        var sortMode = 'due';
+        var searchQuery = '';
+        var modalHost = el('div', { className: 'todo-modal-host', hidden: true });
+        var titleEl = el('span', { className: 'todo-title', textContent: isWorkspace ? 'Todos · ' + workspaceRoot : 'Todos' });
+        var countEl = el('span', { className: 'todo-count' });
+        var statusEl = el('span', { className: 'todo-status' });
+        var statusFilterEl = el('select', { className: 'todo-select', 'data-todo-filter': 'status', onChange: function (event) { statusFilter = event.target.value; render(); } }, [
+          el('option', { value: 'all', textContent: 'All statuses' }),
+          el('option', { value: 'open', textContent: 'Open' }),
+          el('option', { value: 'done', textContent: 'Done' }),
+          el('option', { value: 'cancelled', textContent: 'Cancelled' })
+        ]);
+        var workspaceFilterEl = el('select', { className: 'todo-select', 'data-todo-filter': 'workspace', onChange: function (event) { workspaceFilter = event.target.value; render(); } });
+        var sortEl = el('select', { className: 'todo-select', 'data-todo-filter': 'sort', onChange: function (event) { sortMode = event.target.value; render(); } }, [
+          el('option', { value: 'due', textContent: 'Sort by due date' }),
+          el('option', { value: 'reminder', textContent: 'Sort by reminder' }),
+          el('option', { value: 'updated', textContent: 'Sort by updated' })
+        ]);
+        var searchEl = el('input', { className: 'todo-input search', type: 'search', placeholder: 'Search todos', 'data-todo-filter': 'search', onInput: function (event) { searchQuery = text(event.target.value).trim().toLowerCase(); render(); } });
+        var addBtn = el('button', { className: 'todo-btn primary', 'data-todo-action': 'add', textContent: 'Add Todo', onClick: function () { showTodoModal(null); } });
+        var listEl = el('div', { className: 'todo-list' });
+        var root = el('div', { className: 'todo-root', 'data-plugin-id': PLUGIN_ID });
+        var toolbar = el('div', { className: 'todo-toolbar' });
+        var filters = el('div', { className: 'todo-filters' });
+        toolbar.appendChild(titleEl);
+        toolbar.appendChild(countEl);
+        filters.appendChild(statusFilterEl);
+        if (!isWorkspace) filters.appendChild(workspaceFilterEl);
+        filters.appendChild(sortEl);
+        filters.appendChild(searchEl);
+        toolbar.appendChild(filters);
+        toolbar.appendChild(el('span', { className: 'todo-spacer' }));
+        toolbar.appendChild(statusEl);
+        toolbar.appendChild(addBtn);
+        root.appendChild(toolbar);
+        root.appendChild(listEl);
+        root.appendChild(modalHost);
+        containerEl.innerHTML = '';
+        containerEl.appendChild(root);
+
+        function workspaceRoots() {
+          var found = {};
+          todos.forEach(function (todo) { if (todo.workspaceRootPath) found[todo.workspaceRootPath] = true; });
+          if (workspaceRoot) found[workspaceRoot] = true;
+          return Object.keys(found).sort();
+        }
+
+        function renderWorkspaceOptions() {
+          if (isWorkspace) return;
+          workspaceFilterEl.innerHTML = '';
+          workspaceFilterEl.appendChild(el('option', { value: '', textContent: 'All workspaces' }));
+          workspaceFilterEl.appendChild(el('option', { value: '__unassigned__', textContent: 'Unassigned' }));
+          workspaceRoots().forEach(function (rootName) {
+            workspaceFilterEl.appendChild(el('option', { value: rootName, textContent: rootName }));
+          });
+          workspaceFilterEl.value = workspaceFilter;
+        }
+
+        function visibleTodos() {
+          return sortTodos(todos.filter(function (todo) {
+            if (isWorkspace && todo.workspaceRootPath !== workspaceRoot) return false;
+            if (!isWorkspace && workspaceFilter === '__unassigned__' && todo.workspaceRootPath) return false;
+            if (!isWorkspace && workspaceFilter && workspaceFilter !== '__unassigned__' && todo.workspaceRootPath !== workspaceFilter) return false;
+            if (statusFilter !== 'all' && todo.status !== statusFilter) return false;
+            if (!searchQuery) return true;
+            return [todo.title, todo.description, todo.workspaceRootPath].join('\n').toLowerCase().indexOf(searchQuery) !== -1;
+          }), sortMode);
+        }
+
+        function persist() { return api.settings.write(GLOBAL_KEY, todos); }
+        function closeTodoModal() { modalHost.innerHTML = ''; modalHost.hidden = true; }
+
+        function showTodoModal(existingTodo) {
+          var editing = !!existingTodo;
+          var titleInput = el('input', { className: 'todo-input', type: 'text', value: editing ? existingTodo.title : '', 'data-todo-input': 'title' });
+          var descriptionInput = el('textarea', { className: 'todo-input textarea', value: editing ? existingTodo.description : '', 'data-todo-input': 'description' });
+          var priorityInput = el('select', { className: 'todo-select', 'data-todo-input': 'priority' }, [
+            el('option', { value: 'low', textContent: 'Low' }),
+            el('option', { value: 'normal', textContent: 'Normal' }),
+            el('option', { value: 'high', textContent: 'High' })
+          ]);
+          priorityInput.value = editing ? existingTodo.priority : 'normal';
+          var dueInput = el('input', { className: 'todo-input', type: 'date', value: editing ? existingTodo.dueAt : '', 'data-todo-input': 'dueAt' });
+          var reminderInput = el('input', { className: 'todo-input', type: 'datetime-local', value: editing ? existingTodo.reminderAt : '', 'data-todo-input': 'reminderAt' });
+          var workspaceInput = null;
+          if (!isWorkspace) {
+            workspaceInput = el('select', { className: 'todo-select', 'data-todo-input': 'workspaceRootPath' });
+            workspaceInput.appendChild(el('option', { value: '', textContent: 'Unassigned' }));
+            workspaceRoots().forEach(function (rootName) { workspaceInput.appendChild(el('option', { value: rootName, textContent: rootName })); });
+            workspaceInput.value = editing ? existingTodo.workspaceRootPath : '';
+          }
+
+          function saveTodo() {
+            var title = text(titleInput.value).trim();
+            if (!title) return;
+            var rootName = isWorkspace ? workspaceRoot : text(workspaceInput && workspaceInput.value).trim();
+            var timestamp = now();
+            var todo = normalizeTodo({
+              id: editing ? existingTodo.id : todoId(rootName, title),
+              title: title,
+              description: descriptionInput.value,
+              workspaceRootPath: rootName,
+              workspaceName: rootName,
+              status: editing ? existingTodo.status : 'open',
+              priority: priorityInput.value,
+              dueAt: dueInput.value,
+              reminderAt: reminderInput.value,
+              createdAt: editing ? existingTodo.createdAt : timestamp,
+              updatedAt: timestamp,
+              completedAt: editing ? existingTodo.completedAt : '',
+              sourceUrl: editing ? existingTodo.sourceUrl : '',
+              linkedJournalEntryId: editing ? existingTodo.linkedJournalEntryId : ''
+            });
+            todos = editing ? todos.map(function (item) { return item.id === existingTodo.id ? todo : item; }) : [todo].concat(todos);
+            closeTodoModal();
+            statusEl.textContent = editing ? 'Todo updated' : 'Todo added';
+            persist().then(render);
+          }
+
+          var fields = [
+            el('label', { className: 'todo-field wide' }, ['Title', titleInput]),
+            el('label', { className: 'todo-field wide' }, ['Description', descriptionInput]),
+            el('label', { className: 'todo-field' }, ['Priority', priorityInput]),
+            el('label', { className: 'todo-field' }, ['Due date', dueInput]),
+            el('label', { className: 'todo-field' }, ['Reminder', reminderInput])
+          ];
+          if (workspaceInput) fields.push(el('label', { className: 'todo-field' }, ['Workspace', workspaceInput]));
+          else fields.push(el('div', { className: 'todo-field', textContent: 'Workspace: ' + workspaceRoot }));
+          modalHost.innerHTML = '';
+          modalHost.hidden = false;
+          modalHost.appendChild(el('div', { className: 'todo-modal-overlay' }, [
+            el('div', { className: 'todo-modal' }, [
+              el('div', { className: 'todo-modal-title', textContent: editing ? 'Edit Todo' : 'Add Todo' }),
+              el('div', { className: 'todo-form-grid' }, fields),
+              el('div', { className: 'todo-modal-actions' }, [
+                el('button', { className: 'todo-btn', textContent: 'Cancel', onClick: closeTodoModal }),
+                el('button', { className: 'todo-btn primary', 'data-todo-action': 'save', textContent: editing ? 'Save changes' : 'Add Todo', onClick: saveTodo })
+              ])
+            ])
+          ]));
+          titleInput.focus();
+        }
+
+        function setTodoStatus(todo, status) {
+          var timestamp = now();
+          todos = todos.map(function (item) {
+            return item.id === todo.id ? Object.assign({}, item, { status: status, completedAt: status === 'done' ? timestamp : '', updatedAt: timestamp }) : item;
+          });
+          statusEl.textContent = status === 'done' ? 'Todo marked done' : (status === 'cancelled' ? 'Todo cancelled' : 'Todo reopened');
+          persist().then(render);
+        }
+
+        function deleteTodo(todo) {
+          todos = todos.filter(function (item) { return item.id !== todo.id; });
+          statusEl.textContent = 'Todo deleted';
+          persist().then(render);
+        }
+
+        function openWorkspace(todo) {
+          if (!todo.workspaceRootPath) return;
+          window.dispatchEvent(new CustomEvent('verstak:workspace-selected', { detail: { workspaceName: todo.workspaceRootPath } }));
+          window.dispatchEvent(new CustomEvent('verstak:workspace-open-tool', { detail: { kind: 'todo' } }));
+        }
+
+        function createJournalEntry(todo) {
+          if (!isWorkspace || todo.status !== 'done') return;
+          window.dispatchEvent(new CustomEvent('verstak:workspace-open-tool', {
+            detail: {
+              kind: 'journal',
+              toolRequest: {
+                type: 'completed-todo',
+                todo: {
+                  id: todo.id,
+                  title: todo.title,
+                  description: todo.description,
+                  workspaceRootPath: workspaceRoot,
+                  completedAt: todo.completedAt
+                }
+              }
+            }
+          }));
+        }
+
+        function todoMeta(todo) {
+          var due = dueState(todo);
+          var reminderDue = reminderIsDue(todo);
+          var badges = [
+            el('span', { className: 'todo-badge', textContent: todo.priority + ' priority' }),
+            el('span', { className: 'todo-badge', textContent: todo.status })
+          ];
+          if (!isWorkspace) badges.unshift(el('span', { className: 'todo-badge', textContent: todo.workspaceRootPath || 'Unassigned' }));
+          if (todo.dueAt) badges.push(el('span', { className: 'todo-badge ' + due, textContent: (due === 'overdue' ? 'Overdue · ' : (due === 'due-soon' ? 'Due soon · ' : '')) + 'Due ' + todo.dueAt }));
+          if (todo.reminderAt) badges.push(el('span', { className: 'todo-badge ' + (reminderDue ? 'reminder-due' : ''), textContent: (reminderDue ? 'Reminder due ' : 'Reminder ') + todo.reminderAt }));
+          return el('div', { className: 'todo-row-meta' }, badges);
+        }
+
+        function renderList() {
+          var visible = visibleTodos();
+          listEl.innerHTML = '';
+          if (!visible.length) {
+            listEl.appendChild(el('div', { className: 'todo-empty', textContent: todos.length ? 'No todos match the current filters.' : 'No todos yet.' }));
+            return;
+          }
+          visible.forEach(function (todo) {
+            var actions = [];
+            if (!isWorkspace && todo.workspaceRootPath) actions.push(el('button', { className: 'todo-btn', 'data-todo-action': 'open-workspace', textContent: 'Open workspace', onClick: function () { openWorkspace(todo); } }));
+            if (todo.status === 'open') {
+              actions.push(el('button', { className: 'todo-btn', 'data-todo-action': 'mark-done', textContent: 'Done', onClick: function () { setTodoStatus(todo, 'done'); } }));
+              actions.push(el('button', { className: 'todo-btn', 'data-todo-action': 'cancel', textContent: 'Cancel', onClick: function () { setTodoStatus(todo, 'cancelled'); } }));
+            } else {
+              actions.push(el('button', { className: 'todo-btn', 'data-todo-action': 'reopen', textContent: 'Reopen', onClick: function () { setTodoStatus(todo, 'open'); } }));
+            }
+            if (isWorkspace && todo.status === 'done') actions.push(el('button', { className: 'todo-btn', 'data-todo-action': 'create-journal-entry', textContent: 'Create Journal Entry', onClick: function () { createJournalEntry(todo); } }));
+            actions.push(el('button', { className: 'todo-btn', 'data-todo-action': 'edit', textContent: 'Edit', onClick: function () { showTodoModal(todo); } }));
+            actions.push(el('button', { className: 'todo-btn danger', 'data-todo-action': 'delete', textContent: 'Delete', onClick: function () { deleteTodo(todo); } }));
+            listEl.appendChild(el('div', { className: 'todo-row' + (todo.status === 'done' ? ' done' : ''), 'data-todo-id': todo.id }, [
+              el('div', {}, [
+                el('div', { className: 'todo-row-title', textContent: todo.title || 'Untitled todo' }),
+                todo.description ? el('div', { className: 'todo-row-description', textContent: todo.description }) : null,
+                todoMeta(todo)
+              ]),
+              el('div', { className: 'todo-row-actions' }, actions)
+            ]));
+          });
+        }
+
+        function render() {
+          var visible = visibleTodos();
+          countEl.textContent = visible.length === todos.length ? todos.length + ' todo' + (todos.length === 1 ? '' : 's') : visible.length + ' of ' + todos.length + ' todos';
+          statusFilterEl.value = statusFilter;
+          sortEl.value = sortMode;
+          searchEl.value = searchQuery;
+          renderWorkspaceOptions();
+          renderList();
+        }
+
+        api.settings.read().then(function (settings) {
+          todos = rows((settings || {})[GLOBAL_KEY]).map(normalizeTodo);
+          render();
+        }).catch(render);
+        render();
+      };
+
+      TodoView.unmount = function (containerEl) { containerEl.innerHTML = ''; };
+      window.VerstakPluginRegister('verstak.todo', { components: { TodoView: TodoView } });
+    }.toString() + ')();';
+  }
+
   function searchPluginBundle() {
     return '(' + function () {
       function el(tag, attrs, children) {
@@ -2872,6 +3277,9 @@
       }
       if (pluginId === 'verstak.browser-inbox' && assetPath === 'frontend/dist/index.js') {
         return Promise.resolve(browserInboxBundle());
+      }
+      if (pluginId === 'verstak.todo' && assetPath === 'frontend/dist/index.js') {
+        return Promise.resolve(todoBundle());
       }
       if (pluginId === 'verstak.search' && assetPath === 'frontend/dist/index.js') {
         return Promise.resolve(searchPluginBundle());
@@ -3482,6 +3890,7 @@
           rootPath: '/tmp/verstak-test/plugins/browser-inbox',
           error: ''
         },
+        'verstak.todo': makeTodoPluginState(),
         'verstak.search': {
           status: 'loaded',
           enabled: true,
@@ -3512,6 +3921,8 @@
       vaultPluginState = { enabledPlugins: ['verstak.platform-test', 'verstak.default-editor', 'verstak.files', 'verstak.notes', 'verstak.sync', 'verstak.activity', 'verstak.journal', 'verstak.browser-inbox', 'verstak.search'], disabledPlugins: [], desiredPlugins: [{ id: 'verstak.platform-test', version: '0.1.0', source: 'official' }, { id: 'verstak.default-editor', version: '0.1.0', source: 'official' }, { id: 'verstak.files', version: '0.1.0', source: 'official' }, { id: 'verstak.notes', version: '0.1.0', source: 'official' }, { id: 'verstak.sync', version: '0.1.0', source: 'official' }, { id: 'verstak.activity', version: '0.1.0', source: 'official' }, { id: 'verstak.journal', version: '0.1.0', source: 'official' }, { id: 'verstak.browser-inbox', version: '0.1.0', source: 'official' }, { id: 'verstak.search', version: '0.1.0', source: 'official' }] };
       vaultPluginState.enabledPlugins.push('verstak.trash');
       vaultPluginState.desiredPlugins.push({ id: 'verstak.trash', version: '0.1.0', source: 'official' });
+      vaultPluginState.enabledPlugins.push('verstak.todo');
+      vaultPluginState.desiredPlugins.push({ id: 'verstak.todo', version: '0.1.0', source: 'official' });
       appSettings = { currentVaultPath: '/tmp/verstak-test/vault', recentVaults: [] };
       workbenchPreferences = {};
       openedResources = [];

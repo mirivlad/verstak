@@ -21,6 +21,7 @@
   import Folder from 'lucide-svelte/icons/folder';
   import Inbox from 'lucide-svelte/icons/inbox';
   import LayoutGrid from 'lucide-svelte/icons/layout-grid';
+  import ListTodo from 'lucide-svelte/icons/list-todo';
   import PanelsTopLeft from 'lucide-svelte/icons/panels-top-left';
   import Pencil from 'lucide-svelte/icons/pencil';
   import Plug from 'lucide-svelte/icons/plug';
@@ -47,6 +48,7 @@
     folder: Folder,
     gear: Settings,
     inbox: Inbox,
+    'list-todo': ListTodo,
     logo: PanelsTopLeft,
     plugin: Plug,
     puzzle: Puzzle,
@@ -61,6 +63,7 @@
     '🧪': 'flask',
     danger: 'warning',
     settings: 'gear',
+    todo: 'list-todo',
   };
 
   $: iconKey = aliases[name] || name || 'dot';

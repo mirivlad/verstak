@@ -31,13 +31,15 @@
   let captures = [];
   let activityEvents = [];
   let journalEntries = [];
+  let todos = [];
   let workSessionCandidates = [];
   let keyResources = [];
   let totalNotes = 0;
   let loadedWorkspaceRoot = '';
   let toolProbe = 0;
 
-  $: hasNotes = hasTool('notes');
+  $: hasNotes = hasTool('notes', availableTools);
+  $: hasTodos = hasTool('todo', availableTools);
   $: recentChanges = buildRecentChanges(activityEvents, captures, journalEntries);
   $: filteredRecentChanges = activeFilter === 'all'
     ? recentChanges
@@ -47,10 +49,11 @@
   $: unprocessedCaptures = captures.filter(item => item?.processed !== true);
   $: linkedCandidateIds = new Set(journalEntries.map(item => String(item?.sourceCandidateId || '')).filter(Boolean));
   $: pendingWorkSessionCandidates = workSessionCandidates.filter(item => !linkedCandidateIds.has(String(item?.candidateId || '')));
-  $: needsAttention = buildNeedsAttention(unprocessedCaptures, pendingWorkSessionCandidates);
-  $: continueItems = buildContinueItems(activityEvents, unprocessedCaptures, journalEntries);
+  $: urgentTodos = hasTodos ? todos.filter(item => todoAttentionState(item)) : [];
+  $: needsAttention = buildNeedsAttention(unprocessedCaptures, pendingWorkSessionCandidates, urgentTodos);
+  $: continueItems = buildContinueItems(activityEvents, unprocessedCaptures, journalEntries, urgentTodos);
   $: attentionActionKind = needsAttention[0]?.actionKind || 'browser-inbox';
-  $: lastActive = lastActiveDate([...recentChanges, ...continueItems], captures, journalEntries);
+  $: lastActive = lastActiveDate([...recentChanges, ...continueItems], captures, journalEntries, todos);
   $: summaryItems = [
     { key: 'notes', label: 'Notes', count: totalNotes, detail: totalAndRecentLabel(totalNotes, noteRecentChanges), actionKind: 'notes', actionLabel: 'Open Notes' },
     { key: 'files', label: 'Files', count: fileRecentChanges, detail: countLabel(fileRecentChanges, 'recent change'), actionKind: 'files', actionLabel: 'Open Files' },
@@ -68,10 +71,10 @@
     loadOverview();
   }
 
-  function hasTool(name) {
+  function hasTool(name, tools = availableTools) {
     toolProbe;
     name = String(name || '').toLowerCase();
-    const fromProps = (availableTools || []).some(tool => {
+    const fromProps = (tools || []).some(tool => {
       const label = `${tool?.title || ''} ${tool?.id || ''} ${tool?.pluginId || ''}`.toLowerCase();
       return label.includes(name);
     });
@@ -127,6 +130,47 @@
       seen.add(captureId);
       return true;
     });
+  }
+
+  function todoRowsForWorkspace(settings) {
+    const workspace = String(workspaceRootPath || '').trim();
+    if (!workspace) return [];
+    const seen = new Set();
+    return normalizeRows(settings?.['todos:global']).filter(item => {
+      const tagged = String(item.workspaceRootPath || item.workspaceName || item.workspaceNodeId || '').trim();
+      if (tagged !== workspace) return false;
+      const todoId = String(item.id || '');
+      if (!todoId || seen.has(todoId)) return !todoId;
+      seen.add(todoId);
+      return true;
+    });
+  }
+
+  function todoDateMs(value) {
+    const raw = String(value || '').trim();
+    if (!raw) return 0;
+    const normalized = /^\d{4}-\d{2}-\d{2}$/.test(raw) ? `${raw}T00:00:00` : raw;
+    const date = new Date(normalized);
+    return Number.isNaN(date.getTime()) ? 0 : date.getTime();
+  }
+
+  function todoTitle(item) {
+    return String(item?.title || item?.name || 'Untitled todo').trim() || 'Untitled todo';
+  }
+
+  function todoAttentionState(item) {
+    if (String(item?.status || 'open').toLowerCase() !== 'open') return '';
+    const now = Date.now();
+    const dueAt = todoDateMs(item?.dueAt);
+    const reminderAt = todoDateMs(item?.reminderAt);
+    if (reminderAt && reminderAt <= now) return 'Reminder due';
+    if (dueAt && dueAt < now) return 'Overdue';
+    if (dueAt && dueAt <= now + 3 * 24 * 60 * 60 * 1000) return 'Due soon';
+    return '';
+  }
+
+  function todoTimeValue(item) {
+    return item?.dueAt || item?.reminderAt || item?.updatedAt || item?.createdAt || '';
   }
 
   function timeValue(item) {
@@ -321,7 +365,17 @@
     };
   }
 
-  function buildContinueItems(events, captureRows, journalRows) {
+  function buildContinueItems(events, captureRows, journalRows, todoRows) {
+    const todoCandidates = [...todoRows].sort((a, b) => todoDateMs(todoTimeValue(a)) - todoDateMs(todoTimeValue(b))).map(item => ({
+      id: item.id || `todo:${todoTitle(item)}`,
+      category: 'todo',
+      title: `Todo ${quoted(todoTitle(item))}`,
+      meta: `${todoAttentionState(item)}${item.dueAt ? ` · Due ${item.dueAt}` : ''}`,
+      time: todoTimeValue(item),
+      absolute: absoluteTime(todoTimeValue(item)),
+      actionKind: 'todo',
+      actionLabel: 'Open Todos',
+    }));
     const captureCandidates = sortByTime(captureRows).map(item => ({
       id: item.captureId || `capture:${timeValue(item)}`,
       category: 'captures',
@@ -348,10 +402,10 @@
       actionKind: 'journal',
       actionLabel: 'Open Journal',
     }));
-    return [...captureCandidates, ...noteCandidates, ...fileCandidates, ...journalCandidates].slice(0, 4);
+    return [...todoCandidates, ...captureCandidates, ...noteCandidates, ...fileCandidates, ...journalCandidates].slice(0, 4);
   }
 
-  function buildNeedsAttention(captureRows, candidates) {
+  function buildNeedsAttention(captureRows, candidates, todoRows) {
     const captureItems = sortByTime(captureRows).slice(0, 4).map(item => ({
       id: item.captureId || `capture:${timeValue(item)}`,
       title: captureTitle(item),
@@ -367,7 +421,14 @@
       actionLabel: 'Review candidate',
       toolRequest: { type: 'work-session-candidate', candidate: item },
     }));
-    return [...captureItems, ...candidateItems].slice(0, 6);
+    const todoItems = [...todoRows].sort((a, b) => todoDateMs(todoTimeValue(a)) - todoDateMs(todoTimeValue(b))).slice(0, 4).map(item => ({
+      id: item.id || `todo:${todoTitle(item)}`,
+      title: todoTitle(item),
+      meta: `${todoAttentionState(item)}${item.dueAt ? ` · Due ${item.dueAt}` : ''}`,
+      actionKind: 'todo',
+      actionLabel: 'Open Todos',
+    }));
+    return [...todoItems, ...captureItems, ...candidateItems].slice(0, 6);
   }
 
   function countCategory(items, category) {
@@ -390,8 +451,8 @@
     return `${count} journal entr${count === 1 ? 'y' : 'ies'}`;
   }
 
-  function lastActiveDate(items, captureRows, journalRows) {
-    const source = sortByTime([...items, ...captureRows, ...journalRows])[0];
+  function lastActiveDate(items, captureRows, journalRows, todoRows) {
+    const source = sortByTime([...items, ...captureRows, ...journalRows, ...todoRows])[0];
     return timeValue(source);
   }
 
@@ -429,10 +490,11 @@
     const workspaceAtStart = String(workspaceRootPath || '').trim();
     loadedWorkspaceRoot = workspaceAtStart;
     loading = true;
-    const [browserSettings, activitySettings, journalSettings, resources] = await Promise.all([
+    const [browserSettings, activitySettings, journalSettings, todoSettings, resources] = await Promise.all([
       readPluginSettings('verstak.browser-inbox'),
       readPluginSettings('verstak.activity'),
       readPluginSettings('verstak.journal'),
+      readPluginSettings('verstak.todo'),
       loadWorkspaceResources(),
     ]);
     if (workspaceAtStart !== String(workspaceRootPath || '').trim()) return;
@@ -447,6 +509,7 @@
       workspaceKey('worklog:workspace:'),
       'worklog',
     ]);
+    todos = todoRowsForWorkspace(todoSettings);
     workSessionCandidates = rowsFor(activitySettings, [
       workspaceKey('work-session-candidates:workspace:'),
     ]);
@@ -583,7 +646,7 @@
           <div class="today-panel-head overview-panel-head">
             <div>
               <h3>Needs attention</h3>
-              <p>Pending captures and possible journal entries.</p>
+              <p>Pending captures, urgent todos, and possible journal entries.</p>
             </div>
           </div>
           {#if loading}
@@ -599,7 +662,7 @@
               {/each}
             </div>
           {:else}
-            <p class="today-empty compact">No pending captures or possible journal entries.</p>
+            <p class="today-empty compact">No pending captures, urgent todos, or possible journal entries.</p>
           {/if}
         </section>
       {/if}

@@ -78,7 +78,7 @@ test.describe('E: Plugin Manager layout', () => {
 
     const health = page.locator('[data-plugin-manager-summary="health"]');
     await expect(health).toBeVisible();
-    await expect(health.locator('[data-plugin-status-summary="loaded"]')).toContainText('10');
+    await expect(health.locator('[data-plugin-status-summary="loaded"]')).toContainText('11');
     await expect(health.locator('[data-plugin-status-summary="failed"]')).toContainText('0');
     await expect(health.locator('[data-plugin-status-summary="disabled"]')).toContainText('0');
 

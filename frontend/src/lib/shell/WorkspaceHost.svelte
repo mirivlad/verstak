@@ -23,6 +23,7 @@
   const toolOrder = new Map([
     ['notes', 10],
     ['files', 20],
+    ['todo', 30],
     ['activity', 40],
     ['browser', 50],
     ['inbox', 50],
