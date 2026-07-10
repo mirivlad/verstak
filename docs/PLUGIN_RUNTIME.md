@@ -464,6 +464,9 @@ contributions summary.
   Conflicts are rejected unless `options.overwrite` is true.
 - `files.deleteTrash(trashId)` — permanently removes a file/folder already in
   internal trash. This operation cannot be undone.
+- UI policy: the workspace `Files` plugin displays only live files and folders.
+  The global official `verstak.trash` plugin owns listing, restoring, filtering,
+  and permanently deleting deleted items across the vault.
 - `files.openExternal(relativePath)` — opens a vault-relative file/folder in
   the OS default application.
 - `files.showInFolder(relativePath)` — reveals a vault-relative file/folder in

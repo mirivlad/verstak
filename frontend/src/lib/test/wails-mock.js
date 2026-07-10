@@ -134,6 +134,7 @@
       rootPath: '/tmp/verstak-test/plugins/files',
       error: ''
     },
+    'verstak.trash': makeTrashPluginState(),
     'verstak.notes': {
       status: 'loaded',
       enabled: true,
@@ -282,6 +283,8 @@
 
   var vaultStatus = { status: 'open', path: '/tmp/verstak-test/vault', vaultId: 'test-vault-001' };
   var vaultPluginState = { enabledPlugins: ['verstak.platform-test', 'verstak.default-editor', 'verstak.files', 'verstak.notes', 'verstak.sync', 'verstak.activity', 'verstak.journal', 'verstak.browser-inbox', 'verstak.search'], disabledPlugins: [], desiredPlugins: [{ id: 'verstak.platform-test', version: '0.1.0', source: 'official' }, { id: 'verstak.default-editor', version: '0.1.0', source: 'official' }, { id: 'verstak.files', version: '0.1.0', source: 'official' }, { id: 'verstak.notes', version: '0.1.0', source: 'official' }, { id: 'verstak.sync', version: '0.1.0', source: 'official' }, { id: 'verstak.activity', version: '0.1.0', source: 'official' }, { id: 'verstak.journal', version: '0.1.0', source: 'official' }, { id: 'verstak.browser-inbox', version: '0.1.0', source: 'official' }, { id: 'verstak.search', version: '0.1.0', source: 'official' }] };
+  vaultPluginState.enabledPlugins.push('verstak.trash');
+  vaultPluginState.desiredPlugins.push({ id: 'verstak.trash', version: '0.1.0', source: 'official' });
   var appSettings = { currentVaultPath: '/tmp/verstak-test/vault', recentVaults: [] };
   var workbenchPreferences = {};
   var openedResources = [];
@@ -342,6 +345,33 @@
       'Project/project-only.txt': { type: 'file', content: 'project file', modifiedAt: new Date().toISOString() },
       'Test': { type: 'folder', modifiedAt: new Date().toISOString() },
       'Test/test-only.txt': { type: 'file', content: 'test file', modifiedAt: new Date().toISOString() }
+    };
+  }
+
+  function makeTrashPluginState() {
+    return {
+      status: 'loaded',
+      enabled: true,
+      manifest: {
+        schemaVersion: 1,
+        id: 'verstak.trash',
+        name: 'Trash',
+        version: '0.1.0',
+        apiVersion: '0.1.0',
+        description: 'Global vault trash manager for deleted files and folders.',
+        source: 'official',
+        icon: 'trash',
+        provides: ['trash.management'],
+        requires: ['verstak/core/files/v1'],
+        permissions: ['files.delete', 'files.write', 'ui.register'],
+        frontend: { entry: 'frontend/dist/index.js' },
+        contributes: {
+          views: [{ id: 'verstak.trash.view', title: 'Trash', icon: 'trash', component: 'TrashView' }],
+          sidebarItems: [{ id: 'verstak.trash.sidebar', title: 'Trash', icon: 'trash', view: 'verstak.trash.view', position: 40 }]
+        }
+      },
+      rootPath: '/tmp/verstak-test/plugins/trash',
+      error: ''
     };
   }
 
@@ -840,7 +870,6 @@
           var sort = 'folder-name';
           var createMode = '';
           var renaming = null;
-          var showingTrash = false;
           function scoped(local) { local = clean(local); return root ? (local ? root + '/' + local : root) : local; }
           function local(full) { full = clean(full); return root && full.indexOf(root + '/') === 0 ? full.slice(root.length + 1) : full === root ? '' : full; }
           function saveHistory() { window.__filesHistoryByWorkspace[historyKey] = { stack: history.slice(), index: historyIndex, currentPath: current }; }
@@ -899,19 +928,18 @@
           var backButton = btn('Back', 'back', goBack, 'back');
           var forwardButton = btn('Forward', 'forward', goForward, 'forward');
           var upButton = btn('Up', 'up', function () { if (current) nav(parent(current)); }, 'up');
-          var refreshButton = btn('Refresh', 'refresh', function () { if (showingTrash) loadTrash(); else load(); }, 'refresh');
+          var refreshButton = btn('Refresh', 'refresh', load, 'refresh');
           var newFolderButton = btn('New folder', 'new-folder', function () { startCreate('folder'); }, 'folderAdd');
           var newMarkdownButton = btn('New markdown file', 'new-markdown', function () { startCreate('markdown'); }, 'markdownAdd');
           var newTextButton = btn('New text file', 'new-text', function () { startCreate('text'); }, 'textAdd');
           var openButton = btn('Open', 'open', function () { open(firstSelected()); }, 'open');
           var renameButton = btn('Rename', 'rename', function () { startRename(firstSelected()); }, 'rename');
           var trashButton = btn('Move to trash', 'trash', function () { trashSelection(); }, 'trash');
-          var trashViewButton = btn('Trash metadata', 'trash-view', loadTrash, 'trashView');
           var cutButton = btn('Cut', 'cut', cutSelection, 'cut');
           var copyButton = btn('Copy', 'copy', copySelection, 'copy');
           var pasteButton = btn('Paste', 'paste', paste, 'paste');
           toolbar.appendChild(breadcrumb);
-          [backButton, forwardButton, upButton, refreshButton, newFolderButton, newMarkdownButton, newTextButton, openButton, renameButton, trashButton, trashViewButton, cutButton, copyButton, pasteButton].forEach(function (button) { toolbar.appendChild(button); });
+          [backButton, forwardButton, upButton, refreshButton, newFolderButton, newMarkdownButton, newTextButton, openButton, renameButton, trashButton, cutButton, copyButton, pasteButton].forEach(function (button) { toolbar.appendChild(button); });
           var filterInput = e('input', { className: 'files-filter', 'data-files-filter': '', placeholder: 'Filter current folder' }, []);
           filterInput.addEventListener('input', function () { filter = filterInput.value.toLowerCase(); render(); });
           toolbar.appendChild(filterInput);
@@ -967,18 +995,6 @@
               }, [part]));
             });
           }
-          function setToolbarTrashMode(isTrash) {
-            [upButton, newFolderButton, newMarkdownButton, newTextButton, openButton, renameButton, trashButton, cutButton, copyButton, pasteButton, filterInput, sortSelect].forEach(function (node) {
-              node.disabled = !!isTrash;
-              if (isTrash) {
-                node.style.setProperty('opacity', '.45', 'important');
-                node.style.setProperty('cursor', 'default', 'important');
-              } else {
-                node.style.removeProperty('opacity');
-                node.style.removeProperty('cursor');
-              }
-            });
-          }
           function visible() {
             return entries.filter(function (item) { return !item.isHidden && !item.isReserved && (!filter || item.name.toLowerCase().indexOf(filter) !== -1); }).sort(function (a, b) {
               if (sort === 'folder-name') { if (a.type === 'folder' && b.type !== 'folder') return -1; if (a.type !== 'folder' && b.type === 'folder') return 1; }
@@ -989,8 +1005,6 @@
             });
           }
           function render() {
-            showingTrash = false;
-            setToolbarTrashMode(false);
             updateBreadcrumb();
             list.innerHTML = '';
             list.appendChild(e('div', { className: 'files-header' }, [e('span', {}, ['Name']), e('span', {}, ['Type']), e('span', {}, ['Size']), e('span', {}, ['Modified']), e('span', {}, ['Actions'])]));
@@ -1024,38 +1038,6 @@
               list.appendChild(row);
             });
           }
-          function renderTrash(items) {
-            showingTrash = true;
-            setToolbarTrashMode(true);
-            selected = {};
-            lastClicked = '';
-            breadcrumb.innerHTML = '';
-            breadcrumb.appendChild(e('span', { className: 'files-breadcrumb-current' }, ['Trash metadata']));
-            list.innerHTML = '';
-            list.appendChild(e('div', { className: 'files-header' }, [e('span', {}, ['Original path']), e('span', {}, ['Type']), e('span', {}, ['Deleted']), e('span', {}, ['Trash path']), e('span', {}, ['Actions'])]));
-            if (!items.length) {
-              list.appendChild(e('div', { className: 'files-empty' }, ['Trash is empty']));
-              return;
-            }
-            items.forEach(function (item) {
-              list.appendChild(e('div', { className: 'files-item', 'data-files-trash-id': item.trashId || '' }, [
-                e('span', { className: 'files-item-name', title: item.originalPath || '' }, [item.originalPath || item.basename || '']),
-                e('span', { className: 'files-item-meta' }, [item.originalType || '']),
-                e('span', { className: 'files-item-meta' }, [formatDate(item.deletedAt)]),
-                e('span', { className: 'files-item-meta', title: item.trashPath || '' }, [item.trashPath || '']),
-                e('span', { className: 'files-row-actions' }, [e('button', {
-                  className: 'files-row-btn',
-                  'data-files-action': 'restore-trash',
-                  'data-files-icon': 'restore',
-                  'data-files-restore-trash': item.trashId || '',
-                  title: 'Restore',
-                  'aria-label': 'Restore',
-                  innerHTML: actionSvg('restore'),
-                  onClick: function (ev) { ev.stopPropagation(); restoreTrash(item); }
-                }, [])])
-              ]));
-            });
-          }
           function select(item, ev) {
             if (ev && (ev.ctrlKey || ev.metaKey)) {
               if (selected[item.relativePath]) delete selected[item.relativePath]; else selected[item.relativePath] = true;
@@ -1074,17 +1056,6 @@
             render();
           }
           function load() { selected = {}; api.files.list(scoped(current)).then(function (result) { entries = result || []; render(); }).catch(function (err) { list.textContent = 'Error: ' + (err.message || err); }); }
-          function loadTrash() {
-            if (!api.files || typeof api.files.listTrash !== 'function') {
-              list.innerHTML = 'Trash metadata is unavailable';
-              return;
-            }
-            api.files.listTrash().then(function (result) { renderTrash(result || []); }).catch(function (err) { list.textContent = 'Error: ' + (err.message || err); });
-          }
-          function restoreTrash(item) {
-            if (!item || !item.trashId || !api.files || typeof api.files.restoreTrash !== 'function') return;
-            api.files.restoreTrash(item.trashId, { overwrite: false }).then(load).catch(function (err) { list.textContent = 'Error: ' + (err.message || err); });
-          }
           function nav(path, push) {
             current = clean(path);
             if (push !== false) {
@@ -1425,6 +1396,222 @@
         unmount: function (c) { if (c.__filesCleanup) c.__filesCleanup(); c.innerHTML = ''; }
       };
       window.VerstakPluginRegister('verstak.files', { components: { FilesView: FilesView } });
+    }.toString() + ')();';
+  }
+
+  function trashPluginBundle() {
+    return '(' + function () {
+      var PLUGIN_ID = 'verstak.trash';
+
+      function el(tag, attrs, children) {
+        var node = document.createElement(tag);
+        attrs = attrs || {};
+        Object.keys(attrs).forEach(function (key) {
+          var value = attrs[key];
+          if (value == null) return;
+          if (key === 'className') node.className = value;
+          else if (key === 'textContent') node.textContent = value;
+          else if (key.indexOf('on') === 0) node.addEventListener(key.slice(2).toLowerCase(), value);
+          else if (key === 'value') node.value = value;
+          else if (key === 'disabled') node.disabled = !!value;
+          else node.setAttribute(key, value);
+        });
+        (children || []).forEach(function (child) {
+          if (child == null) return;
+          node.appendChild(typeof child === 'string' ? document.createTextNode(child) : child);
+        });
+        return node;
+      }
+
+      function text(value) { return String(value == null ? '' : value); }
+      function cleanPath(value) { return text(value).split('/').filter(Boolean).join('/'); }
+      function nameFor(entry) {
+        var path = cleanPath(entry && entry.originalPath);
+        return text(entry && entry.basename).trim() || path.split('/').pop() || 'Untitled item';
+      }
+      function workspaceFor(entry) { return cleanPath(entry && entry.originalPath).split('/')[0] || 'Vault root'; }
+      function typeFor(entry) { return entry && entry.originalType === 'folder' ? 'Folder' : 'File'; }
+      function dateFor(entry) { return text(entry && entry.deletedAt); }
+      function errorText(error) { return error && error.message ? error.message : text(error); }
+      function isConflict(error) { return /conflict:/i.test(errorText(error)); }
+
+      var TrashView = {
+        mount: function (containerEl, props, api) {
+          var state = {
+            entries: [], workspace: '', query: '', sort: 'date-desc', loading: true,
+            busyId: '', confirmingId: '', status: '', statusError: false, disposed: false
+          };
+
+          function workspaces() {
+            var values = {};
+            state.entries.forEach(function (entry) { values[workspaceFor(entry)] = true; });
+            return Object.keys(values).sort();
+          }
+
+          function visible() {
+            var query = state.query.toLowerCase();
+            return state.entries.filter(function (entry) {
+              if (state.workspace && workspaceFor(entry) !== state.workspace) return false;
+              return !query || (nameFor(entry) + ' ' + text(entry.originalPath) + ' ' + workspaceFor(entry)).toLowerCase().indexOf(query) !== -1;
+            }).sort(function (left, right) {
+              if (state.sort === 'date-asc') return dateFor(left).localeCompare(dateFor(right));
+              if (state.sort === 'name-asc') return nameFor(left).localeCompare(nameFor(right));
+              return dateFor(right).localeCompare(dateFor(left));
+            });
+          }
+
+          function render() {
+            var rows = visible();
+            containerEl.innerHTML = '';
+            containerEl.className = 'trash-root';
+            containerEl.setAttribute('data-plugin-id', PLUGIN_ID);
+
+            var workspaceSelect = el('select', {
+              'data-trash-filter-workspace': '', value: state.workspace,
+              onChange: function (event) { state.workspace = event.target.value; render(); }
+            }, [el('option', { value: '' }, ['All workspaces'])]);
+            workspaces().forEach(function (workspace) {
+              workspaceSelect.appendChild(el('option', { value: workspace }, [workspace]));
+            });
+            var search = el('input', {
+              type: 'search', value: state.query, placeholder: 'Filter name or path',
+              'data-trash-filter-search': '',
+              onInput: function (event) { state.query = event.target.value; render(); }
+            }, []);
+            var sort = el('select', {
+              'data-trash-sort': '', value: state.sort,
+              onChange: function (event) { state.sort = event.target.value; render(); }
+            }, [
+              el('option', { value: 'date-desc' }, ['Deleted: newest']),
+              el('option', { value: 'date-asc' }, ['Deleted: oldest']),
+              el('option', { value: 'name-asc' }, ['Name'])
+            ]);
+            containerEl.appendChild(el('div', { className: 'trash-toolbar' }, [
+              el('strong', {}, ['Trash']), search, workspaceSelect, sort,
+              el('button', { type: 'button', onClick: load }, ['Refresh'])
+            ]));
+            containerEl.appendChild(el('div', {
+              className: 'trash-status' + (state.statusError ? ' error' : ''),
+              'data-trash-status': ''
+            }, [state.loading ? 'Loading deleted items...' : (state.status || rows.length + ' deleted items')]));
+
+            var list = el('div', { className: 'trash-list', 'data-trash-list': '' }, []);
+            if (state.loading) {
+              list.appendChild(el('div', { className: 'trash-empty' }, ['Loading deleted items...']));
+            } else if (!rows.length) {
+              list.appendChild(el('div', { className: 'trash-empty' }, [state.entries.length ? 'No deleted items match the current filters.' : 'Trash is empty.']));
+            } else {
+              rows.forEach(function (entry) {
+                list.appendChild(el('div', {
+                  className: 'trash-row', 'data-trash-row': entry.trashId, 'data-trash-workspace': workspaceFor(entry)
+                }, [
+                  el('span', { className: 'trash-name' }, [nameFor(entry)]),
+                  el('span', { className: 'trash-workspace' }, [workspaceFor(entry)]),
+                  el('span', { className: 'trash-path' }, [entry.originalPath || '']),
+                  el('span', { className: 'trash-meta' }, [dateFor(entry)]),
+                  el('span', { className: 'trash-meta' }, [typeFor(entry)]),
+                  el('button', {
+                    type: 'button', disabled: state.busyId === entry.trashId,
+                    'data-trash-restore': entry.trashId,
+                    onClick: function () { restore(entry); }
+                  }, [state.busyId === entry.trashId ? 'Restoring...' : 'Restore']),
+                  el('button', {
+                    type: 'button', disabled: state.busyId === entry.trashId,
+                    'data-trash-delete': entry.trashId,
+                    onClick: function () { state.confirmingId = entry.trashId; render(); }
+                  }, ['Delete permanently'])
+                ]));
+              });
+            }
+            containerEl.appendChild(list);
+
+            var entry = state.entries.find(function (item) { return item.trashId === state.confirmingId; });
+            if (entry) {
+              containerEl.appendChild(el('div', { className: 'trash-confirm', 'data-trash-confirm': entry.trashId }, [
+                el('p', {}, ['Delete permanently?']),
+                el('span', {}, [entry.originalPath || nameFor(entry)]),
+                el('button', {
+                  type: 'button', 'data-trash-confirm-cancel': entry.trashId,
+                  onClick: function () { state.confirmingId = ''; render(); }
+                }, ['Cancel']),
+                el('button', {
+                  type: 'button', disabled: state.busyId === entry.trashId,
+                  'data-trash-confirm-delete': entry.trashId,
+                  onClick: function () { deletePermanently(entry); }
+                }, ['Delete permanently'])
+              ]));
+            }
+          }
+
+          function restore(entry) {
+            state.busyId = entry.trashId;
+            state.status = '';
+            state.statusError = false;
+            render();
+            api.files.restoreTrash(entry.trashId, { overwrite: false }).then(function () {
+              if (state.disposed) return;
+              state.entries = state.entries.filter(function (item) { return item.trashId !== entry.trashId; });
+              state.busyId = '';
+              state.status = 'Restored ' + nameFor(entry) + '.';
+              render();
+            }).catch(function (error) {
+              if (state.disposed) return;
+              state.busyId = '';
+              state.statusError = true;
+              state.status = isConflict(error)
+                ? 'Restore blocked: an item already exists at the original path. Nothing was overwritten.'
+                : 'Restore failed: ' + errorText(error);
+              render();
+            });
+          }
+
+          function deletePermanently(entry) {
+            state.busyId = entry.trashId;
+            state.status = '';
+            state.statusError = false;
+            render();
+            api.files.deleteTrash(entry.trashId).then(function () {
+              if (state.disposed) return;
+              state.entries = state.entries.filter(function (item) { return item.trashId !== entry.trashId; });
+              state.busyId = '';
+              state.confirmingId = '';
+              state.status = 'Permanently deleted ' + nameFor(entry) + '.';
+              render();
+            }).catch(function (error) {
+              if (state.disposed) return;
+              state.busyId = '';
+              state.statusError = true;
+              state.status = 'Permanent delete failed: ' + errorText(error);
+              render();
+            });
+          }
+
+          function load() {
+            state.loading = true;
+            state.status = '';
+            state.statusError = false;
+            render();
+            api.files.listTrash().then(function (entries) {
+              if (state.disposed) return;
+              state.entries = Array.isArray(entries) ? entries : [];
+              state.loading = false;
+              render();
+            }).catch(function (error) {
+              if (state.disposed) return;
+              state.entries = [];
+              state.loading = false;
+              state.statusError = true;
+              state.status = 'Could not load Trash: ' + errorText(error);
+              render();
+            });
+          }
+
+          containerEl.__trashCleanup = function () { state.disposed = true; containerEl.innerHTML = ''; };
+          load();
+        },
+        unmount: function (containerEl) { if (containerEl.__trashCleanup) containerEl.__trashCleanup(); }
+      };
+      window.VerstakPluginRegister(PLUGIN_ID, { components: { TrashView: TrashView } });
     }.toString() + ')();';
   }
 
@@ -2442,6 +2629,9 @@
       if (pluginId === 'verstak.files' && assetPath === 'frontend/dist/index.js') {
         return Promise.resolve(filesPluginBundle());
       }
+      if (pluginId === 'verstak.trash' && assetPath === 'frontend/dist/index.js') {
+        return Promise.resolve(trashPluginBundle());
+      }
       if (pluginId === 'verstak.notes' && assetPath === 'frontend/dist/index.js') {
         return Promise.resolve(simplePluginBundle('verstak.notes', 'NotesView', 'notes-root', 'Notes'));
       }
@@ -2943,6 +3133,7 @@
           rootPath: '/tmp/verstak-test/plugins/files',
           error: ''
         },
+        'verstak.trash': makeTrashPluginState(),
         'verstak.notes': {
           status: 'loaded',
           enabled: true,
@@ -3090,6 +3281,8 @@
       };
       vaultStatus = { status: 'open', path: '/tmp/verstak-test/vault', vaultId: 'test-vault-001' };
       vaultPluginState = { enabledPlugins: ['verstak.platform-test', 'verstak.default-editor', 'verstak.files', 'verstak.notes', 'verstak.sync', 'verstak.activity', 'verstak.journal', 'verstak.browser-inbox', 'verstak.search'], disabledPlugins: [], desiredPlugins: [{ id: 'verstak.platform-test', version: '0.1.0', source: 'official' }, { id: 'verstak.default-editor', version: '0.1.0', source: 'official' }, { id: 'verstak.files', version: '0.1.0', source: 'official' }, { id: 'verstak.notes', version: '0.1.0', source: 'official' }, { id: 'verstak.sync', version: '0.1.0', source: 'official' }, { id: 'verstak.activity', version: '0.1.0', source: 'official' }, { id: 'verstak.journal', version: '0.1.0', source: 'official' }, { id: 'verstak.browser-inbox', version: '0.1.0', source: 'official' }, { id: 'verstak.search', version: '0.1.0', source: 'official' }] };
+      vaultPluginState.enabledPlugins.push('verstak.trash');
+      vaultPluginState.desiredPlugins.push({ id: 'verstak.trash', version: '0.1.0', source: 'official' });
       appSettings = { currentVaultPath: '/tmp/verstak-test/vault', recentVaults: [] };
       workbenchPreferences = {};
       openedResources = [];
@@ -3152,6 +3345,11 @@
     },
     setVaultStatus: function (status) { vaultStatus = status; },
     setVaultPluginState: function (state) { vaultPluginState = state; },
+    setTrashDeletedAt: function (trashId, deletedAt) {
+      trashEntries.forEach(function (entry) {
+        if (entry.trashId === trashId) entry.deletedAt = deletedAt;
+      });
+    },
     setReloadResponseMode: function (mode) { reloadResponseMode = mode || 'tuple'; }
   };
 

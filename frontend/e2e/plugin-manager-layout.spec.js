@@ -78,13 +78,13 @@ test.describe('E: Plugin Manager layout', () => {
 
     const health = page.locator('[data-plugin-manager-summary="health"]');
     await expect(health).toBeVisible();
-    await expect(health.locator('[data-plugin-status-summary="loaded"]')).toContainText('9');
+    await expect(health.locator('[data-plugin-status-summary="loaded"]')).toContainText('10');
     await expect(health.locator('[data-plugin-status-summary="failed"]')).toContainText('0');
     await expect(health.locator('[data-plugin-status-summary="disabled"]')).toContainText('0');
 
     const risk = page.locator('[data-plugin-manager-summary="risk"]');
     await expect(risk).toBeVisible();
-    await expect(risk.locator('[data-plugin-risk-summary="elevated-permissions"]')).toContainText('5');
+    await expect(risk.locator('[data-plugin-risk-summary="elevated-permissions"]')).toContainText('6');
     await expect(risk).toContainText('elevated permissions');
   });
 

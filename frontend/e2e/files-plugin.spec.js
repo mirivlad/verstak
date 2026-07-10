@@ -218,7 +218,7 @@ test.describe('G: Files Plugin', () => {
     await expect(page.locator('[data-file-name="project-only.txt"]')).toBeVisible();
   });
 
-  test('files explorer restores an item from trash metadata', async ({ page }) => {
+  test('files explorer keeps removed items out of live files without Trash metadata', async ({ page }) => {
     await page.locator('.wt-label').filter({ hasText: 'Project' }).click();
     await openFilesTool(page);
     await expect(page.locator('.files-breadcrumb')).toContainText('Project', { timeout: 10000 });
@@ -232,14 +232,8 @@ test.describe('G: Files Plugin', () => {
     await page.locator('[data-files-action="trash"]').click();
     await page.locator('.files-modal-btn.confirm').click();
     await expect(page.locator('[data-file-name="RestoreMe.txt"]')).toHaveCount(0);
-
-    await page.locator('[data-files-action="trash-view"]').click();
-    await expect(page.locator('.files-breadcrumb')).toContainText('Trash metadata');
-    await expect(page.locator('[data-files-trash-id]').filter({ hasText: 'Project/RestoreMe.txt' })).toBeVisible();
-
-    await page.locator('[data-files-restore-trash]').first().click();
-    await expect(page.locator('.files-breadcrumb')).toContainText('Project');
-    await expect(page.locator('[data-file-name="RestoreMe.txt"]')).toBeVisible();
+    await expect(page.locator('[data-files-action="trash-view"]')).toHaveCount(0);
+    await expect(page.locator('[data-files-restore-trash]')).toHaveCount(0);
   });
 
   test('files explorer uses labeled controls and no row New Here action', async ({ page }) => {
@@ -258,7 +252,6 @@ test.describe('G: Files Plugin', () => {
       open: 'open',
       rename: 'rename',
       trash: 'trash',
-      'trash-view': 'trashView',
       cut: 'cut',
       copy: 'copy',
       paste: 'paste',
