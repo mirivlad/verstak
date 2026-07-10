@@ -239,11 +239,11 @@
         name: 'Browser Inbox',
         version: '0.1.0',
         apiVersion: '0.1.0',
-        description: 'Workspace-scoped inbox for browser captures.',
+        description: 'Global browser capture queue with explicit workspace assignment.',
         source: 'official',
         icon: 'inbox',
         provides: ['browser.inbox'],
-        permissions: ['events.subscribe', 'storage.namespace', 'ui.register'],
+        permissions: ['events.subscribe', 'files.read', 'storage.namespace', 'ui.register'],
         frontend: { entry: 'frontend/dist/index.js' },
         contributes: {
           views: [{ id: 'verstak.browser-inbox.view', title: 'Browser Inbox', icon: 'inbox', component: 'BrowserInboxView' }],
@@ -2087,6 +2087,9 @@
   function browserInboxBundle() {
     return '(' + function () {
       var PLUGIN_ID = 'verstak.browser-inbox';
+      var GLOBAL_KEY = 'captures:global';
+      var LEGACY_KEY = 'captures';
+      var WORKSPACE_PREFIX = 'captures:workspace:';
 
       function injectStyles() {
         if (document.getElementById('mock-browser-inbox-style')) return;
@@ -2096,6 +2099,7 @@
           '.browser-inbox-root{height:100%;min-height:0;display:flex;flex-direction:column;background:#0d0d1a;color:#e0e0f0}',
           '.browser-inbox-toolbar{display:flex;align-items:center;gap:.5rem;padding:.55rem .75rem;border-bottom:1px solid #16213e;background:#12122a;flex-wrap:wrap}',
           '.browser-inbox-title{font-size:.86rem;font-weight:600;color:#f0f0ff}.browser-inbox-count,.browser-inbox-status{font-size:.74rem;color:#8b8ba8}.browser-inbox-spacer{flex:1}',
+          '.browser-inbox-filters{display:flex;align-items:center;gap:.35rem;flex:1;flex-wrap:wrap}.browser-inbox-select,.browser-inbox-input{min-height:1.85rem;max-width:12rem;border:1px solid #1a3a5c;border-radius:4px;background:#101020;color:#e0e0f0;padding:.25rem .4rem;font-size:.76rem}.browser-inbox-input{width:12rem}',
           '.browser-inbox-btn{min-height:1.85rem;padding:.3rem .65rem;border:1px solid #1a3a5c;border-radius:4px;background:#0f3460;color:#e0e0f0;font-size:.76rem;cursor:pointer}.browser-inbox-btn:hover{background:#1a4a7a}.browser-inbox-btn:disabled{opacity:.45;cursor:default}.browser-inbox-btn.danger{border-color:#633;color:#ffb0b0}',
           '.browser-inbox-body{flex:1;min-height:0;display:grid;grid-template-columns:minmax(260px,360px) minmax(0,1fr)}.browser-inbox-list{min-height:0;overflow:auto;border-right:1px solid #16213e;background:#101020}.browser-inbox-detail{min-width:0;min-height:0;overflow:auto;padding:1rem;display:flex;flex-direction:column;gap:.75rem}',
           '.browser-inbox-empty,.browser-inbox-detail-empty{height:100%;display:flex;align-items:center;justify-content:center;padding:1.5rem;color:#8b8ba8;font-size:.84rem;line-height:1.45;text-align:center}.browser-inbox-detail-empty{height:auto;margin:auto}',
@@ -2113,8 +2117,11 @@
           if (key === 'textContent') node.textContent = attrs[key];
           else if (key === 'className') node.className = attrs[key];
           else if (key === 'disabled') node.disabled = !!attrs[key];
+          else if (key === 'value') node.value = attrs[key];
           else if (key.indexOf('data-') === 0) node.setAttribute(key, attrs[key]);
           else if (key === 'onClick') node.addEventListener('click', attrs[key]);
+          else if (key === 'onChange') node.addEventListener('change', attrs[key]);
+          else if (key === 'onInput') node.addEventListener('input', attrs[key]);
           else node[key] = attrs[key];
         });
         (children || []).forEach(function (child) {
@@ -2136,8 +2143,44 @@
         return 'captures:workspace:' + encodeURIComponent(root || '');
       }
 
+      function cleanWorkspace(value) {
+        return String(value == null ? '' : value).trim().replace(/^\/+|\/+$/g, '');
+      }
+
+      function workspaceFromKey(key) {
+        key = String(key || '');
+        if (key.indexOf(WORKSPACE_PREFIX) !== 0) return '';
+        try {
+          return cleanWorkspace(decodeURIComponent(key.slice(WORKSPACE_PREFIX.length)));
+        } catch (_) {
+          return '';
+        }
+      }
+
       function rows(value) {
         return Array.isArray(value) ? value.filter(function (item) { return item && typeof item === 'object'; }) : [];
+      }
+
+      function normalizeRows(value, storageKey) {
+        return rows(value).filter(function (item) { return item.captureId; }).map(function (item) {
+          var workspaceRootPath = cleanWorkspace(item.workspaceRootPath || item.workspaceName) || workspaceFromKey(storageKey);
+          return Object.assign({}, item, {
+            workspaceRootPath: workspaceRootPath,
+            workspaceName: cleanWorkspace(item.workspaceName || workspaceRootPath),
+            processed: item.processed === true
+          });
+        });
+      }
+
+      function sortCaptures(items) {
+        var seen = {};
+        return items.filter(function (item) {
+          if (!item || !item.captureId || seen[item.captureId]) return false;
+          seen[item.captureId] = true;
+          return true;
+        }).sort(function (a, b) {
+          return String(b.capturedAt || b.receivedAt || '').localeCompare(String(a.capturedAt || a.receivedAt || ''));
+        });
       }
 
       function title(capture) {
@@ -2147,10 +2190,13 @@
       function renderBrowserInbox(containerEl, props, api) {
         injectStyles();
         var rootPath = workspaceRoot(props || {});
-        var key = workspaceKey(rootPath);
         var captures = [];
         var selectedId = '';
         var statusText = 'Ready for browser captures';
+        var workspaceOptions = [];
+        var statusFilter = 'all';
+        var workspaceFilter = '';
+        var searchQuery = '';
 
         containerEl.innerHTML = '';
         var root = el('div', { className: 'browser-inbox-root', 'data-plugin-id': PLUGIN_ID });
@@ -2158,14 +2204,49 @@
         var titleEl = el('span', { className: 'browser-inbox-title', textContent: rootPath ? 'Browser Inbox · ' + rootPath : 'Browser Inbox' });
         var countEl = el('span', { className: 'browser-inbox-count' });
         var statusEl = el('span', { className: 'browser-inbox-status' });
+        var filtersEl = el('div', { className: 'browser-inbox-filters' });
+        var statusFilterEl = el('select', {
+          className: 'browser-inbox-select',
+          'data-browser-inbox-filter': 'status',
+          onChange: function (event) {
+            statusFilter = String(event.target.value || 'all');
+            selectedId = '';
+            render();
+          }
+        }, [
+          el('option', { value: 'all', textContent: 'All captures' }),
+          el('option', { value: 'unassigned', textContent: 'Unassigned' }),
+          el('option', { value: 'unprocessed', textContent: 'Unprocessed' }),
+          el('option', { value: 'processed', textContent: 'Processed' })
+        ]);
+        var workspaceFilterEl = el('select', {
+          className: 'browser-inbox-select',
+          'data-browser-inbox-filter': 'workspace',
+          onChange: function (event) {
+            workspaceFilter = cleanWorkspace(event.target.value);
+            selectedId = '';
+            render();
+          }
+        });
+        var searchInput = el('input', {
+          className: 'browser-inbox-input',
+          type: 'search',
+          placeholder: 'Search captures',
+          'data-browser-inbox-filter': 'search',
+          onInput: function (event) {
+            searchQuery = String(event.target.value || '').trim().toLowerCase();
+            selectedId = '';
+            renderList();
+            renderDetail();
+            renderCount();
+          }
+        });
         var clearBtn = el('button', {
           className: 'browser-inbox-btn danger',
           'data-browser-inbox-action': 'clear',
           textContent: 'Clear',
           onClick: function () {
-            captures = [];
-            selectedId = '';
-            persist().then(render);
+            clearScope().then(render);
           }
         });
         var body = el('div', { className: 'browser-inbox-body' });
@@ -2174,6 +2255,10 @@
 
         toolbar.appendChild(titleEl);
         toolbar.appendChild(countEl);
+        filtersEl.appendChild(statusFilterEl);
+        if (!rootPath) filtersEl.appendChild(workspaceFilterEl);
+        filtersEl.appendChild(searchInput);
+        toolbar.appendChild(filtersEl);
         toolbar.appendChild(el('span', { className: 'browser-inbox-spacer' }));
         toolbar.appendChild(statusEl);
         toolbar.appendChild(clearBtn);
@@ -2183,29 +2268,123 @@
         root.appendChild(body);
         containerEl.appendChild(root);
 
+        function option(value, label) {
+          return el('option', { value: value, textContent: label });
+        }
+
+        function workspaceRoots() {
+          var roots = workspaceOptions.slice();
+          captures.forEach(function (capture) {
+            var workspace = cleanWorkspace(capture.workspaceRootPath);
+            if (workspace && roots.indexOf(workspace) === -1) roots.push(workspace);
+          });
+          if (rootPath && roots.indexOf(rootPath) === -1) roots.push(rootPath);
+          return roots.sort(function (a, b) { return a.localeCompare(b); });
+        }
+
+        function renderWorkspaceFilterOptions() {
+          if (rootPath) return;
+          workspaceFilterEl.innerHTML = '';
+          workspaceFilterEl.appendChild(option('', 'All workspaces'));
+          workspaceRoots().forEach(function (workspace) {
+            workspaceFilterEl.appendChild(option(workspace, workspace));
+          });
+          workspaceFilterEl.value = workspaceFilter;
+        }
+
+        function visibleCaptures() {
+          return captures.filter(function (capture) {
+            var workspace = cleanWorkspace(capture.workspaceRootPath);
+            if (rootPath && workspace !== rootPath) return false;
+            if (!rootPath && workspaceFilter && workspace !== workspaceFilter) return false;
+            if (statusFilter === 'unassigned' && workspace) return false;
+            if (statusFilter === 'unprocessed' && capture.processed === true) return false;
+            if (statusFilter === 'processed' && capture.processed !== true) return false;
+            if (!searchQuery) return true;
+            return [title(capture), capture.url, capture.domain, capture.text, workspace].join('\n').toLowerCase().indexOf(searchQuery) !== -1;
+          });
+        }
+
         function readSettings() {
           if (!api || !api.settings || typeof api.settings.read !== 'function') return Promise.resolve({});
           return api.settings.read().then(function (settings) { return settings || {}; }).catch(function () { return {}; });
         }
 
+        function capturesFromSettings(settings) {
+          var keys = [GLOBAL_KEY, LEGACY_KEY];
+          Object.keys(settings || {}).forEach(function (name) {
+            if (name.indexOf(WORKSPACE_PREFIX) === 0) keys.push(name);
+          });
+          var all = [];
+          keys.forEach(function (name) {
+            all = all.concat(normalizeRows((settings || {})[name], name));
+          });
+          return sortCaptures(all);
+        }
+
+        function loadWorkspaceOptions() {
+          if (!api || !api.files || typeof api.files.list !== 'function') return Promise.resolve();
+          return api.files.list('').then(function (entries) {
+            workspaceOptions = (Array.isArray(entries) ? entries : []).filter(function (entry) {
+              return String(entry && entry.type || '').toLowerCase() === 'folder';
+            }).map(function (entry) {
+              return cleanWorkspace(entry.relativePath || entry.name);
+            }).filter(function (workspace) {
+              return workspace && workspace.indexOf('/') === -1;
+            });
+          }).catch(function () {
+            workspaceOptions = [];
+          });
+        }
+
         function persist() {
           if (!api || !api.settings || typeof api.settings.write !== 'function') return Promise.resolve();
-          return api.settings.write(key, captures.slice()).catch(function (err) {
+          return api.settings.write(GLOBAL_KEY, sortCaptures(captures)).catch(function (err) {
             statusText = 'Could not save inbox: ' + (err && err.message ? err.message : String(err));
           });
         }
 
         function selectedCapture() {
-          for (var i = 0; i < captures.length; i += 1) {
-            if (captures[i].captureId === selectedId) return captures[i];
+          var visible = visibleCaptures();
+          for (var i = 0; i < visible.length; i += 1) {
+            if (visible[i].captureId === selectedId) return visible[i];
           }
-          return captures[0] || null;
+          return visible[0] || null;
+        }
+
+        function clearScope() {
+          var ids = (rootPath ? captures.filter(function (capture) {
+            return cleanWorkspace(capture.workspaceRootPath) === rootPath;
+          }) : captures).map(function (capture) { return capture.captureId; });
+          captures = captures.filter(function (capture) { return ids.indexOf(capture.captureId) === -1; });
+          selectedId = '';
+          statusText = rootPath ? 'Workspace captures cleared' : 'Inbox cleared';
+          return persist();
         }
 
         function removeCapture(captureId) {
           captures = captures.filter(function (item) { return item.captureId !== captureId; });
-          selectedId = captures[0] ? captures[0].captureId : '';
-          statusText = 'Capture removed';
+          selectedId = '';
+          statusText = 'Capture deleted';
+          return persist().then(render);
+        }
+
+        function assignWorkspace(captureId, workspace) {
+          workspace = cleanWorkspace(workspace);
+          captures = captures.map(function (capture) {
+            if (capture.captureId !== captureId) return capture;
+            return Object.assign({}, capture, { workspaceRootPath: workspace, workspaceName: workspace });
+          });
+          if (workspace && workspaceOptions.indexOf(workspace) === -1) workspaceOptions.push(workspace);
+          statusText = workspace ? 'Capture assigned to ' + workspace : 'Capture is unassigned';
+          return persist().then(render);
+        }
+
+        function setProcessed(captureId, processed) {
+          captures = captures.map(function (capture) {
+            return capture.captureId === captureId ? Object.assign({}, capture, { processed: processed === true }) : capture;
+          });
+          statusText = processed ? 'Capture marked processed' : 'Capture marked unprocessed';
           return persist().then(render);
         }
 
@@ -2216,14 +2395,18 @@
 
         function renderList() {
           listEl.innerHTML = '';
-          if (captures.length === 0) {
+          var visible = visibleCaptures();
+          if (visible.length === 0) {
             listEl.appendChild(el('div', {
               className: 'browser-inbox-empty',
-              textContent: 'No browser captures yet. Keep this view open, then send a page, selection, link, or file from the browser extension.'
+              textContent: captures.length === 0
+                ? 'No browser captures yet. Keep this view open, then send a page, selection, link, or file from the browser extension.'
+                : 'No captures match the current filters.'
             }));
             return;
           }
-          captures.forEach(function (capture) {
+          visible.forEach(function (capture) {
+            var workspace = cleanWorkspace(capture.workspaceRootPath);
             var row = el('div', {
               className: 'browser-inbox-row' + (capture.captureId === selectedId ? ' selected' : ''),
               'data-browser-capture-id': capture.captureId,
@@ -2238,6 +2421,7 @@
               ]),
               el('div', { className: 'browser-inbox-row-url', textContent: capture.url || capture.domain || capture.captureId || '' })
             ]);
+            row.appendChild(el('div', { className: 'browser-inbox-row-text', textContent: (workspace || 'Unassigned') + ' · ' + (capture.processed ? 'Processed' : 'Unprocessed') }));
             if (capture.text) row.appendChild(el('div', { className: 'browser-inbox-row-text', textContent: capture.text }));
             listEl.appendChild(row);
           });
@@ -2260,28 +2444,73 @@
             el('div', { className: 'browser-inbox-meta-label', textContent: 'Domain' }),
             el('div', { className: 'browser-inbox-meta-value', textContent: capture.domain || '-' }),
             el('div', { className: 'browser-inbox-meta-label', textContent: 'Browser' }),
-            el('div', { className: 'browser-inbox-meta-value', textContent: capture.browserName || capture.source || '-' })
+            el('div', { className: 'browser-inbox-meta-value', textContent: capture.browserName || capture.source || '-' }),
+            el('div', { className: 'browser-inbox-meta-label', textContent: 'Workspace' }),
+            el('div', { className: 'browser-inbox-meta-value', textContent: capture.workspaceRootPath || 'Unassigned' }),
+            el('div', { className: 'browser-inbox-meta-label', textContent: 'Status' }),
+            el('div', { className: 'browser-inbox-meta-value', textContent: capture.processed ? 'Processed' : 'Unprocessed' })
           ]));
+          var assignment = el('select', {
+            className: 'browser-inbox-select',
+            'data-browser-inbox-assignment': capture.captureId,
+            onChange: function (event) { assignWorkspace(capture.captureId, event.target.value); }
+          });
+          assignment.appendChild(option('', 'Unassigned'));
+          workspaceRoots().forEach(function (workspace) {
+            assignment.appendChild(option(workspace, workspace));
+          });
+          assignment.value = capture.workspaceRootPath || '';
+          var assignmentRow = el('div', { className: 'browser-inbox-detail-actions' }, [assignment]);
+          if (capture.workspaceRootPath) {
+            assignmentRow.appendChild(el('button', {
+              className: 'browser-inbox-btn',
+              'data-browser-inbox-action': 'clear-assignment',
+              textContent: 'Clear assignment',
+              onClick: function () { assignWorkspace(capture.captureId, ''); }
+            }));
+          }
+          detailEl.appendChild(assignmentRow);
           if (capture.text) detailEl.appendChild(el('div', { className: 'browser-inbox-text', textContent: capture.text }));
           if (capture.fileText) detailEl.appendChild(el('div', { className: 'browser-inbox-text', textContent: capture.fileText }));
-          detailEl.appendChild(el('div', { className: 'browser-inbox-detail-actions' }, [
-            el('button', { className: 'browser-inbox-btn', 'data-browser-inbox-action': 'create-note', textContent: 'Create Note', onClick: function () { conversionAction('note', capture); } }),
-            el('button', { className: 'browser-inbox-btn', 'data-browser-inbox-action': 'create-link', textContent: 'Create Link', onClick: function () { conversionAction('link', capture); } }),
-            el('button', { className: 'browser-inbox-btn', 'data-browser-inbox-action': 'create-file', textContent: 'Create File', onClick: function () { conversionAction('file', capture); } }),
-            el('button', { className: 'browser-inbox-btn danger', 'data-browser-inbox-action': 'remove', textContent: 'Remove', onClick: function () { removeCapture(capture.captureId); } })
-          ]));
+          var actionButtons = [
+            el('button', {
+              className: 'browser-inbox-btn',
+              'data-browser-inbox-action': 'toggle-processed',
+              textContent: capture.processed ? 'Mark Unprocessed' : 'Mark Processed',
+              onClick: function () { setProcessed(capture.captureId, !capture.processed); }
+            })
+          ];
+          if (capture.workspaceRootPath) {
+            actionButtons.push(el('button', { className: 'browser-inbox-btn', 'data-browser-inbox-action': 'create-note', textContent: 'Create Note', onClick: function () { conversionAction('note', capture); } }));
+            if (capture.url) actionButtons.push(el('button', { className: 'browser-inbox-btn', 'data-browser-inbox-action': 'create-link', textContent: 'Create Link', onClick: function () { conversionAction('link', capture); } }));
+            if (capture.kind === 'file') actionButtons.push(el('button', { className: 'browser-inbox-btn', 'data-browser-inbox-action': 'create-file', textContent: 'Create File', onClick: function () { conversionAction('file', capture); } }));
+          }
+          actionButtons.push(el('button', { className: 'browser-inbox-btn danger', 'data-browser-inbox-action': 'remove', textContent: 'Delete', onClick: function () { removeCapture(capture.captureId); } }));
+          detailEl.appendChild(el('div', { className: 'browser-inbox-detail-actions' }, actionButtons));
+        }
+
+        function renderCount() {
+          var visible = visibleCaptures();
+          countEl.textContent = visible.length === captures.length
+            ? captures.length + ' item' + (captures.length === 1 ? '' : 's')
+            : visible.length + ' of ' + captures.length + ' items';
+          clearBtn.disabled = rootPath
+            ? !captures.some(function (capture) { return cleanWorkspace(capture.workspaceRootPath) === rootPath; })
+            : captures.length === 0;
         }
 
         function render() {
-          countEl.textContent = captures.length + ' item' + (captures.length === 1 ? '' : 's');
-          clearBtn.disabled = captures.length === 0;
+          statusFilterEl.value = statusFilter;
+          searchInput.value = searchQuery;
+          renderWorkspaceFilterOptions();
+          renderCount();
           statusEl.textContent = statusText;
           renderList();
           renderDetail();
         }
 
-        readSettings().then(function (settings) {
-          captures = rows(settings[key]);
+        Promise.all([readSettings(), loadWorkspaceOptions()]).then(function (result) {
+          captures = capturesFromSettings(result[0]);
           selectedId = captures[0] ? captures[0].captureId : '';
           render();
         });
@@ -3238,11 +3467,11 @@
             name: 'Browser Inbox',
             version: '0.1.0',
             apiVersion: '0.1.0',
-            description: 'Workspace-scoped inbox for browser captures.',
+            description: 'Global browser capture queue with explicit workspace assignment.',
             source: 'official',
             icon: 'inbox',
             provides: ['browser.inbox'],
-            permissions: ['events.subscribe', 'storage.namespace', 'ui.register'],
+            permissions: ['events.subscribe', 'files.read', 'storage.namespace', 'ui.register'],
             frontend: { entry: 'frontend/dist/index.js' },
             contributes: {
               views: [{ id: 'verstak.browser-inbox.view', title: 'Browser Inbox', icon: 'inbox', component: 'BrowserInboxView' }],

@@ -83,7 +83,7 @@ test.describe('UX Overview workspace flow', () => {
   test('Overview prioritizes resume work and filters meaningful recent changes', async ({ page }) => {
     await page.evaluate(async () => {
       await window.go.api.App.WritePluginSettings('verstak.browser-inbox', {
-        'captures:workspace:Project': [
+        'captures:global': [
           {
             captureId: 'overview-capture-1',
             capturedAt: '2026-06-30T08:00:00.000Z',
@@ -100,6 +100,19 @@ test.describe('UX Overview workspace flow', () => {
             title: 'Quote to process',
             domain: 'example.com',
             workspaceRootPath: 'Project',
+          },
+          {
+            captureId: 'overview-client-capture',
+            capturedAt: '2026-06-30T08:30:00.000Z',
+            kind: 'page',
+            title: 'Client capture must stay global',
+            workspaceRootPath: 'ClientA',
+          },
+          {
+            captureId: 'overview-unassigned-capture',
+            capturedAt: '2026-06-30T08:35:00.000Z',
+            kind: 'page',
+            title: 'Unassigned capture must stay global',
           },
         ],
       });
@@ -215,6 +228,8 @@ test.describe('UX Overview workspace flow', () => {
     await expect(recent).not.toContainText('Selected file');
     await expect(recent).not.toContainText('Workspace selected');
     await expect(recent).not.toContainText('file.opened');
+    await expect(recent).not.toContainText('Client capture must stay global');
+    await expect(recent).not.toContainText('Unassigned capture must stay global');
     await expect(recent.locator('[data-overview-recent-item]')).toHaveCount(5);
     await expect(recent.locator('[data-overview-recent-item] button')).toHaveCount(0);
 

@@ -197,6 +197,46 @@ func TestReceiverAnnotatesCaptureWithCurrentWorkspace(t *testing.T) {
 	}
 }
 
+func TestReceiverLeavesCaptureUnassignedWithoutCurrentWorkspace(t *testing.T) {
+	bus := events.NewBus()
+	received := make(chan events.Event, 1)
+	bus.Subscribe("browser.capture.page", func(event events.Event) {
+		received <- event
+	})
+
+	receiver := New(bus, func() string { return "" })
+	body := `{
+		"schemaVersion": 1,
+		"captureId": "capture-unassigned",
+		"capturedAt": "2026-06-27T00:00:00.000Z",
+		"source": "verstak-browser-extension",
+		"kind": "page",
+		"page": {
+			"url": "https://example.com/article",
+			"title": "Example Article"
+		}
+	}`
+
+	req := httptest.NewRequest(http.MethodPost, "/api/browser-inbox/v1/captures", bytes.NewBufferString(body))
+	rec := httptest.NewRecorder()
+	receiver.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusAccepted {
+		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusAccepted, rec.Body.String())
+	}
+	event := <-received
+	payload, ok := event.Payload.(map[string]interface{})
+	if !ok {
+		t.Fatalf("event payload type = %T, want map[string]interface{}", event.Payload)
+	}
+	if _, ok := payload["workspaceRootPath"]; ok {
+		t.Fatalf("workspaceRootPath = %v, want absent for an unassigned capture", payload["workspaceRootPath"])
+	}
+	if _, ok := payload["workspaceName"]; ok {
+		t.Fatalf("workspaceName = %v, want absent for an unassigned capture", payload["workspaceName"])
+	}
+}
+
 func TestReceiverRequiresTokenWhenPaired(t *testing.T) {
 	bus := events.NewBus()
 	received := make(chan events.Event, 1)

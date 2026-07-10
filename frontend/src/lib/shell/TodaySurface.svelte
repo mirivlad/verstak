@@ -111,6 +111,24 @@
     });
   }
 
+  function browserCaptureRowsForWorkspace(settings) {
+    const workspace = String(workspaceRootPath || '').trim();
+    if (!workspace) return [];
+    const seen = new Set();
+    return [
+      'captures:global',
+      workspaceKey('captures:workspace:'),
+      'captures',
+    ].flatMap(key => normalizeRows(settings?.[key])).filter(item => {
+      const tagged = String(item.workspaceRootPath || item.workspaceName || item.workspaceNodeId || '').trim();
+      if (tagged !== workspace) return false;
+      const captureId = String(item.captureId || '');
+      if (!captureId || seen.has(captureId)) return !captureId;
+      seen.add(captureId);
+      return true;
+    });
+  }
+
   function timeValue(item) {
     return item?.capturedAt || item?.endedAt || item?.startedAt || item?.occurredAt || item?.receivedAt || item?.updatedAt || item?.modifiedAt || item?.date || item?.time || '';
   }
@@ -419,11 +437,7 @@
     ]);
     if (workspaceAtStart !== String(workspaceRootPath || '').trim()) return;
 
-    captures = rowsFor(browserSettings, [
-      workspaceKey('captures:workspace:'),
-      'captures:global',
-      'captures',
-    ]);
+    captures = browserCaptureRowsForWorkspace(browserSettings);
     activityEvents = rowsFor(activitySettings, [
       workspaceKey('events:workspace:'),
       'events:global',
