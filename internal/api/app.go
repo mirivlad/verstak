@@ -2080,16 +2080,79 @@ func (a *App) GetPluginFrontendInfo(pluginID string) map[string]interface{} {
 			return map[string]interface{}{"status": "no-frontend"}
 		}
 		return map[string]interface{}{
-			"pluginId": p.Manifest.ID,
-			"name":     p.Manifest.Name,
-			"icon":     p.Manifest.Icon,
-			"version":  p.Manifest.Version,
-			"entry":    p.Manifest.Frontend.Entry,
-			"style":    p.Manifest.Frontend.Style,
-			"rootPath": p.RootPath,
+			"pluginId":     p.Manifest.ID,
+			"name":         p.Manifest.Name,
+			"icon":         p.Manifest.Icon,
+			"version":      p.Manifest.Version,
+			"entry":        p.Manifest.Frontend.Entry,
+			"style":        p.Manifest.Frontend.Style,
+			"localization": p.Manifest.Localization,
+			"rootPath":     p.RootPath,
 		}
 	}
 	return map[string]interface{}{"status": "not-found"}
+}
+
+// GetPluginLocalization reads a locale catalog declared by the plugin manifest.
+func (a *App) GetPluginLocalization(pluginID, locale string) (map[string]string, string) {
+	var selected *plugin.Plugin
+	for i := range a.plugins {
+		if a.plugins[i].Manifest.ID == pluginID {
+			selected = &a.plugins[i]
+			break
+		}
+	}
+	if selected == nil {
+		return nil, "plugin not found"
+	}
+	localization := selected.Manifest.Localization
+	if localization == nil {
+		return nil, "plugin does not declare localization"
+	}
+	catalogPath, ok := localization.Locales[locale]
+	if !ok {
+		return nil, fmt.Sprintf("locale %q is not declared", locale)
+	}
+	if err := plugin.ValidateLocalizationPath(catalogPath); err != nil {
+		return nil, err.Error()
+	}
+
+	absRoot, err := filepath.Abs(selected.RootPath)
+	if err != nil {
+		return nil, fmt.Sprintf("resolve plugin root: %v", err)
+	}
+	absPath, err := filepath.Abs(filepath.Join(absRoot, filepath.FromSlash(catalogPath)))
+	if err != nil {
+		return nil, fmt.Sprintf("resolve catalog path: %v", err)
+	}
+	if !pathInsideRoot(absRoot, absPath) {
+		return nil, "catalog path escapes plugin root"
+	}
+	resolvedPath, err := filepath.EvalSymlinks(absPath)
+	if err != nil {
+		return nil, fmt.Sprintf("failed to resolve catalog: %v", err)
+	}
+	if !pathInsideRoot(absRoot, resolvedPath) {
+		return nil, "catalog path escapes plugin root"
+	}
+
+	data, err := os.ReadFile(resolvedPath)
+	if err != nil {
+		return nil, fmt.Sprintf("failed to read catalog: %v", err)
+	}
+	catalog := map[string]string{}
+	if err := json.Unmarshal(data, &catalog); err != nil {
+		return nil, fmt.Sprintf("failed to parse catalog: %v", err)
+	}
+	return catalog, ""
+}
+
+func pathInsideRoot(root, candidate string) bool {
+	relative, err := filepath.Rel(root, candidate)
+	if err != nil {
+		return false
+	}
+	return relative != ".." && !strings.HasPrefix(relative, ".."+string(filepath.Separator))
 }
 
 // GetPluginAssetContent reads a frontend asset file from a plugin directory.

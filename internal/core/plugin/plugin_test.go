@@ -233,6 +233,50 @@ func TestValidateManifest_OpenProviders(t *testing.T) {
 	}
 }
 
+func TestValidateManifest_Localization(t *testing.T) {
+	base := &Manifest{
+		SchemaVersion: 1,
+		ID:            "localized.plugin",
+		Name:          "Localized",
+		Version:       "1.0.0",
+		APIVersion:    "1.0",
+		Provides:      []string{"localized.capability"},
+		Permissions:   []string{"ui.register"},
+		Localization: &LocalizationConfig{
+			DefaultLocale: "en",
+			Locales: map[string]string{
+				"en": "locales/en.json",
+				"ru": "locales/ru.json",
+			},
+		},
+	}
+	if errs := ValidateManifest(base); len(errs) != 0 {
+		t.Fatalf("valid localization errors = %v", errs)
+	}
+
+	tests := []struct {
+		name         string
+		localization *LocalizationConfig
+		want         string
+	}{
+		{"missing default catalog", &LocalizationConfig{DefaultLocale: "en", Locales: map[string]string{"ru": "locales/ru.json"}}, "defaultLocale"},
+		{"invalid locale", &LocalizationConfig{DefaultLocale: "EN", Locales: map[string]string{"EN": "locales/en.json"}}, "locale"},
+		{"absolute path", &LocalizationConfig{DefaultLocale: "en", Locales: map[string]string{"en": "/tmp/en.json"}}, "relative"},
+		{"traversal", &LocalizationConfig{DefaultLocale: "en", Locales: map[string]string{"en": "../en.json"}}, "traversal"},
+		{"backslash", &LocalizationConfig{DefaultLocale: "en", Locales: map[string]string{"en": `locales\en.json`}}, "backslash"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			manifest := *base
+			manifest.Localization = tc.localization
+			combined := strings.Join(ValidateManifest(&manifest), "\n")
+			if !strings.Contains(combined, tc.want) {
+				t.Fatalf("errors = %q, want %q", combined, tc.want)
+			}
+		})
+	}
+}
+
 // TestDiscoverPlugins_MultipleDirs ensures discovery scans multiple directories.
 func TestDiscoverPlugins_MultipleDirs(t *testing.T) {
 	dir1 := t.TempDir()

@@ -343,6 +343,65 @@ func TestGetPluginAssetContent_NonexistentFile(t *testing.T) {
 	}
 }
 
+func TestGetPluginLocalizationReadsDeclaredCatalog(t *testing.T) {
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, "locales"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "locales", "ru.json"), []byte(`{"greeting":"Привет","count":"Всего: {count}"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	app := newTestApp(root)
+	app.plugins[0].Manifest.Localization = &plugin.LocalizationConfig{
+		DefaultLocale: "en",
+		Locales: map[string]string{
+			"en": "locales/en.json",
+			"ru": "locales/ru.json",
+		},
+	}
+
+	catalog, errStr := app.GetPluginLocalization("test.plugin", "ru")
+	if errStr != "" {
+		t.Fatalf("GetPluginLocalization: %s", errStr)
+	}
+	if catalog["greeting"] != "Привет" || catalog["count"] != "Всего: {count}" {
+		t.Fatalf("catalog = %#v", catalog)
+	}
+}
+
+func TestGetPluginLocalizationRejectsInvalidCatalogs(t *testing.T) {
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, "locales"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "locales", "bad.json"), []byte(`{"valid":"text","invalid":42}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	app := newTestApp(root)
+
+	tests := []struct {
+		name   string
+		config *plugin.LocalizationConfig
+		locale string
+		want   string
+	}{
+		{"missing declaration", nil, "ru", "does not declare"},
+		{"unknown locale", &plugin.LocalizationConfig{DefaultLocale: "en", Locales: map[string]string{"en": "locales/en.json"}}, "ru", "not declared"},
+		{"traversal", &plugin.LocalizationConfig{DefaultLocale: "en", Locales: map[string]string{"en": "../outside.json"}}, "en", "traversal"},
+		{"backslash", &plugin.LocalizationConfig{DefaultLocale: "en", Locales: map[string]string{"en": `locales\bad.json`}}, "en", "backslash"},
+		{"non string value", &plugin.LocalizationConfig{DefaultLocale: "en", Locales: map[string]string{"en": "locales/bad.json"}}, "en", "parse"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			app.plugins[0].Manifest.Localization = tc.config
+			_, errStr := app.GetPluginLocalization("test.plugin", tc.locale)
+			if !strings.Contains(errStr, tc.want) {
+				t.Fatalf("error = %q, want substring %q", errStr, tc.want)
+			}
+		})
+	}
+}
+
 func TestFilesBridgeReadWriteListMoveTrash(t *testing.T) {
 	app, root := newFilesTestApp(t, []string{"files.read", "files.write", "files.delete"})
 

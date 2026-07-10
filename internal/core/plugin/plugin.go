@@ -7,28 +7,36 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 )
 
 // Manifest represents a Verstak plugin.json manifest.
 type Manifest struct {
-	SchemaVersion    int              `json:"schemaVersion"`
-	ID               string           `json:"id"`
-	Name             string           `json:"name"`
-	Version          string           `json:"version"`
-	APIVersion       string           `json:"apiVersion"`
-	Description      string           `json:"description,omitempty"`
-	Source           string           `json:"source,omitempty"`
-	Icon             string           `json:"icon,omitempty"`
-	Provides         []string         `json:"provides"`
-	Requires         []string         `json:"requires,omitempty"`
-	OptionalRequires []string         `json:"optionalRequires,omitempty"`
-	Permissions      []string         `json:"permissions"`
-	Frontend         *FrontendConfig  `json:"frontend,omitempty"`
-	Backend          *BackendConfig   `json:"backend,omitempty"`
-	Migrations       *MigrationConfig `json:"migrations,omitempty"`
-	Contributes      *Contributions   `json:"contributes,omitempty"`
-	Sync             *SyncConfig      `json:"sync,omitempty"`
+	SchemaVersion    int                 `json:"schemaVersion"`
+	ID               string              `json:"id"`
+	Name             string              `json:"name"`
+	Version          string              `json:"version"`
+	APIVersion       string              `json:"apiVersion"`
+	Description      string              `json:"description,omitempty"`
+	Source           string              `json:"source,omitempty"`
+	Icon             string              `json:"icon,omitempty"`
+	Localization     *LocalizationConfig `json:"localization,omitempty"`
+	Provides         []string            `json:"provides"`
+	Requires         []string            `json:"requires,omitempty"`
+	OptionalRequires []string            `json:"optionalRequires,omitempty"`
+	Permissions      []string            `json:"permissions"`
+	Frontend         *FrontendConfig     `json:"frontend,omitempty"`
+	Backend          *BackendConfig      `json:"backend,omitempty"`
+	Migrations       *MigrationConfig    `json:"migrations,omitempty"`
+	Contributes      *Contributions      `json:"contributes,omitempty"`
+	Sync             *SyncConfig         `json:"sync,omitempty"`
+}
+
+// LocalizationConfig declares plugin-owned UI message catalogs.
+type LocalizationConfig struct {
+	DefaultLocale string            `json:"defaultLocale"`
+	Locales       map[string]string `json:"locales"`
 }
 
 // FrontendConfig describes the plugin's frontend bundle.
@@ -237,6 +245,25 @@ func ValidateManifest(m *Manifest) []string {
 	if len(m.Permissions) == 0 {
 		errs.add("permissions must have at least one permission")
 	}
+	if m.Localization != nil {
+		if !isValidLocaleTag(m.Localization.DefaultLocale) {
+			errs.add("localization.defaultLocale %q is not a valid lower-case locale", m.Localization.DefaultLocale)
+		}
+		if len(m.Localization.Locales) == 0 {
+			errs.add("localization.locales must contain at least one catalog")
+		}
+		if _, ok := m.Localization.Locales[m.Localization.DefaultLocale]; !ok {
+			errs.add("localization.defaultLocale %q must have a declared catalog", m.Localization.DefaultLocale)
+		}
+		for locale, catalogPath := range m.Localization.Locales {
+			if !isValidLocaleTag(locale) {
+				errs.add("localization locale %q is not a valid lower-case locale", locale)
+			}
+			if err := ValidateLocalizationPath(catalogPath); err != nil {
+				errs.add("localization locale %q: %v", locale, err)
+			}
+		}
+	}
 	if m.Contributes != nil {
 		for i, provider := range m.Contributes.OpenProviders {
 			if provider.ID == "" {
@@ -260,6 +287,31 @@ func ValidateManifest(m *Manifest) []string {
 	}
 
 	return errs.errors
+}
+
+var localeTagPattern = regexp.MustCompile(`^[a-z]{2}(?:-[a-z0-9]+)*$`)
+
+func isValidLocaleTag(locale string) bool {
+	return localeTagPattern.MatchString(locale)
+}
+
+// ValidateLocalizationPath accepts only slash-separated plugin-relative paths.
+func ValidateLocalizationPath(catalogPath string) error {
+	if strings.TrimSpace(catalogPath) == "" {
+		return fmt.Errorf("catalog path is required")
+	}
+	if filepath.IsAbs(catalogPath) || filepath.VolumeName(catalogPath) != "" || strings.HasPrefix(catalogPath, "/") {
+		return fmt.Errorf("catalog path must be relative")
+	}
+	if strings.Contains(catalogPath, `\`) {
+		return fmt.Errorf("catalog path must not contain backslash")
+	}
+	for _, part := range strings.Split(catalogPath, "/") {
+		if part == ".." {
+			return fmt.Errorf("catalog path traversal is not allowed")
+		}
+	}
+	return nil
 }
 
 func isValidPluginID(id string) bool {
