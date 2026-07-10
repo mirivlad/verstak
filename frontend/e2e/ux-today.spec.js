@@ -145,6 +145,21 @@ test.describe('UX Overview workspace flow', () => {
             workspaceRootPath: 'Project',
           },
         ],
+        'work-session-candidates:workspace:Project': [
+          {
+            candidateId: 'work-session:Project:overview-note:overview-file',
+            workspaceRootPath: 'Project',
+            startedAt: '2026-06-30T08:15:00.000Z',
+            endedAt: '2026-06-30T08:25:00.000Z',
+            estimatedMinutes: 10,
+            activityCount: 2,
+            activityIds: ['overview-file', 'overview-note'],
+            activities: [
+              { activityId: 'overview-file', type: 'file.changed', occurredAt: '2026-06-30T08:20:00.000Z' },
+              { activityId: 'overview-note', type: 'note.saved', occurredAt: '2026-06-30T08:25:00.000Z' },
+            ],
+          },
+        ],
       });
       await window.go.api.App.WritePluginSettings('verstak.journal', {
         'worklog:workspace:Project': [
@@ -154,15 +169,6 @@ test.describe('UX Overview workspace flow', () => {
             title: 'Write project summary',
             summary: 'Turn recent captures into a worklog entry',
             minutes: 35,
-            workspaceRootPath: 'Project',
-          },
-        ],
-        'suggestions:workspace:Project': [
-          {
-            suggestionId: 'overview-suggestion-1',
-            date: '2026-06-30',
-            title: 'Project work on 2026-06-30',
-            minutes: 50,
             workspaceRootPath: 'Project',
           },
         ],
@@ -179,6 +185,14 @@ test.describe('UX Overview workspace flow', () => {
     await expect(overview.locator('[data-overview-summary="activity"]')).toContainText('5 recorded events');
     await expect(overview.locator('[data-overview-summary="journal"]')).toContainText('1');
     await expect(overview.locator('[data-overview-summary="attention"]')).toContainText('3');
+    const attention = overview.locator('[data-overview-section="attention"]');
+    await expect(attention).toContainText('Possible journal entry');
+    await expect(attention).toContainText('Workspace: Project · 10 min · 2 activities');
+    await attention.locator('.overview-attention-row', { hasText: 'Possible journal entry' }).getByRole('button', { name: 'Review candidate' }).click();
+    await expect(page.getByRole('tab', { name: 'Journal' })).toHaveAttribute('aria-selected', 'true');
+    await expect(page.locator('.journal-root [data-journal-candidate]')).toContainText('Workspace: Project');
+    await page.locator('.journal-modal-actions').getByRole('button', { name: 'Cancel' }).click();
+    await page.getByRole('tab', { name: 'Overview' }).click();
 
     const resume = overview.locator('[data-overview-section="continue"]');
     const candidates = resume.locator('[data-overview-continue-item]');

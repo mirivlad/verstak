@@ -27,7 +27,7 @@ test.describe('Activity workflow', () => {
     await expect(activity.locator('[data-activity-action="clear"]')).toBeDisabled();
   });
 
-  test('workspace activity renders stored events and worklog suggestions', async ({ page }) => {
+  test('workspace activity keeps raw events and renders factual work session candidates', async ({ page }) => {
     await page.evaluate(async () => {
       await window.go.api.App.WritePluginSettings('verstak.activity', {
         'events:workspace:Project': [
@@ -42,7 +42,7 @@ test.describe('Activity workflow', () => {
           },
           {
             activityId: 'activity-e2e-note',
-            occurredAt: '2026-06-30T08:25:00.000Z',
+            occurredAt: '2026-06-30T08:20:00.000Z',
             type: 'note.saved',
             title: 'Saved note',
             summary: 'Project/Notes/Research Capture.md',
@@ -65,12 +65,77 @@ test.describe('Activity workflow', () => {
     await page.getByRole('tab', { name: 'Activity' }).click();
 
     const activity = page.locator('.activity-root');
-    await expect(activity.locator('.activity-count')).toHaveText('2 events');
+    await expect(activity.locator('.activity-count')).toHaveText('3 events');
     await expect(activity.locator('[data-activity-id="activity-e2e-capture"]')).toContainText('Research Capture');
     await expect(activity.locator('[data-activity-id="activity-e2e-note"]')).toContainText('Saved note');
-    await expect(activity.locator('[data-activity-id="activity-e2e-open"]')).toHaveCount(0);
-    await expect(activity.locator('[data-activity-section="worklog-suggestions"]')).toContainText('Worklog suggestions');
-    await expect(activity.locator('[data-worklog-suggestion="worklog:Project:2026-06-30"]')).toContainText('Project work on 2026-06-30');
-    await expect(activity.locator('[data-worklog-suggestion="worklog:Project:2026-06-30"]')).toContainText('50 min');
+    await expect(activity.locator('[data-activity-id="activity-e2e-open"]')).toContainText('Selected file');
+
+    const candidateSection = activity.locator('[data-activity-section="work-session-candidates"]');
+    await expect(candidateSection).toContainText('Possible journal entries');
+    const candidate = candidateSection.locator('[data-work-session-candidate]');
+    await expect(candidate).toHaveCount(1);
+    await expect(candidate).toContainText('Workspace: Project');
+    await expect(candidate).toContainText('Estimated duration: 20 min');
+    await expect(candidate).toContainText('Activities: 2');
+    await expect(candidate).not.toContainText('Project work on');
+    await expect(candidate.locator('[data-work-session-action="review"]')).toBeVisible();
+    await expect(candidate.locator('[data-work-session-action="dismiss"]')).toBeVisible();
+  });
+
+  test('Review opens an empty Journal form with selectable candidate activities', async ({ page }) => {
+    await page.evaluate(async () => {
+      await window.go.api.App.WritePluginSettings('verstak.activity', {
+        'events:workspace:Project': [
+          {
+            activityId: 'review-capture',
+            occurredAt: '2026-06-30T08:00:00.000Z',
+            type: 'browser.capture.selection',
+            title: 'Research Capture',
+            workspaceRootPath: 'Project',
+          },
+          {
+            activityId: 'review-note',
+            occurredAt: '2026-06-30T08:20:00.000Z',
+            type: 'note.saved',
+            title: 'Saved note',
+            workspaceRootPath: 'Project',
+          },
+        ],
+      });
+    });
+
+    await page.getByRole('tab', { name: 'Activity' }).click();
+    await page.locator('[data-work-session-candidate] [data-work-session-action="review"]').click();
+
+    await expect(page.getByRole('tab', { name: 'Journal' })).toHaveAttribute('aria-selected', 'true');
+    const journal = page.locator('.journal-root');
+    await expect(journal).toBeVisible({ timeout: 10000 });
+    await expect(journal.locator('[data-journal-candidate]')).toContainText('Workspace: Project');
+    await expect(journal.locator('[data-journal-candidate]')).toContainText('Estimated duration: 20 min');
+    await expect(journal.locator('[data-journal-input="title"]')).toHaveValue('');
+    await expect(journal.locator('[data-journal-input="summary"]')).toHaveValue('');
+    await expect(journal.locator('[data-journal-input="minutes"]')).toHaveValue('20');
+
+    const activityInputs = journal.locator('[data-journal-candidate-activity]');
+    await expect(activityInputs).toHaveCount(2);
+    await expect(activityInputs.nth(0)).toBeChecked();
+    await expect(activityInputs.nth(1)).toBeChecked();
+    await journal.locator('[data-journal-input="title"]').fill('Review research capture');
+    await journal.locator('[data-journal-input="summary"]').fill('Read the capture and updated the project note.');
+    await activityInputs.nth(1).uncheck();
+    await journal.locator('[data-journal-action="save-entry"]').click();
+
+    await expect(journal).toContainText('Review research capture');
+    await expect(journal).toContainText('20 min');
+    const stored = await page.evaluate(async () => {
+      const result = await window.go.api.App.ReadPluginSettings('verstak.journal');
+      return Array.isArray(result) ? result[0]['worklog:workspace:Project'] : result['worklog:workspace:Project'];
+    });
+    await expect(stored).toEqual([expect.objectContaining({
+      title: 'Review research capture',
+      summary: 'Read the capture and updated the project note.',
+      sourceCandidateId: expect.any(String),
+      activityIds: ['review-capture'],
+    })]);
   });
 });

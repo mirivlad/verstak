@@ -14,6 +14,9 @@
   let workspaceTools = [];
   let toolsLoaded = false;
   let requestedToolKind = '';
+  let requestedToolRequest = null;
+  let activeToolRequest = null;
+  let requestedWorkspaceRoot = '';
   // TODO: Rename TodaySurface.svelte to OverviewSurface.svelte in a refactor-only follow-up.
   const overviewTool = { id: '__overview', title: 'Overview', pluginId: 'verstak.shell', component: 'TodaySurface', shell: true };
 
@@ -30,6 +33,11 @@
   $: workspaceRootPath = selectedWorkspace?.rootPath || selectedWorkspace?.name || selectedWorkspace?.id || '';
   $: workspaceTitle = selectedWorkspace?.title || selectedWorkspace?.name || selectedWorkspace?.id || selectedWorkspaceName;
   $: workspaceType = selectedWorkspace?.type || 'workspace';
+  $: if (workspaceRootPath !== requestedWorkspaceRoot) {
+    requestedWorkspaceRoot = workspaceRootPath;
+    requestedToolRequest = null;
+    activeToolRequest = null;
+  }
   $: displayedTools = selectedWorkspace ? [overviewTool, ...workspaceTools] : [];
   $: activeTool = displayedTools.find(tool => toolKey(tool) === activeToolKey) || displayedTools[0] || null;
   $: if (displayedTools.length > 0 && (!activeToolKey || (toolsLoaded && !displayedTools.some(tool => toolKey(tool) === activeToolKey)))) {
@@ -38,8 +46,10 @@
   $: if (requestedToolKind && workspaceTools.length > 0) {
     const match = findWorkspaceTool(requestedToolKind);
     if (match) {
+      const toolRequest = requestedToolRequest;
       requestedToolKind = '';
-      selectTool(match);
+      requestedToolRequest = null;
+      selectTool(match, toolRequest);
     }
   }
   $: if (selectedWorkspaceName) loadTools();
@@ -72,8 +82,9 @@
     });
   }
 
-  function selectTool(tool) {
+  function selectTool(tool, toolRequest = null) {
     activeToolKey = toolKey(tool);
+    activeToolRequest = toolRequest;
     window.dispatchEvent(new CustomEvent('verstak:workspace-tool-selected', {
       detail: {
         toolKey: activeToolKey,
@@ -92,18 +103,23 @@
     });
   }
 
-  function requestWorkspaceTool(kind) {
+  function requestWorkspaceTool(kind, toolRequest = null) {
     requestedToolKind = String(kind || '').toLowerCase();
+    requestedToolRequest = toolRequest;
     const match = findWorkspaceTool(requestedToolKind);
-    if (match) selectTool(match);
+    if (match) {
+      requestedToolKind = '';
+      requestedToolRequest = null;
+      selectTool(match, toolRequest);
+    }
   }
 
   function openWorkspaceTool(event) {
-    requestWorkspaceTool(event?.detail?.kind);
+    requestWorkspaceTool(event?.detail?.kind, event?.detail?.toolRequest || null);
   }
 
   function handleWorkspaceOpenTool(event) {
-    requestWorkspaceTool(event?.detail?.kind);
+    requestWorkspaceTool(event?.detail?.kind, event?.detail?.toolRequest || null);
   }
 
   async function loadTools() {
@@ -169,7 +185,7 @@
             <PluginBundleHost
               pluginId={activeTool.pluginId}
               componentId={activeTool.component}
-              componentProps={{ workspaceName: selectedWorkspaceName, workspaceNodeId: selectedWorkspaceName, workspaceNode: selectedWorkspace, workspaceRootPath }}
+              componentProps={{ workspaceName: selectedWorkspaceName, workspaceNodeId: selectedWorkspaceName, workspaceNode: selectedWorkspace, workspaceRootPath, toolRequest: activeToolRequest }}
             />
           {/if}
         {/if}

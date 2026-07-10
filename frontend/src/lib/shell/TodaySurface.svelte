@@ -31,7 +31,7 @@
   let captures = [];
   let activityEvents = [];
   let journalEntries = [];
-  let worklogSuggestions = [];
+  let workSessionCandidates = [];
   let keyResources = [];
   let totalNotes = 0;
   let loadedWorkspaceRoot = '';
@@ -45,7 +45,9 @@
   $: noteRecentChanges = countCategory(recentChanges, 'notes');
   $: fileRecentChanges = countCategory(recentChanges, 'files');
   $: unprocessedCaptures = captures.filter(item => item?.processed !== true);
-  $: needsAttention = buildNeedsAttention(unprocessedCaptures, worklogSuggestions);
+  $: linkedCandidateIds = new Set(journalEntries.map(item => String(item?.sourceCandidateId || '')).filter(Boolean));
+  $: pendingWorkSessionCandidates = workSessionCandidates.filter(item => !linkedCandidateIds.has(String(item?.candidateId || '')));
+  $: needsAttention = buildNeedsAttention(unprocessedCaptures, pendingWorkSessionCandidates);
   $: continueItems = buildContinueItems(activityEvents, unprocessedCaptures, journalEntries);
   $: attentionActionKind = needsAttention[0]?.actionKind || 'browser-inbox';
   $: lastActive = lastActiveDate([...recentChanges, ...continueItems], captures, journalEntries);
@@ -110,7 +112,7 @@
   }
 
   function timeValue(item) {
-    return item?.capturedAt || item?.occurredAt || item?.receivedAt || item?.updatedAt || item?.modifiedAt || item?.date || item?.time || '';
+    return item?.capturedAt || item?.endedAt || item?.startedAt || item?.occurredAt || item?.receivedAt || item?.updatedAt || item?.modifiedAt || item?.date || item?.time || '';
   }
 
   function timeMs(item) {
@@ -331,7 +333,7 @@
     return [...captureCandidates, ...noteCandidates, ...fileCandidates, ...journalCandidates].slice(0, 4);
   }
 
-  function buildNeedsAttention(captureRows, suggestions) {
+  function buildNeedsAttention(captureRows, candidates) {
     const captureItems = sortByTime(captureRows).slice(0, 4).map(item => ({
       id: item.captureId || `capture:${timeValue(item)}`,
       title: captureTitle(item),
@@ -339,14 +341,15 @@
       actionKind: 'browser-inbox',
       actionLabel: 'Review Inbox',
     }));
-    const suggestionItems = sortByTime(suggestions).slice(0, 4).map(item => ({
-      id: item.suggestionId || item.entryId || `suggestion:${timeValue(item)}`,
-      title: item.title || item.summary || 'Possible journal entry',
-      meta: `${item.minutes ? item.minutes + ' min · ' : ''}${item.date || itemTimeLabel(item)}`,
+    const candidateItems = sortByTime(candidates).slice(0, 4).map(item => ({
+      id: item.candidateId || `work-session:${timeValue(item)}`,
+      title: 'Possible journal entry',
+      meta: `Workspace: ${item.workspaceRootPath || workspaceRootPath || 'Unknown'} · ${item.estimatedMinutes || 0} min · ${item.activityCount || (item.activityIds || []).length || 0} activities`,
       actionKind: 'journal',
       actionLabel: 'Review candidate',
+      toolRequest: { type: 'work-session-candidate', candidate: item },
     }));
-    return [...captureItems, ...suggestionItems].slice(0, 6);
+    return [...captureItems, ...candidateItems].slice(0, 6);
   }
 
   function countCategory(items, category) {
@@ -430,17 +433,16 @@
       workspaceKey('worklog:workspace:'),
       'worklog',
     ]);
-    worklogSuggestions = rowsFor(journalSettings, [
-      workspaceKey('suggestions:workspace:'),
-      'suggestions',
+    workSessionCandidates = rowsFor(activitySettings, [
+      workspaceKey('work-session-candidates:workspace:'),
     ]);
     keyResources = resources.keyResources;
     totalNotes = resources.totalNotes;
     loading = false;
   }
 
-  function openTool(kind) {
-    dispatch('openTool', { kind });
+  function openTool(kind, toolRequest = null) {
+    dispatch('openTool', { kind, toolRequest });
   }
 </script>
 
@@ -578,12 +580,12 @@
                 <div class="today-row overview-attention-row">
                   <strong title={item.title}>{item.title}</strong>
                   <span>{item.meta}</span>
-                  <button type="button" on:click={() => openTool(item.actionKind)}>{item.actionLabel}</button>
+                  <button type="button" on:click={() => openTool(item.actionKind, item.toolRequest)}>{item.actionLabel}</button>
                 </div>
               {/each}
             </div>
           {:else}
-            <p class="today-empty compact">No pending captures or worklog suggestions.</p>
+            <p class="today-empty compact">No pending captures or possible journal entries.</p>
           {/if}
         </section>
       {/if}

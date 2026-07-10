@@ -214,11 +214,10 @@
         name: 'Journal',
         version: '0.1.0',
         apiVersion: '0.1.0',
-        description: 'Workspace-scoped worklog journal.',
+        description: 'Workspace-scoped journal with user-authored entries and optional Activity links.',
         source: 'official',
         icon: 'book-open',
         provides: ['worklog', 'journal', 'report.worklog'],
-        optionalRequires: ['activity.reconstruction'],
         permissions: ['storage.namespace', 'ui.register'],
         frontend: { entry: 'frontend/dist/index.js' },
         contributes: {
@@ -1454,9 +1453,9 @@
           '.activity-toolbar{display:flex;align-items:center;gap:.5rem;padding:.55rem .75rem;border-bottom:1px solid #16213e;background:#12122a;flex-wrap:wrap}',
           '.activity-title{font-size:.86rem;font-weight:600;color:#f0f0ff}.activity-count,.activity-status{font-size:.74rem;color:#8b8ba8}.activity-spacer{flex:1}',
           '.activity-btn{min-height:1.85rem;padding:.3rem .65rem;border:1px solid #1a3a5c;border-radius:4px;background:#0f3460;color:#e0e0f0;font-size:.76rem;cursor:pointer}.activity-btn:hover{background:#1a4a7a}.activity-btn:disabled{opacity:.45;cursor:default}.activity-btn.danger{border-color:#633;color:#ffb0b0}',
-          '.activity-suggestions{display:grid;gap:.5rem;padding:.65rem .75rem;border-bottom:1px solid rgba(22,33,62,.75);background:#111126}.activity-suggestions-title{font-size:.76rem;font-weight:600;color:#8b8ba8;text-transform:uppercase}.activity-suggestion{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:.65rem;padding:.55rem .65rem;border:1px solid rgba(78,204,163,.24);border-radius:4px;background:#14142c}.activity-suggestion-title{font-size:.84rem;font-weight:600;color:#f4f7fb}.activity-suggestion-summary{margin-top:.22rem;color:#aaa;font-size:.76rem;line-height:1.4}.activity-suggestion-minutes{color:#4ecca3;font-size:.76rem;white-space:nowrap}',
+          '.activity-candidates{display:grid;gap:.5rem;padding:.65rem .75rem;border-bottom:1px solid rgba(22,33,62,.75);background:#111126}.activity-candidates-title{font-size:.76rem;font-weight:600;color:#8b8ba8;text-transform:uppercase}.activity-candidate{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:.65rem;padding:.55rem .65rem;border:1px solid rgba(78,204,163,.32);border-radius:4px;background:#14142c}.activity-candidate-title{font-size:.84rem;font-weight:600;color:#f4f7fb}.activity-candidate-facts{margin-top:.22rem;display:grid;gap:.14rem;color:#aaa;font-size:.76rem;line-height:1.4}.activity-candidate-actions{display:flex;gap:.35rem;align-items:flex-start;flex-wrap:wrap}.activity-candidate-minutes{color:#4ecca3;font-size:.76rem;white-space:nowrap}',
           '.activity-list{flex:1;min-height:0;overflow:auto;background:#101020}.activity-empty{height:100%;display:flex;align-items:center;justify-content:center;padding:1.5rem;color:#8b8ba8;font-size:.84rem;line-height:1.45;text-align:center}.activity-row{display:grid;grid-template-columns:9.5rem minmax(0,1fr);gap:.75rem;padding:.72rem .85rem;border-bottom:1px solid rgba(22,33,62,.7)}.activity-time{font-size:.72rem;color:#777;white-space:nowrap}.activity-main{min-width:0}.activity-row-head{display:flex;align-items:center;gap:.45rem;min-width:0}.activity-type{font-size:.68rem;color:#4ecca3;text-transform:uppercase;letter-spacing:.04em}.activity-title-text{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#e0e0f0;font-size:.86rem}.activity-summary{margin-top:.25rem;color:#aaa;font-size:.78rem;line-height:1.4}.activity-source{margin-top:.25rem;color:#777;font-size:.72rem}',
-          '@media(max-width:760px){.activity-row,.activity-suggestion{grid-template-columns:1fr;gap:.25rem}.activity-status{width:100%}}'
+          '@media(max-width:760px){.activity-row,.activity-candidate{grid-template-columns:1fr;gap:.25rem}.activity-status{width:100%}}'
         ].join('');
         document.head.appendChild(style);
       }
@@ -1495,20 +1494,9 @@
         return Array.isArray(value) ? value.filter(function (item) { return item && typeof item === 'object'; }) : [];
       }
 
-      function meaningfulRows(value) {
-        return rows(value).filter(function (activity) {
-          return !LOW_VALUE_EVENT_TYPES[String(activity.type || '').toLowerCase()];
-        });
-      }
-
       function eventTime(value) {
         var date = new Date(value || 0);
         return isNaN(date.getTime()) ? 0 : date.getTime();
-      }
-
-      function eventDay(activity) {
-        var value = activity.occurredAt || activity.receivedAt || new Date().toISOString();
-        return String(value).slice(0, 10);
       }
 
       function formatDate(value) {
@@ -1521,29 +1509,60 @@
         return activity.title || activity.summary || activity.type || activity.activityId || 'Activity event';
       }
 
-      function summarize(group) {
-        return group.map(title).filter(Boolean).slice(0, 3).join('; ') || group.length + ' activity events';
-      }
-
-      function suggestions(events, root) {
-        var groups = {};
-        events.forEach(function (activity) {
-          var workspace = activity.workspaceRootPath || root || 'Global';
-          var day = eventDay(activity);
-          var key = workspace + '|' + day;
-          groups[key] = groups[key] || { workspaceRootPath: workspace, date: day, events: [] };
-          groups[key].events.push(activity);
+      function workSessionCandidates(events, root) {
+        var ordered = rows(events).filter(function (activity) {
+          return !LOW_VALUE_EVENT_TYPES[String(activity.type || '').toLowerCase()] && eventTime(activity.occurredAt || activity.receivedAt);
+        }).sort(function (a, b) {
+          return eventTime(a.occurredAt || a.receivedAt) - eventTime(b.occurredAt || b.receivedAt);
         });
-        return Object.keys(groups).map(function (key) {
-          var group = groups[key];
-          var ordered = group.events.slice().sort(function (a, b) { return eventTime(a.occurredAt || a.receivedAt) - eventTime(b.occurredAt || b.receivedAt); });
-          return {
-            suggestionId: 'worklog:' + group.workspaceRootPath + ':' + group.date,
-            title: group.workspaceRootPath + ' work on ' + group.date,
-            summary: summarize(ordered),
-            minutes: Math.max(25, ordered.length * 25)
-          };
-        }).sort(function (a, b) { return b.suggestionId.localeCompare(a.suggestionId); });
+        var candidates = [];
+        var current = null;
+
+        function addCurrent() {
+          if (!current || current.events.length < 2) return;
+          var first = current.events[0];
+          var last = current.events[current.events.length - 1];
+          var duration = Math.round((eventTime(last.occurredAt || last.receivedAt) - eventTime(first.occurredAt || first.receivedAt)) / 60000);
+          if (duration < 10) return;
+          candidates.push({
+            candidateId: 'work-session:' + encodeURIComponent(current.workspaceRootPath) + ':' + encodeURIComponent(first.activityId || '') + ':' + encodeURIComponent(last.activityId || ''),
+            workspaceRootPath: current.workspaceRootPath,
+            startedAt: new Date(eventTime(first.occurredAt || first.receivedAt)).toISOString(),
+            endedAt: new Date(eventTime(last.occurredAt || last.receivedAt)).toISOString(),
+            estimatedMinutes: duration,
+            activityCount: current.events.length,
+            activityIds: current.events.map(function (activity) { return activity.activityId; }),
+            activities: current.events.map(function (activity) {
+              return {
+                activityId: activity.activityId,
+                type: activity.type || 'activity.event',
+                occurredAt: new Date(eventTime(activity.occurredAt || activity.receivedAt)).toISOString(),
+                sourcePluginId: activity.sourcePluginId || '',
+                workspaceRootPath: activity.workspaceRootPath || root || ''
+              };
+            })
+          });
+        }
+
+        ordered.forEach(function (activity) {
+          var workspace = activity.workspaceRootPath || root || '';
+          var time = eventTime(activity.occurredAt || activity.receivedAt);
+          if (!workspace) return;
+          if (!current) {
+            current = { workspaceRootPath: workspace, events: [activity] };
+            return;
+          }
+          var firstTime = eventTime(current.events[0].occurredAt || current.events[0].receivedAt);
+          var lastTime = eventTime(current.events[current.events.length - 1].occurredAt || current.events[current.events.length - 1].receivedAt);
+          if (current.workspaceRootPath !== workspace || time - lastTime > 20 * 60 * 1000 || time - firstTime > 120 * 60 * 1000) {
+            addCurrent();
+            current = { workspaceRootPath: workspace, events: [activity] };
+            return;
+          }
+          current.events.push(activity);
+        });
+        addCurrent();
+        return candidates.sort(function (a, b) { return b.endedAt.localeCompare(a.endedAt); });
       }
 
       function renderActivity(containerEl, props, api) {
@@ -1551,6 +1570,7 @@
         var rootPath = workspaceRoot(props || {});
         var key = workspaceKey(rootPath);
         var events = [];
+        var dismissed = {};
         var statusText = 'Listening for workspace activity';
 
         containerEl.innerHTML = '';
@@ -1568,7 +1588,7 @@
             persist().then(render);
           }
         });
-        var suggestionsEl = el('div', { className: 'activity-suggestions', 'data-activity-section': 'worklog-suggestions' });
+        var candidatesEl = el('div', { className: 'activity-candidates', 'data-activity-section': 'work-session-candidates' });
         var listEl = el('div', { className: 'activity-list' });
 
         toolbar.appendChild(titleEl);
@@ -1577,7 +1597,7 @@
         toolbar.appendChild(statusEl);
         toolbar.appendChild(clearBtn);
         root.appendChild(toolbar);
-        root.appendChild(suggestionsEl);
+        root.appendChild(candidatesEl);
         root.appendChild(listEl);
         containerEl.appendChild(root);
 
@@ -1593,18 +1613,31 @@
           });
         }
 
-        function renderSuggestions() {
-          suggestionsEl.innerHTML = '';
-          var items = suggestions(events, rootPath);
+        function renderCandidates() {
+          candidatesEl.innerHTML = '';
+          var items = workSessionCandidates(events, rootPath).filter(function (item) { return !dismissed[item.candidateId]; });
           if (!items.length) return;
-          suggestionsEl.appendChild(el('div', { className: 'activity-suggestions-title', textContent: 'Worklog suggestions' }));
+          candidatesEl.appendChild(el('div', { className: 'activity-candidates-title', textContent: 'Possible journal entries' }));
           items.forEach(function (item) {
-            suggestionsEl.appendChild(el('div', { className: 'activity-suggestion', 'data-worklog-suggestion': item.suggestionId }, [
+            candidatesEl.appendChild(el('div', { className: 'activity-candidate', 'data-work-session-candidate': item.candidateId }, [
               el('div', {}, [
-                el('div', { className: 'activity-suggestion-title', textContent: item.title }),
-                el('div', { className: 'activity-suggestion-summary', textContent: item.summary })
+                el('div', { className: 'activity-candidate-title', textContent: 'Possible journal entry' }),
+                el('div', { className: 'activity-candidate-facts' }, [
+                  el('div', { textContent: 'Workspace: ' + item.workspaceRootPath }),
+                  el('div', { textContent: 'Estimated duration: ' + item.estimatedMinutes + ' min' }),
+                  el('div', { textContent: 'Activities: ' + item.activityCount })
+                ])
               ]),
-              el('div', { className: 'activity-suggestion-minutes', textContent: item.minutes + ' min' })
+              el('div', { className: 'activity-candidate-actions' }, [
+                el('div', { className: 'activity-candidate-minutes', textContent: item.estimatedMinutes + ' min' }),
+                el('button', { className: 'activity-btn', type: 'button', 'data-work-session-action': 'review', textContent: 'Review', onClick: function () {
+                  window.dispatchEvent(new CustomEvent('verstak:workspace-open-tool', { detail: { kind: 'journal', toolRequest: { type: 'work-session-candidate', candidate: item } } }));
+                } }),
+                el('button', { className: 'activity-btn', type: 'button', 'data-work-session-action': 'dismiss', textContent: 'Dismiss', onClick: function () {
+                  dismissed[item.candidateId] = true;
+                  render();
+                } })
+              ])
             ]));
           });
         }
@@ -1637,12 +1670,12 @@
           countEl.textContent = events.length + ' event' + (events.length === 1 ? '' : 's');
           clearBtn.disabled = events.length === 0;
           statusEl.textContent = statusText;
-          renderSuggestions();
+          renderCandidates();
           renderList();
         }
 
         readSettings().then(function (settings) {
-          events = meaningfulRows(settings[key]);
+          events = rows(settings[key]);
           render();
         });
         render();
@@ -1653,6 +1686,214 @@
         unmount: function (containerEl) { containerEl.innerHTML = ''; }
       };
       window.VerstakPluginRegister('verstak.activity', { components: { ActivityView: ActivityView } });
+    }.toString() + ')();';
+  }
+
+  function journalBundle() {
+    return '(' + function () {
+      var PLUGIN_ID = 'verstak.journal';
+
+      function injectStyles() {
+        if (document.getElementById('mock-journal-style')) return;
+        var style = document.createElement('style');
+        style.id = 'mock-journal-style';
+        style.textContent = [
+          '.journal-root{height:100%;min-height:0;display:flex;flex-direction:column;background:#0d0d1a;color:#e0e0f0}',
+          '.journal-toolbar{display:flex;align-items:center;gap:.5rem;padding:.55rem .75rem;border-bottom:1px solid #16213e;background:#12122a}.journal-title{font-size:.86rem;font-weight:600;color:#f0f0ff}.journal-count,.journal-status{font-size:.74rem;color:#8b8ba8}.journal-spacer{flex:1}',
+          '.journal-btn{min-height:1.85rem;padding:.3rem .65rem;border:1px solid #1a3a5c;border-radius:4px;background:#0f3460;color:#e0e0f0;font-size:.76rem;cursor:pointer}.journal-btn.primary{background:#4ecca3;border-color:#4ecca3;color:#102018}',
+          '.journal-list{flex:1;min-height:0;overflow:auto;padding:.5rem .75rem}.journal-empty{padding:1.5rem;color:#8b8ba8}.journal-row{display:grid;grid-template-columns:8rem minmax(0,1fr) auto;gap:.7rem;padding:.65rem 0;border-bottom:1px solid rgba(22,33,62,.75)}.journal-entry-title{font-weight:600}.journal-summary,.journal-meta{margin-top:.22rem;font-size:.76rem;color:#aaa}.journal-minutes{color:#4ecca3;font-size:.78rem;white-space:nowrap}',
+          '.journal-modal-host[hidden]{display:none}.journal-modal-overlay{position:fixed;inset:0;z-index:10000;display:flex;align-items:center;justify-content:center;padding:1rem;background:rgba(0,0,0,.58)}.journal-modal{width:520px;max-width:96vw;display:grid;gap:.75rem;padding:1rem;border:1px solid #2c456a;border-radius:8px;background:#15152c;box-shadow:0 18px 44px rgba(0,0,0,.38)}.journal-modal-title{font-size:.95rem;font-weight:600}.journal-modal-grid{display:grid;grid-template-columns:1fr 8rem;gap:.6rem}.journal-field{display:grid;gap:.3rem;font-size:.72rem;color:#8b8ba8}.journal-field.wide{grid-column:1/-1}.journal-input{min-width:0;padding:.38rem .5rem;border:1px solid #2c456a;border-radius:4px;background:#0f1424;color:#f4f7fb;font:inherit}.journal-input.textarea{min-height:6rem;resize:vertical}.journal-candidate-context{display:grid;gap:.2rem;padding:.65rem;border:1px solid rgba(78,204,163,.34);border-radius:6px;background:#111126;font-size:.76rem;color:#b7c0d4}.journal-candidate-activities{display:grid;gap:.35rem;margin:0;padding:.65rem;border:1px solid #202b46;border-radius:6px;font-size:.74rem;color:#b7c0d4}.journal-candidate-activity{display:flex;align-items:flex-start;gap:.45rem}.journal-modal-actions{display:flex;justify-content:flex-end;gap:.5rem}'
+        ].join('');
+        document.head.appendChild(style);
+      }
+
+      function el(tag, attrs, children) {
+        var node = document.createElement(tag);
+        attrs = attrs || {};
+        Object.keys(attrs).forEach(function (key) {
+          if (key === 'textContent') node.textContent = attrs[key];
+          else if (key === 'className') node.className = attrs[key];
+          else if (key === 'disabled') node.disabled = !!attrs[key];
+          else if (key === 'checked') node.checked = !!attrs[key];
+          else if (key === 'value') node.value = attrs[key];
+          else if (key.indexOf('data-') === 0) node.setAttribute(key, attrs[key]);
+          else if (key === 'onClick') node.addEventListener('click', attrs[key]);
+          else node[key] = attrs[key];
+        });
+        (children || []).forEach(function (child) {
+          if (child) node.appendChild(typeof child === 'string' ? document.createTextNode(child) : child);
+        });
+        return node;
+      }
+
+      function workspaceRoot(props) {
+        return String(props.workspaceRootPath || (props.workspaceNode && (props.workspaceNode.rootPath || props.workspaceNode.name || props.workspaceNode.id)) || props.workspaceName || '').trim();
+      }
+
+      function workspaceKey(root) {
+        return 'worklog:workspace:' + encodeURIComponent(root || '');
+      }
+
+      function rows(value) {
+        return Array.isArray(value) ? value.filter(function (item) { return item && typeof item === 'object'; }) : [];
+      }
+
+      function candidateFromProps(props, root) {
+        var request = props && props.toolRequest;
+        var candidate = request && request.type === 'work-session-candidate' ? request.candidate : null;
+        if (!candidate || candidate.workspaceRootPath !== root || !candidate.candidateId) return null;
+        var activities = rows(candidate.activities).filter(function (activity) { return activity.activityId; });
+        return {
+          candidateId: String(candidate.candidateId),
+          workspaceRootPath: root,
+          startedAt: candidate.startedAt || '',
+          endedAt: candidate.endedAt || '',
+          estimatedMinutes: Number(candidate.estimatedMinutes || 0),
+          activityCount: Number(candidate.activityCount || activities.length),
+          activities: activities,
+          activityIds: Array.isArray(candidate.activityIds) ? candidate.activityIds : activities.map(function (activity) { return activity.activityId; })
+        };
+      }
+
+      function candidateDate(value) {
+        var date = new Date(value || '');
+        return isNaN(date.getTime()) ? new Date().toISOString().slice(0, 10) : date.toISOString().slice(0, 10);
+      }
+
+      function candidateTime(value) {
+        var date = new Date(value || '');
+        return isNaN(date.getTime()) ? String(value || '') : date.toLocaleString(undefined, { month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+      }
+
+      function JournalView() {}
+
+      JournalView.mount = function (containerEl, props, api) {
+        injectStyles();
+        var rootPath = workspaceRoot(props || {});
+        var key = workspaceKey(rootPath);
+        var entries = [];
+        var modalHost = el('div', { className: 'journal-modal-host', hidden: true });
+        containerEl.innerHTML = '';
+        var root = el('div', { className: 'journal-root', 'data-plugin-id': PLUGIN_ID });
+        var toolbar = el('div', { className: 'journal-toolbar' });
+        var countEl = el('span', { className: 'journal-count' });
+        var addBtn = el('button', { className: 'journal-btn primary', 'data-journal-action': 'add', textContent: 'Add', onClick: function () { showEntryModal(null); } });
+        var listEl = el('div', { className: 'journal-list' });
+        toolbar.appendChild(el('span', { className: 'journal-title', textContent: rootPath ? 'Journal · ' + rootPath : 'Journal' }));
+        toolbar.appendChild(countEl);
+        toolbar.appendChild(el('span', { className: 'journal-spacer' }));
+        toolbar.appendChild(addBtn);
+        root.appendChild(toolbar);
+        root.appendChild(listEl);
+        root.appendChild(modalHost);
+        containerEl.appendChild(root);
+
+        function closeModal() {
+          modalHost.innerHTML = '';
+          modalHost.hidden = true;
+        }
+
+        function persist() {
+          return api.settings.write(key, entries);
+        }
+
+        function showEntryModal(candidate) {
+          var reviewing = !!candidate;
+          var titleInput = el('input', { className: 'journal-input', type: 'text', value: '', 'data-journal-input': 'title' });
+          var summaryInput = el('textarea', { className: 'journal-input textarea', value: '', 'data-journal-input': 'summary' });
+          var minutesInput = el('input', { className: 'journal-input', type: 'number', value: reviewing ? String(candidate.estimatedMinutes) : '30', 'data-journal-input': 'minutes' });
+          var dateInput = el('input', { className: 'journal-input', type: 'date', value: reviewing ? candidateDate(candidate.startedAt) : new Date().toISOString().slice(0, 10), 'data-journal-input': 'date' });
+          var billableInput = el('input', { type: 'checkbox', checked: false, 'data-journal-input': 'billable' });
+          var activityInputs = reviewing ? candidate.activities.map(function (activity) {
+            return { activity: activity, input: el('input', { type: 'checkbox', checked: true, 'data-journal-candidate-activity': activity.activityId }) };
+          }) : [];
+          var context = reviewing ? el('div', { className: 'journal-candidate-context', 'data-journal-candidate': candidate.candidateId }, [
+            el('strong', { textContent: 'Possible journal entry' }),
+            el('div', { textContent: 'Workspace: ' + candidate.workspaceRootPath }),
+            el('div', { textContent: 'Time: ' + candidateTime(candidate.startedAt) + ' - ' + candidateTime(candidate.endedAt) }),
+            el('div', { textContent: 'Estimated duration: ' + candidate.estimatedMinutes + ' min' }),
+            el('div', { textContent: 'Activities: ' + candidate.activityCount })
+          ]) : null;
+          var linked = reviewing ? el('fieldset', { className: 'journal-candidate-activities' }, [
+            el('legend', { textContent: 'Linked activities' })
+          ].concat(activityInputs.map(function (item) {
+            return el('label', { className: 'journal-candidate-activity' }, [item.input, (item.activity.type || 'activity.event') + ' · ' + item.activity.activityId]);
+          }))) : null;
+
+          function save() {
+            var title = String(titleInput.value || '').trim();
+            if (!title) return;
+            var entry = {
+              entryId: 'journal:' + Date.now(),
+              workspaceRootPath: rootPath,
+              date: dateInput.value,
+              title: title,
+              summary: String(summaryInput.value || ''),
+              minutes: Number(minutesInput.value || 0),
+              billable: billableInput.checked === true,
+              sourceCandidateId: reviewing ? candidate.candidateId : '',
+              activityIds: reviewing ? activityInputs.filter(function (item) { return item.input.checked; }).map(function (item) { return item.activity.activityId; }) : []
+            };
+            entries = [entry].concat(entries);
+            closeModal();
+            persist().then(render);
+          }
+
+          modalHost.innerHTML = '';
+          modalHost.hidden = false;
+          modalHost.appendChild(el('div', { className: 'journal-modal-overlay' }, [
+            el('div', { className: 'journal-modal' }, [
+              el('div', { className: 'journal-modal-title', textContent: reviewing ? 'Review possible journal entry' : 'Add journal entry' }),
+              context,
+              el('div', { className: 'journal-modal-grid' }, [
+                el('label', { className: 'journal-field' }, ['Date', dateInput]),
+                el('label', { className: 'journal-field' }, ['Minutes', minutesInput]),
+                el('label', { className: 'journal-field wide' }, ['Title', titleInput]),
+                el('label', { className: 'journal-field wide' }, ['Body', summaryInput]),
+                el('label', { className: 'journal-field wide' }, [billableInput, 'Billable'])
+              ]),
+              linked,
+              el('div', { className: 'journal-modal-actions' }, [
+                el('button', { className: 'journal-btn', textContent: 'Cancel', onClick: closeModal }),
+                el('button', { className: 'journal-btn primary', 'data-journal-action': 'save-entry', textContent: 'Add entry', onClick: save })
+              ])
+            ])
+          ]));
+          titleInput.focus();
+        }
+
+        function render() {
+          countEl.textContent = entries.length + ' entr' + (entries.length === 1 ? 'y' : 'ies');
+          listEl.innerHTML = '';
+          if (!entries.length) {
+            listEl.appendChild(el('div', { className: 'journal-empty', textContent: 'No journal entries yet.' }));
+            return;
+          }
+          entries.forEach(function (entry) {
+            var activityIds = Array.isArray(entry.activityIds) ? entry.activityIds : (Array.isArray(entry.eventIds) ? entry.eventIds : []);
+            listEl.appendChild(el('div', { className: 'journal-row', 'data-journal-entry': entry.entryId }, [
+              el('div', { textContent: entry.date }),
+              el('div', {}, [
+                el('div', { className: 'journal-entry-title', textContent: entry.title }),
+                entry.summary ? el('div', { className: 'journal-summary', textContent: entry.summary }) : null,
+                el('div', { className: 'journal-meta', textContent: entry.workspaceRootPath + (activityIds.length ? ' · ' + activityIds.length + ' linked activities' : '') })
+              ]),
+              el('div', { className: 'journal-minutes', textContent: entry.minutes + ' min' })
+            ]));
+          });
+        }
+
+        api.settings.read(key).then(function (stored) {
+          entries = rows(stored);
+          render();
+          var candidate = candidateFromProps(props || {}, rootPath);
+          if (candidate) showEntryModal(candidate);
+        }).catch(function () { render(); });
+        render();
+      };
+
+      JournalView.unmount = function (containerEl) { containerEl.innerHTML = ''; };
+      window.VerstakPluginRegister('verstak.journal', { components: { JournalView: JournalView } });
     }.toString() + ')();';
   }
 
@@ -2208,7 +2449,7 @@
         return Promise.resolve(activityBundle());
       }
       if (pluginId === 'verstak.journal' && assetPath === 'frontend/dist/index.js') {
-        return Promise.resolve(simplePluginBundle('verstak.journal', 'JournalView', 'journal-root', 'Journal'));
+        return Promise.resolve(journalBundle());
       }
       if (pluginId === 'verstak.browser-inbox' && assetPath === 'frontend/dist/index.js') {
         return Promise.resolve(browserInboxBundle());
@@ -2771,11 +3012,10 @@
             name: 'Journal',
             version: '0.1.0',
             apiVersion: '0.1.0',
-            description: 'Workspace-scoped worklog journal.',
+            description: 'Workspace-scoped journal with user-authored entries and optional Activity links.',
             source: 'official',
             icon: 'book-open',
             provides: ['worklog', 'journal', 'report.worklog'],
-            optionalRequires: ['activity.reconstruction'],
             permissions: ['storage.namespace', 'ui.register'],
             frontend: { entry: 'frontend/dist/index.js' },
             contributes: {
