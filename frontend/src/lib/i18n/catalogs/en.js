@@ -73,7 +73,7 @@ export default {
   'pluginCard.count.searchProviders': '{count} search provider(s)',
   'pluginCard.count.sidebar': '{count} sidebar item(s)',
   'pluginCard.count.statusbar': '{count} status bar item(s)',
-  'pluginCard.count.openProviders': '{count} open provider(s)',
+  'pluginCard.count.openProviders': '{count} openProviders',
   'pluginCard.count.workspace': '{count} workspace item(s)',
   'pluginCard.degraded': 'Plugin is usable, but some optional capabilities are unavailable.',
   'pluginCard.name': 'Name',
