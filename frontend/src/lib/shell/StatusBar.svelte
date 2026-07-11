@@ -2,26 +2,41 @@
   import { onDestroy, onMount } from 'svelte';
   import * as App from '../../../wailsjs/go/api/App';
   import Icon from '../ui/Icon.svelte';
+  import { i18n } from '../i18n/index.js';
 
   let items = [];
   let settingsPanels = [];
   let vaultStatus = { status: 'unknown', path: '', vaultId: '' };
   let settingsOpen = false;
+  let locale = i18n.getLocale();
+  let selectedLanguage = i18n.getLanguagePreference();
+  let unsubscribeLocale = null;
+
+  $: tr = ((activeLocale) => (key, params, fallback) => {
+    void activeLocale;
+    return i18n.t(key, params, fallback);
+  })(locale);
 
   $: leftItems = items.filter((item) => item.position === 'left');
   $: centerItems = items.filter((item) => item.position === 'center');
   $: rightItems = items.filter((item) => item.position === 'right');
   $: vaultOpen = vaultStatus.status === 'open';
-  $: vaultLabel = vaultStatus.status && vaultStatus.status !== 'unknown' ? 'Vault: ' + vaultStatus.status : 'Vault: unknown';
+  $: vaultStatusLabel = tr(`vault.status.${vaultStatus.status || 'unknown'}`, undefined, vaultStatus.status || 'unknown');
+  $: vaultLabel = tr('vault.label', { status: vaultStatusLabel });
 
   const inactiveStatuses = new Set(['disabled', 'failed', 'incompatible', 'missing-required-capability']);
 
   async function loadStatusBar() {
-    const [plugins, contributions, vault] = await Promise.all([
+    const [rawPlugins, rawContributions, vault] = await Promise.all([
       App.GetPlugins().catch(() => []),
       App.GetContributions().catch(() => ({})),
       App.GetVaultStatus().catch(() => ({ status: 'unknown', path: '', vaultId: '' })),
     ]);
+    await Promise.all((rawPlugins || []).map((plugin) => (
+      i18n.loadPlugin(plugin.manifest?.id, plugin.manifest?.localization).catch(() => {})
+    )));
+    const plugins = (rawPlugins || []).map((plugin) => i18n.localizePlugin(plugin));
+    const contributions = i18n.localizeContributionSummary(rawContributions || {});
     const pluginById = new Map((plugins || []).map((plugin) => [plugin.manifest?.id, plugin]));
     vaultStatus = vault || { status: 'unknown', path: '', vaultId: '' };
     items = (contributions.statusBarItems || [])
@@ -56,6 +71,16 @@
     }));
   }
 
+  async function selectLanguage(language) {
+    const err = await App.UpdateAppSettings({ language });
+    if (err) {
+      throw new Error(err);
+    }
+    await i18n.setLanguagePreference(language);
+    selectedLanguage = language;
+    settingsOpen = false;
+  }
+
   function toggleSettings(event) {
     event.stopPropagation();
     settingsOpen = !settingsOpen;
@@ -66,6 +91,12 @@
   }
 
   onMount(() => {
+    unsubscribeLocale = i18n.subscribe((nextLocale) => {
+      const changed = locale !== nextLocale;
+      locale = nextLocale;
+      selectedLanguage = i18n.getLanguagePreference();
+      if (changed) loadStatusBar();
+    });
     loadStatusBar();
     window.addEventListener('verstak:plugins-changed', loadStatusBar);
     window.addEventListener('verstak:vault-opened', loadStatusBar);
@@ -73,13 +104,14 @@
   });
 
   onDestroy(() => {
+    if (unsubscribeLocale) unsubscribeLocale();
     window.removeEventListener('verstak:plugins-changed', loadStatusBar);
     window.removeEventListener('verstak:vault-opened', loadStatusBar);
     window.removeEventListener('click', closeSettings);
   });
 </script>
 
-<footer class="status-bar" aria-label="Status bar">
+<footer class="status-bar" aria-label={tr('statusBar.label')}>
   <div class="status-bar-group status-left">
     <span
       class="vault-status"
@@ -132,7 +164,7 @@
         class="settings-button"
         class:active={settingsOpen}
         type="button"
-        title="Settings"
+        title={tr('settings.title')}
         aria-haspopup="menu"
         aria-expanded={settingsOpen}
         data-settings-menu-button
@@ -143,6 +175,22 @@
       </button>
       {#if settingsOpen}
         <div class="settings-menu" role="menu">
+          <div class="settings-menu-heading">{tr('settings.language')}</div>
+          {#each ['system', 'en', 'ru'] as language}
+            <button
+              class="settings-menu-item language-item"
+              class:active-language={selectedLanguage === language}
+              type="button"
+              role="menuitemradio"
+              aria-checked={selectedLanguage === language}
+              data-settings-language={language}
+              on:click={() => selectLanguage(language)}
+            >
+              <span class="language-check" aria-hidden="true">{selectedLanguage === language ? '✓' : ''}</span>
+              <span>{tr(`settings.language.${language}`)}</span>
+            </button>
+          {/each}
+          <div class="settings-menu-separator"></div>
           <button
             class="settings-menu-item"
             type="button"
@@ -151,7 +199,7 @@
             on:click={openPluginManager}
           >
             <Icon name="puzzle" size={14} class="settings-menu-icon" />
-            <span>Plugin Manager</span>
+            <span>{tr('settings.pluginManager')}</span>
           </button>
           {#if settingsPanels.length > 0}
             <div class="settings-menu-separator"></div>
@@ -318,6 +366,25 @@
   .settings-menu-item:hover {
     background: #0f3460;
     color: #ffffff;
+  }
+
+  .settings-menu-heading {
+    padding: 0.25rem 0.45rem 0.2rem;
+    color: #7f8aa3;
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+
+  .language-check {
+    width: 0.9rem;
+    color: #4ecca3;
+    text-align: center;
+  }
+
+  .active-language {
+    background: rgba(78, 204, 163, 0.1);
   }
 
   .settings-menu-separator {

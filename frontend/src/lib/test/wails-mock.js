@@ -283,6 +283,64 @@
     }
   };
 
+  var russianPluginNames = {
+    'verstak.platform-test': 'Тест платформы',
+    'verstak.default-editor': 'Стандартный редактор',
+    'verstak.files': 'Файлы',
+    'verstak.notes': 'Заметки',
+    'verstak.sync': 'Синхронизация',
+    'verstak.activity': 'Активность',
+    'verstak.journal': 'Журнал',
+    'verstak.browser-inbox': 'Входящие из браузера',
+    'verstak.search': 'Поиск',
+    'verstak.trash': 'Корзина',
+    'verstak.todo': 'Задачи',
+    'verstak.secrets': 'Секреты'
+  };
+  var russianContributionLabels = {
+    'verstak.platform-test.diagnostics': 'Диагностика платформы',
+    'verstak.platform-test.run-tests': 'Запустить тесты платформы',
+    'verstak.platform-test.show-version': 'Показать сведения о версии',
+    'verstak.platform-test.sidebar': 'Тест платформы',
+    'verstak.platform-test.status': '[OK] Все тесты пройдены',
+    'verstak.platform-test.settings': 'Настройки теста платформы',
+    'verstak.platform-test.markdown-diagnostic': 'Диагностика Markdown платформы',
+    'verstak.search.searchVaultText': 'Искать текст в хранилище',
+    'verstak.search.vault-text': 'Поиск по тексту хранилища'
+  };
+  Object.keys(pluginStates).forEach(function (pluginId) {
+    var manifest = pluginStates[pluginId].manifest;
+    manifest.localization = {
+      defaultLocale: 'en',
+      locales: { en: 'locales/en.json', ru: 'locales/ru.json' }
+    };
+  });
+
+  function mockPluginCatalog(pluginId, locale) {
+    var state = pluginStates[pluginId];
+    if (!state || !state.manifest) return {};
+    var manifest = state.manifest;
+    var translatedName = locale === 'ru' ? (russianPluginNames[pluginId] || manifest.name) : manifest.name;
+    var catalog = {
+      'manifest.name': translatedName,
+      'manifest.description': manifest.description || ''
+    };
+    var contributionFields = {
+      views: 'title', commands: 'title', settingsPanels: 'title', sidebarItems: 'title',
+      fileActions: 'label', noteActions: 'label', contextMenuEntries: 'label',
+      searchProviders: 'label', statusBarItems: 'label', openProviders: 'title', workspaceItems: 'title'
+    };
+    Object.keys(contributionFields).forEach(function (point) {
+      var field = contributionFields[point];
+      ((manifest.contributes || {})[point] || []).forEach(function (item) {
+        catalog['contributions.' + point + '.' + item.id + '.' + field] = locale === 'ru'
+          ? (russianContributionLabels[item.id] || translatedName)
+          : item[field];
+      });
+    });
+    return catalog;
+  }
+
   var vaultStatus = { status: 'open', path: '/tmp/verstak-test/vault', vaultId: 'test-vault-001' };
   var vaultPluginState = { enabledPlugins: ['verstak.platform-test', 'verstak.default-editor', 'verstak.files', 'verstak.notes', 'verstak.sync', 'verstak.activity', 'verstak.journal', 'verstak.browser-inbox', 'verstak.search'], disabledPlugins: [], desiredPlugins: [{ id: 'verstak.platform-test', version: '0.1.0', source: 'official' }, { id: 'verstak.default-editor', version: '0.1.0', source: 'official' }, { id: 'verstak.files', version: '0.1.0', source: 'official' }, { id: 'verstak.notes', version: '0.1.0', source: 'official' }, { id: 'verstak.sync', version: '0.1.0', source: 'official' }, { id: 'verstak.activity', version: '0.1.0', source: 'official' }, { id: 'verstak.journal', version: '0.1.0', source: 'official' }, { id: 'verstak.browser-inbox', version: '0.1.0', source: 'official' }, { id: 'verstak.search', version: '0.1.0', source: 'official' }] };
   vaultPluginState.enabledPlugins.push('verstak.trash');
@@ -291,7 +349,11 @@
   vaultPluginState.desiredPlugins.push({ id: 'verstak.todo', version: '0.1.0', source: 'official' });
   vaultPluginState.enabledPlugins.push('verstak.secrets');
   vaultPluginState.desiredPlugins.push({ id: 'verstak.secrets', version: '0.1.0', source: 'official' });
-  var appSettings = { currentVaultPath: '/tmp/verstak-test/vault', recentVaults: [] };
+  var appSettings = {
+    currentVaultPath: '/tmp/verstak-test/vault',
+    recentVaults: [],
+    language: localStorage.getItem('verstak-test-language') || 'system'
+  };
   var workbenchPreferences = {};
   var openedResources = [];
   var pluginSettings = {
@@ -3263,6 +3325,9 @@
       }
       return Promise.resolve({});
     },
+    GetPluginLocalization: function (pluginId, locale) {
+      return Promise.resolve([mockPluginCatalog(pluginId, locale), '']);
+    },
     ReadPluginSettings: function (pluginId) {
       return Promise.resolve([Object.assign({}, pluginSettings[pluginId] || {}), '']);
     },
@@ -3736,7 +3801,11 @@
     OpenVault: function () { return Promise.resolve(null); },
     CloseVault: function () { return Promise.resolve(null); },
     SetCurrentVault: function () { return Promise.resolve(''); },
-    UpdateAppSettings: function () { return Promise.resolve(''); },
+    UpdateAppSettings: function (patch) {
+      appSettings = Object.assign({}, appSettings, patch || {});
+      if (patch && patch.language) localStorage.setItem('verstak-test-language', patch.language);
+      return Promise.resolve('');
+    },
     RecordDesiredPlugin: function () { return Promise.resolve(''); },
     WriteFrontendLog: function () { return Promise.resolve(); },
 
@@ -4066,7 +4135,8 @@
       vaultPluginState.desiredPlugins.push({ id: 'verstak.todo', version: '0.1.0', source: 'official' });
       vaultPluginState.enabledPlugins.push('verstak.secrets');
       vaultPluginState.desiredPlugins.push({ id: 'verstak.secrets', version: '0.1.0', source: 'official' });
-      appSettings = { currentVaultPath: '/tmp/verstak-test/vault', recentVaults: [] };
+      localStorage.removeItem('verstak-test-language');
+      appSettings = { currentVaultPath: '/tmp/verstak-test/vault', recentVaults: [], language: 'system' };
       workbenchPreferences = {};
       openedResources = [];
       pluginSettings = { 'verstak.platform-test': { savedText: 'initial value' } };

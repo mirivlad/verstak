@@ -48,6 +48,8 @@ export function GetPluginCapability(arg1:string,arg2:string):Promise<Record<stri
 
 export function GetPluginFrontendInfo(arg1:string):Promise<Record<string, any>>;
 
+export function GetPluginLocalization(arg1:string,arg2:string):Promise<Record<string, string>|string>;
+
 export function GetPlugins():Promise<Array<plugin.Plugin>>;
 
 export function GetVaultFileMetadata(arg1:string,arg2:string):Promise<files.FileMetadata|string>;

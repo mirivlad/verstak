@@ -2,9 +2,10 @@
   import Icon from '../ui/Icon.svelte';
   import PluginCard from './PluginCard.svelte';
   import PluginBundleHost from '../plugin-host/PluginBundleHost.svelte';
-  import { onMount, tick } from 'svelte';
+  import { onDestroy, onMount, tick } from 'svelte';
   import { GetPlugins, GetCapabilities, GetPermissions, GetContributions, ReloadPlugins, GetVaultStatus, GetVaultPluginState, EnablePlugin, DisablePlugin, ReadPluginSettings, WritePluginSettings, GetPluginFrontendInfo, WriteFrontendLog } from '../../../wailsjs/go/api/App';
   import { debug } from '../log/debug.js';
+  import { i18n } from '../i18n/index.js';
 
   let plugins = [];
   let capabilities = [];
@@ -20,6 +21,12 @@
   let settingsError = null;
   let settingsPluginInfo = null;
   let lastOpenedKey = '';
+  let locale = i18n.getLocale();
+  let unsubscribeLocale = null;
+  $: tr = ((activeLocale) => (key, params, fallback) => {
+    void activeLocale;
+    return i18n.t(key, params, fallback);
+  })(locale);
 
   // Per-action loading state — shows feedback on specific buttons without hiding the whole list
   let actionFeedback = {}; // { [pluginId]: 'enabling' | 'disabling' | null }
@@ -109,7 +116,10 @@
     try {
       debug.log('[PluginManager] loadAll: calling GetPlugins...');
       const p = await GetPlugins();
-      plugins = p || [];
+      await Promise.all((p || []).map((plugin) => (
+        i18n.loadPlugin(plugin.manifest?.id, plugin.manifest?.localization).catch(() => {})
+      )));
+      plugins = (p || []).map((plugin) => i18n.localizePlugin(plugin));
       debug.log('[PluginManager] loadAll: GetPlugins returned', plugins.length, 'plugins');
       for (var i = 0; i < plugins.length; i++) {
         debug.log('[PluginManager] loadAll: plugin[' + i + ']:', plugins[i].manifest?.id, 'status:', plugins[i].status, 'enabled:', plugins[i].enabled);
@@ -133,7 +143,7 @@
       vaultStatus = v || { status: 'unknown', path: '', vaultId: '' };
       capabilities = caps || [];
       permissions = perms || [];
-      contributions = contribs || {};
+      contributions = i18n.localizeContributionSummary(contribs || {});
       debug.log('[PluginManager] loadAll: vault=' + vaultStatus.status + ' caps=' + capabilities.length + ' perms=' + permissions.length);
       WriteFrontendLog('PluginManager', 'loadAll: vault=' + vaultStatus.status + ' caps=' + capabilities.length + ' perms=' + permissions.length);
     } catch (e) {
@@ -156,7 +166,18 @@
     WriteFrontendLog('PluginManager', 'loadAll: END, loading=false');
   }
 
-  onMount(() => { loadAll(); });
+  onMount(() => {
+    unsubscribeLocale = i18n.subscribe((nextLocale) => {
+      const changed = locale !== nextLocale;
+      locale = nextLocale;
+      if (changed) loadAll();
+    });
+    loadAll();
+  });
+
+  onDestroy(() => {
+    if (unsubscribeLocale) unsubscribeLocale();
+  });
 
   async function reload() {
     debug.log('[PluginManager] reload: START');
@@ -272,48 +293,48 @@
 
   <header>
     <div class="header-left">
-      <h2>Plugin Manager</h2>
+      <h2>{tr('settings.pluginManager')}</h2>
       {#if vaultStatus.status !== 'unknown'}
         <span class="vault-badge" class:vault-open={vaultStatus.status === 'open'} class:vault-not-created={vaultStatus.status === 'not-created'} class:vault-closed={vaultStatus.status === 'closed'} class:vault-error={vaultStatus.status === 'error'}>
-          Vault: {vaultStatus.status}{#if vaultStatus.path} ({vaultStatus.path}){/if}
+          {tr('vault.label', { status: tr(`vault.status.${vaultStatus.status}`, undefined, vaultStatus.status) })}{#if vaultStatus.path} ({vaultStatus.path}){/if}
         </span>
       {/if}
     </div>
     <button class="reload-btn" on:click={reload} type="button" disabled={loading || reloading}>
-      {reloading ? '⟳ Reloading...' : '⟳ Reload'}
+      {reloading ? tr('pluginManager.reloading') : tr('pluginManager.reload')}
     </button>
   </header>
 
   {#if loading}
-    <div class="loading">Scanning plugin directories...</div>
+    <div class="loading">{tr('pluginManager.scanning')}</div>
   {:else if error}
     <div class="error">
       <Icon name="warning" size={24} class="error-icon" />
       <div class="error-message">{error}</div>
-      <button class="retry-btn" on:click={loadAll} type="button">⟳ Retry</button>
+      <button class="retry-btn" on:click={loadAll} type="button">{tr('common.retry')}</button>
     </div>
   {:else}
     <div class="summary">
-      <span class="badge">{totalPlugins} plugin(s) discovered</span>
-      <span class="badge">{totalCaps} capabilities registered</span>
-      <span class="badge">{totalPerms} permissions known</span>
+      <span class="badge">{tr('pluginManager.summary.plugins', { count: totalPlugins })}</span>
+      <span class="badge">{tr('pluginManager.summary.capabilities', { count: totalCaps })}</span>
+      <span class="badge">{tr('pluginManager.summary.permissions', { count: totalPerms })}</span>
     </div>
 
-    <div class="scan-summary" aria-label="Plugin scan summary">
+    <div class="scan-summary" aria-label={tr('pluginManager.scanSummary')}>
       <section class="scan-card" data-plugin-manager-summary="health">
-        <div class="scan-card-title">Plugin Health</div>
+        <div class="scan-card-title">{tr('pluginManager.health')}</div>
         <div class="scan-metrics">
-          <span data-plugin-status-summary="loaded"><strong>{statusSummary.loaded}</strong> loaded</span>
-          <span data-plugin-status-summary="degraded"><strong>{statusSummary.degraded}</strong> degraded</span>
-          <span data-plugin-status-summary="failed"><strong>{statusSummary.failed}</strong> failed</span>
-          <span data-plugin-status-summary="disabled"><strong>{statusSummary.disabled}</strong> disabled</span>
+          <span data-plugin-status-summary="loaded"><strong>{statusSummary.loaded}</strong> {tr('status.loaded')}</span>
+          <span data-plugin-status-summary="degraded"><strong>{statusSummary.degraded}</strong> {tr('status.degraded')}</span>
+          <span data-plugin-status-summary="failed"><strong>{statusSummary.failed}</strong> {tr('status.failed')}</span>
+          <span data-plugin-status-summary="disabled"><strong>{statusSummary.disabled}</strong> {tr('status.disabled')}</span>
         </div>
       </section>
 
       <section class="scan-card" data-plugin-manager-summary="risk">
-        <div class="scan-card-title">Permission Risk</div>
+        <div class="scan-card-title">{tr('pluginManager.permissionRisk')}</div>
         <div class="scan-metrics">
-          <span data-plugin-risk-summary="elevated-permissions"><strong>{elevatedPermissionPluginCount}</strong> plugins request elevated permissions</span>
+          <span data-plugin-risk-summary="elevated-permissions">{tr('pluginManager.elevatedPermissions', { count: elevatedPermissionPluginCount })}</span>
         </div>
       </section>
     </div>
@@ -325,13 +346,13 @@
             <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
           </svg>
         </div>
-        <p>No plugins found</p>
-        <p class="hint">Plugin directories scanned:</p>
+        <p>{tr('pluginManager.none')}</p>
+        <p class="hint">{tr('pluginManager.scannedDirs')}</p>
         <ul class="hint-list">
-          <li><code>~/.config/verstak/plugins/</code> — user plugins</li>
-          <li><code>./plugins/</code> — bundled plugins (app directory)</li>
+          <li><code>~/.config/verstak/plugins/</code> — {tr('pluginManager.userPlugins')}</li>
+          <li><code>./plugins/</code> — {tr('pluginManager.bundledPlugins')}</li>
         </ul>
-        <p class="hint">Place a plugin folder with <code>plugin.json</code> in one of these directories and click Reload.</p>
+        <p class="hint">{tr('pluginManager.installHint')}</p>
       </div>
     {:else}
       <div class="plugin-list">
@@ -343,8 +364,8 @@
 
     {#if missingInstalled.length > 0}
       <div class="missing-section">
-        <h3>Missing Installed Plugins</h3>
-        <p class="missing-hint">These plugins are required by this vault but their packages are not installed locally.</p>
+        <h3>{tr('pluginManager.missingTitle')}</h3>
+        <p class="missing-hint">{tr('pluginManager.missingHint')}</p>
         <div class="plugin-list">
           {#each missingInstalled as mp}
             <div class="plugin-card missing-card">
@@ -354,12 +375,12 @@
                   <strong>{mp.id}</strong>
                   {#if mp.version}<span class="version">v{mp.version}</span>{/if}
                 </div>
-                <span class="status-badge" style="color: #e94560">missing</span>
+                <span class="status-badge" style="color: #e94560">{tr('status.missing')}</span>
               </div>
               <p class="missing-text">
-                This plugin is listed in the vault's desired plugins but the package is not installed.
+                {tr('pluginManager.missingPackage')}
                 {#if mp.source && mp.source !== 'unknown'}
-                  <span class="source-hint">Source: {mp.source}</span>
+                  <span class="source-hint">{tr('common.source')}: {mp.source}</span>
                 {/if}
               </p>
             </div>
@@ -370,10 +391,10 @@
 
     {#if capabilities.length > 0}
       <details class="registry-section">
-        <summary>Capability Registry ({totalCaps})</summary>
+        <summary>{tr('pluginManager.capabilityRegistry', { count: totalCaps })}</summary>
         <table>
           <thead>
-            <tr><th>Capability</th><th>Provider</th><th>Source</th><th>Status</th></tr>
+            <tr><th>{tr('common.capability')}</th><th>{tr('common.provider')}</th><th>{tr('common.source')}</th><th>{tr('common.status')}</th></tr>
           </thead>
           <tbody>
             {#each capabilities as cap}
@@ -394,9 +415,9 @@
   {#key `settings-${settingsPluginId}`}
   {#if settingsError}
   <div class="modal-overlay" on:click|self={closeSettings} on:keydown|self={(e) => e.key === 'Escape' && closeSettings()} role="presentation">
-  <div class="modal" role="dialog" aria-modal="true" aria-label="Settings Error">
+  <div class="modal" role="dialog" aria-modal="true" aria-label={tr('pluginManager.settingsError')}>
     <div class="modal-header">
-      <h3>Settings Error</h3>
+      <h3>{tr('pluginManager.settingsError')}</h3>
       <button class="modal-close" on:click={closeSettings} type="button">✕</button>
     </div>
     <div class="modal-body">
@@ -406,21 +427,21 @@
   </div>
   {:else if settingsPanel}
   <div class="modal-overlay" on:click|self={closeSettings} on:keydown|self={(e) => e.key === 'Escape' && closeSettings()} role="presentation">
-  <div class="modal" role="dialog" aria-modal="true" aria-label="Plugin Settings">
+  <div class="modal" role="dialog" aria-modal="true" aria-label={tr('pluginManager.pluginSettings')}>
     <div class="modal-header">
       <h3>{settingsPanel.title}</h3>
       <button class="modal-close" on:click={closeSettings} type="button">✕</button>
     </div>
     <div class="modal-body">
-      <p class="settings-hint">Plugin: <code>{settingsPluginId}</code></p>
+      <p class="settings-hint">{tr('common.plugin')}: <code>{settingsPluginId}</code></p>
       {#if settingsPluginInfo && settingsPluginInfo.entry}
         <PluginBundleHost
           pluginId={settingsPluginId}
           componentId={settingsPanel.component || settingsPanel.id}
         />
       {:else}
-        <p class="settings-hint">Component: <code>{settingsPanel.component}</code></p>
-        <p class="placeholder">Settings panel frontend bundle not available</p>
+        <p class="settings-hint">{tr('common.component')}: <code>{settingsPanel.component}</code></p>
+        <p class="placeholder">{tr('pluginManager.settingsBundleUnavailable')}</p>
       {/if}
     </div>
   </div>

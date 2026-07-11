@@ -920,6 +920,20 @@ export namespace plugin {
 	    }
 	}
 	
+	export class LocalizationConfig {
+	    defaultLocale: string;
+	    locales: Record<string, string>;
+
+	    static createFrom(source: any = {}) {
+	        return new LocalizationConfig(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.defaultLocale = source["defaultLocale"];
+	        this.locales = source["locales"];
+	    }
+	}
 	export class SyncConfig {
 	    namespaces?: string[];
 	    participate?: boolean;
@@ -955,6 +969,7 @@ export namespace plugin {
 	    description?: string;
 	    source?: string;
 	    icon?: string;
+	    localization?: LocalizationConfig;
 	    provides: string[];
 	    requires?: string[];
 	    optionalRequires?: string[];
@@ -979,6 +994,7 @@ export namespace plugin {
 	        this.description = source["description"];
 	        this.source = source["source"];
 	        this.icon = source["icon"];
+	        this.localization = this.convertValues(source["localization"], LocalizationConfig);
 	        this.provides = source["provides"];
 	        this.requires = source["requires"];
 	        this.optionalRequires = source["optionalRequires"];

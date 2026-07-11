@@ -2,6 +2,7 @@
   import { onMount, onDestroy } from 'svelte';
   import * as App from '../../../wailsjs/go/api/App';
   import Icon from '../ui/Icon.svelte';
+  import { i18n } from '../i18n/index.js';
 
   import { createPluginAPI } from './VerstakPluginAPI.js';
 
@@ -18,6 +19,13 @@
   let currentComponent = null;
   let currentAPI = null;
   let currentPropsKey = '';
+  let locale = i18n.getLocale();
+  let unsubscribeLocale = null;
+
+  $: tr = ((activeLocale) => (key, params, fallback) => {
+    void activeLocale;
+    return i18n.t(key, params, fallback);
+  })(locale);
 
   $: activePluginId = pluginId || viewPluginId;
   $: activeComponent = componentId;
@@ -32,7 +40,12 @@
   }
 
   onDestroy(() => {
+    unsubscribeLocale?.();
     cleanup();
+  });
+
+  onMount(() => {
+    unsubscribeLocale = i18n.subscribe((nextLocale) => locale = nextLocale);
   });
 
   function cleanup() {
@@ -93,9 +106,15 @@
       if (!info || info.status === 'no-frontend' || info.status === 'not-found') {
         loadState = 'error';
         errorText = info.status === 'no-frontend'
-          ? 'Plugin has no frontend bundle'
-          : 'Plugin not found';
+          ? tr('bundle.noFrontend')
+          : tr('bundle.notFound');
         return;
+      }
+
+      try {
+        await i18n.loadPlugin(pId, info.localization);
+      } catch (catalogError) {
+        console.warn(`[PluginBundleHost] localization unavailable for ${pId}:`, catalogError);
       }
 
       // Check if bundle already loaded for this plugin
@@ -106,7 +125,7 @@
         const content = assetResult.value;
         if (assetResult.error || !content) {
           loadState = 'error';
-          errorText = 'Failed to load bundle: ' + (assetResult.error || 'empty content');
+          errorText = tr('bundle.loadFailed', { error: assetResult.error || tr('bundle.emptyContent') });
           return;
         }
 
@@ -117,7 +136,7 @@
           fn();
         } catch (e) {
           loadState = 'error';
-          errorText = 'Bundle execution error: ' + e.message;
+          errorText = tr('bundle.executionError', { error: e.message });
           console.error('[PluginBundleHost] bundle exec error:', e);
           return;
         }
@@ -125,7 +144,7 @@
         // Verify registration happened
         if (!window.__VERSTAK_PLUGIN_REGISTRY__[pId]) {
           loadState = 'error';
-          errorText = 'Bundle loaded but no VerstakPluginRegister call detected';
+          errorText = tr('bundle.registrationMissing');
           return;
         }
       }
@@ -135,8 +154,10 @@
       const comp = components[compId];
       if (!comp || !comp.mount) {
         loadState = 'error';
-        errorText = 'Component "' + compId + '" not found in bundle. Available: '
-          + (Object.keys(components).join(', ') || 'none');
+        errorText = tr('bundle.componentMissing', {
+          component: compId,
+          available: Object.keys(components).join(', ') || tr('common.none'),
+        });
         return;
       }
 
@@ -156,16 +177,16 @@
           errorText = '';
         } catch (e) {
           loadState = 'error';
-          errorText = 'Component mount error: ' + e.message;
+          errorText = tr('bundle.mountError', { error: e.message });
           console.error('[PluginBundleHost] mount error:', e);
         }
       } else {
         loadState = 'error';
-        errorText = 'Mount container not available';
+        errorText = tr('bundle.mountUnavailable');
       }
     } catch (e) {
       loadState = 'error';
-      errorText = 'Unexpected error: ' + (e.message || e);
+      errorText = tr('bundle.unexpectedError', { error: e.message || e });
       console.error('[PluginBundleHost] error:', e);
     }
   }
@@ -180,22 +201,22 @@
 <div class="plugin-bundle-host">
   {#if loadState === 'idle'}
     <div class="host-state idle">
-      <p>Select a plugin view from the sidebar</p>
+      <p>{tr('pluginView.select')}</p>
     </div>
 
   {:else if loadState === 'error'}
     <div class="host-state error">
       <Icon name="warning" size={24} class="error-icon" />
-      <p class="error-title">Plugin View Error</p>
+      <p class="error-title">{tr('pluginView.error')}</p>
       <div class="error-details">
-        <p><strong>Plugin:</strong> {currentPluginId || 'unknown'}</p>
-        <p><strong>Component:</strong> {currentComponent || 'unknown'}</p>
-        <p class="error-message">{errorText || 'Unknown error'}</p>
+        <p><strong>{tr('common.plugin')}:</strong> {currentPluginId || tr('common.unknown')}</p>
+        <p><strong>{tr('common.component')}:</strong> {currentComponent || tr('common.unknown')}</p>
+        <p class="error-message">{errorText || tr('bundle.unknownError')}</p>
         {#if pluginInfo}
-          <p class="error-meta">Frontend entry: {pluginInfo.entry || 'none'}</p>
+          <p class="error-meta">{tr('bundle.frontendEntry')}: {pluginInfo.entry || tr('common.none')}</p>
         {/if}
         {#if getComponentList().length > 0}
-          <p class="error-meta">Available components: {getComponentList().join(', ')}</p>
+          <p class="error-meta">{tr('bundle.availableComponents')}: {getComponentList().join(', ')}</p>
         {/if}
       </div>
     </div>
@@ -204,7 +225,7 @@
     {#if loadState === 'loading'}
       <div class="host-state loading">
         <div class="spinner"></div>
-        <p>Loading plugin bundle...</p>
+        <p>{tr('bundle.loading')}</p>
       </div>
     {/if}
     <div

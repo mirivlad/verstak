@@ -5,6 +5,7 @@
   import GlobalSearch from './GlobalSearch.svelte';
   import Icon from '../ui/Icon.svelte';
   import { debug } from '../log/debug.js';
+  import { i18n } from '../i18n/index.js';
 
   export let showGlobalSearch = true;
 
@@ -16,6 +17,13 @@
   let vaultStatus = { status: 'unknown', path: '', vaultId: '' };
   let sidebarItems = [];
   let errorMessage = '';
+  let locale = i18n.getLocale();
+  let unsubscribeLocale = null;
+
+  $: tr = ((activeLocale) => (key, params, fallback) => {
+    void activeLocale;
+    return i18n.t(key, params, fallback);
+  })(locale);
 
   $: vaultOpen = vaultStatus.status === 'open';
 
@@ -31,14 +39,18 @@
         App.GetVaultStatus().catch(() => ({ status: 'unknown', path: '', vaultId: '' })),
         App.GetContributions().catch(() => { contribErr = true; return {}; }),
       ]);
-      plugins = p || [];
+      await Promise.all((p || []).map((plugin) => (
+        i18n.loadPlugin(plugin.manifest?.id, plugin.manifest?.localization).catch(() => {})
+      )));
+      plugins = (p || []).map((plugin) => i18n.localizePlugin(plugin));
+      const localizedContributions = i18n.localizeContributionSummary(contribs || {});
       vaultStatus = v;
       debug.log('[Sidebar] onMount: plugins=' + plugins.length + ' vault=' + vaultStatus.status);
       flog('onMount: plugins=' + plugins.length + ' vault=' + vaultStatus.status);
       if (contribErr) {
-        errorMessage = 'Failed to load plugin contributions';
+        errorMessage = tr('sidebar.error.contributions');
       }
-      sidebarItems = (contribs.sidebarItems || []).filter(item => {
+      sidebarItems = (localizedContributions.sidebarItems || []).filter(item => {
         const plugin = plugins.find(p => p.manifest?.id === item.pluginId);
         if (!plugin) return false;
         return plugin.status !== 'disabled' && plugin.status !== 'failed' && plugin.status !== 'incompatible' && plugin.status !== 'missing-required-capability';
@@ -50,18 +62,24 @@
       debug.log('[Sidebar] onMount: ERROR:', String(e));
       flog('onMount: ERROR: ' + String(e));
       console.error('[Sidebar] load error:', e);
-      errorMessage = 'Failed to load sidebar';
+      errorMessage = tr('sidebar.error.load');
     }
     debug.log('[Sidebar] onMount: END');
     flog('onMount: END');
   }
 
   onMount(() => {
+    unsubscribeLocale = i18n.subscribe((nextLocale) => {
+      const changed = locale !== nextLocale;
+      locale = nextLocale;
+      if (changed) loadSidebar();
+    });
     loadSidebar();
     window.addEventListener('verstak:plugins-changed', loadSidebar);
   });
 
   onDestroy(() => {
+    if (unsubscribeLocale) unsubscribeLocale();
     window.removeEventListener('verstak:plugins-changed', loadSidebar);
   });
 
@@ -85,7 +103,7 @@
 
   {#if sidebarItems.length > 0}
     <div class="sidebar-section">
-      <span class="section-label">Tools</span>
+      <span class="section-label">{tr('sidebar.tools')}</span>
       {#each sidebarItems as item}
         <button
           class="nav-item plugin-item vt-list-row"
@@ -107,7 +125,7 @@
     {#if errorMessage}
       <span class="sidebar-error">
         <Icon name="warning" size={10} class="sidebar-error-icon" />
-        Plugin UI error
+        {tr('sidebar.error.ui')}
       </span>
     {/if}
   </div>

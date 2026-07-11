@@ -8,6 +8,7 @@
   import { onDestroy, onMount } from 'svelte';
   import * as App from '../../../wailsjs/go/api/App';
   import Icon from '../ui/Icon.svelte';
+  import { i18n } from '../i18n/index.js';
 
   let loading = true;
   let localError = '';
@@ -24,14 +25,26 @@
   let renamingId = '';
   let renameValue = '';
   let busyId = '';
+  let locale = i18n.getLocale();
+  let unsubscribeLocale = null;
+  $: tr = ((activeLocale) => (key, params, fallback) => {
+    void activeLocale;
+    return i18n.t(key, params, fallback);
+  })(locale);
 
   onMount(() => {
+    unsubscribeLocale = i18n.subscribe((nextLocale) => {
+      const changed = locale !== nextLocale;
+      locale = nextLocale;
+      if (changed) loadWorkspaceTemplates();
+    });
     loadWorkspaces();
     loadWorkspaceTemplates();
     window.addEventListener('verstak:workspace-active-changed', onActiveWorkspaceChanged);
   });
 
   onDestroy(() => {
+    if (unsubscribeLocale) unsubscribeLocale();
     window.removeEventListener('verstak:workspace-active-changed', onActiveWorkspaceChanged);
   });
 
@@ -67,7 +80,10 @@
         return;
       }
       workspaceTemplates = Array.isArray(list) ? list : [];
-      templatePluginNames = (Array.isArray(plugins) ? plugins : []).reduce((names, plugin) => {
+      await Promise.all((Array.isArray(plugins) ? plugins : []).map((plugin) => (
+        i18n.loadPlugin(plugin.manifest?.id, plugin.manifest?.localization).catch(() => {})
+      )));
+      templatePluginNames = (Array.isArray(plugins) ? plugins : []).map((plugin) => i18n.localizePlugin(plugin)).reduce((names, plugin) => {
         const id = plugin?.manifest?.id;
         const name = plugin?.manifest?.name;
         if (id && name) names[id] = name;
@@ -154,11 +170,11 @@
   async function doCreate() {
     const name = newWorkspaceName.trim();
     if (!name) {
-      createError = 'Name is required';
+      createError = tr('workspaceTree.nameRequired');
       return;
     }
     if (!selectedTemplate) {
-      createError = 'Choose a workspace template';
+      createError = tr('workspaceTree.chooseTemplate');
       return;
     }
     creating = true;
@@ -246,12 +262,12 @@
 
 <div class="wt">
   <div class="wt-header">
-    <span class="wt-title">Workspaces</span>
-    <button class="wt-btn" on:click={openCreateDialog} title="New workspace" type="button">+</button>
+    <span class="wt-title">{tr('workspaceTree.title')}</span>
+    <button class="wt-btn" on:click={openCreateDialog} title={tr('workspaceTree.new')} type="button">+</button>
   </div>
 
   {#if loading}
-    <div class="wt-loading">Loading...</div>
+    <div class="wt-loading">{tr('common.loading')}</div>
   {:else if localError}
     <div class="wt-error">{localError}</div>
   {/if}
@@ -272,14 +288,14 @@
                 if (e.key === 'Escape') cancelRename();
               }}
             />
-            <button class="wt-btn wt-btn-small wt-always" on:click={() => commitRename(workspace)} title="Save rename" type="button" disabled={busyId === id}>OK</button>
-            <button class="wt-btn wt-btn-small wt-always" on:click={cancelRename} title="Cancel rename" type="button" disabled={busyId === id}>Cancel</button>
+            <button class="wt-btn wt-btn-small wt-always" on:click={() => commitRename(workspace)} title={tr('workspaceTree.saveRename')} type="button" disabled={busyId === id}>OK</button>
+            <button class="wt-btn wt-btn-small wt-always" on:click={cancelRename} title={tr('common.cancel')} type="button" disabled={busyId === id}>{tr('common.cancel')}</button>
           {:else}
             <button class="wt-label" on:click={() => selectWorkspace(workspace)} type="button">{id}</button>
-            <button class="wt-icon-btn" on:click={() => startRename(workspace)} title="Rename workspace" type="button" disabled={busyId === id}>
+            <button class="wt-icon-btn" on:click={() => startRename(workspace)} title={tr('workspaceTree.rename')} type="button" disabled={busyId === id}>
               <Icon name="edit" size={12} />
             </button>
-            <button class="wt-icon-btn danger" on:click={() => trashWorkspace(workspace)} title="Trash workspace" type="button" disabled={busyId === id}>
+            <button class="wt-icon-btn danger" on:click={() => trashWorkspace(workspace)} title={tr('workspaceTree.trash')} type="button" disabled={busyId === id}>
               <Icon name="trash" size={12} />
             </button>
           {/if}
@@ -289,20 +305,20 @@
   </div>
 
   {#if showCreate}
-    <div class="workspace-create-overlay" data-workspace-create-modal role="dialog" aria-modal="true" aria-label="Create workspace">
+    <div class="workspace-create-overlay" data-workspace-create-modal role="dialog" aria-modal="true" aria-label={tr('workspaceTree.create')}>
       <div class="workspace-create-modal">
         <div class="workspace-create-header">
           <div>
-            <h2>New workspace</h2>
+            <h2>{tr('workspaceTree.new')}</h2>
           </div>
-          <button class="wt-btn" on:click={closeCreateDialog} type="button" disabled={creating}>Close</button>
+          <button class="wt-btn" on:click={closeCreateDialog} type="button" disabled={creating}>{tr('common.close')}</button>
         </div>
         <label class="workspace-create-field">
-          <span>Name</span>
-          <input data-workspace-name type="text" bind:value={newWorkspaceName} placeholder="Workspace name" disabled={creating} on:keydown={(event) => event.key === 'Enter' && doCreate()} />
+          <span>{tr('pluginCard.name')}</span>
+          <input data-workspace-name type="text" bind:value={newWorkspaceName} placeholder={tr('workspaceTree.namePlaceholder')} disabled={creating} on:keydown={(event) => event.key === 'Enter' && doCreate()} />
         </label>
         <label class="workspace-create-field">
-          <span>Template</span>
+          <span>{tr('workspaceTree.template')}</span>
           <select data-workspace-template bind:value={selectedTemplateId} disabled={creating || templatesLoading || !workspaceTemplates.length}>
             {#each workspaceTemplates as template (template.id)}
               <option value={template.id}>{template.name}</option>
@@ -323,8 +339,8 @@
           <p class="workspace-create-error" data-workspace-create-error role="alert">{createError}</p>
         {/if}
         <div class="workspace-create-actions">
-          <button class="wt-btn-primary" on:click={doCreate} type="button" disabled={creating || templatesLoading || !selectedTemplate}>{creating ? 'Creating...' : 'Create workspace'}</button>
-          <button class="wt-btn" on:click={closeCreateDialog} type="button" disabled={creating}>Cancel</button>
+          <button class="wt-btn-primary" on:click={doCreate} type="button" disabled={creating || templatesLoading || !selectedTemplate}>{creating ? tr('workspaceTree.creating') : tr('workspaceTree.create')}</button>
+          <button class="wt-btn" on:click={closeCreateDialog} type="button" disabled={creating}>{tr('common.cancel')}</button>
         </div>
       </div>
     </div>

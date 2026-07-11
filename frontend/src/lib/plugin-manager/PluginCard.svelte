@@ -1,5 +1,7 @@
 <script>
   import Icon from '../ui/Icon.svelte';
+  import { onDestroy } from 'svelte';
+  import { i18n } from '../i18n/index.js';
   export let p = {};
   export let capabilities = [];
   export let permissions = [];
@@ -8,6 +10,13 @@
   export let settingsPanels = [];
   export let onEnable = () => {};
   export let onDisable = () => {};
+  let locale = i18n.getLocale();
+  const unsubscribeLocale = i18n.subscribe((nextLocale) => { locale = nextLocale; });
+  $: tr = ((activeLocale) => (key, params, fallback) => {
+    void activeLocale;
+    return i18n.t(key, params, fallback);
+  })(locale);
+  onDestroy(unsubscribeLocale);
 
   $: m = p.manifest || {};
   $: pluginId = m.id || 'unknown';
@@ -39,14 +48,14 @@
 
   $: contribSummary = (() => {
     const parts = [];
-    if (contribCounts.views > 0) parts.push(contribCounts.views + ' view' + (contribCounts.views !== 1 ? 's' : ''));
-    if (contribCounts.commands > 0) parts.push(contribCounts.commands + ' command' + (contribCounts.commands !== 1 ? 's' : ''));
-    if (contribCounts.searchProviders > 0) parts.push(contribCounts.searchProviders + ' searchProvider' + (contribCounts.searchProviders !== 1 ? 's' : ''));
-    if (contribCounts.sidebar > 0) parts.push(contribCounts.sidebar + ' sidebar' + (contribCounts.sidebar !== 1 ? 's' : ''));
-    if (contribCounts.statusbar > 0) parts.push(contribCounts.statusbar + ' statusbar' + (contribCounts.statusbar !== 1 ? 's' : ''));
-    if (contribCounts.openProviders > 0) parts.push(contribCounts.openProviders + ' openProvider' + (contribCounts.openProviders !== 1 ? 's' : ''));
-    if (contribCounts.workspaceItems > 0) parts.push(contribCounts.workspaceItems + ' workspace' + (contribCounts.workspaceItems !== 1 ? 's' : ''));
-    return parts.length > 0 ? parts.join(', ') : 'none';
+    if (contribCounts.views > 0) parts.push(tr('pluginCard.count.views', { count: contribCounts.views }));
+    if (contribCounts.commands > 0) parts.push(tr('pluginCard.count.commands', { count: contribCounts.commands }));
+    if (contribCounts.searchProviders > 0) parts.push(tr('pluginCard.count.searchProviders', { count: contribCounts.searchProviders }));
+    if (contribCounts.sidebar > 0) parts.push(tr('pluginCard.count.sidebar', { count: contribCounts.sidebar }));
+    if (contribCounts.statusbar > 0) parts.push(tr('pluginCard.count.statusbar', { count: contribCounts.statusbar }));
+    if (contribCounts.openProviders > 0) parts.push(tr('pluginCard.count.openProviders', { count: contribCounts.openProviders }));
+    if (contribCounts.workspaceItems > 0) parts.push(tr('pluginCard.count.workspace', { count: contribCounts.workspaceItems }));
+    return parts.length > 0 ? parts.join(', ') : tr('common.none');
   })();
 
   $: dangerousPermissions = (m.permissions || []).filter(name => {
@@ -81,11 +90,11 @@
       <strong>{pluginId}</strong>
       <span class="version">v{m.version || '?'}</span>
     </div>
-    <span class="status-badge" style="color: {statusColor}">{p.status}</span>
+    <span class="status-badge" style="color: {statusColor}">{tr(`status.${p.status}`, undefined, p.status)}</span>
   </div>
 
   {#if p.status === 'degraded'}
-    <p class="degraded-text">Plugin is usable, but some optional capabilities are unavailable.</p>
+    <p class="degraded-text">{tr('pluginCard.degraded')}</p>
   {/if}
 
   {#if m.description}
@@ -94,34 +103,34 @@
 
   <div class="card-meta">
     <div class="meta-row">
-      <span class="label">Name:</span>
+      <span class="label">{tr('pluginCard.name')}:</span>
       <span>{m.name || '-'}</span>
     </div>
     <div class="meta-row">
-      <span class="label">Source:</span>
-      <span>{m.source || 'unknown'}</span>
+      <span class="label">{tr('common.source')}:</span>
+      <span>{m.source || tr('common.unknown')}</span>
     </div>
     <div class="meta-row">
-      <span class="label">Contributions:</span>
+      <span class="label">{tr('pluginCard.contributions')}:</span>
       <span>{contribSummary}</span>
     </div>
   </div>
 
   <details class="plugin-details">
-    <summary>Technical details</summary>
+    <summary>{tr('pluginCard.technicalDetails')}</summary>
     <div class="card-meta technical-meta">
       <div class="meta-row">
-        <span class="label">API Version:</span>
+        <span class="label">{tr('pluginCard.apiVersion')}:</span>
         <span>{m.apiVersion || '-'}</span>
       </div>
       <div class="meta-row">
-        <span class="label">Root:</span>
+        <span class="label">{tr('pluginCard.root')}:</span>
         <span class="path">{p.rootPath || '-'}</span>
       </div>
     </div>
 
     <div class="section">
-      <span class="section-title">Provides</span>
+      <span class="section-title">{tr('pluginCard.provides')}</span>
       <div class="tags">
         {#each m.provides || [] as cap}
           <span class="tag provides">{cap}</span>
@@ -131,7 +140,7 @@
 
     {#if m.requires && m.requires.length > 0}
     <div class="section">
-      <span class="section-title">Requires</span>
+      <span class="section-title">{tr('pluginCard.requires')}</span>
       <div class="tags">
         {#each m.requires as req}
           {@const found = capabilities.some(c => c.name === req)}
@@ -142,14 +151,14 @@
         {/each}
       </div>
       {#if missingRequired.length > 0}
-        <p class="warning"><Icon name="warning" size={12} /> Missing required capabilities: {missingRequired.join(', ')}</p>
+        <p class="warning"><Icon name="warning" size={12} /> {tr('pluginCard.missingRequired')}: {missingRequired.join(', ')}</p>
       {/if}
     </div>
     {/if}
 
     {#if m.optionalRequires && m.optionalRequires.length > 0}
     <div class="section">
-      <span class="section-title">Optional Requires</span>
+      <span class="section-title">{tr('pluginCard.optionalRequires')}</span>
       <div class="tags">
         {#each m.optionalRequires as opt}
           {@const found = capabilities.some(c => c.name === opt)}
@@ -160,14 +169,14 @@
         {/each}
       </div>
       {#if missingOptional.length > 0}
-        <p class="info"><Icon name="warning" size={12} /> Optional capabilities not available — plugin running in degraded mode</p>
+        <p class="info"><Icon name="warning" size={12} /> {tr('pluginCard.optionalUnavailable')}</p>
       {/if}
     </div>
     {/if}
 
     {#if m.permissions && m.permissions.length > 0}
     <div class="section">
-      <span class="section-title">Permissions</span>
+      <span class="section-title">{tr('pluginCard.permissions')}</span>
       <div class="tags">
         {#each m.permissions as perm}
           {@const isDangerous = dangerousPermissions.includes(perm)}
@@ -190,28 +199,28 @@
   <div class="card-actions">
     {#if hasSettingsPanel}
       <button class="btn-settings" on:click={() => window.dispatchEvent(new CustomEvent('verstak:open-settings', { detail: { pluginId: m.id, panelId: settingsPanels[0]?.id } }))} type="button" disabled={isDisabled || p.status === 'failed'}>
-        <Icon name="gear" size={14} /> Settings
+        <Icon name="gear" size={14} /> {tr('settings.title')}
       </button>
     {/if}
     {#if vaultOpen && canToggle}
       {#if isDisabled}
         <button class="btn-enable" on:click={() => onEnable(m.id)} type="button" disabled={isBusy}>
-          {#if busyAction === 'enabling'}⟳ Enabling...{:else}▶ Enable{/if}
+          {#if busyAction === 'enabling'}{tr('pluginCard.enabling')}{:else}{tr('pluginCard.enable')}{/if}
         </button>
       {:else}
         <button class="btn-disable" on:click={() => onDisable(m.id)} type="button" disabled={isBusy}>
-          {#if busyAction === 'disabling'}⟳ Disabling...{:else}⏸ Disable{/if}
+          {#if busyAction === 'disabling'}{tr('pluginCard.disabling')}{:else}{tr('pluginCard.disable')}{/if}
         </button>
       {/if}
     {/if}
     {#if !vaultOpen && canToggle}
-      <span class="vault-hint">Open a vault to manage plugin state</span>
+      <span class="vault-hint">{tr('pluginCard.openVault')}</span>
     {/if}
   </div>
 
   <!-- Permission warnings -->
   {#if !hasUIPermission && m.contributes && ((m.contributes.views || []).length > 0 || (m.contributes.sidebarItems || []).length > 0 || (m.contributes.settingsPanels || []).length > 0)}
-    <p class="warning"><Icon name="warning" size={12} /> Plugin has UI contributions but lacks ui.register permission</p>
+    <p class="warning"><Icon name="warning" size={12} /> {tr('pluginCard.missingUiPermission')}</p>
   {/if}
 </div>
 

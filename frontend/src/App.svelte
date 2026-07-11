@@ -9,13 +9,19 @@
   import WorkspaceHost from './lib/shell/WorkspaceHost.svelte';
   import * as App from '../wailsjs/go/api/App';
   import { debug } from './lib/log/debug.js';
-  import { onMount } from 'svelte';
-  import { tick } from 'svelte';
+  import { onDestroy, onMount, tick } from 'svelte';
+  import { i18n } from './lib/i18n/index.js';
 
   let currentView = 'workspace';
   let vaultStatus = { status: 'unknown', path: '', vaultId: '' };
   let needsVaultSelection = false;
   let loading = true;
+  let locale = i18n.getLocale();
+  const unsubscribeLocale = i18n.subscribe((nextLocale) => { locale = nextLocale; });
+  $: tr = ((activeLocale) => (key, params, fallback) => {
+    void activeLocale;
+    return i18n.t(key, params, fallback);
+  })(locale);
 
   let activeView = null;
   let activeViewPluginId = '';
@@ -375,11 +381,13 @@
     await checkVault();
     pushNavigation();
   });
+
+  onDestroy(unsubscribeLocale);
 </script>
 
 {#if loading}
   <div class="app-loading">
-    <p>Loading Verstak...</p>
+    <p>{tr('app.loading')}</p>
   </div>
 {:else if needsVaultSelection}
   <VaultSelection />

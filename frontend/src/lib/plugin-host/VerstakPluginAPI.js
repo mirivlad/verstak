@@ -1,4 +1,5 @@
 import * as App from '../../../wailsjs/go/api/App';
+import { i18n } from '../i18n/index.js';
 
 window.__VERSTAK_PLUGIN_REGISTRY__ = window.__VERSTAK_PLUGIN_REGISTRY__ || {};
 window.__VERSTAK_EVENT_HANDLERS__ = window.__VERSTAK_EVENT_HANDLERS__ || {};
@@ -143,6 +144,24 @@ export function createPluginAPI(pluginId) {
 
   return {
     pluginId: pluginId,
+
+    i18n: {
+      getLocale: function() {
+        assertActive('i18n.getLocale');
+        return i18n.getLocale();
+      },
+      t: function(key, params, fallback) {
+        assertActive('i18n.t(' + key + ')');
+        return i18n.translatePlugin(pluginId, key, params, fallback);
+      },
+      onDidChangeLocale: function(listener) {
+        assertActive('i18n.onDidChangeLocale');
+        if (typeof listener !== 'function') {
+          throw new Error('i18n.onDidChangeLocale requires a listener function');
+        }
+        return trackCleanup(i18n.subscribe(listener));
+      }
+    },
 
     ui: {
       openSettings: function(panelId) {

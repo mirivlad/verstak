@@ -1,18 +1,12 @@
 <script>
-  import { createEventDispatcher, onMount } from 'svelte';
+  import { createEventDispatcher, onDestroy, onMount } from 'svelte';
   import * as App from '../../../wailsjs/go/api/App';
+  import { i18n } from '../i18n/index.js';
 
   export let workspaceRootPath = '';
   export let availableTools = [];
 
   const dispatch = createEventDispatcher();
-  const FILTERS = [
-    { key: 'all', label: 'All' },
-    { key: 'notes', label: 'Notes' },
-    { key: 'files', label: 'Files' },
-    { key: 'captures', label: 'Captures' },
-    { key: 'journal', label: 'Journal' },
-  ];
   const LOW_VALUE_RECENT_TYPES = new Set([
     'workspace.selected',
     'case.selected',
@@ -37,6 +31,20 @@
   let totalNotes = 0;
   let loadedWorkspaceRoot = '';
   let toolProbe = 0;
+  let locale = i18n.getLocale();
+  let unsubscribeLocale = null;
+
+  $: tr = ((activeLocale) => (key, params, fallback) => {
+    void activeLocale;
+    return i18n.t(key, params, fallback);
+  })(locale);
+  $: FILTERS = ['all', 'notes', 'files', 'captures', 'journal'].map((key) => ({
+    key,
+    label: tr(`overview.filter.${key}`),
+  }));
+  function countText(key, count, params = {}) {
+    return tr(`${key}.${count === 1 ? 'one' : 'many'}`, { count, ...params });
+  }
 
   $: hasNotes = hasTool('notes', availableTools);
   $: hasTodos = hasTool('todo', availableTools);
@@ -55,17 +63,20 @@
   $: attentionActionKind = needsAttention[0]?.actionKind || 'browser-inbox';
   $: lastActive = lastActiveDate([...recentChanges, ...continueItems], captures, journalEntries, todos);
   $: summaryItems = [
-    { key: 'notes', label: 'Notes', count: totalNotes, detail: totalAndRecentLabel(totalNotes, noteRecentChanges), actionKind: 'notes', actionLabel: 'Open Notes' },
-    { key: 'files', label: 'Files', count: fileRecentChanges, detail: countLabel(fileRecentChanges, 'recent change'), actionKind: 'files', actionLabel: 'Open Files' },
-    { key: 'captures', label: 'Captures', count: unprocessedCaptures.length, detail: captureReviewLabel(unprocessedCaptures.length), actionKind: 'browser-inbox', actionLabel: 'Review Inbox' },
-    { key: 'activity', label: 'Activity', count: activityEvents.length, detail: countLabel(activityEvents.length, 'recorded event'), actionKind: 'activity', actionLabel: 'View Activity' },
-    { key: 'journal', label: 'Journal', count: journalEntries.length, detail: journalEntryLabel(journalEntries.length), actionKind: 'journal', actionLabel: 'Open Journal' },
-    { key: 'attention', label: 'Needs attention', count: needsAttention.length, detail: countLabel(needsAttention.length, 'pending item'), actionKind: attentionActionKind, actionLabel: 'Review pending items' },
+    { key: 'notes', label: tr('overview.notes'), count: totalNotes, detail: countText('overview.count.totalRecent', noteRecentChanges, { total: totalNotes, recent: noteRecentChanges }), actionKind: 'notes', actionLabel: tr('overview.openNotes') },
+    { key: 'files', label: tr('overview.files'), count: fileRecentChanges, detail: countText('overview.count.recentChanges', fileRecentChanges), actionKind: 'files', actionLabel: tr('overview.openFiles') },
+    { key: 'captures', label: tr('overview.captures'), count: unprocessedCaptures.length, detail: countText('overview.count.captures', unprocessedCaptures.length), actionKind: 'browser-inbox', actionLabel: tr('overview.reviewInbox') },
+    { key: 'activity', label: tr('overview.activity'), count: activityEvents.length, detail: countText('overview.count.events', activityEvents.length), actionKind: 'activity', actionLabel: tr('overview.viewActivity') },
+    { key: 'journal', label: tr('overview.journal'), count: journalEntries.length, detail: countText('overview.count.journal', journalEntries.length), actionKind: 'journal', actionLabel: tr('overview.openJournal') },
+    { key: 'attention', label: tr('overview.attention'), count: needsAttention.length, detail: countText('overview.count.pending', needsAttention.length), actionKind: attentionActionKind, actionLabel: tr('overview.reviewPending') },
   ];
 
   onMount(() => {
+    unsubscribeLocale = i18n.subscribe((nextLocale) => locale = nextLocale);
     toolProbe += 1;
   });
+
+  onDestroy(() => unsubscribeLocale?.());
 
   $: if (workspaceRootPath && workspaceRootPath !== loadedWorkspaceRoot) {
     loadOverview();
@@ -245,17 +256,17 @@
 
   function relativeTime(value) {
     const ms = timeMs({ occurredAt: value });
-    if (!ms) return 'No timestamp';
+    if (!ms) return tr('overview.time.none');
     const diff = Date.now() - ms;
     if (diff < 0) return absoluteTime(value);
     const minute = 60 * 1000;
     const hour = 60 * minute;
     const day = 24 * hour;
-    if (diff < minute) return 'Just now';
-    if (diff < hour) return `${Math.floor(diff / minute)} min ago`;
-    if (diff < day) return `${Math.floor(diff / hour)}h ago`;
-    if (diff < 2 * day) return 'Yesterday';
-    if (diff < 7 * day) return `${Math.floor(diff / day)} days ago`;
+    if (diff < minute) return tr('overview.time.now');
+    if (diff < hour) return tr('overview.time.minutes', { count: Math.floor(diff / minute) });
+    if (diff < day) return tr('overview.time.hours', { count: Math.floor(diff / hour) });
+    if (diff < 2 * day) return tr('overview.time.yesterday');
+    if (diff < 7 * day) return tr('overview.time.days', { count: Math.floor(diff / day) });
     const date = new Date(ms);
     return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: date.getFullYear() === new Date().getFullYear() ? undefined : 'numeric' });
   }
@@ -291,11 +302,11 @@
   }
 
   function actionForCategory(category) {
-    if (category === 'notes') return { kind: 'notes', label: 'Open Notes' };
-    if (category === 'files') return { kind: 'files', label: 'Open Files' };
-    if (category === 'captures') return { kind: 'browser-inbox', label: 'Review Inbox' };
-    if (category === 'journal') return { kind: 'journal', label: 'Open Journal' };
-    return { kind: 'activity', label: 'View Activity' };
+    if (category === 'notes') return { kind: 'notes', label: tr('overview.openNotes') };
+    if (category === 'files') return { kind: 'files', label: tr('overview.openFiles') };
+    if (category === 'captures') return { kind: 'browser-inbox', label: tr('overview.reviewInbox') };
+    if (category === 'journal') return { kind: 'journal', label: tr('overview.openJournal') };
+    return { kind: 'activity', label: tr('overview.viewActivity') };
   }
 
   function buildRecentChanges(events, captureRows, journalRows) {
@@ -323,7 +334,7 @@
       time: timeValue(item),
       absolute: absoluteTime(timeValue(item)),
       actionKind: 'browser-inbox',
-      actionLabel: 'Review Inbox',
+      actionLabel: tr('overview.reviewInbox'),
     }));
     const journalItems = journalRows.map(item => ({
       id: item.entryId || `journal:${timeValue(item)}`,
@@ -333,7 +344,7 @@
       time: timeValue(item),
       absolute: absoluteTime(timeValue(item)),
       actionKind: 'journal',
-      actionLabel: 'Open Journal',
+      actionLabel: tr('overview.openJournal'),
     }));
     return sortByTime([...activityItems, ...captureItems, ...journalItems]).slice(0, 12);
   }
@@ -374,7 +385,7 @@
       time: todoTimeValue(item),
       absolute: absoluteTime(todoTimeValue(item)),
       actionKind: 'todo',
-      actionLabel: 'Open Todos',
+      actionLabel: tr('overview.openTodos'),
     }));
     const captureCandidates = sortByTime(captureRows).map(item => ({
       id: item.captureId || `capture:${timeValue(item)}`,
@@ -384,7 +395,7 @@
       time: timeValue(item),
       absolute: absoluteTime(timeValue(item)),
       actionKind: 'browser-inbox',
-      actionLabel: 'Review Inbox',
+      actionLabel: tr('overview.reviewInbox'),
     }));
     const noteCandidates = sortByTime(events)
       .filter(item => isResumeEvent(item) && activityCategory(item) === 'notes')
@@ -400,7 +411,7 @@
       time: timeValue(item),
       absolute: absoluteTime(timeValue(item)),
       actionKind: 'journal',
-      actionLabel: 'Open Journal',
+      actionLabel: tr('overview.openJournal'),
     }));
     return [...todoCandidates, ...captureCandidates, ...noteCandidates, ...fileCandidates, ...journalCandidates].slice(0, 4);
   }
@@ -411,14 +422,14 @@
       title: captureTitle(item),
       meta: `${item.kind || 'capture'} · ${itemTimeLabel(item)}`,
       actionKind: 'browser-inbox',
-      actionLabel: 'Review Inbox',
+      actionLabel: tr('overview.reviewInbox'),
     }));
     const candidateItems = sortByTime(candidates).slice(0, 4).map(item => ({
       id: item.candidateId || `work-session:${timeValue(item)}`,
       title: 'Possible journal entry',
       meta: `Workspace: ${item.workspaceRootPath || workspaceRootPath || 'Unknown'} · ${item.estimatedMinutes || 0} min · ${item.activityCount || (item.activityIds || []).length || 0} activities`,
       actionKind: 'journal',
-      actionLabel: 'Review candidate',
+      actionLabel: tr('overview.reviewCandidate'),
       toolRequest: { type: 'work-session-candidate', candidate: item },
     }));
     const todoItems = [...todoRows].sort((a, b) => todoDateMs(todoTimeValue(a)) - todoDateMs(todoTimeValue(b))).slice(0, 4).map(item => ({
@@ -426,7 +437,7 @@
       title: todoTitle(item),
       meta: `${todoAttentionState(item)}${item.dueAt ? ` · Due ${item.dueAt}` : ''}`,
       actionKind: 'todo',
-      actionLabel: 'Open Todos',
+      actionLabel: tr('overview.openTodos'),
     }));
     return [...todoItems, ...captureItems, ...candidateItems].slice(0, 6);
   }
@@ -481,7 +492,7 @@
         title: overview.name || fileName(overview.relativePath) || 'Overview.md',
         meta: overview.relativePath || 'Workspace overview note',
         actionKind: hasNotes ? 'notes' : 'files',
-        actionLabel: hasNotes ? 'Open Notes' : 'Open Files',
+        actionLabel: hasNotes ? tr('overview.openNotes') : tr('overview.openFiles'),
       }] : [],
     };
   }
@@ -523,24 +534,24 @@
   }
 </script>
 
-<div class="today-root overview-root" aria-label="Overview" data-overview-root>
+<div class="today-root overview-root" aria-label={tr('workspace.overview')} data-overview-root>
   <div class="today-header overview-header">
     <div>
-      <h2>Overview</h2>
+      <h2>{tr('workspace.overview')}</h2>
       <p title={lastActive ? absoluteTime(lastActive) : ''}>
         {#if loading}
-          Loading workspace context...
+          {tr('overview.loadingContext')}
         {:else if lastActive}
-          Last active {relativeTime(lastActive)}
+          {tr('overview.lastActive', { time: relativeTime(lastActive) })}
         {:else}
-          No recent workspace activity
+          {tr('overview.noRecentActivity')}
         {/if}
       </p>
     </div>
-    <button type="button" data-overview-action="refresh" on:click={loadOverview}>Refresh</button>
+    <button type="button" data-overview-action="refresh" on:click={loadOverview}>{tr('overview.refresh')}</button>
   </div>
 
-  <div class="today-summary overview-summary" aria-label="Workspace overview summary">
+  <div class="today-summary overview-summary" aria-label={tr('overview.summary')}>
     {#each summaryItems as item}
       <button
         type="button"
@@ -553,7 +564,7 @@
       >
         <strong>{loading ? '...' : item.count}</strong>
         <span>{item.label}</span>
-        <small>{loading ? 'Loading...' : item.detail}</small>
+        <small>{loading ? tr('common.loading') : item.detail}</small>
         <em>{item.actionLabel}</em>
       </button>
     {/each}
@@ -563,11 +574,11 @@
     <main class="overview-main">
       <section class="today-resume overview-continue" data-overview-section="continue">
         <div class="today-resume-copy overview-continue-copy">
-          <span>Continue working</span>
-          <h3>Pick up the next useful item in this workspace.</h3>
+          <span>{tr('overview.continue')}</span>
+          <h3>{tr('overview.continueHint')}</h3>
         </div>
         {#if loading}
-          <p class="today-empty compact">Loading workspace signals...</p>
+          <p class="today-empty compact">{tr('overview.loadingSignals')}</p>
         {:else if continueItems.length}
           <div class="overview-continue-list">
             {#each continueItems as item}
@@ -588,8 +599,8 @@
           </div>
         {:else}
           <div class="overview-continue-empty">
-            <strong>No clear resume point yet</strong>
-            <p>Recent notes, files, captures, and journal entries will appear here.</p>
+            <strong>{tr('overview.noResume')}</strong>
+            <p>{tr('overview.noResumeHint')}</p>
           </div>
         {/if}
       </section>
@@ -597,10 +608,10 @@
       <section class="today-panel overview-panel overview-recent" data-overview-section="recent">
         <div class="today-panel-head overview-panel-head">
           <div>
-            <h3>Recent changes</h3>
-            <p>Latest meaningful activity in this workspace.</p>
+            <h3>{tr('overview.recentChanges')}</h3>
+            <p>{tr('overview.recentChangesHint')}</p>
           </div>
-          <div class="overview-filters" aria-label="Recent changes filter">
+          <div class="overview-filters" aria-label={tr('overview.recentFilter')}>
             {#each FILTERS as filter}
               <button
                 type="button"
@@ -615,7 +626,7 @@
           </div>
         </div>
         {#if loading}
-          <p class="today-empty">Loading recent changes...</p>
+          <p class="today-empty">{tr('overview.loadingRecent')}</p>
         {:else if filteredRecentChanges.length}
           <div class="today-list overview-list">
             {#each filteredRecentChanges as item}
@@ -635,7 +646,7 @@
             {/each}
           </div>
         {:else}
-          <p class="today-empty">No meaningful changes for this filter yet.</p>
+          <p class="today-empty">{tr('overview.noChanges')}</p>
         {/if}
       </section>
     </main>
@@ -645,12 +656,12 @@
         <section class="today-panel overview-panel" data-overview-section="attention">
           <div class="today-panel-head overview-panel-head">
             <div>
-              <h3>Needs attention</h3>
-              <p>Pending captures, urgent todos, and possible journal entries.</p>
+              <h3>{tr('overview.attention')}</h3>
+              <p>{tr('overview.attentionHint')}</p>
             </div>
           </div>
           {#if loading}
-            <p class="today-empty">Loading pending items...</p>
+            <p class="today-empty">{tr('overview.loadingPending')}</p>
           {:else if needsAttention.length}
             <div class="today-list overview-list compact">
               {#each needsAttention as item}
@@ -662,7 +673,7 @@
               {/each}
             </div>
           {:else}
-            <p class="today-empty compact">No pending captures, urgent todos, or possible journal entries.</p>
+            <p class="today-empty compact">{tr('overview.noPending')}</p>
           {/if}
         </section>
       {/if}
@@ -670,7 +681,7 @@
       {#if keyResources.length}
         <section class="today-panel overview-panel secondary" data-overview-section="key-resources">
           <div class="today-panel-head overview-panel-head">
-            <h3>Key resources</h3>
+            <h3>{tr('overview.keyResources')}</h3>
           </div>
           <div class="today-list overview-list compact">
             {#each keyResources as item}

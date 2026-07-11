@@ -4,6 +4,7 @@
   import TodaySurface from './TodaySurface.svelte';
   import * as App from '../../../wailsjs/go/api/App';
   import { onDestroy, onMount } from 'svelte';
+  import { i18n } from '../i18n/index.js';
 
   export let selectedWorkspaceName = '';
   export let nodes = [];
@@ -20,8 +21,14 @@
   let requestedToolRequest = null;
   let activeToolRequest = null;
   let requestedWorkspaceRoot = '';
+  let locale = i18n.getLocale();
+  let unsubscribeLocale = null;
+  $: tr = ((activeLocale) => (key, params, fallback) => {
+    void activeLocale;
+    return i18n.t(key, params, fallback);
+  })(locale);
   // TODO: Rename TodaySurface.svelte to OverviewSurface.svelte in a refactor-only follow-up.
-  const overviewTool = { id: '__overview', title: 'Overview', pluginId: 'verstak.shell', component: 'TodaySurface', shell: true };
+  $: overviewTool = { id: '__overview', title: tr('workspace.overview'), pluginId: 'verstak.shell', component: 'TodaySurface', shell: true };
 
   const toolOrder = new Map([
     ['notes', 10],
@@ -66,10 +73,16 @@
   $: if (selectedWorkspaceName) loadTools();
 
   onMount(() => {
+    unsubscribeLocale = i18n.subscribe((nextLocale) => {
+      const changed = locale !== nextLocale;
+      locale = nextLocale;
+      if (changed && selectedWorkspaceName) loadTools();
+    });
     window.addEventListener('verstak:workspace-open-tool', handleWorkspaceOpenTool);
   });
 
   onDestroy(() => {
+    if (unsubscribeLocale) unsubscribeLocale();
     window.removeEventListener('verstak:workspace-open-tool', handleWorkspaceOpenTool);
   });
 
@@ -163,8 +176,11 @@
         App.GetContributions().catch(() => ({})),
         App.GetPlugins().catch(() => []),
       ]);
-      contributions = c || {};
-      plugins = p || [];
+      await Promise.all((p || []).map((plugin) => (
+        i18n.loadPlugin(plugin.manifest?.id, plugin.manifest?.localization).catch(() => {})
+      )));
+      contributions = i18n.localizeContributionSummary(c || {});
+      plugins = (p || []).map((plugin) => i18n.localizePlugin(plugin));
 
       const enabledIds = new Set(
         plugins.filter(pl => pl.enabled && (pl.status === 'loaded' || pl.status === 'degraded')).map(pl => pl.manifest?.id)
@@ -186,13 +202,13 @@
         <span class="workspace-title vt-page-title">{workspaceTitle}</span>
         <span class="workspace-type vt-badge accent">{workspaceType}</span>
       </div>
-      <div class="workspace-search" aria-label="Workspace search">
+      <div class="workspace-search" aria-label={tr('workspace.search')}>
         <GlobalSearch />
       </div>
     </div>
 
     {#if displayedTools.length > 0}
-      <div class="workspace-tabs vt-tabbar" role="tablist" aria-label="Workspace tools">
+      <div class="workspace-tabs vt-tabbar" role="tablist" aria-label={tr('workspace.tools')}>
         {#each displayedTools as tool (tool.id + tool.pluginId)}
           <button
             class="vt-tab"
@@ -207,7 +223,7 @@
           </button>
         {/each}
       </div>
-      <div class="workspace-tool-content" role="tabpanel" aria-label={activeTool?.title || activeTool?.id || 'Workspace tool'}>
+      <div class="workspace-tool-content" role="tabpanel" aria-label={activeTool?.title || activeTool?.id || tr('workspace.tool')}>
         {#if activeTool}
           {#if activeTool.shell}
             <TodaySurface
@@ -226,14 +242,14 @@
       </div>
     {:else}
       <div class="workspace-empty vt-empty-state">
-        <p class="vt-empty-title">No workspace tools available</p>
-        <p class="workspace-hint">Enable plugins with workspace tools or open Plugin Manager from settings.</p>
+        <p class="vt-empty-title">{tr('workspace.emptyTools')}</p>
+        <p class="workspace-hint">{tr('workspace.emptyToolsHint')}</p>
       </div>
     {/if}
   {:else}
     <div class="workspace-empty vt-empty-state">
-      <p class="vt-empty-title">Select a workspace</p>
-      <p class="workspace-hint">Use the + button in Workspaces to add your first project.</p>
+      <p class="vt-empty-title">{tr('workspace.select')}</p>
+      <p class="workspace-hint">{tr('workspace.selectHint')}</p>
     </div>
   {/if}
 </div>

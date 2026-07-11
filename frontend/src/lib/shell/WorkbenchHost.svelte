@@ -1,8 +1,17 @@
 <script>
+  import { onDestroy } from 'svelte';
   import PluginBundleHost from '../plugin-host/PluginBundleHost.svelte';
   import Icon from '../ui/Icon.svelte';
+  import { i18n } from '../i18n/index.js';
 
   export let openedResource = null;
+  let locale = i18n.getLocale();
+  const unsubscribeLocale = i18n.subscribe((nextLocale) => locale = nextLocale);
+
+  $: tr = ((activeLocale) => (key, params, fallback) => {
+    void activeLocale;
+    return i18n.t(key, params, fallback);
+  })(locale);
 
   $: providerPluginId = openedResource?.providerPluginId || '';
   $: providerComponent = openedResource?.providerComponent || '';
@@ -24,26 +33,28 @@
   function closeWorkbench() {
     window.dispatchEvent(new CustomEvent('verstak:close-workbench', { cancelable: true }));
   }
+
+  onDestroy(unsubscribeLocale);
 </script>
 
 <div class="workbench-host vt-page">
   {#if openedResource?.status === 'no-provider'}
     <div class="workbench-header vt-page-header">
       <span class="workbench-title vt-page-title">{resourcePath}</span>
-      <span class="workbench-provider vt-badge">No provider</span>
-      <button class="close-btn btn-ghost btn-icon" type="button" title="Close" aria-label="Close" on:click={closeWorkbench}>
+      <span class="workbench-provider vt-badge">{tr('workbench.noProvider')}</span>
+      <button class="close-btn btn-ghost btn-icon" type="button" title={tr('common.close')} aria-label={tr('common.close')} on:click={closeWorkbench}>
         <Icon name="x" size={18} />
       </button>
     </div>
     <div class="workbench-empty no-provider vt-empty-state" data-workbench-status="no-provider">
-      <p class="vt-empty-title">No viewer/editor available</p>
+      <p class="vt-empty-title">{tr('workbench.noViewer')}</p>
       <p class="workbench-meta">{requestMode} · {requestContext}</p>
     </div>
   {:else if openedResource}
     <div class="workbench-header vt-page-header">
       <span class="workbench-title vt-page-title">{resourcePath}</span>
       <span class="workbench-provider vt-badge accent">{providerId}</span>
-      <button class="close-btn btn-ghost btn-icon" type="button" title="Close" aria-label="Close" on:click={closeWorkbench}>
+      <button class="close-btn btn-ghost btn-icon" type="button" title={tr('common.close')} aria-label={tr('common.close')} on:click={closeWorkbench}>
         <Icon name="x" size={18} />
       </button>
     </div>
@@ -58,7 +69,7 @@
     </div>
   {:else}
     <div class="workbench-empty vt-empty-state">
-      <p class="vt-empty-title">No resource opened</p>
+      <p class="vt-empty-title">{tr('workbench.noResource')}</p>
     </div>
   {/if}
 </div>

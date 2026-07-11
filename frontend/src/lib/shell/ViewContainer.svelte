@@ -1,8 +1,9 @@
 <script>
   import PluginBundleHost from '../plugin-host/PluginBundleHost.svelte';
-  import { onMount } from 'svelte';
+  import { onDestroy, onMount } from 'svelte';
   import * as App from '../../../wailsjs/go/api/App';
   import Icon from '../ui/Icon.svelte';
+  import { i18n } from '../i18n/index.js';
 
   export let activeView = null;
   export let activeViewPluginId = null;
@@ -10,18 +11,40 @@
   let views = [];
   let plugins = [];
   let renderError = null;
+  let locale = i18n.getLocale();
+  let unsubscribeLocale = null;
+  $: tr = ((activeLocale) => (key, params, fallback) => {
+    void activeLocale;
+    return i18n.t(key, params, fallback);
+  })(locale);
 
-  onMount(async () => {
+  async function loadViews() {
     try {
       const [contribs, pluginList] = await Promise.all([
         App.GetContributions().catch(() => ({ views: [] })),
         App.GetPlugins().catch(() => []),
       ]);
-      views = contribs.views || [];
-      plugins = pluginList;
+      await Promise.all((pluginList || []).map((plugin) => (
+        i18n.loadPlugin(plugin.manifest?.id, plugin.manifest?.localization).catch(() => {})
+      )));
+      views = i18n.localizeContributionSummary(contribs || {}).views || [];
+      plugins = (pluginList || []).map((plugin) => i18n.localizePlugin(plugin));
     } catch (e) {
       console.error('[ViewContainer] load error:', e);
     }
+  }
+
+  onMount(() => {
+    unsubscribeLocale = i18n.subscribe((nextLocale) => {
+      const changed = locale !== nextLocale;
+      locale = nextLocale;
+      if (changed) loadViews();
+    });
+    loadViews();
+  });
+
+  onDestroy(() => {
+    if (unsubscribeLocale) unsubscribeLocale();
   });
 
   $: currentView = views.find(v => v.id === activeView && v.pluginId === activeViewPluginId);
@@ -39,7 +62,7 @@
   }
 
   function onHostError(e) {
-    renderError = e.detail?.message || 'Plugin view error';
+    renderError = e.detail?.message || tr('pluginView.error');
   }
 </script>
 
@@ -49,9 +72,9 @@
       <div class="error-boundary">
         <div class="error-fallback vt-inline-alert error">
           <Icon name="warning" size={24} class="error-icon" />
-          <p class="error-title">Plugin UI failed</p>
+          <p class="error-title">{tr('pluginView.failed')}</p>
           <details class="error-details">
-            <summary>Details</summary>
+            <summary>{tr('common.details')}</summary>
             <p class="error-text">{renderError}</p>
           </details>
         </div>
@@ -72,14 +95,14 @@
             />
           {:else}
             <div class="placeholder">
-              <p class="placeholder-label">This plugin does not provide a visual view yet.</p>
+              <p class="placeholder-label">{tr('pluginView.noVisual')}</p>
               <details class="placeholder-details">
-                <summary>Details</summary>
-                <p class="placeholder-info"><span class="placeholder-key">Plugin:</span> <strong>{currentView.pluginId}</strong></p>
-                <p class="placeholder-info"><span class="placeholder-key">View ID:</span> <code>{currentView.id}</code></p>
-                <p class="placeholder-info"><span class="placeholder-key">Component:</span> <code>{currentView.component}</code></p>
+                <summary>{tr('common.details')}</summary>
+                <p class="placeholder-info"><span class="placeholder-key">{tr('common.plugin')}:</span> <strong>{currentView.pluginId}</strong></p>
+                <p class="placeholder-info"><span class="placeholder-key">{tr('pluginView.viewId')}:</span> <code>{currentView.id}</code></p>
+                <p class="placeholder-info"><span class="placeholder-key">{tr('common.component')}:</span> <code>{currentView.component}</code></p>
               </details>
-              <p class="placeholder-badge vt-badge">Frontend bundle unavailable</p>
+              <p class="placeholder-badge vt-badge">{tr('pluginView.bundleUnavailable')}</p>
             </div>
           {/if}
         </div>
@@ -87,12 +110,12 @@
     </div>
   {:else if activeView}
     <div class="view-container empty">
-      <p>View is unavailable.</p>
+      <p>{tr('pluginView.unavailable')}</p>
     </div>
   {:else}
     <div class="view-container empty">
-      <p>Select a plugin view from the sidebar</p>
-      <p class="sub">Plugin views will appear here</p>
+      <p>{tr('pluginView.select')}</p>
+      <p class="sub">{tr('pluginView.selectHint')}</p>
     </div>
   {/if}
 {/key}

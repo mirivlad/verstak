@@ -82,6 +82,10 @@ export function GetPluginFrontendInfo(arg1) {
   return window['go']['api']['App']['GetPluginFrontendInfo'](arg1);
 }
 
+export function GetPluginLocalization(arg1, arg2) {
+  return window['go']['api']['App']['GetPluginLocalization'](arg1, arg2);
+}
+
 export function GetPlugins() {
   return window['go']['api']['App']['GetPlugins']();
 }

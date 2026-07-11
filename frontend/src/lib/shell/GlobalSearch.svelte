@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import * as App from '../../../wailsjs/go/api/App';
   import Icon from '../ui/Icon.svelte';
+  import { i18n } from '../i18n/index.js';
 
   const TEXT_EXTENSIONS = new Set(['txt', 'md', 'markdown', 'log', 'json', 'csv', 'yaml', 'yml', 'toml']);
   const FILE_INDEX_LIMIT = 220;
@@ -16,12 +17,26 @@
   let loading = true;
   let searchTimer = null;
   let buildSeq = 0;
+  let locale = i18n.getLocale();
+
+  $: tr = ((activeLocale) => (key, params, fallback) => {
+    void activeLocale;
+    return i18n.t(key, params, fallback);
+  })(locale);
 
   $: scheduleSearch(query);
 
   onMount(() => {
+    const unsubscribeLocale = i18n.subscribe((nextLocale) => {
+      const changed = locale !== nextLocale;
+      locale = nextLocale;
+      if (changed) buildIndex();
+    });
     buildIndex();
-    return () => clearTimeout(searchTimer);
+    return () => {
+      unsubscribeLocale();
+      clearTimeout(searchTimer);
+    };
   });
 
   function normalize(value) {
@@ -160,8 +175,9 @@
     nodes.forEach(node => {
       next.push({
         type: 'Workspace',
+        typeLabel: tr('search.type.workspace'),
         title: workspaceTitle(node),
-        subtitle: 'Workspace',
+        subtitle: tr('search.type.workspace'),
         keywords: `${node.id || ''} ${node.rootPath || ''}`,
         rank: 10,
         action: 'workspace',
@@ -170,7 +186,15 @@
       });
     });
 
-    const contributions = await resultOrEmpty(App.GetContributions(), {});
+    const [rawPlugins, rawContributions] = await Promise.all([
+      resultOrEmpty(App.GetPlugins(), []),
+      resultOrEmpty(App.GetContributions(), {}),
+    ]);
+    await Promise.all((rawPlugins || []).map((plugin) => i18n.loadPlugin(
+      plugin.manifest?.id,
+      plugin.manifest?.localization,
+    ).catch(() => {})));
+    const contributions = i18n.localizeContributionSummary(rawContributions || {});
     const viewByPluginId = new Map();
     (contributions.views || []).forEach(view => {
       if (view.pluginId && !viewByPluginId.has(view.pluginId)) viewByPluginId.set(view.pluginId, view);
@@ -178,6 +202,7 @@
     (contributions.sidebarItems || []).forEach(item => {
       next.push({
         type: 'Tool',
+        typeLabel: tr('search.type.tool'),
         title: item.title || item.id,
         subtitle: item.pluginId || '',
         keywords: `${item.id || ''} ${item.view || ''}`,
@@ -194,6 +219,7 @@
       const snippet = await readFileSnippet(path);
       next.push({
         type: entry.type === 'folder' ? 'Folder' : 'File',
+        typeLabel: tr(entry.type === 'folder' ? 'search.type.folder' : 'search.type.file'),
         title: path.split('/').pop() || path,
         subtitle: path,
         keywords: snippet,
@@ -205,9 +231,9 @@
     }
 
     const pluginItems = await Promise.all([
-      indexPluginSettings('verstak.journal', 'Journal', 50, viewByPluginId.get('verstak.journal'), nodes),
-      indexPluginSettings('verstak.browser-inbox', 'Browser Inbox', 55, viewByPluginId.get('verstak.browser-inbox'), nodes),
-      indexPluginSettings('verstak.activity', 'Activity', 60, viewByPluginId.get('verstak.activity'), nodes),
+      indexPluginSettings('verstak.journal', tr('search.type.journal'), 50, viewByPluginId.get('verstak.journal'), nodes),
+      indexPluginSettings('verstak.browser-inbox', tr('search.type.browserInbox'), 55, viewByPluginId.get('verstak.browser-inbox'), nodes),
+      indexPluginSettings('verstak.activity', tr('search.type.activity'), 60, viewByPluginId.get('verstak.activity'), nodes),
     ]);
 
     if (seq !== buildSeq) return;
@@ -293,8 +319,8 @@
       on:focus={handleFocus}
       on:blur={() => setTimeout(() => focused = false, 120)}
       type="search"
-      placeholder={loading ? 'Indexing...' : 'Search'}
-      aria-label="Global search"
+      placeholder={loading ? tr('search.indexing') : tr('search.placeholder')}
+      aria-label={tr('search.global')}
       data-global-search-input
     />
   </div>
@@ -310,11 +336,11 @@
             on:mousedown|preventDefault={() => openResult(item)}
           >
             <span class="global-search-result-title">{item.title}</span>
-            <span class="global-search-result-meta">{item.type} · {item.subtitle}</span>
+            <span class="global-search-result-meta">{item.typeLabel || item.type} · {item.subtitle}</span>
           </button>
         {/each}
       {:else}
-        <div class="global-search-empty vt-empty-title">No results</div>
+        <div class="global-search-empty vt-empty-title">{tr('search.noResults')}</div>
       {/if}
     </div>
   {/if}

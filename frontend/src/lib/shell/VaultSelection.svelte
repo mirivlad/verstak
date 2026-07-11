@@ -1,7 +1,8 @@
 <script>
-  import { onMount } from 'svelte';
+  import { onDestroy, onMount } from 'svelte';
   import * as App from '../../../wailsjs/go/api/App';
   import Icon from '../ui/Icon.svelte';
+  import { i18n } from '../i18n/index.js';
 
   let appSettings = {};
   let recentVaults = [];
@@ -11,6 +12,13 @@
   let opening = false;
   let newVaultPath = '';
   let openVaultPath = '';
+  let locale = i18n.getLocale();
+  const unsubscribeLocale = i18n.subscribe((nextLocale) => { locale = nextLocale; });
+  $: tr = ((activeLocale) => (key, params, fallback) => {
+    void activeLocale;
+    return i18n.t(key, params, fallback);
+  })(locale);
+  onDestroy(unsubscribeLocale);
 
   onMount(async () => {
     try {
@@ -39,20 +47,20 @@
   async function createVault() {
     error = '';
     if (!newVaultPath.trim()) {
-      error = 'Choose or enter a folder for the new vault.';
+      error = tr('vaultSelection.chooseNew');
       return;
     }
     creating = true;
     try {
       const createErr = await App.CreateVault(newVaultPath.trim());
       if (createErr) {
-        error = 'Could not create vault: ' + createErr;
+        error = tr('vaultSelection.createError', { error: createErr });
         creating = false;
         return;
       }
       const openErr = await App.OpenVault(newVaultPath.trim());
       if (openErr) {
-        error = 'Could not open vault: ' + openErr;
+        error = tr('vaultSelection.openError', { error: openErr });
         creating = false;
         return;
       }
@@ -70,14 +78,14 @@
   async function openExistingVault() {
     error = '';
     if (!openVaultPath.trim()) {
-      error = 'Choose or enter an existing vault.';
+      error = tr('vaultSelection.chooseExisting');
       return;
     }
     opening = true;
     try {
       const openErr = await App.OpenVault(openVaultPath.trim());
       if (openErr) {
-        error = 'Could not open vault: ' + openErr;
+        error = tr('vaultSelection.openError', { error: openErr });
         opening = false;
         return;
       }
@@ -98,7 +106,7 @@
     try {
       const openErr = await App.OpenVault(path);
       if (openErr) {
-        error = 'Could not open vault: ' + openErr;
+        error = tr('vaultSelection.openError', { error: openErr });
         opening = false;
         return;
       }
@@ -117,7 +125,7 @@
 {#if loading}
   <div class="vault-selection">
     <div class="vault-selection-inner">
-      <p class="loading-text">Loading...</p>
+      <p class="loading-text">{tr('common.loading')}</p>
     </div>
   </div>
 {:else}
@@ -130,7 +138,7 @@
         <line x1="9" y1="14" x2="15" y2="14"/>
       </svg>
       <h1>Verstak</h1>
-      <p class="subtitle">Choose a vault to start working</p>
+      <p class="subtitle">{tr('vaultSelection.subtitle')}</p>
     </div>
 
     {#if error}
@@ -142,43 +150,43 @@
 
     <div class="actions">
       <div class="action-card">
-        <h3>Create a new vault</h3>
-        <p class="hint">Create a local vault folder for workspaces and projects.</p>
+        <h3>{tr('vaultSelection.createTitle')}</h3>
+        <p class="hint">{tr('vaultSelection.createHint')}</p>
         <div class="input-row">
           <input
             type="text"
             bind:value={newVaultPath}
-            placeholder="Choose or enter a path..."
+            placeholder={tr('vaultSelection.pathPlaceholder')}
             disabled={creating}
           />
           <button class="btn-secondary" on:click={browseNewVault} type="button" disabled={creating}>
-            Browse...
+            {tr('common.browse')}
           </button>
         </div>
         <div class="button-row">
           <button class="btn-primary" on:click={createVault} type="button" disabled={creating}>
-            {creating ? 'Creating...' : 'Create vault'}
+            {creating ? tr('vaultSelection.creating') : tr('vaultSelection.create')}
           </button>
         </div>
       </div>
 
       <div class="action-card">
-        <h3>Open an existing vault</h3>
-        <p class="hint">Use a vault that is already on this computer.</p>
+        <h3>{tr('vaultSelection.openTitle')}</h3>
+        <p class="hint">{tr('vaultSelection.openHint')}</p>
         <div class="input-row">
           <input
             type="text"
             bind:value={openVaultPath}
-            placeholder="Choose or enter a path..."
+            placeholder={tr('vaultSelection.pathPlaceholder')}
             disabled={opening}
           />
           <button class="btn-secondary" on:click={browseOpenVault} type="button" disabled={opening}>
-            Browse...
+            {tr('common.browse')}
           </button>
         </div>
         <div class="button-row">
           <button class="btn-secondary open-existing-btn" on:click={openExistingVault} type="button" disabled={opening}>
-            {opening ? 'Opening...' : 'Open existing'}
+            {opening ? tr('vaultSelection.opening') : tr('vaultSelection.open')}
           </button>
         </div>
       </div>
@@ -186,7 +194,7 @@
 
     {#if recentVaults.length > 0}
       <div class="recent-section">
-        <h3>Recent vaults</h3>
+        <h3>{tr('vaultSelection.recent')}</h3>
         <ul class="recent-list">
           {#each recentVaults as path}
             <li>

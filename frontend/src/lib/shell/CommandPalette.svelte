@@ -1,7 +1,8 @@
 <script>
-  import { onDestroy, tick } from 'svelte';
+  import { onDestroy, onMount, tick } from 'svelte';
   import * as App from '../../../wailsjs/go/api/App';
   import { executePluginCommand } from '../plugin-host/VerstakPluginAPI.js';
+  import { i18n } from '../i18n/index.js';
 
   let open = false;
   let query = '';
@@ -10,18 +11,25 @@
   let inputEl = null;
   let statusMessage = '';
   let statusType = '';
+  let locale = i18n.getLocale();
+  let unsubscribeLocale = null;
+
+  $: tr = ((activeLocale) => (key, params, fallback) => {
+    void activeLocale;
+    return i18n.t(key, params, fallback);
+  })(locale);
 
   const inactiveStatuses = new Set(['disabled', 'failed', 'incompatible', 'missing-required-capability']);
-  const shellCommands = [
-    { id: 'verstak.shell.open-overview', title: 'Open Overview', pluginId: 'verstak.shell', pluginName: 'Verstak', priority: 10, shellAction: 'overview' },
-    { id: 'verstak.shell.open-files', title: 'Open Files', pluginId: 'verstak.shell', pluginName: 'Verstak', priority: 20, shellAction: 'files' },
-    { id: 'verstak.shell.open-activity', title: 'Open Activity', pluginId: 'verstak.shell', pluginName: 'Verstak', priority: 30, shellAction: 'activity' },
-    { id: 'verstak.shell.open-browser-inbox', title: 'Open Browser Inbox', pluginId: 'verstak.shell', pluginName: 'Verstak', priority: 40, shellAction: 'browser-inbox' },
-    { id: 'verstak.shell.create-markdown', title: 'Create Markdown File', pluginId: 'verstak.shell', pluginName: 'Verstak', priority: 50, shellAction: 'create-markdown' },
-    { id: 'verstak.shell.create-text', title: 'Create Text File', pluginId: 'verstak.shell', pluginName: 'Verstak', priority: 60, shellAction: 'create-text' },
-    { id: 'verstak.shell.sync-now', title: 'Sync Now', pluginId: 'verstak.shell', pluginName: 'Verstak', priority: 70, shellAction: 'sync-now' },
-    { id: 'verstak.shell.open-sync-settings', title: 'Open Sync Settings', pluginId: 'verstak.shell', pluginName: 'Verstak', priority: 80, shellAction: 'sync-settings' },
-    { id: 'verstak.shell.open-plugin-manager', title: 'Open Plugin Manager', pluginId: 'verstak.shell', pluginName: 'Verstak', priority: 90, shellAction: 'plugin-manager' },
+  $: shellCommands = [
+    { id: 'verstak.shell.open-overview', title: tr('command.openOverview'), pluginId: 'verstak.shell', pluginName: 'Verstak', priority: 10, shellAction: 'overview' },
+    { id: 'verstak.shell.open-files', title: tr('command.openFiles'), pluginId: 'verstak.shell', pluginName: 'Verstak', priority: 20, shellAction: 'files' },
+    { id: 'verstak.shell.open-activity', title: tr('command.openActivity'), pluginId: 'verstak.shell', pluginName: 'Verstak', priority: 30, shellAction: 'activity' },
+    { id: 'verstak.shell.open-browser-inbox', title: tr('command.openBrowserInbox'), pluginId: 'verstak.shell', pluginName: 'Verstak', priority: 40, shellAction: 'browser-inbox' },
+    { id: 'verstak.shell.create-markdown', title: tr('command.createMarkdown'), pluginId: 'verstak.shell', pluginName: 'Verstak', priority: 50, shellAction: 'create-markdown' },
+    { id: 'verstak.shell.create-text', title: tr('command.createText'), pluginId: 'verstak.shell', pluginName: 'Verstak', priority: 60, shellAction: 'create-text' },
+    { id: 'verstak.shell.sync-now', title: tr('command.syncNow'), pluginId: 'verstak.shell', pluginName: 'Verstak', priority: 70, shellAction: 'sync-now' },
+    { id: 'verstak.shell.open-sync-settings', title: tr('command.openSyncSettings'), pluginId: 'verstak.shell', pluginName: 'Verstak', priority: 80, shellAction: 'sync-settings' },
+    { id: 'verstak.shell.open-plugin-manager', title: tr('command.openPluginManager'), pluginId: 'verstak.shell', pluginName: 'Verstak', priority: 90, shellAction: 'plugin-manager' },
   ];
 
   $: normalizedQuery = query.trim().toLowerCase();
@@ -44,14 +52,21 @@
       App.GetContributions().catch(() => ({})),
     ]);
     const pluginById = new Map((plugins || []).map((plugin) => [plugin.manifest?.id, plugin]));
-    const pluginCommands = (contributions.commands || [])
+    await Promise.all((plugins || []).map((plugin) => i18n.loadPlugin(
+      plugin.manifest?.id,
+      plugin.manifest?.localization,
+    ).catch(() => {})));
+    const localizedPlugins = (plugins || []).map((plugin) => i18n.localizePlugin(plugin));
+    const localizedPluginById = new Map(localizedPlugins.map((plugin) => [plugin.manifest?.id, plugin]));
+    const localizedContributions = i18n.localizeContributionSummary(contributions || {});
+    const pluginCommands = (localizedContributions.commands || [])
       .filter((command) => {
         const plugin = pluginById.get(command.pluginId);
         if (!plugin) return false;
         return !inactiveStatuses.has(plugin.status);
       })
       .map((command) => {
-        const plugin = pluginById.get(command.pluginId);
+        const plugin = localizedPluginById.get(command.pluginId);
         return {
           ...command,
           pluginName: plugin?.manifest?.name || command.pluginId,
@@ -170,14 +185,14 @@
       if (command.shellAction) {
         await runShellCommand(command);
         closePalette();
-        setStatus('success', `${command.title || command.id} handled`);
+        setStatus('success', tr('command.handled', { title: command.title || command.id }));
         return;
       }
       const result = await executePluginCommand(command.pluginId, command.id, {
         source: 'command-palette',
       });
       closePalette();
-      setStatus('success', `${command.title || command.id} ${result.status || 'handled'}`);
+      setStatus('success', tr('command.result', { title: command.title || command.id, status: result.status || tr('command.statusHandled') }));
     } catch (err) {
       setStatus('error', `${command.title || command.id}: ${err?.message || String(err)}`);
     }
@@ -221,7 +236,16 @@
     window.addEventListener('keydown', onWindowKeydown);
   }
 
+  onMount(() => {
+    unsubscribeLocale = i18n.subscribe((nextLocale) => {
+      const changed = locale !== nextLocale;
+      locale = nextLocale;
+      if (changed && open) loadCommands();
+    });
+  });
+
   onDestroy(() => {
+    unsubscribeLocale?.();
     if (typeof window !== 'undefined') {
       window.removeEventListener('keydown', onWindowKeydown);
       window.clearTimeout(setStatus.timer);
@@ -240,19 +264,19 @@
 
 {#if open}
   <div class="command-palette-overlay" role="presentation" on:mousedown={onOverlayMouseDown}>
-    <section class="command-palette" role="dialog" aria-modal="true" aria-label="Command Palette">
+    <section class="command-palette" role="dialog" aria-modal="true" aria-label={tr('command.palette')}>
       <input
         bind:this={inputEl}
         bind:value={query}
         class="command-palette-input"
         data-command-palette-input
-        placeholder="Run command"
-        aria-label="Run command"
+        placeholder={tr('command.run')}
+        aria-label={tr('command.run')}
       />
 
       <div class="command-palette-list" role="listbox">
         {#if filteredCommands.length === 0}
-          <div class="command-palette-empty">No commands</div>
+          <div class="command-palette-empty">{tr('command.none')}</div>
         {:else}
           {#each filteredCommands as command, index}
             <button
