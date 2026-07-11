@@ -236,12 +236,10 @@ export function createPluginAPI(pluginId) {
         if (!key) {
           throw new Error('settings.write requires a key');
         }
-        const settings = await this.read();
-        settings[key] = value;
         await callBackendErrorString(pluginId, 'settings.write(' + key + ')', function() {
-          return App.WritePluginSettings(pluginId, settings);
+          return App.WritePluginSetting(pluginId, key, value);
         });
-        return settings;
+        return this.read();
       },
       writeAll: function(settings) {
         assertActive('settings.writeAll');

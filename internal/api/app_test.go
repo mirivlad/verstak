@@ -3,12 +3,14 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -614,6 +616,250 @@ func TestActivityProviderRecordsFileChangedWithoutMountedView(t *testing.T) {
 	}
 	if activity["sourcePluginId"] != "files.plugin" {
 		t.Fatalf("activity sourcePluginId = %#v, want files.plugin", activity["sourcePluginId"])
+	}
+}
+
+func TestBrowserInboxRecordsCaptureWithoutMountedView(t *testing.T) {
+	v := vault.NewVault(nil)
+	if err := v.CreateVault(t.TempDir()); err != nil {
+		t.Fatalf("CreateVault: %v", err)
+	}
+	bus := events.NewBus()
+	app := &App{
+		eventBus: bus,
+		storage:  storage.New(v),
+		vault:    v,
+		plugins: []plugin.Plugin{{
+			Manifest: plugin.Manifest{
+				ID:          "verstak.browser-inbox",
+				Name:        "Browser Inbox",
+				Permissions: []string{"storage.namespace"},
+			},
+			Status:  plugin.StatusLoaded,
+			Enabled: true,
+		}},
+	}
+	app.ensureBrowserInboxSubscriptions()
+
+	if err := app.recordBrowserCapture(events.Event{
+		Name:      "browser.capture.page",
+		Timestamp: "2026-07-11T12:00:00Z",
+		Payload: map[string]interface{}{
+			"captureId":  "capture-background",
+			"capturedAt": "2026-07-11T11:59:00Z",
+			"kind":       "page",
+			"url":        "https://example.com/article",
+			"title":      "Background capture",
+			"domain":     "example.com",
+		},
+	}); err != nil {
+		t.Fatalf("RecordBrowserCapture: %v", err)
+	}
+	bus.Publish(events.Event{Name: browserInboxMutationEvent, Payload: map[string]interface{}{
+		"pluginId": browserInboxPluginID, "action": "assign", "captureId": "capture-background", "workspaceRootPath": "Project",
+	}})
+	bus.Publish(events.Event{Name: browserInboxMutationEvent, Payload: map[string]interface{}{
+		"pluginId": browserInboxPluginID, "action": "processed", "captureId": "capture-background", "processed": true,
+	}})
+	if err := app.recordBrowserCapture(events.Event{
+		Name: "browser.capture.page",
+		Payload: map[string]interface{}{
+			"captureId": "capture-background",
+			"title":     "Retried payload",
+		},
+	}); err != nil {
+		t.Fatalf("RecordBrowserCapture retry: %v", err)
+	}
+
+	settings, err := app.storage.ReadPluginSettings("verstak.browser-inbox")
+	if err != nil {
+		t.Fatalf("ReadPluginSettings: %v", err)
+	}
+	stored, ok := settings["captures:global"].([]interface{})
+	if !ok || len(stored) != 1 {
+		t.Fatalf("captures:global = %#v, want one capture", settings["captures:global"])
+	}
+	capture, ok := stored[0].(map[string]interface{})
+	if !ok {
+		t.Fatalf("capture = %#v, want map[string]interface{}", stored[0])
+	}
+	if capture["captureId"] != "capture-background" || capture["title"] != "Background capture" || capture["workspaceRootPath"] != "Project" || capture["processed"] != true {
+		t.Fatalf("stored capture = %#v", capture)
+	}
+}
+
+func TestBrowserInboxRejectsCaptureWithoutOpenVault(t *testing.T) {
+	v := vault.NewVault(nil)
+	app := &App{
+		storage: storage.New(v),
+		vault:   v,
+		plugins: []plugin.Plugin{{
+			Manifest: plugin.Manifest{
+				ID:          browserInboxPluginID,
+				Permissions: []string{"storage.namespace"},
+			},
+			Status:  plugin.StatusLoaded,
+			Enabled: true,
+		}},
+	}
+	app.ensureBrowserInboxSubscriptions()
+
+	err := app.recordBrowserCapture(events.Event{
+		Name:    "browser.capture.page",
+		Payload: map[string]interface{}{"captureId": "capture-no-vault"},
+	})
+
+	if err == nil || !strings.Contains(err.Error(), "unavailable") {
+		t.Fatalf("RecordBrowserCapture error = %v, want unavailable", err)
+	}
+}
+
+func TestBrowserInboxSerializesConcurrentCapturesAndMutations(t *testing.T) {
+	v := vault.NewVault(nil)
+	if err := v.CreateVault(t.TempDir()); err != nil {
+		t.Fatalf("CreateVault: %v", err)
+	}
+	bus := events.NewBus()
+	app := &App{
+		eventBus: bus,
+		storage:  storage.New(v),
+		vault:    v,
+		plugins: []plugin.Plugin{{
+			Manifest: plugin.Manifest{
+				ID:          browserInboxPluginID,
+				Permissions: []string{"storage.namespace"},
+			},
+			Status:  plugin.StatusLoaded,
+			Enabled: true,
+		}},
+	}
+	app.ensureBrowserInboxSubscriptions()
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		if err := app.storage.WritePluginSetting(browserInboxPluginID, "domainBindings", map[string]interface{}{
+			"example.com": "Project",
+		}); err != nil {
+			t.Errorf("WritePluginSetting(domainBindings): %v", err)
+		}
+	}()
+	for i := 0; i < 50; i++ {
+		wg.Add(1)
+		go func(index int) {
+			defer wg.Done()
+			if err := app.recordBrowserCapture(events.Event{
+				Name:      "browser.capture.page",
+				Timestamp: "2026-07-11T12:00:00Z",
+				Payload: map[string]interface{}{
+					"captureId": fmt.Sprintf("capture-%02d", index),
+					"kind":      "page",
+					"url":       fmt.Sprintf("https://example.com/%d", index),
+				},
+			}); err != nil {
+				t.Errorf("RecordBrowserCapture(%d): %v", index, err)
+			}
+		}(i)
+	}
+	wg.Wait()
+
+	bus.Publish(events.Event{
+		Name: browserInboxMutationEvent,
+		Payload: map[string]interface{}{
+			"pluginId":          browserInboxPluginID,
+			"action":            "assign",
+			"captureId":         "capture-00",
+			"workspaceRootPath": "Project",
+		},
+	})
+	bus.Publish(events.Event{
+		Name: browserInboxMutationEvent,
+		Payload: map[string]interface{}{
+			"pluginId":  browserInboxPluginID,
+			"action":    "delete",
+			"captureId": "capture-01",
+		},
+	})
+
+	settings, err := app.storage.ReadPluginSettings(browserInboxPluginID)
+	if err != nil {
+		t.Fatalf("ReadPluginSettings: %v", err)
+	}
+	stored, ok := settings[browserInboxGlobalKey].([]interface{})
+	if !ok || len(stored) != 49 {
+		t.Fatalf("captures:global contains %d captures, want 49", len(stored))
+	}
+	var assigned map[string]interface{}
+	for _, item := range stored {
+		capture := item.(map[string]interface{})
+		if capture["captureId"] == "capture-00" {
+			assigned = capture
+		}
+		if capture["captureId"] == "capture-01" {
+			t.Fatal("deleted capture remained in storage")
+		}
+	}
+	if assigned == nil || assigned["workspaceRootPath"] != "Project" {
+		t.Fatalf("assigned capture = %#v", assigned)
+	}
+	if settings["domainBindings"] == nil {
+		t.Fatal("concurrent domainBindings update was lost")
+	}
+}
+
+func TestBrowserInboxMutationMigratesAndClearsLegacyCaptures(t *testing.T) {
+	v := vault.NewVault(nil)
+	if err := v.CreateVault(t.TempDir()); err != nil {
+		t.Fatalf("CreateVault: %v", err)
+	}
+	bus := events.NewBus()
+	app := &App{
+		eventBus: bus,
+		storage:  storage.New(v),
+		vault:    v,
+		plugins: []plugin.Plugin{{
+			Manifest: plugin.Manifest{ID: browserInboxPluginID, Permissions: []string{"storage.namespace"}},
+			Status:   plugin.StatusLoaded,
+			Enabled:  true,
+		}},
+	}
+	if err := app.storage.WritePluginSettings(browserInboxPluginID, map[string]interface{}{
+		browserInboxLegacyKey: []interface{}{map[string]interface{}{
+			"captureId": "legacy-duplicate",
+			"title":     "Stale legacy copy",
+		}},
+		browserInboxGlobalKey: []interface{}{map[string]interface{}{
+			"captureId":         "legacy-duplicate",
+			"title":             "Canonical copy",
+			"workspaceRootPath": "Project",
+			"processed":         true,
+		}},
+	}); err != nil {
+		t.Fatalf("WritePluginSettings: %v", err)
+	}
+	app.ensureBrowserInboxSubscriptions()
+
+	bus.Publish(events.Event{Name: browserInboxMutationEvent, Payload: map[string]interface{}{
+		"pluginId": browserInboxPluginID,
+		"action":   "migrate",
+	}})
+
+	settings, err := app.storage.ReadPluginSettings(browserInboxPluginID)
+	if err != nil {
+		t.Fatalf("ReadPluginSettings: %v", err)
+	}
+	legacy := settings[browserInboxLegacyKey].([]interface{})
+	if len(legacy) != 0 {
+		t.Fatalf("legacy captures = %#v, want empty", legacy)
+	}
+	stored := settings[browserInboxGlobalKey].([]interface{})
+	if len(stored) != 1 {
+		t.Fatalf("canonical captures = %#v, want one", stored)
+	}
+	capture := stored[0].(map[string]interface{})
+	if capture["title"] != "Canonical copy" || capture["workspaceRootPath"] != "Project" || capture["processed"] != true {
+		t.Fatalf("canonical capture = %#v", capture)
 	}
 }
 

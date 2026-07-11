@@ -57,6 +57,8 @@ type WorkspaceProvider func() string
 type Options struct {
 	RequireToken  bool
 	ReceiverToken string
+	Available     func() bool
+	Persist       func(events.Event) error
 }
 
 type Server struct {
@@ -128,6 +130,17 @@ func (r *Receiver) SetReceiverToken(token string) {
 	r.options.ReceiverToken = strings.TrimSpace(token)
 }
 
+// SetPersistence configures durable capture storage and its availability gate.
+func (r *Receiver) SetPersistence(available func() bool, persist func(events.Event) error) {
+	if r == nil {
+		return
+	}
+	r.optionsMu.Lock()
+	defer r.optionsMu.Unlock()
+	r.options.Available = available
+	r.options.Persist = persist
+}
+
 func Start(addr string, receiver *Receiver) (*Server, error) {
 	if receiver == nil {
 		return nil, fmt.Errorf("receiver is required")
@@ -181,6 +194,11 @@ func (r *Receiver) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		writeError(w, http.StatusUnauthorized, err.Error())
 		return
 	}
+	options := r.currentOptions()
+	if options.Available != nil && !options.Available() {
+		writeError(w, http.StatusServiceUnavailable, "browser inbox unavailable")
+		return
+	}
 
 	defer req.Body.Close()
 	decoder := json.NewDecoder(http.MaxBytesReader(w, req.Body, maxCaptureBodyBytes))
@@ -209,23 +227,42 @@ func (r *Receiver) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	}
 
 	eventName := "browser.capture." + payload.Kind
-	if r.bus == nil || !r.bus.HasSubscribers(eventName) {
+	if options.Persist == nil && (r.bus == nil || !r.bus.HasSubscribers(eventName)) {
 		writeError(w, http.StatusServiceUnavailable, "browser inbox unavailable")
 		return
 	}
 	eventPayload := payload.EventPayload()
 	r.annotateWorkspace(eventPayload)
-	r.bus.Publish(events.Event{
+	event := events.Event{
 		Name:      eventName,
 		Timestamp: time.Now().UTC().Format(time.RFC3339Nano),
 		Payload:   eventPayload,
-	})
+	}
+	if options.Persist != nil {
+		if err := options.Persist(event); err != nil {
+			log.Printf("[browserreceiver] persist %s: %v", payload.CaptureID, err)
+			writeError(w, http.StatusServiceUnavailable, "browser inbox unavailable")
+			return
+		}
+	}
+	if r.bus != nil {
+		r.bus.Publish(event)
+	}
 
 	w.WriteHeader(http.StatusAccepted)
 	_ = json.NewEncoder(w).Encode(map[string]string{
 		"status":    "accepted",
 		"captureId": payload.CaptureID,
 	})
+}
+
+func (r *Receiver) currentOptions() Options {
+	if r == nil {
+		return Options{}
+	}
+	r.optionsMu.RLock()
+	defer r.optionsMu.RUnlock()
+	return r.options
 }
 
 func (r *Receiver) validateReceiverToken(req *http.Request) error {

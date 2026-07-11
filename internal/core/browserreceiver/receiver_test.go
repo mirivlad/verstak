@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -318,6 +319,61 @@ func TestReceiverAcceptsPairedToken(t *testing.T) {
 	event := <-received
 	if event.Name != "browser.capture.page" {
 		t.Fatalf("event name = %q, want browser.capture.page", event.Name)
+	}
+}
+
+func TestReceiverRejectsCaptureWhenInboxIsUnavailable(t *testing.T) {
+	bus := events.NewBus()
+	bus.Subscribe("browser.capture.page", func(event events.Event) {
+		t.Fatalf("unexpected event while inbox is unavailable: %#v", event)
+	})
+	receiver := NewWithOptions(bus, Options{
+		Available: func() bool { return false },
+	})
+	req := httptest.NewRequest(http.MethodPost, capturePath, strings.NewReader(`{
+		"schemaVersion": 1,
+		"captureId": "capture-no-vault",
+		"capturedAt": "2026-07-11T12:00:00Z",
+		"kind": "page",
+		"page": {"url": "https://example.com"}
+	}`))
+	res := httptest.NewRecorder()
+
+	receiver.ServeHTTP(res, req)
+
+	if res.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status = %d, want %d; body=%s", res.Code, http.StatusServiceUnavailable, res.Body.String())
+	}
+}
+
+func TestReceiverDoesNotAcknowledgeFailedPersistence(t *testing.T) {
+	bus := events.NewBus()
+	published := false
+	bus.Subscribe("browser.capture.page", func(event events.Event) {
+		published = true
+	})
+	receiver := NewWithOptions(bus, Options{
+		Available: func() bool { return true },
+		Persist: func(event events.Event) error {
+			return errors.New("disk full")
+		},
+	})
+	req := httptest.NewRequest(http.MethodPost, capturePath, strings.NewReader(`{
+		"schemaVersion": 1,
+		"captureId": "capture-disk-full",
+		"capturedAt": "2026-07-11T12:00:00Z",
+		"kind": "page",
+		"page": {"url": "https://example.com"}
+	}`))
+	res := httptest.NewRecorder()
+
+	receiver.ServeHTTP(res, req)
+
+	if res.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status = %d, want %d; body=%s", res.Code, http.StatusServiceUnavailable, res.Body.String())
+	}
+	if published {
+		t.Fatal("capture event was published after persistence failed")
 	}
 }
 

@@ -9,7 +9,9 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
@@ -41,6 +43,12 @@ const pluginEventRuntimeName = "verstak:plugin-event"
 const activityGlobalKey = "events:global"
 const activityWorkspacePrefix = "events:workspace:"
 const maxActivityEvents = 250
+const browserInboxPluginID = "verstak.browser-inbox"
+const browserInboxGlobalKey = "captures:global"
+const browserInboxLegacyKey = "captures"
+const browserInboxWorkspacePrefix = "captures:workspace:"
+const browserInboxMutationEvent = "browser-inbox.storage.mutate"
+const maxBrowserInboxCaptures = 100
 const workspaceCreatedEventName = "workspace.created"
 const workspaceRenamedEventName = "workspace.renamed"
 const workspaceTrashedEventName = "workspace.trashed"
@@ -48,26 +56,28 @@ const workspaceSelectedEventName = "workspace.selected"
 
 // App is the main application struct exposed to the Wails frontend.
 type App struct {
-	ctx             context.Context
-	capRegistry     *capability.Registry
-	contribRegistry *contribution.Registry
-	permRegistry    *permissions.Registry
-	eventBus        *events.Bus
-	plugins         []plugin.Plugin
-	vault           *vault.Vault
-	storage         *storage.Storage
-	files           *corefiles.Service
-	externalOpen    externalOpenService
-	appSettings     *appsettings.Manager
-	pluginState     *pluginstate.Manager
-	workbench       *coreworkbench.Router
-	workspace       *workspace.Manager
-	syncSvc         *syncsvc.Service
-	browserReceiver *browserreceiver.Receiver
-	secretsSession  *coresecrets.VaultSession
-	fileWatcher     *filewatcher.Service
-	debug           bool
-	activityEvents  map[string]bool
+	ctx                 context.Context
+	capRegistry         *capability.Registry
+	contribRegistry     *contribution.Registry
+	permRegistry        *permissions.Registry
+	eventBus            *events.Bus
+	plugins             []plugin.Plugin
+	vault               *vault.Vault
+	storage             *storage.Storage
+	files               *corefiles.Service
+	externalOpen        externalOpenService
+	appSettings         *appsettings.Manager
+	pluginState         *pluginstate.Manager
+	workbench           *coreworkbench.Router
+	workspace           *workspace.Manager
+	syncSvc             *syncsvc.Service
+	browserReceiver     *browserreceiver.Receiver
+	secretsSession      *coresecrets.VaultSession
+	fileWatcher         *filewatcher.Service
+	debug               bool
+	activityEvents      map[string]bool
+	browserInboxEvents  map[string]bool
+	browserInboxEnabled atomic.Bool
 }
 
 type externalOpenService interface {
@@ -93,29 +103,34 @@ func NewApp(
 	debugEnabled bool,
 ) *App {
 	app := &App{
-		capRegistry:     capReg,
-		contribRegistry: contribReg,
-		permRegistry:    permReg,
-		eventBus:        bus,
-		plugins:         plugins,
-		vault:           vaultService,
-		storage:         storageService,
-		files:           filesService,
-		externalOpen:    externalopen.NewService(),
-		appSettings:     appSettingsMgr,
-		pluginState:     pluginStateMgr,
-		workbench:       coreworkbench.NewRouter(workbenchPrefsFromSettings(appSettingsMgr)),
-		workspace:       workspaceMgr,
-		syncSvc:         syncService,
-		browserReceiver: browserReceiverService,
-		fileWatcher:     filewatcher.NewService(bus, 0),
-		debug:           debugEnabled,
-		activityEvents:  make(map[string]bool),
+		capRegistry:        capReg,
+		contribRegistry:    contribReg,
+		permRegistry:       permReg,
+		eventBus:           bus,
+		plugins:            plugins,
+		vault:              vaultService,
+		storage:            storageService,
+		files:              filesService,
+		externalOpen:       externalopen.NewService(),
+		appSettings:        appSettingsMgr,
+		pluginState:        pluginStateMgr,
+		workbench:          coreworkbench.NewRouter(workbenchPrefsFromSettings(appSettingsMgr)),
+		workspace:          workspaceMgr,
+		syncSvc:            syncService,
+		browserReceiver:    browserReceiverService,
+		fileWatcher:        filewatcher.NewService(bus, 0),
+		debug:              debugEnabled,
+		activityEvents:     make(map[string]bool),
+		browserInboxEvents: make(map[string]bool),
 	}
 	if app.syncSvc == nil {
 		app.rebindSyncService()
 	}
 	app.ensureActivityProviderSubscriptions()
+	app.ensureBrowserInboxSubscriptions()
+	if app.browserReceiver != nil {
+		app.browserReceiver.SetPersistence(app.browserInboxAvailable, app.recordBrowserCapture)
+	}
 	app.startFileWatcherForOpenVault()
 	return app
 }
@@ -151,7 +166,182 @@ func (a *App) ensureWorkbench() *coreworkbench.Router {
 func (a *App) Startup(ctx context.Context) {
 	a.ctx = ctx
 	a.ensureActivityProviderSubscriptions()
+	a.ensureBrowserInboxSubscriptions()
 	log.Printf("[api] App.Startup: initialized with %d plugins", len(a.plugins))
+}
+
+func (a *App) ensureBrowserInboxSubscriptions() {
+	if a.eventBus == nil || a.storage == nil {
+		a.browserInboxEnabled.Store(false)
+		return
+	}
+	if _, err := a.requirePluginAccess(browserInboxPluginID, "storage.namespace"); err != nil {
+		a.browserInboxEnabled.Store(false)
+		return
+	}
+	a.browserInboxEnabled.Store(true)
+	if a.browserInboxEvents == nil {
+		a.browserInboxEvents = make(map[string]bool)
+	}
+	for _, eventName := range []string{browserInboxMutationEvent} {
+		if a.browserInboxEvents[eventName] {
+			continue
+		}
+		a.browserInboxEvents[eventName] = true
+		a.eventBus.Subscribe(eventName, func(event events.Event) {
+			if err := a.mutateBrowserInboxCapture(event); err != nil {
+				log.Printf("[api] browser inbox mutation failed: %v", err)
+			}
+		})
+	}
+}
+
+func (a *App) browserInboxAvailable() bool {
+	if a == nil || a.storage == nil || a.vault == nil || !a.browserInboxEnabled.Load() || a.vault.GetVaultStatus() != vault.StatusOpen {
+		return false
+	}
+	return true
+}
+
+func (a *App) recordBrowserCapture(event events.Event) error {
+	if !a.browserInboxAvailable() {
+		return fmt.Errorf("browser inbox unavailable")
+	}
+	capture := eventPayloadMap(event.Payload)
+	captureID := firstPayloadText(capture, "captureId")
+	if captureID == "" {
+		return fmt.Errorf("captureId is empty")
+	}
+	if firstPayloadText(capture, "kind") == "" {
+		capture["kind"] = strings.TrimPrefix(event.Name, "browser.capture.")
+	}
+	if firstPayloadText(capture, "capturedAt") == "" {
+		capture["capturedAt"] = event.Timestamp
+	}
+	capture["receivedAt"] = time.Now().UTC().Format(time.RFC3339Nano)
+	return a.updateBrowserInboxCaptures(func(captures []map[string]interface{}) []map[string]interface{} {
+		for _, stored := range captures {
+			if firstPayloadText(stored, "captureId") == captureID {
+				return captures
+			}
+		}
+		result := []map[string]interface{}{capture}
+		result = append(result, captures...)
+		return result
+	})
+}
+
+func (a *App) mutateBrowserInboxCapture(event events.Event) error {
+	payload := eventPayloadMap(event.Payload)
+	if firstPayloadText(payload, "pluginId") != browserInboxPluginID {
+		return fmt.Errorf("browser inbox mutation source is not authorized")
+	}
+	action := firstPayloadText(payload, "action")
+	switch action {
+	case "migrate", "assign", "delete", "processed":
+	default:
+		return fmt.Errorf("unsupported browser inbox mutation %q", action)
+	}
+	captureID := firstPayloadText(payload, "captureId")
+	captureIDs := make(map[string]bool)
+	if captureID != "" {
+		captureIDs[captureID] = true
+	}
+	if items, ok := payload["captureIds"].([]interface{}); ok {
+		for _, item := range items {
+			if id, ok := item.(string); ok && strings.TrimSpace(id) != "" {
+				captureIDs[strings.TrimSpace(id)] = true
+			}
+		}
+	}
+	if action != "migrate" && len(captureIDs) == 0 {
+		return fmt.Errorf("captureId is empty")
+	}
+	return a.updateBrowserInboxCaptures(func(captures []map[string]interface{}) []map[string]interface{} {
+		result := make([]map[string]interface{}, 0, len(captures))
+		for _, capture := range captures {
+			storedID := firstPayloadText(capture, "captureId")
+			if !captureIDs[storedID] {
+				result = append(result, capture)
+				continue
+			}
+			switch action {
+			case "delete":
+				continue
+			case "assign":
+				workspaceRoot := firstPayloadText(payload, "workspaceRootPath")
+				capture["workspaceRootPath"] = workspaceRoot
+				capture["workspaceName"] = workspaceRoot
+			case "processed":
+				capture["processed"], _ = payload["processed"].(bool)
+			}
+			result = append(result, capture)
+		}
+		return result
+	})
+}
+
+func (a *App) updateBrowserInboxCaptures(update func([]map[string]interface{}) []map[string]interface{}) error {
+	if !a.browserInboxAvailable() {
+		return fmt.Errorf("browser inbox unavailable")
+	}
+	return a.storage.UpdatePluginSettings(browserInboxPluginID, func(settings map[string]interface{}) error {
+		captures, legacyKeys := browserInboxCaptures(settings)
+		captures = update(captures)
+		if len(captures) > maxBrowserInboxCaptures {
+			captures = captures[:maxBrowserInboxCaptures]
+		}
+		stored := make([]interface{}, 0, len(captures))
+		for _, capture := range captures {
+			stored = append(stored, capture)
+		}
+		settings[browserInboxGlobalKey] = stored
+		for _, key := range legacyKeys {
+			settings[key] = []interface{}{}
+		}
+		return nil
+	})
+}
+
+func browserInboxCaptures(settings map[string]interface{}) ([]map[string]interface{}, []string) {
+	keys := []string{browserInboxGlobalKey, browserInboxLegacyKey}
+	for key := range settings {
+		if strings.HasPrefix(key, browserInboxWorkspacePrefix) {
+			keys = append(keys, key)
+		}
+	}
+	sort.Strings(keys[2:])
+	seen := make(map[string]bool)
+	legacyKeys := make([]string, 0, len(keys)-1)
+	var captures []map[string]interface{}
+	for _, key := range keys {
+		if key != browserInboxGlobalKey {
+			legacyKeys = append(legacyKeys, key)
+		}
+		workspaceRoot := ""
+		if strings.HasPrefix(key, browserInboxWorkspacePrefix) {
+			workspaceRoot, _ = url.PathUnescape(strings.TrimPrefix(key, browserInboxWorkspacePrefix))
+		}
+		items, _ := settings[key].([]interface{})
+		for _, item := range items {
+			original, ok := item.(map[string]interface{})
+			if !ok {
+				continue
+			}
+			capture := eventPayloadMap(original)
+			captureID := firstPayloadText(capture, "captureId")
+			if captureID == "" || seen[captureID] {
+				continue
+			}
+			seen[captureID] = true
+			if firstPayloadText(capture, "workspaceRootPath") == "" && workspaceRoot != "" {
+				capture["workspaceRootPath"] = workspaceRoot
+				capture["workspaceName"] = workspaceRoot
+			}
+			captures = append(captures, capture)
+		}
+	}
+	return captures, legacyKeys
 }
 
 func (a *App) findPlugin(pluginID string) (*plugin.Plugin, error) {
@@ -646,6 +836,7 @@ func (a *App) ReloadPlugins() (int, string) {
 
 	a.plugins = plugins
 	a.ensureActivityProviderSubscriptions()
+	a.ensureBrowserInboxSubscriptions()
 
 	var buf strings.Builder
 	buf.WriteString("discovery complete")

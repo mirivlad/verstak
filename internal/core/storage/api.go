@@ -84,13 +84,22 @@ func atomicWrite(path string, data []byte) error {
 // ReadPluginSettings reads all settings for a plugin.
 // Returns empty map if settings.json does not exist.
 func (s *Storage) ReadPluginSettings(pluginID string) (map[string]interface{}, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 	if err := validatePluginID(pluginID); err != nil {
 		return nil, err
 	}
+	var result map[string]interface{}
+	err := s.withOpenVault(func(vaultPath string) error {
+		var err error
+		result, err = readPluginSettingsAt(vaultPath, pluginID)
+		return err
+	})
+	return result, err
+}
 
-	dir := s.vault.GetPluginSettingsPath(pluginID)
-	path := filepath.Join(dir, "settings.json")
-
+func readPluginSettingsAt(vaultPath, pluginID string) (map[string]interface{}, error) {
+	path := filepath.Join(vaultPath, ".verstak", "plugin-settings", pluginID, "settings.json")
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -108,13 +117,18 @@ func (s *Storage) ReadPluginSettings(pluginID string) (map[string]interface{}, e
 
 // WritePluginSettings writes all settings for a plugin atomically.
 func (s *Storage) WritePluginSettings(pluginID string, data map[string]interface{}) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	if err := validatePluginID(pluginID); err != nil {
 		return err
 	}
+	return s.withOpenVault(func(vaultPath string) error {
+		return writePluginSettingsAt(vaultPath, pluginID, data)
+	})
+}
 
-	dir := s.vault.GetPluginSettingsPath(pluginID)
-	path := filepath.Join(dir, "settings.json")
-
+func writePluginSettingsAt(vaultPath, pluginID string, data map[string]interface{}) error {
+	path := filepath.Join(vaultPath, ".verstak", "plugin-settings", pluginID, "settings.json")
 	encoded, err := json.MarshalIndent(data, "", "  ")
 	if err != nil {
 		return fmt.Errorf("failed to marshal settings for plugin %s: %w", pluginID, err)
@@ -137,12 +151,39 @@ func (s *Storage) ReadPluginSetting(pluginID, key string) (interface{}, error) {
 
 // WritePluginSetting writes a single setting key.
 func (s *Storage) WritePluginSetting(pluginID, key string, value interface{}) error {
-	settings, err := s.ReadPluginSettings(pluginID)
-	if err != nil {
+	return s.UpdatePluginSettings(pluginID, func(settings map[string]interface{}) error {
+		settings[key] = value
+		return nil
+	})
+}
+
+// UpdatePluginSettings atomically reads, mutates, and writes a plugin's settings.
+func (s *Storage) UpdatePluginSettings(pluginID string, update func(map[string]interface{}) error) error {
+	if update == nil {
+		return fmt.Errorf("settings update is nil")
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if err := validatePluginID(pluginID); err != nil {
 		return err
 	}
-	settings[key] = value
-	return s.WritePluginSettings(pluginID, settings)
+	return s.withOpenVault(func(vaultPath string) error {
+		settings, err := readPluginSettingsAt(vaultPath, pluginID)
+		if err != nil {
+			return err
+		}
+		if err := update(settings); err != nil {
+			return err
+		}
+		return writePluginSettingsAt(vaultPath, pluginID, settings)
+	})
+}
+
+func (s *Storage) withOpenVault(operation func(string) error) error {
+	if s == nil || s.vault == nil {
+		return fmt.Errorf("vault is not initialized")
+	}
+	return s.vault.WithOpenPath(operation)
 }
 
 // ─── Data JSON API ────────────────────────────────────────

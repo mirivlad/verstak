@@ -70,6 +70,23 @@ func (v *Vault) GetVaultPath() string {
 	return v.path
 }
 
+// WithOpenPath runs fn while holding a read lease on the currently open vault.
+// CloseVault and OpenVault wait until the operation completes.
+func (v *Vault) WithOpenPath(fn func(string) error) error {
+	if v == nil {
+		return fmt.Errorf("vault is not initialized")
+	}
+	if fn == nil {
+		return fmt.Errorf("vault path operation is nil")
+	}
+	v.mu.RLock()
+	defer v.mu.RUnlock()
+	if v.status != StatusOpen || strings.TrimSpace(v.path) == "" {
+		return fmt.Errorf("vault is not open")
+	}
+	return fn(v.path)
+}
+
 // GetVaultMeta returns the current vault metadata.
 func (v *Vault) GetVaultMeta() *VaultMeta {
 	v.mu.RLock()
