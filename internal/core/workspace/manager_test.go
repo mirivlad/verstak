@@ -292,6 +292,126 @@ func TestTrashWorkspaceMovesFolderToTrashAndRemovesFromList(t *testing.T) {
 	}
 }
 
+func TestCreateWorkspaceWritesDurableIdentityMarker(t *testing.T) {
+	vaultDir := newVaultDir(t)
+	m := NewManager(vaultDir)
+	if _, err := m.CreateWorkspace("Client", "default"); err != nil {
+		t.Fatalf("CreateWorkspace: %v", err)
+	}
+
+	markerPath := filepath.Join(vaultDir, "Client", ".verstak", "workspace.json")
+	data, err := os.ReadFile(markerPath)
+	if err != nil {
+		t.Fatalf("read identity marker: %v", err)
+	}
+	var marker map[string]string
+	if err := json.Unmarshal(data, &marker); err != nil {
+		t.Fatalf("decode identity marker: %v", err)
+	}
+	if marker["workspaceId"] == "" {
+		t.Fatalf("workspaceId = %q, want UUID", marker["workspaceId"])
+	}
+}
+
+func TestListWorkspacesKeepsIdentityAfterRename(t *testing.T) {
+	vaultDir := newVaultDir(t)
+	m := NewManager(vaultDir)
+	created, err := m.CreateWorkspace("Client", "default")
+	if err != nil {
+		t.Fatalf("CreateWorkspace: %v", err)
+	}
+	if err := m.RenameWorkspace("Client", "Client-2026"); err != nil {
+		t.Fatalf("RenameWorkspace: %v", err)
+	}
+
+	workspaces, err := m.ListWorkspaces()
+	if err != nil {
+		t.Fatalf("ListWorkspaces: %v", err)
+	}
+	if len(workspaces) != 1 {
+		t.Fatalf("workspaces = %+v, want one", workspaces)
+	}
+	if workspaces[0].Name != "Client-2026" {
+		t.Fatalf("workspace name = %q, want Client-2026", workspaces[0].Name)
+	}
+	if workspaces[0].ID != created.ID {
+		t.Fatalf("workspace ID = %q, want %q", workspaces[0].ID, created.ID)
+	}
+}
+
+func TestListWorkspaceIdentitiesMarksCopiedMarkerAsDuplicate(t *testing.T) {
+	vaultDir := newVaultDir(t)
+	m := NewManager(vaultDir)
+	if _, err := m.CreateWorkspace("Original", "default"); err != nil {
+		t.Fatalf("CreateWorkspace: %v", err)
+	}
+	if err := os.Mkdir(filepath.Join(vaultDir, "Copied"), 0o755); err != nil {
+		t.Fatalf("mkdir copied: %v", err)
+	}
+	originalMarker := filepath.Join(vaultDir, "Original", ".verstak", "workspace.json")
+	copiedMarker := filepath.Join(vaultDir, "Copied", ".verstak", "workspace.json")
+	if err := os.MkdirAll(filepath.Dir(copiedMarker), 0o755); err != nil {
+		t.Fatalf("mkdir copied marker: %v", err)
+	}
+	data, err := os.ReadFile(originalMarker)
+	if err != nil {
+		t.Fatalf("read original marker: %v", err)
+	}
+	if err := os.WriteFile(copiedMarker, data, 0o644); err != nil {
+		t.Fatalf("write copied marker: %v", err)
+	}
+
+	identities, err := m.ListWorkspaceIdentities()
+	if err != nil {
+		t.Fatalf("ListWorkspaceIdentities: %v", err)
+	}
+	if len(identities) != 2 {
+		t.Fatalf("identities = %+v, want two", identities)
+	}
+	for _, identity := range identities {
+		if identity.State != "duplicate" {
+			t.Fatalf("identity %+v state = %q, want duplicate", identity, identity.State)
+		}
+	}
+}
+
+func TestRepairWorkspaceIdentityRegeneratesCopiedMarker(t *testing.T) {
+	vaultDir := newVaultDir(t)
+	m := NewManager(vaultDir)
+	if _, err := m.CreateWorkspace("Original", "default"); err != nil {
+		t.Fatalf("CreateWorkspace: %v", err)
+	}
+	if err := os.Mkdir(filepath.Join(vaultDir, "Copied"), 0o755); err != nil {
+		t.Fatalf("mkdir copied: %v", err)
+	}
+	originalMarker := filepath.Join(vaultDir, "Original", ".verstak", "workspace.json")
+	copiedMarker := filepath.Join(vaultDir, "Copied", ".verstak", "workspace.json")
+	if err := os.MkdirAll(filepath.Dir(copiedMarker), 0o755); err != nil {
+		t.Fatalf("mkdir copied marker: %v", err)
+	}
+	data, err := os.ReadFile(originalMarker)
+	if err != nil {
+		t.Fatalf("read original marker: %v", err)
+	}
+	if err := os.WriteFile(copiedMarker, data, 0o644); err != nil {
+		t.Fatalf("write copied marker: %v", err)
+	}
+
+	if err := m.RepairWorkspaceIdentity("Original", "Copied"); err != nil {
+		t.Fatalf("RepairWorkspaceIdentity: %v", err)
+	}
+	identities, err := m.ListWorkspaceIdentities()
+	if err != nil {
+		t.Fatalf("ListWorkspaceIdentities: %v", err)
+	}
+	if len(identities) != 2 || identities[0].State != "active" || identities[1].State != "active" {
+		t.Fatalf("identities after repair = %+v", identities)
+	}
+	if identities[0].WorkspaceID == identities[1].WorkspaceID {
+		t.Fatalf("repair kept duplicate ID %q", identities[0].WorkspaceID)
+	}
+}
+
 func TestCreateAndRenameConflictsAreExplicit(t *testing.T) {
 	vaultDir := newVaultDir(t)
 	mustMkdir(t, filepath.Join(vaultDir, "Existing"))

@@ -1950,6 +1950,29 @@ func (a *App) ListWorkspaceTemplates() ([]workspace.WorkspaceTemplate, string) {
 	return a.workspace.ListWorkspaceTemplates(), ""
 }
 
+// ListWorkspaceIdentities returns durable workspace identities for relation-aware plugins.
+func (a *App) ListWorkspaceIdentities() ([]workspace.WorkspaceIdentity, string) {
+	if a.workspace == nil {
+		return nil, "workspace not initialized"
+	}
+	identities, err := a.workspace.ListWorkspaceIdentities()
+	if err != nil {
+		return nil, err.Error()
+	}
+	return identities, ""
+}
+
+// RepairWorkspaceIdentity resolves a duplicated workspace marker without moving relations.
+func (a *App) RepairWorkspaceIdentity(keepName, regenerateName string) string {
+	if a.workspace == nil {
+		return "workspace not initialized"
+	}
+	if err := a.workspace.RepairWorkspaceIdentity(keepName, regenerateName); err != nil {
+		return err.Error()
+	}
+	return ""
+}
+
 // CreateWorkspace creates a top-level physical workspace folder.
 func (a *App) CreateWorkspace(name, templateID string) (workspace.Workspace, string) {
 	if a.workspace == nil {
@@ -1961,6 +1984,7 @@ func (a *App) CreateWorkspace(name, templateID string) (workspace.Workspace, str
 	}
 	a.publishWorkspaceLifecycleEvent(workspaceCreatedEventName, map[string]interface{}{
 		"operation":         "create",
+		"workspaceId":       ws.ID,
 		"workspaceRootPath": ws.RootPath,
 		"workspaceName":     ws.Name,
 		"templateId":        templateID,
@@ -1976,8 +2000,13 @@ func (a *App) RenameWorkspace(oldName, newName string) string {
 	if err := a.workspace.RenameWorkspace(oldName, newName); err != nil {
 		return err.Error()
 	}
+	identity, err := a.workspace.GetWorkspaceIdentity(newName)
+	if err != nil {
+		return err.Error()
+	}
 	a.publishWorkspaceLifecycleEvent(workspaceRenamedEventName, map[string]interface{}{
 		"operation":                 "rename",
+		"workspaceId":               identity.WorkspaceID,
 		"workspaceRootPath":         newName,
 		"workspaceName":             newName,
 		"previousWorkspaceRootPath": oldName,
@@ -1997,6 +2026,7 @@ func (a *App) TrashWorkspace(name string) (workspace.TrashResult, string) {
 	}
 	a.publishWorkspaceLifecycleEvent(workspaceTrashedEventName, map[string]interface{}{
 		"operation":         "trash",
+		"workspaceId":       result.WorkspaceID,
 		"workspaceRootPath": name,
 		"workspaceName":     name,
 		"trashId":           result.TrashID,

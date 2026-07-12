@@ -74,6 +74,8 @@ export function ListVaultTrash(arg1:string):Promise<Array<files.TrashEntry>|stri
 
 export function ListWorkspaces():Promise<Array<workspace.Workspace>|string>;
 
+export function ListWorkspaceIdentities():Promise<Array<workspace.WorkspaceIdentity>|string>;
+
 export function ListWorkspaceTemplates():Promise<Array<workspace.WorkspaceTemplate>|string>;
 
 export function MoveVaultPath(arg1:string,arg2:string,arg3:string,arg4:files.MoveOptions):Promise<string>;
@@ -135,6 +137,8 @@ export function RecordDesiredPlugin(arg1:string,arg2:string,arg3:string):Promise
 export function ReloadPlugins():Promise<number|string>;
 
 export function RenameWorkspace(arg1:string,arg2:string):Promise<string>;
+
+export function RepairWorkspaceIdentity(arg1:string,arg2:string):Promise<string>;
 
 export function RenameWorkspaceNode(arg1:string,arg2:string):Promise<string>;
 

@@ -1272,6 +1272,7 @@ export namespace workspace {
 	    }
 	}
 	export class Metadata {
+	    workspaceId?: string;
 	    workspaceName: string;
 	    createdFromTemplate?: TemplateSnapshot;
 	    features?: Record<string, boolean>;
@@ -1285,6 +1286,7 @@ export namespace workspace {
 	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.workspaceId = source["workspaceId"];
 	        this.workspaceName = source["workspaceName"];
 	        this.createdFromTemplate = this.convertValues(source["createdFromTemplate"], TemplateSnapshot);
 	        this.features = source["features"];
@@ -1327,6 +1329,7 @@ export namespace workspace {
 	}
 	
 	export class TrashResult {
+	    workspaceId: string;
 	    originalPath: string;
 	    trashPath: string;
 	    trashId: string;
@@ -1338,6 +1341,7 @@ export namespace workspace {
 	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.workspaceId = source["workspaceId"];
 	        this.originalPath = source["originalPath"];
 	        this.trashPath = source["trashPath"];
 	        this.trashId = source["trashId"];
@@ -1345,6 +1349,7 @@ export namespace workspace {
 	    }
 	}
 	export class Workspace {
+	    id: string;
 	    name: string;
 	    rootPath: string;
 	
@@ -1354,8 +1359,26 @@ export namespace workspace {
 	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
 	        this.name = source["name"];
 	        this.rootPath = source["rootPath"];
+	    }
+	}
+
+	export class WorkspaceIdentity {
+	    workspaceId: string;
+	    rootPath: string;
+	    state: string;
+
+	    static createFrom(source: any = {}) {
+	        return new WorkspaceIdentity(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.workspaceId = source["workspaceId"];
+	        this.rootPath = source["rootPath"];
+	        this.state = source["state"];
 	    }
 	}
 

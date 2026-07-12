@@ -1836,6 +1836,10 @@ func TestWorkspaceAPIPublishesLifecycleEvents(t *testing.T) {
 	if got := received["workspace.created"]["workspaceRootPath"]; got != "Project" {
 		t.Fatalf("workspace.created workspaceRootPath = %#v, want Project", got)
 	}
+	createdID, _ := received["workspace.created"]["workspaceId"].(string)
+	if createdID == "" {
+		t.Fatal("workspace.created workspaceId is empty")
+	}
 	if got := received["workspace.created"]["templateId"]; got != "client-project" {
 		t.Fatalf("workspace.created templateId = %#v, want client-project", got)
 	}
@@ -1845,14 +1849,45 @@ func TestWorkspaceAPIPublishesLifecycleEvents(t *testing.T) {
 	if got := received["workspace.renamed"]["workspaceRootPath"]; got != "Renamed" {
 		t.Fatalf("workspace.renamed workspaceRootPath = %#v, want Renamed", got)
 	}
+	if got := received["workspace.renamed"]["workspaceId"]; got != createdID {
+		t.Fatalf("workspace.renamed workspaceId = %#v, want %q", got, createdID)
+	}
 	if got := received["workspace.renamed"]["previousWorkspaceRootPath"]; got != "Project" {
 		t.Fatalf("workspace.renamed previousWorkspaceRootPath = %#v, want Project", got)
 	}
 	if got := received["workspace.trashed"]["workspaceRootPath"]; got != "Renamed" {
 		t.Fatalf("workspace.trashed workspaceRootPath = %#v, want Renamed", got)
 	}
+	if got := received["workspace.trashed"]["workspaceId"]; got != createdID {
+		t.Fatalf("workspace.trashed workspaceId = %#v, want %q", got, createdID)
+	}
 	if got := received["workspace.trashed"]["trashPath"]; got == "" {
 		t.Fatalf("workspace.trashed trashPath = %#v, want non-empty", got)
+	}
+}
+
+func TestWorkspaceIdentityAPIListsAndRepairsDuplicates(t *testing.T) {
+	app, vaultDir := newFilesTestApp(t, []string{"files.read"})
+	app.workspace = workspace.NewManager(vaultDir)
+	if err := app.workspace.Load(); err != nil {
+		t.Fatal(err)
+	}
+	if _, errStr := app.CreateWorkspace("Original", "default"); errStr != "" {
+		t.Fatalf("CreateWorkspace: %s", errStr)
+	}
+	identities, errStr := app.ListWorkspaceIdentities()
+	if errStr != "" {
+		t.Fatalf("ListWorkspaceIdentities: %s", errStr)
+	}
+	var original workspace.WorkspaceIdentity
+	for _, identity := range identities {
+		if identity.RootPath == "Original" {
+			original = identity
+			break
+		}
+	}
+	if original.WorkspaceID == "" || original.State != "active" {
+		t.Fatalf("identities = %+v", identities)
 	}
 }
 

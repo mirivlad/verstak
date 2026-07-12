@@ -134,6 +134,10 @@ export function ListWorkspaces() {
   return window['go']['api']['App']['ListWorkspaces']();
 }
 
+export function ListWorkspaceIdentities() {
+  return window['go']['api']['App']['ListWorkspaceIdentities']();
+}
+
 export function ListWorkspaceTemplates() {
   return window['go']['api']['App']['ListWorkspaceTemplates']();
 }
@@ -256,6 +260,10 @@ export function ReloadPlugins() {
 
 export function RenameWorkspace(arg1, arg2) {
   return window['go']['api']['App']['RenameWorkspace'](arg1, arg2);
+}
+
+export function RepairWorkspaceIdentity(arg1, arg2) {
+  return window['go']['api']['App']['RepairWorkspaceIdentity'](arg1, arg2);
 }
 
 export function RenameWorkspaceNode(arg1, arg2) {

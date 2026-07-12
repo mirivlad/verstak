@@ -40,6 +40,7 @@ const (
 
 // Workspace is a physical top-level workspace folder.
 type Workspace struct {
+	ID       string `json:"id"`
 	Name     string `json:"name"`
 	RootPath string `json:"rootPath"`
 }
@@ -66,12 +67,19 @@ type WorkspaceTemplate struct {
 // Metadata stores semantic workspace metadata that is not the source of truth
 // for whether the workspace exists.
 type Metadata struct {
+	WorkspaceID         string            `json:"workspaceId,omitempty"`
 	WorkspaceName       string            `json:"workspaceName"`
 	CreatedFromTemplate *TemplateSnapshot `json:"createdFromTemplate,omitempty"`
 	Features            map[string]bool   `json:"features,omitempty"`
 	Folders             map[string]string `json:"folders,omitempty"`
 	WorkspaceTools      []string          `json:"workspaceTools,omitempty"`
 	UpdatedAt           string            `json:"updatedAt,omitempty"`
+}
+
+const workspaceIdentityRelativePath = ".verstak/workspace.json"
+
+type workspaceIdentityMarker struct {
+	WorkspaceID string `json:"workspaceId"`
 }
 
 // MetadataPatch updates metadata fields without replacing unspecified fields.
@@ -82,10 +90,18 @@ type MetadataPatch struct {
 
 // TrashResult describes a workspace moved into the internal trash area.
 type TrashResult struct {
+	WorkspaceID  string `json:"workspaceId"`
 	OriginalPath string `json:"originalPath"`
 	TrashPath    string `json:"trashPath"`
 	TrashID      string `json:"trashId"`
 	DeletedAt    string `json:"deletedAt"`
+}
+
+// WorkspaceIdentity identifies an existing top-level workspace independently of its path.
+type WorkspaceIdentity struct {
+	WorkspaceID string `json:"workspaceId"`
+	RootPath    string `json:"rootPath"`
+	State       string `json:"state"`
 }
 
 // WorkspaceNode is a compatibility shell view of a top-level workspace.
@@ -301,12 +317,94 @@ func (m *Manager) ListWorkspaces() ([]Workspace, error) {
 		if !entry.IsDir() {
 			continue
 		}
-		workspaces = append(workspaces, Workspace{Name: name, RootPath: name})
+		workspaceID, err := ensureWorkspaceIdentity(filepath.Join(m.vaultDir, name))
+		if err != nil {
+			return nil, err
+		}
+		workspaces = append(workspaces, Workspace{ID: workspaceID, Name: name, RootPath: name})
 	}
 	sort.Slice(workspaces, func(i, j int) bool {
 		return strings.ToLower(workspaces[i].Name) < strings.ToLower(workspaces[j].Name)
 	})
 	return workspaces, nil
+}
+
+// GetWorkspaceIdentity resolves the durable identity for an existing workspace.
+func (m *Manager) GetWorkspaceIdentity(name string) (WorkspaceIdentity, error) {
+	name = strings.TrimSpace(name)
+	if err := validateWorkspaceName(name); err != nil {
+		return WorkspaceIdentity{}, err
+	}
+	full := filepath.Join(m.vaultDir, name)
+	if err := ensureExistingWorkspaceDir(full, name); err != nil {
+		return WorkspaceIdentity{}, err
+	}
+	workspaceID, err := ensureWorkspaceIdentity(full)
+	if err != nil {
+		return WorkspaceIdentity{}, err
+	}
+	return WorkspaceIdentity{WorkspaceID: workspaceID, RootPath: name, State: "active"}, nil
+}
+
+// ListWorkspaceIdentities returns durable identities and flags copied markers.
+func (m *Manager) ListWorkspaceIdentities() ([]WorkspaceIdentity, error) {
+	workspaces, err := m.ListWorkspaces()
+	if err != nil {
+		return nil, err
+	}
+	counts := make(map[string]int, len(workspaces))
+	for _, workspace := range workspaces {
+		counts[workspace.ID]++
+	}
+	identities := make([]WorkspaceIdentity, 0, len(workspaces))
+	for _, workspace := range workspaces {
+		state := "active"
+		if counts[workspace.ID] > 1 {
+			state = "duplicate"
+		}
+		identities = append(identities, WorkspaceIdentity{
+			WorkspaceID: workspace.ID,
+			RootPath:    workspace.RootPath,
+			State:       state,
+		})
+	}
+	return identities, nil
+}
+
+// RepairWorkspaceIdentity keeps the identity on one copied workspace and regenerates the other.
+func (m *Manager) RepairWorkspaceIdentity(keepName, regenerateName string) error {
+	keepName = strings.TrimSpace(keepName)
+	regenerateName = strings.TrimSpace(regenerateName)
+	if err := validateWorkspaceName(keepName); err != nil {
+		return err
+	}
+	if err := validateWorkspaceName(regenerateName); err != nil {
+		return err
+	}
+	if keepName == regenerateName {
+		return fmt.Errorf("workspace identity repair requires two workspaces")
+	}
+	keepPath := filepath.Join(m.vaultDir, keepName)
+	regeneratePath := filepath.Join(m.vaultDir, regenerateName)
+	if err := ensureExistingWorkspaceDir(keepPath, keepName); err != nil {
+		return err
+	}
+	if err := ensureExistingWorkspaceDir(regeneratePath, regenerateName); err != nil {
+		return err
+	}
+	keepID, err := ensureWorkspaceIdentity(keepPath)
+	if err != nil {
+		return err
+	}
+	regenerateID, err := ensureWorkspaceIdentity(regeneratePath)
+	if err != nil {
+		return err
+	}
+	if keepID != regenerateID {
+		return fmt.Errorf("workspaces do not share an identity")
+	}
+	_, err = writeWorkspaceIdentity(regeneratePath)
+	return err
 }
 
 // CreateWorkspace creates a top-level workspace folder and applies a template once.
@@ -339,11 +437,16 @@ func (m *Manager) CreateWorkspace(name, templateID string) (Workspace, error) {
 		}
 	}()
 
+	workspaceID, err := ensureWorkspaceIdentity(full)
+	if err != nil {
+		return Workspace{}, err
+	}
 	if err := applyTemplate(full, template); err != nil {
 		return Workspace{}, err
 	}
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	meta := Metadata{
+		WorkspaceID:   workspaceID,
 		WorkspaceName: name,
 		CreatedFromTemplate: &TemplateSnapshot{
 			TemplateID:      template.ID,
@@ -362,7 +465,47 @@ func (m *Manager) CreateWorkspace(name, templateID string) (Workspace, error) {
 	}
 
 	created = false
-	return Workspace{Name: name, RootPath: name}, nil
+	return Workspace{ID: workspaceID, Name: name, RootPath: name}, nil
+}
+
+func writeWorkspaceIdentity(workspacePath string) (string, error) {
+	workspaceID := uuid.NewString()
+	data, err := json.Marshal(workspaceIdentityMarker{WorkspaceID: workspaceID})
+	if err != nil {
+		return "", err
+	}
+	markerPath := filepath.Join(workspacePath, filepath.FromSlash(workspaceIdentityRelativePath))
+	if err := os.MkdirAll(filepath.Dir(markerPath), 0o755); err != nil {
+		return "", err
+	}
+	tmpPath := markerPath + ".tmp"
+	if err := os.WriteFile(tmpPath, data, 0o644); err != nil {
+		return "", err
+	}
+	if err := os.Rename(tmpPath, markerPath); err != nil {
+		_ = os.Remove(tmpPath)
+		return "", err
+	}
+	return workspaceID, nil
+}
+
+func ensureWorkspaceIdentity(workspacePath string) (string, error) {
+	markerPath := filepath.Join(workspacePath, filepath.FromSlash(workspaceIdentityRelativePath))
+	data, err := os.ReadFile(markerPath)
+	if os.IsNotExist(err) {
+		return writeWorkspaceIdentity(workspacePath)
+	}
+	if err != nil {
+		return "", err
+	}
+	var marker workspaceIdentityMarker
+	if err := json.Unmarshal(data, &marker); err != nil {
+		return "", err
+	}
+	if _, err := uuid.Parse(marker.WorkspaceID); err != nil {
+		return "", fmt.Errorf("invalid workspace identity: %w", err)
+	}
+	return marker.WorkspaceID, nil
 }
 
 // ListWorkspaceTemplates returns selectable built-ins in their presentation order.
@@ -456,6 +599,10 @@ func (m *Manager) TrashWorkspace(name string) (TrashResult, error) {
 	if err := ensureExistingWorkspaceDir(full, name); err != nil {
 		return TrashResult{}, err
 	}
+	workspaceID, err := ensureWorkspaceIdentity(full)
+	if err != nil {
+		return TrashResult{}, err
+	}
 
 	deletedAt := time.Now().UTC().Format(time.RFC3339Nano)
 	trashID := time.Now().UTC().Format("20060102T150405.000000000Z") + "-" + uuid.NewString()
@@ -468,7 +615,7 @@ func (m *Manager) TrashWorkspace(name string) (TrashResult, error) {
 		return TrashResult{}, err
 	}
 
-	result := TrashResult{OriginalPath: name, TrashPath: trashRel, TrashID: trashID, DeletedAt: deletedAt}
+	result := TrashResult{WorkspaceID: workspaceID, OriginalPath: name, TrashPath: trashRel, TrashID: trashID, DeletedAt: deletedAt}
 	trashMeta := map[string]string{
 		"originalPath": name,
 		"trashPath":    trashRel,
