@@ -1,79 +1,150 @@
-# Verstak Desktop
+# Verstak
 
-Verstak is a local-first desktop workspace for files, notes, browser captures,
-activity and work journal entries. This repository contains the Go/Wails desktop
-host and UI shell; user-facing functions are delivered by official plugins.
+Verstak is a local-first workspace for files, notes, browser captures,
+activity and work-journal entries. This repository is the desktop application:
+the Go/Wails host and UI shell that loads plugins from a `plugins/` directory
+next to its executable.
 
 > **Alpha software.** Use a disposable vault while evaluating it. APIs, storage
 > formats and packaging can change before the first stable release.
 
-## What the alpha does
-
-- keeps each workspace's identity independent of its current directory name;
-- keeps browser captures in a reviewable Inbox, with archive and restore rather
-  than a destructive “remove from inbox” action;
-- records local file/note activity and, after review, turns it into journal
-  entries without creating a workspace automatically;
-- accepts optional browser domain-time batches. The browser extension is
-  opt-in: it sends only normalized domain names and bounded durations, never
-  URLs, page titles, page contents, keystrokes or navigation history;
-- runs official plugins from a `plugins/` directory next to the executable.
-
 ## Components
 
-Clone these repositories as siblings when building a complete local setup:
+The public alpha is split into small repositories. Keep their `main` branches
+in the same release line when building from source.
 
-| Repository | Purpose |
-| --- | --- |
-| `verstak-desktop` | desktop host and UI shell |
-| `verstak-official-plugins` | Files, Notes, Browser Inbox, Activity, Journal and other official plugins |
-| `verstak-browser-extension` | Chromium/Firefox capture and optional domain-activity extension |
-| `verstak-sdk` | plugin manifest schema and TypeScript API |
+| Component | Repository | What it is for |
+| --- | --- | --- |
+| Desktop | [mirivlad/verstak](https://github.com/mirivlad/verstak) | This application: vault UI, local host and plugin runtime. |
+| Official plugins | [mirivlad/verstak-official-plugins](https://github.com/mirivlad/verstak-official-plugins) | Files, Notes, Browser Inbox, Activity, Journal, Sync, Todo and other first-party plugins. |
+| Browser extension | [mirivlad/verstak-browser-extension](https://github.com/mirivlad/verstak-browser-extension) | Manual browser captures and opt-in domain-time activity. |
+| Sync server | [mirivlad/verstak-sync-server](https://github.com/mirivlad/verstak-sync-server) | Optional self-hosted synchronization between devices. |
+| Plugin SDK | [mirivlad/verstak-sdk](https://github.com/mirivlad/verstak-sdk) | TypeScript API, JSON schemas and contract tests for plugin authors. |
+| Architecture documentation | [mirivlad/verstak-docs](https://github.com/mirivlad/verstak-docs) | Product, platform and plugin-system design documents. |
 
-## Build from source (Linux)
+No server account or browser extension is needed for a local desktop vault.
 
-Requirements: Go, Node.js with npm, Python 3, the [Wails v2 build
-prerequisites](https://wails.io/docs/gettingstarted/installation/), and the
-WebKitGTK development package for your distribution.
+## Build the desktop and official plugins
+
+The current release scripts target Linux. Install Go 1.24+, Node.js 20+ with
+npm, Python 3, the [Wails v2 build
+prerequisites](https://wails.io/docs/gettingstarted/installation/), and your
+distribution's WebKitGTK development package.
+
+Clone the repositories as siblings. The directory names below are intentional:
+the desktop helper finds the official-plugin checkout at
+`../verstak-official-plugins`.
+
+```text
+verstak-workspace/
+├── verstak/
+├── verstak-sdk/
+├── verstak-official-plugins/
+└── verstak-browser-extension/   # optional for browser integration
+```
 
 ```bash
-git clone https://git.mirv.top/verstak/verstak-sdk.git
-git clone https://git.mirv.top/verstak/verstak-official-plugins.git
-git clone https://git.mirv.top/verstak/verstak-desktop.git
-git clone https://git.mirv.top/verstak/verstak-browser-extension.git
+git clone https://github.com/mirivlad/verstak.git verstak
+git clone https://github.com/mirivlad/verstak-sdk.git verstak-sdk
+git clone https://github.com/mirivlad/verstak-official-plugins.git verstak-official-plugins
+git clone https://github.com/mirivlad/verstak-browser-extension.git verstak-browser-extension
 
 cd verstak-sdk && ./scripts/build.sh
 cd ../verstak-official-plugins && ./scripts/build.sh
-cd ../verstak-desktop
+cd ../verstak
 ./scripts/install-dev-plugins.sh
 ./scripts/build.sh
 ```
 
-The Linux executable is placed in `build/bin/`. Start it with `--debug` to
-display internal plugin-provider IDs and write diagnostic logs.
+`install-dev-plugins.sh` copies the packages from
+`../verstak-official-plugins/dist/` into this repository's `plugins/`
+directory. `build.sh` then copies them to `build/bin/plugins/`, beside the
+desktop executable:
+
+```bash
+./build/bin/verstak-desktop
+```
+
+For a manually assembled installation, place each unpacked plugin directory
+directly in `plugins/` beside `verstak-desktop`; for example,
+`plugins/browser-inbox/plugin.json`. Do not put the release archive itself in
+that directory. The desktop release archive already includes its matching
+`plugins/` directory.
+
+Start with `--debug` to show internal plugin-provider identifiers and write
+diagnostic logs:
+
+```bash
+./build/bin/verstak-desktop --debug
+```
+
+## First local vault
+
+1. Launch the desktop application and choose or create a writable vault folder.
+   Verstak stores its local metadata in that vault; do not point it at a
+   read-only directory.
+2. Create a Дело (workspace) in the Files plugin before assigning captures or
+   activity to it.
+3. Open Notes, Files, Activity and Journal as needed. Activity candidates are
+   only suggestions: a Journal entry and a new Дело are always created by the
+   user.
+
+## Browser extension
+
+The extension is optional. Build it locally with `npm ci && npm test && npm run
+build` in `verstak-browser-extension/`, then load `dist/chromium` as an
+unpacked Chromium extension or `dist/firefox` temporarily in Firefox. A signed
+Firefox XPI is available from the [extension's GitHub
+Releases](https://github.com/mirivlad/verstak-browser-extension/releases).
+
+To connect it to the desktop application:
+
+1. Ensure the `browser-inbox` plugin is installed and open its settings in
+   Verstak.
+2. Copy the displayed Receiver URL and Pairing Token.
+3. Paste both values into the extension's settings and save.
+4. Use a manual Send Page, selection, link or file action to create a Browser
+   Inbox capture.
+
+Passive domain activity is disabled by default. When the user explicitly turns
+it on, the extension sends only bounded time totals by normalized domain. It
+does not send URLs, page titles, page contents, keystrokes, navigation history
+or inactive-tab time. The extension settings provide a domain exclusion list.
+
+## Optional sync server
+
+The sync server is self-hosted and is not required for local use. Build and
+start a development instance from a sibling checkout:
+
+```bash
+git clone https://github.com/mirivlad/verstak-sync-server.git verstak-sync-server
+cd verstak-sync-server
+./scripts/build.sh
+./build/bin/verstak-sync-server --port 47732 --data ./server-data \
+  --admin-user admin --admin-pass 'choose-a-strong-password'
+```
+
+For a second device or a production host, follow the deployment, HTTPS and
+backup guidance in the [sync server
+README](https://github.com/mirivlad/verstak-sync-server#readme). In the desktop
+application, open the Sync plugin, enter the server URL and user credentials,
+test the connection, then select **Connect**. Each vault is paired separately.
 
 ## Release artifacts
 
-Maintainers can create a Linux desktop tarball after the sibling repositories
-above have been built:
+Maintainers can produce a self-contained Linux desktop archive after the SDK
+and official plugins have been built:
 
 ```bash
-cd verstak-desktop
+cd verstak
 ./scripts/release.sh v0.1.0-alpha.1
 ```
 
 It writes `release/verstak-desktop-linux-amd64-<version>.tar.gz` and a matching
-`SHA256SUMS` file. The archive is self-contained: unpack it and run the
-included executable. Browser and SDK packages have their own release scripts
+`SHA256SUMS` file. Unpack the archive and run the included executable; its
+matching plugins are already in the archive. The browser extension, SDK,
+official plugins and sync server have their own build or release instructions
 in their repositories.
-
-## Privacy and activity tracking
-
-The extension's passive domain tracker is disabled by default. Enabling it
-requires an explicit choice in the extension and lets the user maintain a
-domain exclusion list. Manual page, selection and link captures are separate
-actions; they enter Browser Inbox and never create a workspace or journal
-entry by themselves.
 
 ## License
 
