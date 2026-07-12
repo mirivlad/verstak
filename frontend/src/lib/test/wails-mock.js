@@ -3343,6 +3343,14 @@
     },
     ReadPluginDataNDJSON: function (pluginId, name) {
       var data = (pluginData[pluginId] && pluginData[pluginId][name]) || [];
+      if (!Array.isArray(data) && pluginId === 'verstak.activity' && name === 'activity-events') data = [];
+      if (!data.length && pluginId === 'verstak.activity' && name === 'activity-events') {
+        data = Object.keys(pluginSettings[pluginId] || {}).filter(function (key) {
+          return key === 'events' || key === 'events:global' || key.indexOf('events:workspace:') === 0;
+        }).flatMap(function (key) {
+          return Array.isArray(pluginSettings[pluginId][key]) ? pluginSettings[pluginId][key] : [];
+        });
+      }
       return Promise.resolve([Array.isArray(data) ? data.slice() : [], '']);
     },
     WritePluginDataJSON: function (pluginId, name, data) {

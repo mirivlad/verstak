@@ -3,6 +3,7 @@
   import PluginBundleHost from '../plugin-host/PluginBundleHost.svelte';
   import Icon from '../ui/Icon.svelte';
   import { i18n } from '../i18n/index.js';
+  import { debug } from '../log/debug.js';
 
   export let openedResource = null;
   let locale = i18n.getLocale();
@@ -53,7 +54,9 @@
   {:else if openedResource}
     <div class="workbench-header vt-page-header">
       <span class="workbench-title vt-page-title">{resourcePath}</span>
-      <span class="workbench-provider vt-badge accent">{providerId}</span>
+      {#if debug.isEnabled() && providerId}
+        <span class="workbench-provider vt-badge accent" data-debug-provider>{providerId}</span>
+      {/if}
       <button class="close-btn btn-ghost btn-icon" type="button" title={tr('common.close')} aria-label={tr('common.close')} on:click={closeWorkbench}>
         <Icon name="x" size={18} />
       </button>

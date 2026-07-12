@@ -136,6 +136,7 @@
     ].flatMap(key => normalizeRows(settings?.[key])).filter(item => {
       const tagged = String(item.workspaceRootPath || item.workspaceName || item.workspaceNodeId || '').trim();
       if (tagged !== workspace) return false;
+      if (String(item.globalState || 'inbox') === 'archived') return false;
       const captureId = String(item.captureId || '');
       if (!captureId || seen.has(captureId)) return !captureId;
       seen.add(captureId);
@@ -501,9 +502,14 @@
     const workspaceAtStart = String(workspaceRootPath || '').trim();
     loadedWorkspaceRoot = workspaceAtStart;
     loading = true;
-    const [browserSettings, activitySettings, journalSettings, todoSettings, resources] = await Promise.all([
+    const [browserSettings, activitySettings, activityRecords, journalSettings, todoSettings, resources] = await Promise.all([
       readPluginSettings('verstak.browser-inbox'),
       readPluginSettings('verstak.activity'),
+      App.ReadPluginDataNDJSON
+        ? App.ReadPluginDataNDJSON('verstak.activity', 'activity-events')
+          .then(value => decodeTuple(value, []))
+          .catch(() => [])
+        : Promise.resolve([]),
       readPluginSettings('verstak.journal'),
       readPluginSettings('verstak.todo'),
       loadWorkspaceResources(),
@@ -511,11 +517,10 @@
     if (workspaceAtStart !== String(workspaceRootPath || '').trim()) return;
 
     captures = browserCaptureRowsForWorkspace(browserSettings);
-    activityEvents = rowsFor(activitySettings, [
-      workspaceKey('events:workspace:'),
-      'events:global',
-      'events',
-    ]);
+    activityEvents = normalizeRows(activityRecords).filter(item => {
+      const tagged = String(item.workspaceRootPath || item.workspaceName || item.workspaceNodeId || '').trim();
+      return !tagged || tagged === workspaceAtStart;
+    });
     journalEntries = rowsFor(journalSettings, [
       workspaceKey('worklog:workspace:'),
       'worklog',
