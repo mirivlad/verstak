@@ -42,6 +42,8 @@ var emitFrontendEvent = runtime.EventsEmit
 const pluginEventRuntimeName = "verstak:plugin-event"
 const activityPluginID = "verstak.activity"
 const activityRawDataName = "activity-events"
+const activitySessionHandlingKey = "activity-session-handling-v2"
+const activitySessionHandledEvent = "activity.session.handled"
 const maxActivityRawEvents = 10000
 const maxActivityRawBytes = 8 * 1024 * 1024
 const activityRetention = 60 * 24 * time.Hour
@@ -564,6 +566,46 @@ func (a *App) ensureActivityProviderSubscriptions() {
 			})
 		}
 	}
+	if !a.activityEvents[activitySessionHandledEvent] {
+		a.activityEvents[activitySessionHandledEvent] = true
+		a.eventBus.Subscribe(activitySessionHandledEvent, func(event events.Event) {
+			if err := a.recordActivitySessionHandled(event); err != nil {
+				log.Printf("[api] activity session handling update failed: %v", err)
+			}
+		})
+	}
+}
+
+func (a *App) recordActivitySessionHandled(event events.Event) error {
+	if !a.activityAvailable() {
+		return fmt.Errorf("activity storage unavailable")
+	}
+	payload := eventPayloadMap(event.Payload)
+	if firstPayloadText(payload, "pluginId") != "verstak.journal" {
+		return fmt.Errorf("activity session handling source is not authorized")
+	}
+	sessionID := firstPayloadText(payload, "sessionId")
+	handledThrough := firstPayloadText(payload, "handledThrough")
+	status := firstPayloadText(payload, "status")
+	if sessionID == "" || handledThrough == "" || (status != "accepted" && status != "dismissed") {
+		return fmt.Errorf("activity session handling payload is invalid")
+	}
+	if _, err := time.Parse(time.RFC3339, handledThrough); err != nil {
+		return fmt.Errorf("activity session handledThrough is invalid")
+	}
+	return a.storage.UpdatePluginSettings(activityPluginID, func(settings map[string]interface{}) error {
+		handled, _ := settings[activitySessionHandlingKey].(map[string]interface{})
+		if handled == nil {
+			handled = make(map[string]interface{})
+		}
+		handled[sessionID] = map[string]interface{}{
+			"status":         status,
+			"handledThrough": handledThrough,
+			"handledAt":      time.Now().UTC().Format(time.RFC3339Nano),
+		}
+		settings[activitySessionHandlingKey] = handled
+		return nil
+	})
 }
 
 func (a *App) recordActivityProviderEvent(event events.Event) {

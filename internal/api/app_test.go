@@ -841,6 +841,37 @@ func TestOpenExternalURLUsesBrowserOpenService(t *testing.T) {
 	}
 }
 
+func TestJournalHandledSessionPersistsActivityWatermark(t *testing.T) {
+	v := vault.NewVault(nil)
+	if err := v.CreateVault(t.TempDir()); err != nil {
+		t.Fatalf("CreateVault: %v", err)
+	}
+	bus := events.NewBus()
+	app := &App{
+		eventBus:        bus,
+		storage:         storage.New(v),
+		vault:           v,
+		contribRegistry: contribution.NewRegistry(),
+		plugins: []plugin.Plugin{
+			{Manifest: plugin.Manifest{ID: activityPluginID, Permissions: []string{"storage.namespace"}}, Status: plugin.StatusLoaded, Enabled: true},
+			{Manifest: plugin.Manifest{ID: "verstak.journal", Permissions: []string{"events.publish"}}, Status: plugin.StatusLoaded, Enabled: true},
+		},
+	}
+	app.ensureActivityProviderSubscriptions()
+	bus.Publish(events.Event{Name: activitySessionHandledEvent, Payload: map[string]interface{}{
+		"pluginId": "verstak.journal", "sessionId": "session-1", "handledThrough": "2026-07-12T10:30:00Z", "status": "accepted",
+	}})
+	settings, err := app.storage.ReadPluginSettings(activityPluginID)
+	if err != nil {
+		t.Fatalf("ReadPluginSettings: %v", err)
+	}
+	handled := settings[activitySessionHandlingKey].(map[string]interface{})
+	record := handled["session-1"].(map[string]interface{})
+	if record["status"] != "accepted" || record["handledThrough"] != "2026-07-12T10:30:00Z" {
+		t.Fatalf("handled record = %#v", record)
+	}
+}
+
 func TestBrowserInboxRejectsCaptureWithoutOpenVault(t *testing.T) {
 	v := vault.NewVault(nil)
 	app := &App{
