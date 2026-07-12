@@ -262,6 +262,26 @@ export function createPluginAPI(pluginId) {
             return data || {};
           });
         },
+        readNDJSON: function(name) {
+          assertActive('storage.data.readNDJSON(' + name + ')');
+          if (!name) {
+            throw new Error('storage.data.readNDJSON requires a name');
+          }
+          return callBackend(pluginId, 'storage.data.readNDJSON(' + name + ')', function() {
+            return App.ReadPluginDataNDJSON(pluginId, name);
+          }).then(function(records) {
+            return Array.isArray(records) ? records : [];
+          });
+        },
+        writeNDJSON: function(name, records) {
+          assertActive('storage.data.writeNDJSON(' + name + ')');
+          if (!name) {
+            throw new Error('storage.data.writeNDJSON requires a name');
+          }
+          return callBackendErrorString(pluginId, 'storage.data.writeNDJSON(' + name + ')', function() {
+            return App.WritePluginDataNDJSON(pluginId, name, Array.isArray(records) ? records : []);
+          });
+        },
         write: function(name, data) {
           assertActive('storage.data.write(' + name + ')');
           if (!name) {

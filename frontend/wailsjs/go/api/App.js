@@ -234,6 +234,10 @@ export function ReadPluginDataJSON(arg1, arg2) {
   return window['go']['api']['App']['ReadPluginDataJSON'](arg1, arg2);
 }
 
+export function ReadPluginDataNDJSON(arg1, arg2) {
+  return window['go']['api']['App']['ReadPluginDataNDJSON'](arg1, arg2);
+}
+
 export function ReadPluginSetting(arg1, arg2) {
   return window['go']['api']['App']['ReadPluginSetting'](arg1, arg2);
 }
@@ -336,6 +340,10 @@ export function WriteFrontendLog(arg1, arg2) {
 
 export function WritePluginDataJSON(arg1, arg2, arg3) {
   return window['go']['api']['App']['WritePluginDataJSON'](arg1, arg2, arg3);
+}
+
+export function WritePluginDataNDJSON(arg1, arg2, arg3) {
+  return window['go']['api']['App']['WritePluginDataNDJSON'](arg1, arg2, arg3);
 }
 
 export function WritePluginSetting(arg1, arg2, arg3) {

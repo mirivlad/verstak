@@ -593,21 +593,14 @@ func TestActivityProviderRecordsFileChangedWithoutMountedView(t *testing.T) {
 		t.Fatalf("WriteVaultTextFile: %s", errStr)
 	}
 
-	settings, err := app.storage.ReadPluginSettings("verstak.activity")
+	stored, err := app.storage.ReadPluginDataNDJSON("verstak.activity", activityRawDataName)
 	if err != nil {
-		t.Fatalf("ReadPluginSettings: %v", err)
-	}
-	stored, ok := settings["events:workspace:Project"].([]interface{})
-	if !ok {
-		t.Fatalf("events:workspace:Project = %#v, want []interface{}", settings["events:workspace:Project"])
+		t.Fatalf("ReadPluginDataNDJSON: %v", err)
 	}
 	if len(stored) != 1 {
 		t.Fatalf("stored %d activity events, want 1", len(stored))
 	}
-	activity, ok := stored[0].(map[string]interface{})
-	if !ok {
-		t.Fatalf("activity = %#v, want map[string]interface{}", stored[0])
-	}
+	activity := stored[0]
 	if activity["type"] != "file.changed" {
 		t.Fatalf("activity type = %#v, want file.changed", activity["type"])
 	}
@@ -616,6 +609,51 @@ func TestActivityProviderRecordsFileChangedWithoutMountedView(t *testing.T) {
 	}
 	if activity["sourcePluginId"] != "files.plugin" {
 		t.Fatalf("activity sourcePluginId = %#v, want files.plugin", activity["sourcePluginId"])
+	}
+}
+
+func TestBrowserActivityBatchPersistsWithoutMountedViewAndDeduplicates(t *testing.T) {
+	v := vault.NewVault(nil)
+	if err := v.CreateVault(t.TempDir()); err != nil {
+		t.Fatalf("CreateVault: %v", err)
+	}
+	app := &App{
+		storage: storage.New(v),
+		vault:   v,
+		plugins: []plugin.Plugin{{
+			Manifest: plugin.Manifest{ID: activityPluginID, Permissions: []string{"storage.namespace"}},
+			Status:   plugin.StatusLoaded,
+			Enabled:  true,
+		}},
+	}
+	event := events.Event{
+		Name:      "browser.activity.batch",
+		Timestamp: "2026-07-12T10:05:01Z",
+		Payload: map[string]interface{}{
+			"batchId": "batch-activity-1",
+			"entries": []map[string]interface{}{{
+				"hostname": "example.com", "startedAt": "2026-07-12T10:00:00Z", "endedAt": "2026-07-12T10:05:00Z", "durationSeconds": int64(300),
+			}},
+		},
+	}
+	if err := app.recordBrowserActivityBatch(event); err != nil {
+		t.Fatalf("recordBrowserActivityBatch: %v", err)
+	}
+	if err := app.recordBrowserActivityBatch(event); err != nil {
+		t.Fatalf("recordBrowserActivityBatch retry: %v", err)
+	}
+	records, err := app.storage.ReadPluginDataNDJSON(activityPluginID, activityRawDataName)
+	if err != nil {
+		t.Fatalf("ReadPluginDataNDJSON: %v", err)
+	}
+	if len(records) != 1 {
+		t.Fatalf("records = %+v, want one idempotent domain activity", records)
+	}
+	if records[0]["type"] != "browser.activity.domain" || records[0]["hostname"] != "example.com" {
+		t.Fatalf("record = %+v, want domain-only activity", records[0])
+	}
+	if _, ok := records[0]["url"]; ok {
+		t.Fatalf("record must not contain URL: %+v", records[0])
 	}
 }
 

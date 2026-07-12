@@ -238,6 +238,101 @@ func TestReceiverLeavesCaptureUnassignedWithoutCurrentWorkspace(t *testing.T) {
 	}
 }
 
+func TestReceiverAcceptsDomainActivityBatchAfterDurablePersistence(t *testing.T) {
+	bus := events.NewBus()
+	received := make(chan events.Event, 1)
+	bus.Subscribe("browser.activity.batch", func(event events.Event) {
+		received <- event
+	})
+	persisted := 0
+	receiver := NewWithOptions(bus, Options{
+		ActivityAvailable: func() bool { return true },
+		PersistActivity: func(event events.Event) error {
+			persisted++
+			return nil
+		},
+	})
+	body := `{
+		"schemaVersion": 1,
+		"batchId": "batch-123",
+		"createdAt": "2026-07-12T10:05:00.000Z",
+		"source": "verstak-browser-extension",
+		"entries": [{
+			"hostname": "пример.рф",
+			"startedAt": "2026-07-12T10:00:00.000Z",
+			"endedAt": "2026-07-12T10:05:00.000Z",
+			"durationSeconds": 300
+		}]
+	}`
+	req := httptest.NewRequest(http.MethodPost, "/api/browser-activity/v1/batches", bytes.NewBufferString(body))
+	rec := httptest.NewRecorder()
+
+	receiver.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusAccepted {
+		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusAccepted, rec.Body.String())
+	}
+	if persisted != 1 {
+		t.Fatalf("persisted = %d, want 1 before acknowledgement", persisted)
+	}
+	var response map[string]string
+	if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
+		t.Fatalf("response json: %v", err)
+	}
+	if response["batchId"] != "batch-123" || response["status"] != "accepted" {
+		t.Fatalf("response = %+v, want accepted batch-123", response)
+	}
+	event := <-received
+	payload, ok := event.Payload.(map[string]interface{})
+	if !ok {
+		t.Fatalf("event payload type = %T, want map[string]interface{}", event.Payload)
+	}
+	if payload["batchId"] != "batch-123" {
+		t.Fatalf("event payload = %+v, want batch id", payload)
+	}
+	entries, ok := payload["entries"].([]map[string]interface{})
+	if !ok || len(entries) != 1 || entries[0]["hostname"] != "xn--e1afmkfd.xn--p1ai" {
+		t.Fatalf("event entries = %+v, want one canonical hostname", payload["entries"])
+	}
+	if _, ok := payload["url"]; ok {
+		t.Fatalf("activity payload must not contain URL: %+v", payload)
+	}
+}
+
+func TestReceiverRejectsDomainActivityWithoutConsumerOrValidInterval(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		receiver *Receiver
+		body     string
+		wantCode int
+	}{
+		{
+			name:     "consumer unavailable",
+			receiver: New(events.NewBus()),
+			body:     `{"schemaVersion":1,"batchId":"batch-a","createdAt":"2026-07-12T10:05:00Z","source":"verstak-browser-extension","entries":[{"hostname":"example.com","startedAt":"2026-07-12T10:00:00Z","endedAt":"2026-07-12T10:05:00Z","durationSeconds":300}]}`,
+			wantCode: http.StatusServiceUnavailable,
+		},
+		{
+			name: "duration too long",
+			receiver: NewWithOptions(events.NewBus(), Options{
+				ActivityAvailable: func() bool { return true },
+				PersistActivity:   func(events.Event) error { return nil },
+			}),
+			body:     `{"schemaVersion":1,"batchId":"batch-b","createdAt":"2026-07-12T10:05:00Z","source":"verstak-browser-extension","entries":[{"hostname":"example.com","startedAt":"2026-07-12T10:00:00Z","endedAt":"2026-07-12T10:20:01Z","durationSeconds":1201}]}`,
+			wantCode: http.StatusBadRequest,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodPost, "/api/browser-activity/v1/batches", strings.NewReader(tc.body))
+			rec := httptest.NewRecorder()
+			tc.receiver.ServeHTTP(rec, req)
+			if rec.Code != tc.wantCode {
+				t.Fatalf("status = %d, want %d; body=%s", rec.Code, tc.wantCode, rec.Body.String())
+			}
+		})
+	}
+}
+
 func TestReceiverRequiresTokenWhenPaired(t *testing.T) {
 	bus := events.NewBus()
 	received := make(chan events.Event, 1)

@@ -40,9 +40,11 @@ var newSyncClient = syncsvc.NewClient
 var emitFrontendEvent = runtime.EventsEmit
 
 const pluginEventRuntimeName = "verstak:plugin-event"
-const activityGlobalKey = "events:global"
-const activityWorkspacePrefix = "events:workspace:"
-const maxActivityEvents = 250
+const activityPluginID = "verstak.activity"
+const activityRawDataName = "activity-events"
+const maxActivityRawEvents = 10000
+const maxActivityRawBytes = 8 * 1024 * 1024
+const activityRetention = 60 * 24 * time.Hour
 const browserInboxPluginID = "verstak.browser-inbox"
 const browserInboxGlobalKey = "captures:global"
 const browserInboxLegacyKey = "captures"
@@ -132,6 +134,7 @@ func NewApp(
 	app.ensureBrowserInboxSubscriptions()
 	if app.browserReceiver != nil {
 		app.browserReceiver.SetPersistence(app.browserInboxAvailable, app.recordBrowserCapture)
+		app.browserReceiver.SetActivityPersistence(app.activityAvailable, app.recordBrowserActivityBatch)
 	}
 	app.startFileWatcherForOpenVault()
 	return app
@@ -203,6 +206,78 @@ func (a *App) browserInboxAvailable() bool {
 		return false
 	}
 	return true
+}
+
+func (a *App) activityAvailable() bool {
+	if a == nil || a.storage == nil || a.vault == nil || a.vault.GetVaultStatus() != vault.StatusOpen {
+		return false
+	}
+	_, err := a.requirePluginAccess(activityPluginID, "storage.namespace")
+	return err == nil
+}
+
+func (a *App) recordBrowserActivityBatch(event events.Event) error {
+	if !a.activityAvailable() {
+		return fmt.Errorf("activity storage unavailable")
+	}
+	payload := eventPayloadMap(event.Payload)
+	batchID := firstPayloadText(payload, "batchId")
+	if batchID == "" {
+		return fmt.Errorf("batchId is empty")
+	}
+	entries, ok := payload["entries"].([]map[string]interface{})
+	if !ok || len(entries) == 0 {
+		return fmt.Errorf("activity batch entries are empty")
+	}
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	receivedAt := event.Timestamp
+	if receivedAt == "" {
+		receivedAt = now
+	}
+	records := make([]map[string]interface{}, 0, len(entries))
+	for index, entry := range entries {
+		hostname := firstPayloadText(entry, "hostname")
+		endedAt := firstPayloadText(entry, "endedAt")
+		if hostname == "" || endedAt == "" {
+			return fmt.Errorf("activity batch entry %d is invalid", index)
+		}
+		durationSeconds, _ := entry["durationSeconds"].(int64)
+		if durationSeconds == 0 {
+			if number, ok := entry["durationSeconds"].(float64); ok {
+				durationSeconds = int64(number)
+			}
+		}
+		records = append(records, map[string]interface{}{
+			"activityId":        fmt.Sprintf("browser-domain:%s:%d", batchID, index),
+			"type":              "browser.activity.domain",
+			"title":             hostname,
+			"summary":           fmt.Sprintf("%d min browser activity", durationSeconds/60),
+			"occurredAt":        endedAt,
+			"receivedAt":        receivedAt,
+			"sourcePluginId":    "verstak-browser-extension",
+			"sourceBatchId":     batchID,
+			"hostname":          hostname,
+			"startedAt":         firstPayloadText(entry, "startedAt"),
+			"endedAt":           endedAt,
+			"durationSeconds":   durationSeconds,
+			"workspaceRootPath": "",
+			"payload": map[string]interface{}{
+				"hostname":        hostname,
+				"startedAt":       firstPayloadText(entry, "startedAt"),
+				"endedAt":         endedAt,
+				"durationSeconds": durationSeconds,
+			},
+		})
+	}
+	_, err := a.storage.AppendPluginDataNDJSON(activityPluginID, activityRawDataName, records, storage.NDJSONRetention{
+		TimestampField:   "occurredAt",
+		MaxAge:           activityRetention,
+		MaxEntries:       maxActivityRawEvents,
+		MaxBytes:         maxActivityRawBytes,
+		DeduplicateField: "sourceBatchId",
+		DeduplicateValue: batchID,
+	})
+	return err
 }
 
 func (a *App) recordBrowserCapture(event events.Event) error {
@@ -428,28 +503,13 @@ func (a *App) recordActivityProviderEvent(event events.Event) {
 }
 
 func (a *App) appendActivityEvent(pluginID string, activity map[string]interface{}) error {
-	settings, err := a.storage.ReadPluginSettings(pluginID)
-	if err != nil {
-		return err
-	}
-	key := activityGlobalKey
-	if workspace, _ := activity["workspaceRootPath"].(string); strings.TrimSpace(workspace) != "" {
-		key = activityWorkspacePrefix + url.QueryEscape(strings.TrimSpace(workspace))
-		key = strings.ReplaceAll(key, "+", "%20")
-	}
-	eventsList := []interface{}{activity}
-	if existing, ok := settings[key].([]interface{}); ok {
-		eventsList = append(eventsList, existing...)
-	} else if existingMaps, ok := settings[key].([]map[string]interface{}); ok {
-		for _, item := range existingMaps {
-			eventsList = append(eventsList, item)
-		}
-	}
-	if len(eventsList) > maxActivityEvents {
-		eventsList = eventsList[:maxActivityEvents]
-	}
-	settings[key] = eventsList
-	return a.storage.WritePluginSettings(pluginID, settings)
+	_, err := a.storage.AppendPluginDataNDJSON(pluginID, activityRawDataName, []map[string]interface{}{activity}, storage.NDJSONRetention{
+		TimestampField: "occurredAt",
+		MaxAge:         activityRetention,
+		MaxEntries:     maxActivityRawEvents,
+		MaxBytes:       maxActivityRawBytes,
+	})
+	return err
 }
 
 func activityFromEvent(event events.Event) map[string]interface{} {
@@ -1014,6 +1074,40 @@ func (a *App) ReadPluginDataJSON(pluginID, name string) map[string]interface{} {
 		return make(map[string]interface{})
 	}
 	return data
+}
+
+// ReadPluginDataNDJSON reads append-only plugin data without exposing the
+// underlying vault path to plugin frontends.
+func (a *App) ReadPluginDataNDJSON(pluginID, name string) []map[string]interface{} {
+	if _, err := a.requirePluginAccess(pluginID, "storage.namespace"); err != nil {
+		log.Printf("[api] ReadPluginDataNDJSON(%s, %s): %v", pluginID, name, err)
+		return []map[string]interface{}{}
+	}
+	if a.storage == nil {
+		return []map[string]interface{}{}
+	}
+	data, err := a.storage.ReadPluginDataNDJSON(pluginID, name)
+	if err != nil {
+		log.Printf("[api] ReadPluginDataNDJSON(%s, %s): %v", pluginID, name, err)
+		return []map[string]interface{}{}
+	}
+	return data
+}
+
+// WritePluginDataNDJSON replaces append-only data after an explicit user
+// action, such as clearing activity history.
+func (a *App) WritePluginDataNDJSON(pluginID, name string, data []map[string]interface{}) string {
+	if _, err := a.requirePluginAccess(pluginID, "storage.namespace"); err != nil {
+		return err.Error()
+	}
+	if a.storage == nil {
+		return "storage not initialized"
+	}
+	if err := a.storage.WritePluginDataNDJSON(pluginID, name, data); err != nil {
+		log.Printf("[api] WritePluginDataNDJSON(%s, %s): %v", pluginID, name, err)
+		return err.Error()
+	}
+	return ""
 }
 
 // WritePluginDataJSON writes a named JSON data file for a plugin.

@@ -12,18 +12,20 @@ import (
 	"log"
 	"net"
 	"net/http"
-	"net/url"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/verstak/verstak-desktop/internal/core/events"
+	"github.com/verstak/verstak-desktop/internal/core/hostname"
 )
 
 const (
 	capturePath         = "/api/browser-inbox/v1/captures"
+	activityBatchPath   = "/api/browser-activity/v1/batches"
 	DefaultAddr         = "127.0.0.1:47731"
 	DefaultCaptureURL   = "http://" + DefaultAddr + capturePath
+	DefaultActivityURL  = "http://" + DefaultAddr + activityBatchPath
 	receiverTokenHeader = "X-Verstak-Receiver-Token"
 )
 
@@ -43,6 +45,9 @@ const (
 	maxFileTextBytes       = 2 * 1024 * 1024
 	maxFileBytes           = 8 * 1024 * 1024
 	maxFileDataBase64Bytes = 4 * ((maxFileBytes + 2) / 3)
+	maxActivityBodyBytes   = 256 * 1024
+	maxActivityEntries     = 100
+	maxActivityDuration    = 10 * time.Minute
 )
 
 type Receiver struct {
@@ -55,10 +60,12 @@ type Receiver struct {
 type WorkspaceProvider func() string
 
 type Options struct {
-	RequireToken  bool
-	ReceiverToken string
-	Available     func() bool
-	Persist       func(events.Event) error
+	RequireToken      bool
+	ReceiverToken     string
+	Available         func() bool
+	Persist           func(events.Event) error
+	ActivityAvailable func() bool
+	PersistActivity   func(events.Event) error
 }
 
 type Server struct {
@@ -107,6 +114,23 @@ type CaptureBrowser struct {
 	Name string `json:"name"`
 }
 
+// ActivityBatchPayload contains only domain-level time accounting. It never
+// accepts or emits page URLs, titles, content, or navigation history.
+type ActivityBatchPayload struct {
+	SchemaVersion int             `json:"schemaVersion"`
+	BatchID       string          `json:"batchId"`
+	CreatedAt     string          `json:"createdAt"`
+	Source        string          `json:"source"`
+	Entries       []ActivityEntry `json:"entries"`
+}
+
+type ActivityEntry struct {
+	Hostname        string `json:"hostname"`
+	StartedAt       string `json:"startedAt"`
+	EndedAt         string `json:"endedAt"`
+	DurationSeconds int64  `json:"durationSeconds"`
+}
+
 func New(bus *events.Bus, providers ...WorkspaceProvider) *Receiver {
 	return NewWithOptions(bus, Options{}, providers...)
 }
@@ -139,6 +163,18 @@ func (r *Receiver) SetPersistence(available func() bool, persist func(events.Eve
 	defer r.optionsMu.Unlock()
 	r.options.Available = available
 	r.options.Persist = persist
+}
+
+// SetActivityPersistence configures durable passive browser activity storage.
+// An acknowledgement is sent only after persist returns successfully.
+func (r *Receiver) SetActivityPersistence(available func() bool, persist func(events.Event) error) {
+	if r == nil {
+		return
+	}
+	r.optionsMu.Lock()
+	defer r.optionsMu.Unlock()
+	r.options.ActivityAvailable = available
+	r.options.PersistActivity = persist
 }
 
 func Start(addr string, receiver *Receiver) (*Server, error) {
@@ -181,6 +217,10 @@ func (s *Server) Close() error {
 func (r *Receiver) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
+	if req.URL.Path == activityBatchPath {
+		r.serveActivityBatch(w, req)
+		return
+	}
 	if req.URL.Path != capturePath {
 		http.NotFound(w, req)
 		return
@@ -253,6 +293,59 @@ func (r *Receiver) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	_ = json.NewEncoder(w).Encode(map[string]string{
 		"status":    "accepted",
 		"captureId": payload.CaptureID,
+	})
+}
+
+func (r *Receiver) serveActivityBatch(w http.ResponseWriter, req *http.Request) {
+	if req.Method != http.MethodPost {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "method not allowed"})
+		return
+	}
+	if err := r.validateReceiverToken(req); err != nil {
+		writeError(w, http.StatusUnauthorized, err.Error())
+		return
+	}
+	options := r.currentOptions()
+	if options.ActivityAvailable == nil || !options.ActivityAvailable() || options.PersistActivity == nil {
+		writeError(w, http.StatusServiceUnavailable, "activity storage unavailable")
+		return
+	}
+
+	defer req.Body.Close()
+	decoder := json.NewDecoder(http.MaxBytesReader(w, req.Body, maxActivityBodyBytes))
+	var batch ActivityBatchPayload
+	if err := decoder.Decode(&batch); err != nil {
+		writeActivityDecodeError(w, err)
+		return
+	}
+	if err := decoder.Decode(&struct{}{}); err != io.EOF {
+		writeActivityDecodeError(w, err)
+		return
+	}
+	if err := batch.NormalizeAndValidate(); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	event := events.Event{
+		Name:      "browser.activity.batch",
+		Timestamp: time.Now().UTC().Format(time.RFC3339Nano),
+		Payload:   batch.EventPayload(),
+	}
+	if err := options.PersistActivity(event); err != nil {
+		log.Printf("[browserreceiver] persist activity %s: %v", batch.BatchID, err)
+		writeError(w, http.StatusServiceUnavailable, "activity storage unavailable")
+		return
+	}
+	if r.bus != nil {
+		r.bus.Publish(event)
+	}
+
+	w.WriteHeader(http.StatusAccepted)
+	_ = json.NewEncoder(w).Encode(map[string]string{
+		"status":  "accepted",
+		"batchId": batch.BatchID,
 	})
 }
 
@@ -370,6 +463,80 @@ func (p CapturePayload) Validate() error {
 	return nil
 }
 
+// NormalizeAndValidate validates a batch before it is made durable and replaces
+// each submitted hostname with the shared canonical A-label form.
+func (p *ActivityBatchPayload) NormalizeAndValidate() error {
+	if p == nil || p.SchemaVersion != 1 {
+		return fmt.Errorf("unsupported schemaVersion")
+	}
+	if strings.TrimSpace(p.BatchID) == "" {
+		return fmt.Errorf("batchId is required")
+	}
+	if err := validateCaptureText(p.BatchID, "batchId", maxCaptureIDBytes); err != nil {
+		return err
+	}
+	if strings.TrimSpace(p.CreatedAt) == "" {
+		return fmt.Errorf("createdAt is required")
+	}
+	if _, err := time.Parse(time.RFC3339, p.CreatedAt); err != nil {
+		return fmt.Errorf("createdAt is invalid")
+	}
+	if err := validateCaptureText(p.CreatedAt, "createdAt", maxCapturedAtBytes); err != nil {
+		return err
+	}
+	if strings.TrimSpace(p.Source) == "" {
+		return fmt.Errorf("source is required")
+	}
+	if err := validateCaptureText(p.Source, "source", maxCaptureSourceBytes); err != nil {
+		return err
+	}
+	if len(p.Entries) == 0 || len(p.Entries) > maxActivityEntries {
+		return fmt.Errorf("entries must contain between 1 and %d items", maxActivityEntries)
+	}
+	for index := range p.Entries {
+		entry := &p.Entries[index]
+		canonical := hostname.NormalizeHostnameV1(entry.Hostname)
+		if canonical == "" {
+			return fmt.Errorf("entries[%d].hostname is invalid", index)
+		}
+		startedAt, err := time.Parse(time.RFC3339, entry.StartedAt)
+		if err != nil {
+			return fmt.Errorf("entries[%d].startedAt is invalid", index)
+		}
+		endedAt, err := time.Parse(time.RFC3339, entry.EndedAt)
+		if err != nil {
+			return fmt.Errorf("entries[%d].endedAt is invalid", index)
+		}
+		interval := endedAt.Sub(startedAt)
+		if interval <= 0 || interval > maxActivityDuration {
+			return fmt.Errorf("entries[%d] interval must be between 1 second and %s", index, maxActivityDuration)
+		}
+		if entry.DurationSeconds <= 0 || entry.DurationSeconds > int64(maxActivityDuration/time.Second) || time.Duration(entry.DurationSeconds)*time.Second > interval {
+			return fmt.Errorf("entries[%d].durationSeconds is invalid", index)
+		}
+		entry.Hostname = canonical
+	}
+	return nil
+}
+
+func (p ActivityBatchPayload) EventPayload() map[string]interface{} {
+	entries := make([]map[string]interface{}, 0, len(p.Entries))
+	for _, entry := range p.Entries {
+		entries = append(entries, map[string]interface{}{
+			"hostname":        entry.Hostname,
+			"startedAt":       entry.StartedAt,
+			"endedAt":         entry.EndedAt,
+			"durationSeconds": entry.DurationSeconds,
+		})
+	}
+	return map[string]interface{}{
+		"batchId":   strings.TrimSpace(p.BatchID),
+		"createdAt": strings.TrimSpace(p.CreatedAt),
+		"source":    strings.TrimSpace(p.Source),
+		"entries":   entries,
+	}
+}
+
 func (p CapturePayload) validateFile() error {
 	if p.File == nil || strings.TrimSpace(p.File.Name) == "" {
 		return fmt.Errorf("file.name is required")
@@ -450,10 +617,19 @@ func (p CapturePayload) EventPayload() map[string]interface{} {
 }
 
 func captureDomain(rawURL, fallback string) string {
-	if u, err := url.Parse(strings.TrimSpace(rawURL)); err == nil && u.Hostname() != "" {
-		return u.Hostname()
+	if normalized := hostname.NormalizeURLHostnameV1(rawURL); normalized != "" {
+		return normalized
 	}
-	return strings.TrimSpace(fallback)
+	return hostname.NormalizeHostnameV1(fallback)
+}
+
+func writeActivityDecodeError(w http.ResponseWriter, err error) {
+	var maxBytesErr *http.MaxBytesError
+	if errors.As(err, &maxBytesErr) {
+		writeError(w, http.StatusRequestEntityTooLarge, "activity payload exceeds limit")
+		return
+	}
+	writeError(w, http.StatusBadRequest, "invalid JSON")
 }
 
 func writeError(w http.ResponseWriter, status int, message string) {

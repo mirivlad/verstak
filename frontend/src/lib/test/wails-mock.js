@@ -3341,9 +3341,18 @@
       var data = (pluginData[pluginId] && pluginData[pluginId][name]) || {};
       return Promise.resolve([Object.assign({}, data), '']);
     },
+    ReadPluginDataNDJSON: function (pluginId, name) {
+      var data = (pluginData[pluginId] && pluginData[pluginId][name]) || [];
+      return Promise.resolve([Array.isArray(data) ? data.slice() : [], '']);
+    },
     WritePluginDataJSON: function (pluginId, name, data) {
       pluginData[pluginId] = pluginData[pluginId] || {};
       pluginData[pluginId][name] = Object.assign({}, data || {});
+      return Promise.resolve('');
+    },
+    WritePluginDataNDJSON: function (pluginId, name, records) {
+      pluginData[pluginId] = pluginData[pluginId] || {};
+      pluginData[pluginId][name] = Array.isArray(records) ? records.slice() : [];
       return Promise.resolve('');
     },
     OpenWorkbenchResource: function (pluginId, request) {
