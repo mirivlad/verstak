@@ -274,8 +274,16 @@ export function RestoreVaultTrash(arg1, arg2, arg3) {
   return window['go']['api']['App']['RestoreVaultTrash'](arg1, arg2, arg3);
 }
 
+export function RestoreWorkspaceTrash(arg1, arg2) {
+  return window['go']['api']['App']['RestoreWorkspaceTrash'](arg1, arg2);
+}
+
 export function SelectDirectory() {
   return window['go']['api']['App']['SelectDirectory']();
+}
+
+export function PurgeWorkspaceTrash(arg1) {
+  return window['go']['api']['App']['PurgeWorkspaceTrash'](arg1);
 }
 
 export function SelectVaultForOpen() {

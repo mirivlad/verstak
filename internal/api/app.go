@@ -52,6 +52,8 @@ const maxBrowserInboxCaptures = 100
 const workspaceCreatedEventName = "workspace.created"
 const workspaceRenamedEventName = "workspace.renamed"
 const workspaceTrashedEventName = "workspace.trashed"
+const workspaceRestoredEventName = "workspace.restored"
+const workspacePurgedEventName = "workspace.purged"
 const workspaceSelectedEventName = "workspace.selected"
 
 // App is the main application struct exposed to the Wails frontend.
@@ -2036,6 +2038,47 @@ func (a *App) TrashWorkspace(name string) (workspace.TrashResult, string) {
 	return result, ""
 }
 
+// RestoreWorkspaceTrash restores a trashed workspace and publishes its durable identity.
+func (a *App) RestoreWorkspaceTrash(trashID, targetName string) (workspace.Workspace, string) {
+	if a.workspace == nil {
+		return workspace.Workspace{}, "workspace not initialized"
+	}
+	restored, err := a.workspace.RestoreWorkspaceTrash(trashID, targetName)
+	if err != nil {
+		return workspace.Workspace{}, err.Error()
+	}
+	a.publishWorkspaceLifecycleEvent(workspaceRestoredEventName, map[string]interface{}{
+		"operation":         "restore",
+		"workspaceId":       restored.ID,
+		"workspaceRootPath": restored.RootPath,
+		"workspaceName":     restored.Name,
+		"trashId":           trashID,
+	})
+	return restored, ""
+}
+
+// PurgeWorkspaceTrash permanently removes a trashed workspace and publishes its former identity.
+func (a *App) PurgeWorkspaceTrash(trashID string) string {
+	if a.workspace == nil {
+		return "workspace not initialized"
+	}
+	identity, err := a.workspace.GetWorkspaceTrashIdentity(trashID)
+	if err != nil {
+		return err.Error()
+	}
+	if err := a.workspace.PurgeWorkspaceTrash(trashID); err != nil {
+		return err.Error()
+	}
+	a.publishWorkspaceLifecycleEvent(workspacePurgedEventName, map[string]interface{}{
+		"operation":         "purge",
+		"workspaceId":       identity.WorkspaceID,
+		"workspaceRootPath": identity.RootPath,
+		"workspaceName":     identity.RootPath,
+		"trashId":           trashID,
+	})
+	return ""
+}
+
 // GetWorkspaceMetadata returns metadata or a generic fallback for a workspace.
 func (a *App) GetWorkspaceMetadata(name string) (workspace.Metadata, string) {
 	if a.workspace == nil {
@@ -2069,9 +2112,15 @@ func (a *App) GetCurrentWorkspace() map[string]interface{} {
 	if err != nil {
 		return map[string]interface{}{"error": err.Error()}
 	}
+	identity, err := a.workspace.GetWorkspaceIdentity(node.Name)
+	if err != nil {
+		return map[string]interface{}{"error": err.Error()}
+	}
 	return map[string]interface{}{
-		"name":     node.Name,
-		"rootPath": node.RootPath,
+		"id":          identity.WorkspaceID,
+		"workspaceId": identity.WorkspaceID,
+		"name":        node.Name,
+		"rootPath":    node.RootPath,
 	}
 }
 

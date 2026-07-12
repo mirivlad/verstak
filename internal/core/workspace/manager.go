@@ -490,11 +490,19 @@ func writeWorkspaceIdentity(workspacePath string) (string, error) {
 }
 
 func ensureWorkspaceIdentity(workspacePath string) (string, error) {
-	markerPath := filepath.Join(workspacePath, filepath.FromSlash(workspaceIdentityRelativePath))
-	data, err := os.ReadFile(markerPath)
+	workspaceID, err := readWorkspaceIdentity(workspacePath)
 	if os.IsNotExist(err) {
 		return writeWorkspaceIdentity(workspacePath)
 	}
+	if err != nil {
+		return "", err
+	}
+	return workspaceID, nil
+}
+
+func readWorkspaceIdentity(workspacePath string) (string, error) {
+	markerPath := filepath.Join(workspacePath, filepath.FromSlash(workspaceIdentityRelativePath))
+	data, err := os.ReadFile(markerPath)
 	if err != nil {
 		return "", err
 	}
@@ -506,6 +514,33 @@ func ensureWorkspaceIdentity(workspacePath string) (string, error) {
 		return "", fmt.Errorf("invalid workspace identity: %w", err)
 	}
 	return marker.WorkspaceID, nil
+}
+
+// GetWorkspaceTrashIdentity reads a trashed workspace identity without restoring it.
+func (m *Manager) GetWorkspaceTrashIdentity(trashID string) (WorkspaceIdentity, error) {
+	trashID = strings.TrimSpace(trashID)
+	if err := validateWorkspaceTrashID(trashID); err != nil {
+		return WorkspaceIdentity{}, err
+	}
+	trashDir := filepath.Join(m.vaultDir, ".verstak", "trash", "workspaces", trashID)
+	data, err := os.ReadFile(filepath.Join(trashDir, "metadata.json"))
+	if err != nil {
+		return WorkspaceIdentity{}, err
+	}
+	var trashMeta struct {
+		OriginalPath string `json:"originalPath"`
+	}
+	if err := json.Unmarshal(data, &trashMeta); err != nil {
+		return WorkspaceIdentity{}, err
+	}
+	if err := validateWorkspaceName(trashMeta.OriginalPath); err != nil {
+		return WorkspaceIdentity{}, err
+	}
+	workspaceID, err := readWorkspaceIdentity(filepath.Join(trashDir, trashMeta.OriginalPath))
+	if err != nil {
+		return WorkspaceIdentity{}, err
+	}
+	return WorkspaceIdentity{WorkspaceID: workspaceID, RootPath: trashMeta.OriginalPath, State: "trashed"}, nil
 }
 
 // ListWorkspaceTemplates returns selectable built-ins in their presentation order.
@@ -645,6 +680,83 @@ func (m *Manager) TrashWorkspace(name string) (TrashResult, error) {
 	m.mu.Unlock()
 
 	return result, nil
+}
+
+// RestoreWorkspaceTrash restores a trashed workspace under targetName without changing its identity.
+func (m *Manager) RestoreWorkspaceTrash(trashID, targetName string) (Workspace, error) {
+	trashID = strings.TrimSpace(trashID)
+	targetName = strings.TrimSpace(targetName)
+	if err := validateWorkspaceTrashID(trashID); err != nil {
+		return Workspace{}, err
+	}
+	if err := validateWorkspaceName(targetName); err != nil {
+		return Workspace{}, err
+	}
+	trashDir := filepath.Join(m.vaultDir, ".verstak", "trash", "workspaces", trashID)
+	data, err := os.ReadFile(filepath.Join(trashDir, "metadata.json"))
+	if err != nil {
+		return Workspace{}, err
+	}
+	var trashMeta struct {
+		OriginalPath string `json:"originalPath"`
+	}
+	if err := json.Unmarshal(data, &trashMeta); err != nil {
+		return Workspace{}, err
+	}
+	if err := validateWorkspaceName(trashMeta.OriginalPath); err != nil {
+		return Workspace{}, err
+	}
+	payloadPath := filepath.Join(trashDir, trashMeta.OriginalPath)
+	if err := ensureExistingWorkspaceDir(payloadPath, trashMeta.OriginalPath); err != nil {
+		return Workspace{}, err
+	}
+	targetPath := filepath.Join(m.vaultDir, targetName)
+	if _, err := os.Lstat(targetPath); err == nil {
+		return Workspace{}, fmt.Errorf("conflict: %s", targetName)
+	} else if !os.IsNotExist(err) {
+		return Workspace{}, err
+	}
+	if err := os.Rename(payloadPath, targetPath); err != nil {
+		return Workspace{}, err
+	}
+	restored := true
+	defer func() {
+		if restored {
+			_ = os.Rename(targetPath, payloadPath)
+		}
+	}()
+	if err := moveIfExists(filepath.Join(trashDir, "workspace.metadata.json"), m.metadataPath(targetName)); err != nil {
+		return Workspace{}, err
+	}
+	workspaceID, err := ensureWorkspaceIdentity(targetPath)
+	if err != nil {
+		return Workspace{}, err
+	}
+	if err := os.RemoveAll(trashDir); err != nil {
+		return Workspace{}, err
+	}
+	restored = false
+	return Workspace{ID: workspaceID, Name: targetName, RootPath: targetName}, nil
+}
+
+func validateWorkspaceTrashID(trashID string) error {
+	if trashID == "" || strings.ContainsAny(trashID, `/\\`) || filepath.Clean(trashID) != trashID {
+		return fmt.Errorf("invalid workspace trash ID")
+	}
+	return nil
+}
+
+// PurgeWorkspaceTrash permanently removes a workspace trash entry.
+func (m *Manager) PurgeWorkspaceTrash(trashID string) error {
+	trashID = strings.TrimSpace(trashID)
+	if err := validateWorkspaceTrashID(trashID); err != nil {
+		return err
+	}
+	trashDir := filepath.Join(m.vaultDir, ".verstak", "trash", "workspaces", trashID)
+	if _, err := os.Stat(filepath.Join(trashDir, "metadata.json")); err != nil {
+		return err
+	}
+	return os.RemoveAll(trashDir)
 }
 
 // GetWorkspaceMetadata returns stored metadata or safe generic metadata.

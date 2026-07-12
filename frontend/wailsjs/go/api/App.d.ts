@@ -144,7 +144,11 @@ export function RenameWorkspaceNode(arg1:string,arg2:string):Promise<string>;
 
 export function RestoreVaultTrash(arg1:string,arg2:string,arg3:files.RestoreOptions):Promise<string|string>;
 
+export function RestoreWorkspaceTrash(arg1:string,arg2:string):Promise<workspace.Workspace|string>;
+
 export function SelectDirectory():Promise<string>;
+
+export function PurgeWorkspaceTrash(arg1:string):Promise<string>;
 
 export function SelectVaultForOpen():Promise<string>;
 

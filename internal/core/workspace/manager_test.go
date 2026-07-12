@@ -412,6 +412,47 @@ func TestRepairWorkspaceIdentityRegeneratesCopiedMarker(t *testing.T) {
 	}
 }
 
+func TestRestoreWorkspaceTrashPreservesIdentity(t *testing.T) {
+	vaultDir := newVaultDir(t)
+	m := NewManager(vaultDir)
+	created, err := m.CreateWorkspace("Client", "default")
+	if err != nil {
+		t.Fatalf("CreateWorkspace: %v", err)
+	}
+	trashed, err := m.TrashWorkspace("Client")
+	if err != nil {
+		t.Fatalf("TrashWorkspace: %v", err)
+	}
+	restored, err := m.RestoreWorkspaceTrash(trashed.TrashID, "Client-Restored")
+	if err != nil {
+		t.Fatalf("RestoreWorkspaceTrash: %v", err)
+	}
+	if restored.Name != "Client-Restored" || restored.ID != created.ID {
+		t.Fatalf("restored = %+v, want name Client-Restored and ID %q", restored, created.ID)
+	}
+	if _, err := os.Stat(filepath.Join(vaultDir, "Client-Restored", ".verstak", "workspace.json")); err != nil {
+		t.Fatalf("restored marker: %v", err)
+	}
+}
+
+func TestPurgeWorkspaceTrashRemovesPayload(t *testing.T) {
+	vaultDir := newVaultDir(t)
+	m := NewManager(vaultDir)
+	if _, err := m.CreateWorkspace("Client", "default"); err != nil {
+		t.Fatalf("CreateWorkspace: %v", err)
+	}
+	trashed, err := m.TrashWorkspace("Client")
+	if err != nil {
+		t.Fatalf("TrashWorkspace: %v", err)
+	}
+	if err := m.PurgeWorkspaceTrash(trashed.TrashID); err != nil {
+		t.Fatalf("PurgeWorkspaceTrash: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(vaultDir, ".verstak", "trash", "workspaces", trashed.TrashID)); !os.IsNotExist(err) {
+		t.Fatalf("workspace trash remains, stat err=%v", err)
+	}
+}
+
 func TestCreateAndRenameConflictsAreExplicit(t *testing.T) {
 	vaultDir := newVaultDir(t)
 	mustMkdir(t, filepath.Join(vaultDir, "Existing"))

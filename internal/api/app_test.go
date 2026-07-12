@@ -1826,6 +1826,10 @@ func TestWorkspaceAPIPublishesLifecycleEvents(t *testing.T) {
 	if errStr := app.SetCurrentWorkspace("Project"); errStr != "" {
 		t.Fatalf("SetCurrentWorkspace: %s", errStr)
 	}
+	currentID, ok := app.GetCurrentWorkspace()["workspaceId"].(string)
+	if !ok || currentID == "" {
+		t.Fatalf("GetCurrentWorkspace workspaceId = %#v", app.GetCurrentWorkspace()["workspaceId"])
+	}
 	if errStr := app.RenameWorkspace("Project", "Renamed"); errStr != "" {
 		t.Fatalf("RenameWorkspace: %s", errStr)
 	}
@@ -1888,6 +1892,46 @@ func TestWorkspaceIdentityAPIListsAndRepairsDuplicates(t *testing.T) {
 	}
 	if original.WorkspaceID == "" || original.State != "active" {
 		t.Fatalf("identities = %+v", identities)
+	}
+}
+
+func TestWorkspaceTrashRestoreAndPurgePublishIdentityLifecycle(t *testing.T) {
+	app, vaultDir := newFilesTestApp(t, []string{"files.read"})
+	app.workspace = workspace.NewManager(vaultDir)
+	app.eventBus = events.NewBus()
+	if err := app.workspace.Load(); err != nil {
+		t.Fatal(err)
+	}
+	received := map[string]map[string]interface{}{}
+	for _, eventName := range []string{"workspace.restored", "workspace.purged"} {
+		name := eventName
+		app.eventBus.Subscribe(name, func(event events.Event) {
+			received[name], _ = event.Payload.(map[string]interface{})
+		})
+	}
+	if _, errStr := app.CreateWorkspace("Client", "default"); errStr != "" {
+		t.Fatalf("CreateWorkspace: %s", errStr)
+	}
+	trashed, errStr := app.TrashWorkspace("Client")
+	if errStr != "" {
+		t.Fatalf("TrashWorkspace: %s", errStr)
+	}
+	restored, errStr := app.RestoreWorkspaceTrash(trashed.TrashID, "Client-Restored")
+	if errStr != "" {
+		t.Fatalf("RestoreWorkspaceTrash: %s", errStr)
+	}
+	if got := received["workspace.restored"]["workspaceId"]; got != restored.ID {
+		t.Fatalf("restored workspaceId = %#v, want %q", got, restored.ID)
+	}
+	trashed, errStr = app.TrashWorkspace("Client-Restored")
+	if errStr != "" {
+		t.Fatalf("TrashWorkspace restored: %s", errStr)
+	}
+	if errStr := app.PurgeWorkspaceTrash(trashed.TrashID); errStr != "" {
+		t.Fatalf("PurgeWorkspaceTrash: %s", errStr)
+	}
+	if got := received["workspace.purged"]["workspaceId"]; got != restored.ID {
+		t.Fatalf("purged workspaceId = %#v, want %q", got, restored.ID)
 	}
 }
 
