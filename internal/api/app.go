@@ -188,14 +188,20 @@ func (a *App) ensureBrowserInboxSubscriptions() {
 	if a.browserInboxEvents == nil {
 		a.browserInboxEvents = make(map[string]bool)
 	}
-	for _, eventName := range []string{browserInboxMutationEvent} {
+	for _, eventName := range []string{browserInboxMutationEvent, workspaceRenamedEventName, workspaceTrashedEventName, workspaceRestoredEventName, workspacePurgedEventName} {
 		if a.browserInboxEvents[eventName] {
 			continue
 		}
 		a.browserInboxEvents[eventName] = true
 		a.eventBus.Subscribe(eventName, func(event events.Event) {
-			if err := a.mutateBrowserInboxCapture(event); err != nil {
-				log.Printf("[api] browser inbox mutation failed: %v", err)
+			if event.Name == browserInboxMutationEvent {
+				if err := a.mutateBrowserInboxCapture(event); err != nil {
+					log.Printf("[api] browser inbox mutation failed: %v", err)
+				}
+				return
+			}
+			if err := a.updateBrowserInboxWorkspaceLifecycle(event); err != nil {
+				log.Printf("[api] browser inbox workspace lifecycle failed: %v", err)
 			}
 		})
 	}
@@ -295,6 +301,10 @@ func (a *App) recordBrowserCapture(event events.Event) error {
 	if firstPayloadText(capture, "capturedAt") == "" {
 		capture["capturedAt"] = event.Timestamp
 	}
+	if firstPayloadText(capture, "globalState") == "" {
+		capture["globalState"] = "inbox"
+	}
+	a.annotateBrowserCaptureWorkspace(capture)
 	capture["receivedAt"] = time.Now().UTC().Format(time.RFC3339Nano)
 	return a.updateBrowserInboxCaptures(func(captures []map[string]interface{}) []map[string]interface{} {
 		for _, stored := range captures {
@@ -315,7 +325,7 @@ func (a *App) mutateBrowserInboxCapture(event events.Event) error {
 	}
 	action := firstPayloadText(payload, "action")
 	switch action {
-	case "migrate", "assign", "delete", "processed":
+	case "migrate", "assign", "archive", "restore", "delete", "processed":
 	default:
 		return fmt.Errorf("unsupported browser inbox mutation %q", action)
 	}
@@ -345,16 +355,84 @@ func (a *App) mutateBrowserInboxCapture(event events.Event) error {
 			switch action {
 			case "delete":
 				continue
+			case "archive":
+				capture["globalState"] = "archived"
+			case "restore":
+				capture["globalState"] = "inbox"
 			case "assign":
 				workspaceRoot := firstPayloadText(payload, "workspaceRootPath")
 				capture["workspaceRootPath"] = workspaceRoot
 				capture["workspaceName"] = workspaceRoot
+				delete(capture, "workspaceId")
+				delete(capture, "workspaceTrashId")
+				a.annotateBrowserCaptureWorkspace(capture)
 			case "processed":
 				capture["processed"], _ = payload["processed"].(bool)
 			}
 			result = append(result, capture)
 		}
 		return result
+	})
+}
+
+func (a *App) annotateBrowserCaptureWorkspace(capture map[string]interface{}) {
+	if capture == nil {
+		return
+	}
+	workspaceRoot := firstPayloadText(capture, "workspaceRootPath")
+	if workspaceRoot == "" {
+		capture["workspaceState"] = "unassigned"
+		delete(capture, "workspaceId")
+		delete(capture, "workspaceTrashId")
+		return
+	}
+	if firstPayloadText(capture, "workspaceId") != "" {
+		if firstPayloadText(capture, "workspaceState") == "" {
+			capture["workspaceState"] = "active"
+		}
+		return
+	}
+	if a.workspace == nil {
+		capture["workspaceState"] = "unavailable"
+		return
+	}
+	identity, err := a.workspace.GetWorkspaceIdentity(workspaceRoot)
+	if err != nil {
+		capture["workspaceState"] = "unavailable"
+		return
+	}
+	capture["workspaceId"] = identity.WorkspaceID
+	capture["workspaceRootPath"] = identity.RootPath
+	capture["workspaceName"] = identity.RootPath
+	capture["workspaceState"] = identity.State
+}
+
+func (a *App) updateBrowserInboxWorkspaceLifecycle(event events.Event) error {
+	payload := eventPayloadMap(event.Payload)
+	workspaceID := firstPayloadText(payload, "workspaceId")
+	if workspaceID == "" {
+		return nil
+	}
+	return a.updateBrowserInboxCaptures(func(captures []map[string]interface{}) []map[string]interface{} {
+		for _, capture := range captures {
+			if firstPayloadText(capture, "workspaceId") != workspaceID {
+				continue
+			}
+			switch event.Name {
+			case workspaceRenamedEventName, workspaceRestoredEventName:
+				capture["workspaceRootPath"] = firstPayloadText(payload, "workspaceRootPath")
+				capture["workspaceName"] = firstPayloadText(payload, "workspaceName", "workspaceRootPath")
+				capture["workspaceState"] = "active"
+				delete(capture, "workspaceTrashId")
+			case workspaceTrashedEventName:
+				capture["workspaceState"] = "trashed"
+				capture["workspaceTrashId"] = firstPayloadText(payload, "trashId")
+			case workspacePurgedEventName:
+				capture["workspaceState"] = "orphaned"
+				delete(capture, "workspaceTrashId")
+			}
+		}
+		return captures
 	})
 }
 
@@ -411,6 +489,9 @@ func browserInboxCaptures(settings map[string]interface{}) ([]map[string]interfa
 				continue
 			}
 			seen[captureID] = true
+			if firstPayloadText(capture, "globalState") == "" {
+				capture["globalState"] = "inbox"
+			}
 			if firstPayloadText(capture, "workspaceRootPath") == "" && workspaceRoot != "" {
 				capture["workspaceRootPath"] = workspaceRoot
 				capture["workspaceName"] = workspaceRoot

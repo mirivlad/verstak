@@ -699,6 +699,9 @@ func TestBrowserInboxRecordsCaptureWithoutMountedView(t *testing.T) {
 	bus.Publish(events.Event{Name: browserInboxMutationEvent, Payload: map[string]interface{}{
 		"pluginId": browserInboxPluginID, "action": "processed", "captureId": "capture-background", "processed": true,
 	}})
+	bus.Publish(events.Event{Name: browserInboxMutationEvent, Payload: map[string]interface{}{
+		"pluginId": browserInboxPluginID, "action": "archive", "captureId": "capture-background",
+	}})
 	if err := app.recordBrowserCapture(events.Event{
 		Name: "browser.capture.page",
 		Payload: map[string]interface{}{
@@ -721,8 +724,102 @@ func TestBrowserInboxRecordsCaptureWithoutMountedView(t *testing.T) {
 	if !ok {
 		t.Fatalf("capture = %#v, want map[string]interface{}", stored[0])
 	}
-	if capture["captureId"] != "capture-background" || capture["title"] != "Background capture" || capture["workspaceRootPath"] != "Project" || capture["processed"] != true {
+	if capture["captureId"] != "capture-background" || capture["title"] != "Background capture" || capture["workspaceRootPath"] != "Project" || capture["processed"] != true || capture["globalState"] != "archived" {
 		t.Fatalf("stored capture = %#v", capture)
+	}
+}
+
+func TestBrowserInboxArchiveKeepsAssignmentUntilExplicitPermanentDelete(t *testing.T) {
+	v := vault.NewVault(nil)
+	if err := v.CreateVault(t.TempDir()); err != nil {
+		t.Fatalf("CreateVault: %v", err)
+	}
+	bus := events.NewBus()
+	app := &App{
+		eventBus: bus,
+		storage:  storage.New(v),
+		vault:    v,
+		plugins: []plugin.Plugin{{
+			Manifest: plugin.Manifest{ID: browserInboxPluginID, Permissions: []string{"storage.namespace"}},
+			Status:   plugin.StatusLoaded,
+			Enabled:  true,
+		}},
+	}
+	app.ensureBrowserInboxSubscriptions()
+	if err := app.recordBrowserCapture(events.Event{Name: "browser.capture.page", Payload: map[string]interface{}{
+		"captureId": "archive-1", "capturedAt": "2026-07-12T10:00:00Z", "url": "https://example.com", "workspaceRootPath": "Project",
+	}}); err != nil {
+		t.Fatalf("recordBrowserCapture: %v", err)
+	}
+	bus.Publish(events.Event{Name: browserInboxMutationEvent, Payload: map[string]interface{}{
+		"pluginId": browserInboxPluginID, "action": "archive", "captureId": "archive-1",
+	}})
+	settings, err := app.storage.ReadPluginSettings(browserInboxPluginID)
+	if err != nil {
+		t.Fatalf("ReadPluginSettings: %v", err)
+	}
+	captures, _ := settings[browserInboxGlobalKey].([]interface{})
+	if len(captures) != 1 {
+		t.Fatalf("captures after archive = %#v, want retained capture", captures)
+	}
+	archived := captures[0].(map[string]interface{})
+	if archived["workspaceRootPath"] != "Project" || archived["globalState"] != "archived" {
+		t.Fatalf("archived capture = %#v, want preserved assignment", archived)
+	}
+	bus.Publish(events.Event{Name: browserInboxMutationEvent, Payload: map[string]interface{}{
+		"pluginId": browserInboxPluginID, "action": "delete", "captureId": "archive-1", "permanent": true,
+	}})
+	settings, err = app.storage.ReadPluginSettings(browserInboxPluginID)
+	if err != nil {
+		t.Fatalf("ReadPluginSettings after delete: %v", err)
+	}
+	captures, _ = settings[browserInboxGlobalKey].([]interface{})
+	if len(captures) != 0 {
+		t.Fatalf("captures after permanent delete = %#v, want none", captures)
+	}
+}
+
+func TestBrowserInboxWorkspaceReferenceSurvivesRenameAndTrash(t *testing.T) {
+	v := vault.NewVault(nil)
+	if err := v.CreateVault(t.TempDir()); err != nil {
+		t.Fatalf("CreateVault: %v", err)
+	}
+	manager := workspace.NewManager(v.GetVaultPath())
+	created, err := manager.CreateWorkspace("Project", "minimal")
+	if err != nil {
+		t.Fatalf("CreateWorkspace: %v", err)
+	}
+	bus := events.NewBus()
+	app := &App{
+		eventBus:  bus,
+		storage:   storage.New(v),
+		vault:     v,
+		workspace: manager,
+		plugins: []plugin.Plugin{{
+			Manifest: plugin.Manifest{ID: browserInboxPluginID, Permissions: []string{"storage.namespace"}},
+			Status:   plugin.StatusLoaded,
+			Enabled:  true,
+		}},
+	}
+	app.ensureBrowserInboxSubscriptions()
+	if err := app.recordBrowserCapture(events.Event{Name: "browser.capture.page", Payload: map[string]interface{}{
+		"captureId": "workspace-ref", "capturedAt": "2026-07-12T10:00:00Z", "url": "https://example.com", "workspaceRootPath": "Project",
+	}}); err != nil {
+		t.Fatalf("recordBrowserCapture: %v", err)
+	}
+	if errStr := app.RenameWorkspace("Project", "Client"); errStr != "" {
+		t.Fatalf("RenameWorkspace: %s", errStr)
+	}
+	if _, errStr := app.TrashWorkspace("Client"); errStr != "" {
+		t.Fatalf("TrashWorkspace: %s", errStr)
+	}
+	settings, err := app.storage.ReadPluginSettings(browserInboxPluginID)
+	if err != nil {
+		t.Fatalf("ReadPluginSettings: %v", err)
+	}
+	capture := settings[browserInboxGlobalKey].([]interface{})[0].(map[string]interface{})
+	if capture["workspaceId"] != created.ID || capture["workspaceRootPath"] != "Client" || capture["workspaceState"] != "trashed" || capture["workspaceTrashId"] == "" {
+		t.Fatalf("workspace reference = %#v", capture)
 	}
 }
 
