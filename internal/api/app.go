@@ -2067,6 +2067,7 @@ func (a *App) GetAppSettings() map[string]interface{} {
 		"theme":            cfg.Theme,
 		"language":         cfg.Language,
 		"devMode":          cfg.DevMode,
+		"debug":            a.debug,
 		"userPluginsDir":   cfg.UserPluginsDir,
 		"lastOpenedAt":     cfg.LastOpenedAt,
 	}

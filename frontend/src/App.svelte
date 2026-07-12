@@ -219,6 +219,7 @@
       const settings = await App.GetAppSettings();
       debug.log('[App] checkVault: GetAppSettings returned', settings);
       flog('checkVault: GetAppSettings returned');
+      if (settings?.debug) debug.enable();
 
       debug.log('[App] checkVault: calling GetVaultStatus...');
       vaultStatus = await App.GetVaultStatus() || { status: 'unknown', path: '', vaultId: '' };

@@ -1791,10 +1791,13 @@ func TestAppSettingsLanguageAPI(t *testing.T) {
 	if err := settings.Update(&appsettings.Config{Theme: "light", DevMode: true}); err != nil {
 		t.Fatal(err)
 	}
-	app := &App{appSettings: settings}
+	app := &App{appSettings: settings, debug: true}
 
 	if got := app.GetAppSettings()["language"]; got != "system" {
 		t.Fatalf("initial language = %#v, want system", got)
+	}
+	if got := app.GetAppSettings()["debug"]; got != true {
+		t.Fatalf("debug = %#v, want true", got)
 	}
 	if errStr := app.UpdateAppSettings(map[string]interface{}{"language": "ru"}); errStr != "" {
 		t.Fatalf("UpdateAppSettings language: %s", errStr)
