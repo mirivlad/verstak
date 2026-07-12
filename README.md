@@ -146,6 +146,23 @@ matching plugins are already in the archive. The browser extension, SDK,
 official plugins and sync server have their own build or release instructions
 in their repositories.
 
+## Publish a GitHub Release
+
+After checking the local archive, publish the same assets to GitHub:
+
+```bash
+./scripts/publish-github-release.sh v0.1.0-alpha.1
+```
+
+The command requires an authenticated [`gh`](https://cli.github.com/) CLI, a
+clean local `main` equal to `origin/main`, and the sibling official-plugins
+checkout. It runs the local release script, creates an annotated Git tag when
+needed, pushes that tag through `origin`, then creates or updates the GitHub
+Release with the archive and `SHA256SUMS`. In this checkout `origin` also
+pushes the tag to the configured mirror; other maintainers can add a second
+push URL if they use a mirror too. Publish the compatible official-plugins
+release before publishing the desktop archive that embeds those plugins.
+
 ## License
 
 Copyright © 2026 Verstak contributors. Licensed under
