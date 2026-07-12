@@ -43,6 +43,7 @@
 
   $: selectedWorkspace = nodes.find(n => n.id === selectedWorkspaceName || n.name === selectedWorkspaceName || n.rootPath === selectedWorkspaceName) || null;
   $: workspaceRootPath = selectedWorkspace?.rootPath || selectedWorkspace?.name || selectedWorkspace?.id || '';
+  $: workspaceId = selectedWorkspace?.workspaceId || '';
   $: workspaceTitle = selectedWorkspace?.title || selectedWorkspace?.name || selectedWorkspace?.id || selectedWorkspaceName;
   $: workspaceType = selectedWorkspace?.type || 'workspace';
   $: if (workspaceRootPath !== metadataWorkspaceRoot) {
@@ -235,7 +236,7 @@
             <PluginBundleHost
               pluginId={activeTool.pluginId}
               componentId={activeTool.component}
-              componentProps={{ workspaceName: selectedWorkspaceName, workspaceNodeId: selectedWorkspaceName, workspaceNode: selectedWorkspace, workspaceRootPath, toolRequest: activeToolRequest }}
+              componentProps={{ workspaceName: selectedWorkspaceName, workspaceNodeId: selectedWorkspaceName, workspaceNode: selectedWorkspace, workspaceRootPath, workspaceId, toolRequest: activeToolRequest }}
             />
           {/if}
         {/if}

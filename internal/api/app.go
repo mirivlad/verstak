@@ -577,7 +577,7 @@ func (a *App) recordActivityProviderEvent(event events.Event) {
 		if _, err := a.requirePluginAccess(provider.PluginID, "storage.namespace"); err != nil {
 			continue
 		}
-		if err := a.appendActivityEvent(provider.PluginID, activityFromEvent(event)); err != nil {
+		if err := a.appendActivityEvent(provider.PluginID, a.activityFromEvent(event)); err != nil {
 			log.Printf("[api] activity provider %s failed to record %s: %v", provider.PluginID, event.Name, err)
 		}
 	}
@@ -620,6 +620,24 @@ func activityFromEvent(event events.Event) map[string]interface{} {
 		"workspaceRootPath": workspaceRoot,
 		"payload":           payload,
 	}
+}
+
+func (a *App) activityFromEvent(event events.Event) map[string]interface{} {
+	activity := activityFromEvent(event)
+	workspaceRoot := firstPayloadText(activity, "workspaceRootPath")
+	if workspaceRoot == "" || a == nil || a.workspace == nil {
+		activity["sessionScope"] = map[string]interface{}{"kind": "unassigned"}
+		return activity
+	}
+	identity, err := a.workspace.GetWorkspaceIdentity(workspaceRoot)
+	if err != nil {
+		activity["sessionScope"] = map[string]interface{}{"kind": "unassigned"}
+		return activity
+	}
+	activity["workspaceId"] = identity.WorkspaceID
+	activity["workspaceRootPath"] = identity.RootPath
+	activity["sessionScope"] = map[string]interface{}{"kind": "workspace", "workspaceId": identity.WorkspaceID}
+	return activity
 }
 
 func eventPayloadMap(payload interface{}) map[string]interface{} {
@@ -1493,6 +1511,22 @@ func (a *App) OpenVaultPathExternal(pluginID, relativePath string) string {
 		return err.Error()
 	}
 	if err := a.externalOpenService().OpenPath(target.AbsolutePath); err != nil {
+		return err.Error()
+	}
+	return ""
+}
+
+// OpenExternalURL opens an HTTP(S) URL through the platform browser opener.
+// This deliberately bypasses OS file associations for InternetShortcut files.
+func (a *App) OpenExternalURL(pluginID, rawURL string) string {
+	if _, err := a.requirePluginAccess(pluginID, "files.openExternal"); err != nil {
+		return err.Error()
+	}
+	parsed, err := url.ParseRequestURI(strings.TrimSpace(rawURL))
+	if err != nil || parsed.Host == "" || (parsed.Scheme != "http" && parsed.Scheme != "https") {
+		return "invalid HTTP(S) URL"
+	}
+	if err := a.externalOpenService().OpenPath(parsed.String()); err != nil {
 		return err.Error()
 	}
 	return ""

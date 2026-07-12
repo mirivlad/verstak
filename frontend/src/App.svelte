@@ -54,6 +54,7 @@
     const name = workspaceName(workspace);
     return {
       id: name,
+      workspaceId: workspace?.id || workspace?.workspaceId || '',
       type: workspace?.type || 'space',
       title: workspace?.title || name,
       name,

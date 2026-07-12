@@ -429,6 +429,12 @@ export function createPluginAPI(pluginId) {
           return App.OpenVaultPathExternal(pluginId, relativePath);
         });
       },
+      openURL: function(url) {
+        assertActive('files.openURL');
+        return callBackendErrorString(pluginId, 'files.openURL', function() {
+          return App.OpenExternalURL(pluginId, String(url == null ? '' : url));
+        });
+      },
       showInFolder: function(relativePath) {
         assertActive('files.showInFolder(' + relativePath + ')');
         return callBackendErrorString(pluginId, 'files.showInFolder(' + relativePath + ')', function() {

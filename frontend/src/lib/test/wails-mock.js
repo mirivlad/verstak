@@ -3687,6 +3687,13 @@
       window.__wailsMockExternalOpens = externalOpens.slice();
       return Promise.resolve('');
     },
+    OpenExternalURL: function (pluginId, rawURL) {
+      var err = requirePluginPermission(pluginId, 'files.openExternal');
+      if (err) return Promise.resolve(err);
+      externalOpens.push({ action: 'url', path: String(rawURL || '') });
+      window.__wailsMockExternalOpens = externalOpens.slice();
+      return Promise.resolve('');
+    },
     ShowVaultPathInFolder: function (pluginId, relativePath) {
       var err = requirePluginPermission(pluginId, 'files.openExternal');
       if (err) return Promise.resolve(err);

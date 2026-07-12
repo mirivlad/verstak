@@ -158,6 +158,10 @@ export function OpenVaultPathExternal(arg1, arg2) {
   return window['go']['api']['App']['OpenVaultPathExternal'](arg1, arg2);
 }
 
+export function OpenExternalURL(arg1, arg2) {
+  return window['go']['api']['App']['OpenExternalURL'](arg1, arg2);
+}
+
 export function OpenWorkbenchResource(arg1, arg2) {
   return window['go']['api']['App']['OpenWorkbenchResource'](arg1, arg2);
 }

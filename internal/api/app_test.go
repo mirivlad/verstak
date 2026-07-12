@@ -823,6 +823,24 @@ func TestBrowserInboxWorkspaceReferenceSurvivesRenameAndTrash(t *testing.T) {
 	}
 }
 
+func TestOpenExternalURLUsesBrowserOpenService(t *testing.T) {
+	app, _ := newFilesTestApp(t, []string{"files.openExternal"})
+	opened := ""
+	app.externalOpen = newTestExternalOpenService(func(path string) error {
+		opened = path
+		return nil
+	})
+	if errStr := app.OpenExternalURL("files.plugin", "https://example.com/path"); errStr != "" {
+		t.Fatalf("OpenExternalURL: %s", errStr)
+	}
+	if opened != "https://example.com/path" {
+		t.Fatalf("opened = %q, want URL", opened)
+	}
+	if errStr := app.OpenExternalURL("files.plugin", "ftp://example.com"); errStr == "" {
+		t.Fatal("OpenExternalURL accepted unsupported URL scheme")
+	}
+}
+
 func TestBrowserInboxRejectsCaptureWithoutOpenVault(t *testing.T) {
 	v := vault.NewVault(nil)
 	app := &App{
