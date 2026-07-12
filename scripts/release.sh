@@ -10,6 +10,12 @@ if [[ -z "$VERSION" || ! "$VERSION" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]]; then
   exit 2
 fi
 
+if ! command -v pkg-config >/dev/null || \
+  (! pkg-config --exists webkit2gtk-4.1 && ! pkg-config --exists webkit2gtk-4.0); then
+  echo "Linux desktop releases require libwebkit2gtk-4.1-dev or libwebkit2gtk-4.0-dev." >&2
+  exit 1
+fi
+
 OFFICIAL_PLUGINS="${VERSTAK_OFFICIAL_PLUGINS_DIR:-$ROOT/../verstak-official-plugins}"
 if [[ ! -d "$OFFICIAL_PLUGINS" ]]; then
   echo "official plugins repository not found: $OFFICIAL_PLUGINS" >&2

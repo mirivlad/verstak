@@ -6,3 +6,4 @@ smoke-platform
 plugins/
 vendor/
 frontend/e2e-results/
+release/
