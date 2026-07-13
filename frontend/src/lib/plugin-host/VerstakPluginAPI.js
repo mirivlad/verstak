@@ -220,6 +220,24 @@ export function createPluginAPI(pluginId) {
       }
     },
 
+    notifications: {
+      replace: function(items) {
+        assertActive('notifications.replace');
+        if (!Array.isArray(items)) {
+          throw new Error('notifications.replace requires an array');
+        }
+        return callBackendErrorString(pluginId, 'notifications.replace', function() {
+          return App.ReplacePluginNotifications(pluginId, items);
+        });
+      },
+      clear: function() {
+        assertActive('notifications.clear');
+        return callBackendErrorString(pluginId, 'notifications.clear', function() {
+          return App.ClearPluginNotifications(pluginId);
+        });
+      }
+    },
+
     settings: {
       read: async function(key) {
         assertActive('settings.read');

@@ -20,12 +20,33 @@ import (
 	"github.com/verstak/verstak-desktop/internal/core/contribution"
 	"github.com/verstak/verstak-desktop/internal/core/events"
 	corefiles "github.com/verstak/verstak-desktop/internal/core/files"
+	"github.com/verstak/verstak-desktop/internal/core/notifications"
 	"github.com/verstak/verstak-desktop/internal/core/plugin"
 	"github.com/verstak/verstak-desktop/internal/core/storage"
 	syncsvc "github.com/verstak/verstak-desktop/internal/core/sync"
 	"github.com/verstak/verstak-desktop/internal/core/vault"
 	"github.com/verstak/verstak-desktop/internal/core/workspace"
 )
+
+type fakeNotificationScheduler struct {
+	replaceCalls int
+	clearCalls   int
+	pluginID     string
+	requests     []notifications.Request
+}
+
+func (s *fakeNotificationScheduler) Replace(pluginID string, requests []notifications.Request) error {
+	s.replaceCalls++
+	s.pluginID = pluginID
+	s.requests = append([]notifications.Request(nil), requests...)
+	return nil
+}
+
+func (s *fakeNotificationScheduler) Clear(pluginID string) error {
+	s.clearCalls++
+	s.pluginID = pluginID
+	return nil
+}
 
 func newLocalHTTPTestServer(t *testing.T, handler http.Handler) *httptest.Server {
 	t.Helper()
@@ -75,6 +96,18 @@ func newTestApp(tmpRoot string) *App {
 			},
 		},
 	}
+}
+
+func newNotificationsTestApp(manifest plugin.Manifest) (*App, *fakeNotificationScheduler) {
+	scheduler := &fakeNotificationScheduler{}
+	return &App{
+		plugins: []plugin.Plugin{{
+			Manifest: manifest,
+			Status:   plugin.StatusLoaded,
+			Enabled:  true,
+		}},
+		notifications: scheduler,
+	}, scheduler
 }
 
 func newFilesTestApp(t *testing.T, perms []string) (*App, string) {
@@ -132,6 +165,44 @@ func newSyncFilesTestApp(t *testing.T, perms []string, deviceID string) (*App, s
 		t.Fatalf("settings UpdateSync: %v", err)
 	}
 	return app, root
+}
+
+func TestReplacePluginNotificationsRequiresCapabilityAndPermission(t *testing.T) {
+	requests := []notifications.Request{{ID: "reminder", DueAt: "2026-07-14T10:00:00Z", Title: "Reminder"}}
+	for _, manifest := range []plugin.Manifest{
+		{ID: "notifications.test", Permissions: []string{"notifications.schedule"}},
+		{ID: "notifications.test", Requires: []string{"verstak/core/notifications/v1"}},
+	} {
+		app, scheduler := newNotificationsTestApp(manifest)
+		if got := app.ReplacePluginNotifications(manifest.ID, requests); got == "" {
+			t.Fatalf("manifest %#v unexpectedly scheduled notifications", manifest)
+		}
+		if scheduler.replaceCalls != 0 {
+			t.Fatalf("rejected request called scheduler %d times", scheduler.replaceCalls)
+		}
+	}
+}
+
+func TestReplaceAndClearPluginNotificationsStayWithinPluginNamespace(t *testing.T) {
+	manifest := plugin.Manifest{
+		ID:          "notifications.test",
+		Permissions: []string{"notifications.schedule"},
+		Requires:    []string{"verstak/core/notifications/v1"},
+	}
+	app, scheduler := newNotificationsTestApp(manifest)
+	requests := []notifications.Request{{ID: "reminder", DueAt: "2026-07-14T10:00:00Z", Title: "Reminder"}}
+	if got := app.ReplacePluginNotifications(manifest.ID, requests); got != "" {
+		t.Fatalf("ReplacePluginNotifications error = %q", got)
+	}
+	if scheduler.replaceCalls != 1 || scheduler.pluginID != manifest.ID || len(scheduler.requests) != 1 {
+		t.Fatalf("scheduler state = %#v", scheduler)
+	}
+	if got := app.ClearPluginNotifications(manifest.ID); got != "" {
+		t.Fatalf("ClearPluginNotifications error = %q", got)
+	}
+	if scheduler.clearCalls != 1 || scheduler.pluginID != manifest.ID {
+		t.Fatalf("clear state = %#v", scheduler)
+	}
 }
 
 // TestGetPluginFrontendInfo_KnownPluginWithFrontend verifies that

@@ -39,6 +39,7 @@ func (r *Registry) registerDefaults() {
 		{Name: "files.openExternal", Description: "Open vault files and folders in external OS applications", Dangerous: true},
 		{Name: "storage.namespace", Description: "Read/write plugin's own storage namespace", Dangerous: false},
 		{Name: "storage.migrations", Description: "Run database migrations in plugin namespace", Dangerous: false},
+		{Name: "notifications.schedule", Description: "Schedule native notifications in the plugin's own namespace", Dangerous: false},
 		{Name: "events.publish", Description: "Publish events to the event bus", Dangerous: false},
 		{Name: "events.subscribe", Description: "Subscribe to events on the event bus", Dangerous: false},
 		{Name: "ui.register", Description: "Register UI components and contributions", Dangerous: false},

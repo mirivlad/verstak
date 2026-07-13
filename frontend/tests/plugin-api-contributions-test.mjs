@@ -3,6 +3,7 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 const pluginData = {};
+const scheduledNotifications = [];
 
 globalThis.window = {
   __VERSTAK_PLUGIN_REGISTRY__: {},
@@ -36,6 +37,14 @@ globalThis.window = {
         WritePluginDataJSON: (pluginId, name, data) => {
           pluginData[pluginId] = pluginData[pluginId] || {};
           pluginData[pluginId][name] = Object.assign({}, data || {});
+          return Promise.resolve('');
+        },
+        ReplacePluginNotifications: (pluginId, items) => {
+          scheduledNotifications.push({ pluginId, items });
+          return Promise.resolve(items[0]?.id === 'rejected' ? 'notification permission denied' : '');
+        },
+        ClearPluginNotifications: (pluginId) => {
+          scheduledNotifications.push({ pluginId, clear: true });
           return Promise.resolve('');
         },
       },
@@ -114,6 +123,28 @@ await api.storage.data.write('search-index', { version: 1, workspaceRootPath: 'P
 const stored = await api.storage.data.read('search-index');
 if (stored.version !== 1 || stored.workspaceRootPath !== 'Project') {
   throw new Error(`unexpected storage data: ${JSON.stringify(stored)}`);
+}
+
+if (!api.notifications || typeof api.notifications.replace !== 'function' || typeof api.notifications.clear !== 'function') {
+  throw new Error('api.notifications replace/clear contract is missing');
+}
+await api.notifications.replace([{ id: 'reminder-1', dueAt: '2026-07-14T10:00:00Z', title: 'Reminder' }]);
+await api.notifications.clear();
+if (scheduledNotifications.length !== 2
+  || scheduledNotifications[0].pluginId !== 'verstak.files'
+  || scheduledNotifications[0].items[0].id !== 'reminder-1'
+  || scheduledNotifications[1].pluginId !== 'verstak.files'
+  || !scheduledNotifications[1].clear) {
+  throw new Error(`unexpected notification calls: ${JSON.stringify(scheduledNotifications)}`);
+}
+let rejected = false;
+try {
+  await api.notifications.replace([{ id: 'rejected', dueAt: '2026-07-14T10:00:00Z', title: 'Reminder' }]);
+} catch (err) {
+  rejected = String(err.message || err).includes('[plugin:verstak.files] notifications.replace failed: notification permission denied');
+}
+if (!rejected) {
+  throw new Error('notification backend errors must be plugin-scoped rejections');
 }
 
 api.dispose();

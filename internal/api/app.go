@@ -24,6 +24,7 @@ import (
 	"github.com/verstak/verstak-desktop/internal/core/externalopen"
 	corefiles "github.com/verstak/verstak-desktop/internal/core/files"
 	"github.com/verstak/verstak-desktop/internal/core/filewatcher"
+	"github.com/verstak/verstak-desktop/internal/core/notifications"
 	"github.com/verstak/verstak-desktop/internal/core/permissions"
 	"github.com/verstak/verstak-desktop/internal/core/plugin"
 	"github.com/verstak/verstak-desktop/internal/core/pluginstate"
@@ -38,6 +39,11 @@ import (
 
 var newSyncClient = syncsvc.NewClient
 var emitFrontendEvent = runtime.EventsEmit
+
+type notificationService interface {
+	Replace(pluginID string, requests []notifications.Request) error
+	Clear(pluginID string) error
+}
 
 const pluginEventRuntimeName = "verstak:plugin-event"
 const activityPluginID = "verstak.activity"
@@ -80,10 +86,19 @@ type App struct {
 	browserReceiver     *browserreceiver.Receiver
 	secretsSession      *coresecrets.VaultSession
 	fileWatcher         *filewatcher.Service
+	notifications       notificationService
 	debug               bool
 	activityEvents      map[string]bool
 	browserInboxEvents  map[string]bool
 	browserInboxEnabled atomic.Bool
+}
+
+// SetNotificationService attaches the core-owned plugin notification scheduler.
+func (a *App) SetNotificationService(service notificationService) {
+	if a == nil {
+		return
+	}
+	a.notifications = service
 }
 
 type externalOpenService interface {
@@ -1261,6 +1276,44 @@ func (a *App) WritePluginDataJSON(pluginID, name string, data map[string]interfa
 	}
 	if err := a.storage.WritePluginDataJSON(pluginID, name, data); err != nil {
 		log.Printf("[api] WritePluginDataJSON(%s, %s): %v", pluginID, name, err)
+		return err.Error()
+	}
+	return ""
+}
+
+// ReplacePluginNotifications replaces one plugin's desired native notification
+// schedules. Plugins must declare both the capability and permission.
+func (a *App) ReplacePluginNotifications(pluginID string, requests []notifications.Request) string {
+	if _, err := a.requirePluginAccess(pluginID, "notifications.schedule"); err != nil {
+		return err.Error()
+	}
+	if _, err := a.requirePluginCapabilityAccess(pluginID, "verstak/core/notifications/v1"); err != nil {
+		return err.Error()
+	}
+	if a.notifications == nil {
+		return "notification scheduler not initialized"
+	}
+	if err := a.notifications.Replace(pluginID, requests); err != nil {
+		log.Printf("[api] ReplacePluginNotifications(%s): %v", pluginID, err)
+		return err.Error()
+	}
+	return ""
+}
+
+// ClearPluginNotifications removes every native notification schedule owned by
+// one plugin.
+func (a *App) ClearPluginNotifications(pluginID string) string {
+	if _, err := a.requirePluginAccess(pluginID, "notifications.schedule"); err != nil {
+		return err.Error()
+	}
+	if _, err := a.requirePluginCapabilityAccess(pluginID, "verstak/core/notifications/v1"); err != nil {
+		return err.Error()
+	}
+	if a.notifications == nil {
+		return "notification scheduler not initialized"
+	}
+	if err := a.notifications.Clear(pluginID); err != nil {
+		log.Printf("[api] ClearPluginNotifications(%s): %v", pluginID, err)
 		return err.Error()
 	}
 	return ""
