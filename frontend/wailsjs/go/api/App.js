@@ -6,6 +6,10 @@ export function ArchiveWorkspaceNode(arg1) {
   return window['go']['api']['App']['ArchiveWorkspaceNode'](arg1);
 }
 
+export function ClearPluginNotifications(arg1) {
+  return window['go']['api']['App']['ClearPluginNotifications'](arg1);
+}
+
 export function CloseVault() {
   return window['go']['api']['App']['CloseVault']();
 }
@@ -32,6 +36,10 @@ export function DeleteVaultTrash(arg1, arg2) {
 
 export function DisablePlugin(arg1) {
   return window['go']['api']['App']['DisablePlugin'](arg1);
+}
+
+export function DomReady(arg1) {
+  return window['go']['api']['App']['DomReady'](arg1);
 }
 
 export function EditWorkbenchResource(arg1, arg2) {
@@ -130,16 +138,16 @@ export function ListVaultTrash(arg1) {
   return window['go']['api']['App']['ListVaultTrash'](arg1);
 }
 
-export function ListWorkspaces() {
-  return window['go']['api']['App']['ListWorkspaces']();
-}
-
 export function ListWorkspaceIdentities() {
   return window['go']['api']['App']['ListWorkspaceIdentities']();
 }
 
 export function ListWorkspaceTemplates() {
   return window['go']['api']['App']['ListWorkspaceTemplates']();
+}
+
+export function ListWorkspaces() {
+  return window['go']['api']['App']['ListWorkspaces']();
 }
 
 export function MoveVaultPath(arg1, arg2, arg3, arg4) {
@@ -150,16 +158,16 @@ export function MoveWorkspaceNode(arg1, arg2) {
   return window['go']['api']['App']['MoveWorkspaceNode'](arg1, arg2);
 }
 
+export function OpenExternalURL(arg1, arg2) {
+  return window['go']['api']['App']['OpenExternalURL'](arg1, arg2);
+}
+
 export function OpenVault(arg1) {
   return window['go']['api']['App']['OpenVault'](arg1);
 }
 
 export function OpenVaultPathExternal(arg1, arg2) {
   return window['go']['api']['App']['OpenVaultPathExternal'](arg1, arg2);
-}
-
-export function OpenExternalURL(arg1, arg2) {
-  return window['go']['api']['App']['OpenExternalURL'](arg1, arg2);
 }
 
 export function OpenWorkbenchResource(arg1, arg2) {
@@ -234,6 +242,14 @@ export function PublishPluginEvent(arg1, arg2, arg3) {
   return window['go']['api']['App']['PublishPluginEvent'](arg1, arg2, arg3);
 }
 
+export function PurgeWorkspaceTrash(arg1) {
+  return window['go']['api']['App']['PurgeWorkspaceTrash'](arg1);
+}
+
+export function Quit() {
+  return window['go']['api']['App']['Quit']();
+}
+
 export function ReadPluginDataJSON(arg1, arg2) {
   return window['go']['api']['App']['ReadPluginDataJSON'](arg1, arg2);
 }
@@ -270,12 +286,16 @@ export function RenameWorkspace(arg1, arg2) {
   return window['go']['api']['App']['RenameWorkspace'](arg1, arg2);
 }
 
+export function RenameWorkspaceNode(arg1, arg2) {
+  return window['go']['api']['App']['RenameWorkspaceNode'](arg1, arg2);
+}
+
 export function RepairWorkspaceIdentity(arg1, arg2) {
   return window['go']['api']['App']['RepairWorkspaceIdentity'](arg1, arg2);
 }
 
-export function RenameWorkspaceNode(arg1, arg2) {
-  return window['go']['api']['App']['RenameWorkspaceNode'](arg1, arg2);
+export function ReplacePluginNotifications(arg1, arg2) {
+  return window['go']['api']['App']['ReplacePluginNotifications'](arg1, arg2);
 }
 
 export function RestoreVaultTrash(arg1, arg2, arg3) {
@@ -288,10 +308,6 @@ export function RestoreWorkspaceTrash(arg1, arg2) {
 
 export function SelectDirectory() {
   return window['go']['api']['App']['SelectDirectory']();
-}
-
-export function PurgeWorkspaceTrash(arg1) {
-  return window['go']['api']['App']['PurgeWorkspaceTrash'](arg1);
 }
 
 export function SelectVaultForOpen() {
@@ -310,8 +326,20 @@ export function SetCurrentWorkspaceNode(arg1) {
   return window['go']['api']['App']['SetCurrentWorkspaceNode'](arg1);
 }
 
+export function SetNotificationService(arg1) {
+  return window['go']['api']['App']['SetNotificationService'](arg1);
+}
+
 export function ShowVaultPathInFolder(arg1, arg2) {
   return window['go']['api']['App']['ShowVaultPathInFolder'](arg1, arg2);
+}
+
+export function ShowWindow() {
+  return window['go']['api']['App']['ShowWindow']();
+}
+
+export function Shutdown(arg1) {
+  return window['go']['api']['App']['Shutdown'](arg1);
 }
 
 export function SubscribePluginEvent(arg1, arg2) {
