@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"embed"
 	"log"
 	"os"
@@ -26,6 +27,7 @@ import (
 	"github.com/verstak/verstak-desktop/internal/core/vault"
 	"github.com/verstak/verstak-desktop/internal/core/workspace"
 	"github.com/verstak/verstak-desktop/internal/shell/debug"
+	"github.com/verstak/verstak-desktop/internal/shell/tray"
 )
 
 //go:embed frontend/dist
@@ -236,6 +238,7 @@ func main() {
 	}
 	app = api.NewApp(capRegistry, contribRegistry, permRegistry, eventBus, plugins, vaultService, storageService, filesService, appSettingsMgr, pluginStateMgr, workspaceMgr, syncService, browserReceiver, debugEnabled)
 	app.SetNotificationService(notifications.New(vaultService, api.NewNativeNotificationSender(), time.Now))
+	trayController := tray.New(tray.NewNativeBackend(), tray.DefaultIcon())
 	if browserReceiver != nil {
 		browserReceiverServer, err := browserreceiver.Start(browserreceiver.DefaultAddr, browserReceiver)
 		if err != nil {
@@ -255,8 +258,21 @@ func main() {
 		MinHeight:        600,
 		WindowStartState: options.Normal,
 		OnStartup:        app.Startup,
-		OnDomReady:       app.DomReady,
-		OnShutdown:       app.Shutdown,
+		OnDomReady: func(ctx context.Context) {
+			app.DomReady(ctx)
+			trayController.Start(tray.Actions{Show: app.ShowWindow, Quit: app.Quit})
+		},
+		OnShutdown: func(ctx context.Context) {
+			trayController.Stop()
+			app.Shutdown(ctx)
+		},
+		OnBeforeClose: app.BeforeClose,
+		SingleInstanceLock: &options.SingleInstanceLock{
+			UniqueId: "605fba28-7cbf-4f14-9d1b-a4da0c1723f8",
+			OnSecondInstanceLaunch: func(options.SecondInstanceData) {
+				app.ShowWindow()
+			},
+		},
 		AssetServer: &assetserver.Options{
 			Assets: assets,
 		},

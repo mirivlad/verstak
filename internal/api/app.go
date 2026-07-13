@@ -42,6 +42,9 @@ var emitFrontendEvent = runtime.EventsEmit
 var initializeNativeNotifications = runtime.InitializeNotifications
 var cleanupNativeNotifications = runtime.CleanupNotifications
 var sendNativeNotification = runtime.SendNotification
+var hideNativeWindow = runtime.WindowHide
+var showNativeWindow = runtime.WindowShow
+var quitNativeApplication = runtime.Quit
 
 type notificationService interface {
 	Replace(pluginID string, requests []notifications.Request) error
@@ -96,6 +99,7 @@ type App struct {
 	activityEvents      map[string]bool
 	browserInboxEvents  map[string]bool
 	browserInboxEnabled atomic.Bool
+	allowQuit           atomic.Bool
 }
 
 // SetNotificationService attaches the core-owned plugin notification scheduler.
@@ -215,6 +219,34 @@ func (a *App) Shutdown(ctx context.Context) {
 		a.notifications.Stop()
 	}
 	cleanupNativeNotifications(ctx)
+}
+
+// BeforeClose hides the primary window until the user explicitly quits from the tray.
+func (a *App) BeforeClose(ctx context.Context) bool {
+	if a.allowQuit.Load() {
+		return false
+	}
+	hideNativeWindow(ctx)
+	return true
+}
+
+// ShowWindow brings the primary window back from the tray.
+func (a *App) ShowWindow() {
+	if a == nil || a.ctx == nil {
+		return
+	}
+	showNativeWindow(a.ctx)
+}
+
+// Quit allows the close event and ends the application process.
+func (a *App) Quit() {
+	if a == nil {
+		return
+	}
+	a.allowQuit.Store(true)
+	if a.ctx != nil {
+		quitNativeApplication(a.ctx)
+	}
 }
 
 // NativeNotificationSender delivers scheduler items through the Wails runtime.

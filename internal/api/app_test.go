@@ -306,6 +306,55 @@ func TestNativeNotificationSenderUsesStablePluginScopedID(t *testing.T) {
 	}
 }
 
+func TestBeforeCloseHidesWindowUntilUserChoosesQuit(t *testing.T) {
+	oldHide := hideNativeWindow
+	defer func() { hideNativeWindow = oldHide }()
+
+	hideCalls := 0
+	hideNativeWindow = func(context.Context) { hideCalls++ }
+	app := &App{}
+
+	if prevent := app.BeforeClose(context.Background()); !prevent {
+		t.Fatal("BeforeClose() = false, want true while tray mode is active")
+	}
+	if hideCalls != 1 {
+		t.Fatalf("hide calls = %d, want 1", hideCalls)
+	}
+}
+
+func TestTrayQuitAllowsWindowCloseAndQuitsApplication(t *testing.T) {
+	oldQuit := quitNativeApplication
+	defer func() { quitNativeApplication = oldQuit }()
+
+	quitCalls := 0
+	quitNativeApplication = func(context.Context) { quitCalls++ }
+	app := &App{ctx: context.Background()}
+
+	app.Quit()
+
+	if quitCalls != 1 {
+		t.Fatalf("quit calls = %d, want 1", quitCalls)
+	}
+	if prevent := app.BeforeClose(context.Background()); prevent {
+		t.Fatal("BeforeClose() = true after Quit(), want false")
+	}
+}
+
+func TestShowWindowUsesWailsContext(t *testing.T) {
+	oldShow := showNativeWindow
+	defer func() { showNativeWindow = oldShow }()
+
+	showCalls := 0
+	showNativeWindow = func(context.Context) { showCalls++ }
+	app := &App{ctx: context.Background()}
+
+	app.ShowWindow()
+
+	if showCalls != 1 {
+		t.Fatalf("show calls = %d, want 1", showCalls)
+	}
+}
+
 // TestGetPluginFrontendInfo_KnownPluginWithFrontend verifies that
 // GetPluginFrontendInfo returns correct metadata for a plugin with a frontend.
 func TestGetPluginFrontendInfo_KnownPluginWithFrontend(t *testing.T) {
