@@ -39,10 +39,15 @@ import (
 
 var newSyncClient = syncsvc.NewClient
 var emitFrontendEvent = runtime.EventsEmit
+var initializeNativeNotifications = runtime.InitializeNotifications
+var cleanupNativeNotifications = runtime.CleanupNotifications
+var sendNativeNotification = runtime.SendNotification
 
 type notificationService interface {
 	Replace(pluginID string, requests []notifications.Request) error
 	Clear(pluginID string) error
+	Start(ctx context.Context)
+	Stop()
 }
 
 const pluginEventRuntimeName = "verstak:plugin-event"
@@ -190,6 +195,43 @@ func (a *App) Startup(ctx context.Context) {
 	a.ensureActivityProviderSubscriptions()
 	a.ensureBrowserInboxSubscriptions()
 	log.Printf("[api] App.Startup: initialized with %d plugins", len(a.plugins))
+}
+
+// DomReady initializes the native notification runtime before starting schedules.
+func (a *App) DomReady(ctx context.Context) {
+	if a.notifications == nil {
+		return
+	}
+	if err := initializeNativeNotifications(ctx); err != nil {
+		log.Printf("[api] native notifications unavailable: %v", err)
+		return
+	}
+	a.notifications.Start(ctx)
+}
+
+// Shutdown stops scheduled delivery before releasing native notification resources.
+func (a *App) Shutdown(ctx context.Context) {
+	if a.notifications != nil {
+		a.notifications.Stop()
+	}
+	cleanupNativeNotifications(ctx)
+}
+
+// NativeNotificationSender delivers scheduler items through the Wails runtime.
+type NativeNotificationSender struct{}
+
+// NewNativeNotificationSender creates the adapter used by the core scheduler.
+func NewNativeNotificationSender() notifications.Sender {
+	return NativeNotificationSender{}
+}
+
+// Send shows a native system notification for a scheduled plugin reminder.
+func (NativeNotificationSender) Send(ctx context.Context, item notifications.Item) error {
+	return sendNativeNotification(ctx, runtime.NotificationOptions{
+		ID:    "verstak:" + item.PluginID + ":" + item.ID,
+		Title: item.Title,
+		Body:  item.Body,
+	})
 }
 
 func (a *App) ensureBrowserInboxSubscriptions() {

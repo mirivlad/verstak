@@ -14,6 +14,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/wailsapp/wails/v2/pkg/runtime"
+
 	"github.com/verstak/verstak-desktop/internal/core/appsettings"
 	"github.com/verstak/verstak-desktop/internal/core/browserreceiver"
 	"github.com/verstak/verstak-desktop/internal/core/capability"
@@ -31,8 +33,12 @@ import (
 type fakeNotificationScheduler struct {
 	replaceCalls int
 	clearCalls   int
+	startCalls   int
+	stopCalls    int
 	pluginID     string
 	requests     []notifications.Request
+	onStart      func()
+	onStop       func()
 }
 
 func (s *fakeNotificationScheduler) Replace(pluginID string, requests []notifications.Request) error {
@@ -46,6 +52,20 @@ func (s *fakeNotificationScheduler) Clear(pluginID string) error {
 	s.clearCalls++
 	s.pluginID = pluginID
 	return nil
+}
+
+func (s *fakeNotificationScheduler) Start(context.Context) {
+	s.startCalls++
+	if s.onStart != nil {
+		s.onStart()
+	}
+}
+
+func (s *fakeNotificationScheduler) Stop() {
+	s.stopCalls++
+	if s.onStop != nil {
+		s.onStop()
+	}
 }
 
 func newLocalHTTPTestServer(t *testing.T, handler http.Handler) *httptest.Server {
@@ -202,6 +222,87 @@ func TestReplaceAndClearPluginNotificationsStayWithinPluginNamespace(t *testing.
 	}
 	if scheduler.clearCalls != 1 || scheduler.pluginID != manifest.ID {
 		t.Fatalf("clear state = %#v", scheduler)
+	}
+}
+
+func TestDomReadyInitializesNotificationsBeforeScheduler(t *testing.T) {
+	oldInitialize := initializeNativeNotifications
+	defer func() { initializeNativeNotifications = oldInitialize }()
+
+	order := []string{}
+	initializeNativeNotifications = func(context.Context) error {
+		order = append(order, "initialize")
+		return nil
+	}
+	app, scheduler := newNotificationsTestApp(plugin.Manifest{ID: "notifications.test"})
+	scheduler.onStart = func() { order = append(order, "start") }
+
+	app.DomReady(context.Background())
+
+	if got, want := strings.Join(order, ","), "initialize,start"; got != want {
+		t.Fatalf("notification startup order = %q, want %q", got, want)
+	}
+	if scheduler.startCalls != 1 {
+		t.Fatalf("scheduler start calls = %d, want 1", scheduler.startCalls)
+	}
+}
+
+func TestDomReadyDoesNotStartSchedulerWhenNotificationInitializationFails(t *testing.T) {
+	oldInitialize := initializeNativeNotifications
+	defer func() { initializeNativeNotifications = oldInitialize }()
+
+	initializeNativeNotifications = func(context.Context) error { return fmt.Errorf("unavailable") }
+	app, scheduler := newNotificationsTestApp(plugin.Manifest{ID: "notifications.test"})
+
+	app.DomReady(context.Background())
+
+	if scheduler.startCalls != 0 {
+		t.Fatalf("scheduler start calls = %d, want 0 when native notifications are unavailable", scheduler.startCalls)
+	}
+}
+
+func TestShutdownStopsSchedulerBeforeCleaningUpNotifications(t *testing.T) {
+	oldCleanup := cleanupNativeNotifications
+	defer func() { cleanupNativeNotifications = oldCleanup }()
+
+	order := []string{}
+	cleanupNativeNotifications = func(context.Context) { order = append(order, "cleanup") }
+	app, scheduler := newNotificationsTestApp(plugin.Manifest{ID: "notifications.test"})
+	scheduler.onStop = func() { order = append(order, "stop") }
+
+	app.Shutdown(context.Background())
+
+	if got, want := strings.Join(order, ","), "stop,cleanup"; got != want {
+		t.Fatalf("notification shutdown order = %q, want %q", got, want)
+	}
+	if scheduler.stopCalls != 1 {
+		t.Fatalf("scheduler stop calls = %d, want 1", scheduler.stopCalls)
+	}
+}
+
+func TestNativeNotificationSenderUsesStablePluginScopedID(t *testing.T) {
+	oldSend := sendNativeNotification
+	defer func() { sendNativeNotification = oldSend }()
+
+	var gotTitle, gotBody, gotID string
+	sendNativeNotification = func(_ context.Context, options runtime.NotificationOptions) error {
+		gotID = options.ID
+		gotTitle = options.Title
+		gotBody = options.Body
+		return nil
+	}
+
+	err := NewNativeNotificationSender().Send(context.Background(), notifications.Item{
+		PluginID: "verstak.todo",
+		ID:       "task-42",
+		Title:    "Todo reminder",
+		Body:     "Prepare alpha release",
+	})
+	if err != nil {
+		t.Fatalf("Send() error = %v", err)
+	}
+	if gotID != "verstak:verstak.todo:task-42" || gotTitle != "Todo reminder" || gotBody != "Prepare alpha release" {
+		t.Fatalf("native notification = id=%q title=%q body=%q", gotID, gotTitle, gotBody)
 	}
 }
 

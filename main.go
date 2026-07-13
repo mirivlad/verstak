@@ -4,6 +4,7 @@ import (
 	"embed"
 	"log"
 	"os"
+	"time"
 
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"
@@ -16,6 +17,7 @@ import (
 	"github.com/verstak/verstak-desktop/internal/core/contribution"
 	"github.com/verstak/verstak-desktop/internal/core/events"
 	corefiles "github.com/verstak/verstak-desktop/internal/core/files"
+	"github.com/verstak/verstak-desktop/internal/core/notifications"
 	"github.com/verstak/verstak-desktop/internal/core/permissions"
 	"github.com/verstak/verstak-desktop/internal/core/plugin"
 	"github.com/verstak/verstak-desktop/internal/core/pluginstate"
@@ -91,6 +93,7 @@ func main() {
 		"verstak/core/events/v1",
 		"verstak/core/files/v1",
 		"verstak/core/workbench/v1",
+		"verstak/core/notifications/v1",
 	}
 	if err := capRegistry.Register(corePluginID, coreCaps); err != nil {
 		log.Fatalf("[main] failed to register core capabilities: %v", err)
@@ -232,6 +235,7 @@ func main() {
 		})
 	}
 	app = api.NewApp(capRegistry, contribRegistry, permRegistry, eventBus, plugins, vaultService, storageService, filesService, appSettingsMgr, pluginStateMgr, workspaceMgr, syncService, browserReceiver, debugEnabled)
+	app.SetNotificationService(notifications.New(vaultService, api.NewNativeNotificationSender(), time.Now))
 	if browserReceiver != nil {
 		browserReceiverServer, err := browserreceiver.Start(browserreceiver.DefaultAddr, browserReceiver)
 		if err != nil {
@@ -251,6 +255,8 @@ func main() {
 		MinHeight:        600,
 		WindowStartState: options.Normal,
 		OnStartup:        app.Startup,
+		OnDomReady:       app.DomReady,
+		OnShutdown:       app.Shutdown,
 		AssetServer: &assetserver.Options{
 			Assets: assets,
 		},
