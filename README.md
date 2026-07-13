@@ -1,208 +1,341 @@
+<div align="center">
+
+<img src="packaging/linux/verstak.svg" width="112" alt="Verstak logo">
+
 # Verstak
 
-Verstak is a local-first workspace for files, notes, browser captures,
-activity and work-journal entries. This repository is the desktop application:
-the Go/Wails host and UI shell that loads plugins from a `plugins/` directory
-next to its executable.
+### Keep the context of your work together — locally.
 
-> **Alpha software.** Use a disposable vault while evaluating it. APIs, storage
-> formats and packaging can change before the first stable release.
+Files, notes, links, browser captures, activity and work history
+in one extensible local-first workspace.
 
-## Components
+**English** · [Русский](README.ru.md)
 
-The public alpha is split into small repositories. Keep their `main` branches
-in the same release line when building from source.
+[![Release](https://img.shields.io/github/v/release/mirivlad/verstak?include_prereleases\&label=release)](https://github.com/mirivlad/verstak/releases)
+![Status](https://img.shields.io/badge/status-alpha-orange)
+![Platforms](https://img.shields.io/badge/platform-Linux%20%7C%20Windows-blue)
+[![License](https://img.shields.io/github/license/mirivlad/verstak)](LICENSE)
 
-| Component | Repository | What it is for |
-| --- | --- | --- |
-| Desktop | [mirivlad/verstak](https://github.com/mirivlad/verstak) | This application: vault UI, local host and plugin runtime. |
-| Official plugins | [mirivlad/verstak-official-plugins](https://github.com/mirivlad/verstak-official-plugins) | Files, Notes, Browser Inbox, Activity, Journal, Sync, Todo and other first-party plugins. |
-| Browser extension | [mirivlad/verstak-browser-extension](https://github.com/mirivlad/verstak-browser-extension) | Manual browser captures and opt-in domain-time activity. |
-| Sync server | [mirivlad/verstak-sync-server](https://github.com/mirivlad/verstak-sync-server) | Optional self-hosted synchronization between devices. |
-| Plugin SDK | [mirivlad/verstak-sdk](https://github.com/mirivlad/verstak-sdk) | TypeScript API, JSON schemas and contract tests for plugin authors. |
-| Architecture documentation | [mirivlad/verstak-docs](https://github.com/mirivlad/verstak-docs) | Product, platform and plugin-system design documents. |
+[Download](https://github.com/mirivlad/verstak/releases/latest) ·
+[Documentation](https://github.com/mirivlad/verstak-docs) ·
+[Report an issue](https://github.com/mirivlad/verstak/issues)
 
-No server account or browser extension is needed for a local desktop vault.
+</div>
 
-## Build the desktop and official plugins
+> [!WARNING]
+> Verstak is currently **alpha software**. APIs, storage formats and packaging may change before the first stable release. Use a test vault and keep backups of important data.
 
-To build from source, install Go 1.24+, Node.js 20+ with npm, Python 3, the [Wails v2 build
-prerequisites](https://wails.io/docs/gettingstarted/installation/), and your
-distribution's WebKitGTK development package.
+## What is Verstak?
 
-Clone the repositories as siblings. The directory names below are intentional:
-the desktop helper finds the official-plugin checkout at
-`../verstak-official-plugins`.
+Verstak is a local-first workbench that keeps the context around your work in one place.
+
+A **workspace** can represent almost anything:
+
+* a software project;
+* a client or customer;
+* a server or infrastructure site;
+* a device under repair;
+* an article or research topic;
+* a training course;
+* a personal long-term project.
+
+Normally, information about such work is scattered across directories, notes, browser tabs, task managers, password managers, terminal history and memory.
+
+Verstak brings it together in a local **vault** that remains under your control.
+
+No account, cloud service or sync server is required for local use.
+
+## Verstak in use
+
+| Overview: return to a workspace and see its recent work, captures and items that need attention. | Files: manage ordinary folders and documents inside a workspace. |
+| --- | --- |
+| ![Verstak Overview in a test vault](docs/screenshots/overview.png) | ![Verstak workspace files in a test vault](docs/screenshots/workspace-files.png) |
+
+| Notes: keep Markdown notes next to the workspace they describe. | Journal: record a completed session and retain its context. |
+| --- | --- |
+| ![Verstak notes in a test vault](docs/screenshots/notes.png) | ![Verstak journal in a test vault](docs/screenshots/journal.png) |
+
+## Main features
+
+| Feature                  | Description                                                                                  |
+| ------------------------ | -------------------------------------------------------------------------------------------- |
+| **Workspaces**           | Organize files, notes and activity around durable projects, clients and other areas of work. |
+| **Files**                | Browse and manage ordinary files stored inside your vault.                                   |
+| **Notes**                | Create Markdown notes, overview pages and links between related information.                 |
+| **Overview**             | Quickly return to recent work and see what may need attention.                               |
+| **Browser Inbox**        | Send pages, links, selections and files from a browser into Verstak.                         |
+| **Activity and Journal** | Reconstruct work sessions and turn selected activity into journal entries.                   |
+| **Todo**                 | Keep optional task lists inside individual workspaces and across the whole vault.            |
+| **Search**               | Search across notes, files and supported plugin data.                                        |
+| **Trash**                | Restore deleted items or remove them permanently from one central location.                  |
+| **Secrets**              | Keep credentials and access information connected to the relevant workspace.                 |
+| **Templates**            | Create repeatable workspace structures for common types of work.                             |
+| **Plugins**              | Add, replace or disable tools without turning Verstak into one rigid monolithic application. |
+| **Optional sync**        | Synchronize vaults between devices using a self-hosted Verstak Sync Server.                  |
+
+## Download and install
+
+Download the latest build from the
+[GitHub Releases page](https://github.com/mirivlad/verstak/releases/latest).
+
+Release packages already include the matching official plugins.
+
+| System                            | Download                                  | Installation                                  |
+| --------------------------------- | ----------------------------------------- | --------------------------------------------- |
+| Debian 13 / Ubuntu 24.04 or newer | `verstak_<version>_amd64.deb`             | Install through APT.                          |
+| Other x86_64 Linux distributions  | `verstak-linux-x86_64-<version>.AppImage` | Make the file executable and run it.          |
+| Windows 10/11 x64                 | `verstak-windows-amd64-<version>.zip`     | Extract the archive and launch `Verstak.cmd`. |
+
+### Debian and Ubuntu
+
+```bash
+sudo apt install ./verstak_*_amd64.deb
+```
+
+Launch Verstak from the application menu or run:
+
+```bash
+verstak
+```
+
+### AppImage
+
+```bash
+chmod +x verstak-linux-x86_64-*.AppImage
+./verstak-linux-x86_64-*.AppImage
+```
+
+On a system without FUSE support:
+
+```bash
+APPIMAGE_EXTRACT_AND_RUN=1 ./verstak-linux-x86_64-*.AppImage
+```
+
+### Windows portable version
+
+1. Download `verstak-windows-amd64-<version>.zip`.
+2. Extract it to a local directory.
+3. Run `Verstak.cmd`.
+
+Do not run Verstak directly from inside the ZIP archive or from a network share.
+
+Verstak uses the Microsoft WebView2 Runtime. It is already included with Windows 11 and most current Windows 10 installations. If Verstak does not start, install the
+[Microsoft WebView2 Runtime x64](https://go.microsoft.com/fwlink/p/?LinkId=2124701).
+
+## Background and tray mode
+
+Closing the main window keeps Verstak running in the system tray. Use **Show Verstak** to bring it back and **Quit** to exit the application completely. This lets scheduled Todo reminders continue while the window is hidden.
+
+### Verify a download
+
+Each release includes a `SHA256SUMS` file.
+
+On Linux:
+
+```bash
+sha256sum -c SHA256SUMS --ignore-missing
+```
+
+## First start
+
+### 1. Create or open a vault
+
+A **vault** is the root directory where Verstak stores your work.
+
+Choose a writable local directory. For example:
+
+```text
+Documents/
+└── Verstak/
+```
+
+Your files and notes remain ordinary files that can be accessed without Verstak.
+
+### 2. Create your first workspace
+
+Inside the vault, create a workspace for a project, client, server, device or another area of work.
+
+For example:
+
+```text
+Home server
+Customer Alpha
+Verstak development
+3D printer
+Training course
+```
+
+### 3. Add context
+
+Open the workspace and add the information needed to return to it later:
+
+* notes and decisions;
+* documents and source files;
+* useful links;
+* access information;
+* journal entries;
+* tasks;
+* materials captured from the browser.
+
+### 4. Return through Overview
+
+The Overview screen shows recent changes, unfinished captures, activity and other useful entry points back into your work.
+
+## How Verstak stores data
+
+Verstak follows several principles:
+
+* your vault is local and works without an account or internet connection;
+* files and notes remain readable outside the application;
+* synchronization is optional and is not the source of truth;
+* the user should understand where data is stored and what happens to it;
+* application tools are provided by plugins rather than being permanently embedded into the core.
+
+The desktop application loads plugins from a `plugins/` directory located beside the executable.
+
+## Browser integration
+
+The optional browser extension can send the following into Browser Inbox:
+
+* the current page;
+* selected text;
+* a link;
+* a downloaded or selected file.
+
+Repository:
+
+[mirivlad/verstak-browser-extension](https://github.com/mirivlad/verstak-browser-extension)
+
+To connect the extension:
+
+1. Open Browser Inbox settings in Verstak.
+2. Copy the Receiver URL and Pairing Token.
+3. Paste them into the extension settings.
+4. Save the settings and send a test page.
+
+Passive domain activity tracking is disabled by default. When enabled, it sends bounded time totals by normalized domain. It does not send page contents, keystrokes or full browsing history.
+
+## Optional synchronization
+
+Local use does not require a server.
+
+For synchronization between devices, deploy the optional self-hosted
+[Verstak Sync Server](https://github.com/mirivlad/verstak-sync-server).
+
+Each vault is connected separately. The local vault remains the primary copy of your data.
+
+## Build from source
+
+### Requirements
+
+* Go 1.24 or newer;
+* Node.js 20 or newer with npm;
+* Python 3;
+* Git;
+* Wails v2 build dependencies;
+* WebKitGTK development packages on Linux.
+* Ayatana AppIndicator development files on Linux (`sudo apt install libayatana-appindicator3-dev`).
+
+See the
+[Wails installation documentation](https://wails.io/docs/gettingstarted/installation/)
+for distribution-specific dependencies.
+
+### Clone the repositories
+
+The desktop, SDK and official plugin repositories must be cloned as sibling directories:
 
 ```text
 verstak-workspace/
 ├── verstak/
 ├── verstak-sdk/
-├── verstak-official-plugins/
-└── verstak-browser-extension/   # optional for browser integration
+└── verstak-official-plugins/
 ```
 
 ```bash
-git clone https://github.com/mirivlad/verstak.git verstak
-git clone https://github.com/mirivlad/verstak-sdk.git verstak-sdk
-git clone https://github.com/mirivlad/verstak-official-plugins.git verstak-official-plugins
-git clone https://github.com/mirivlad/verstak-browser-extension.git verstak-browser-extension
+mkdir verstak-workspace
+cd verstak-workspace
 
-cd verstak-sdk && ./scripts/build.sh
-cd ../verstak-official-plugins && ./scripts/build.sh
+git clone https://github.com/mirivlad/verstak.git
+git clone https://github.com/mirivlad/verstak-sdk.git
+git clone https://github.com/mirivlad/verstak-official-plugins.git
+```
+
+### Build
+
+```bash
+cd verstak-sdk
+./scripts/build.sh
+
+cd ../verstak-official-plugins
+./scripts/build.sh
+
 cd ../verstak
 ./scripts/install-dev-plugins.sh
 ./scripts/build.sh
 ```
 
-`install-dev-plugins.sh` copies the packages from
-`../verstak-official-plugins/dist/` into this repository's `plugins/`
-directory. `build.sh` then copies them to `build/bin/plugins/`, beside the
-desktop executable:
+The resulting application will be located at:
 
 ```bash
 ./build/bin/verstak-desktop
 ```
 
-For a manually assembled installation, place each unpacked plugin directory
-directly in `plugins/` beside `verstak-desktop`; for example,
-`plugins/browser-inbox/plugin.json`. Do not put the release archive itself in
-that directory. The desktop release archive already includes its matching
-`plugins/` directory.
-
-Start with `--debug` to show internal plugin-provider identifiers and write
-diagnostic logs:
+Run it with additional diagnostics:
 
 ```bash
 ./build/bin/verstak-desktop --debug
 ```
 
-## Portable test artifacts
+## Build release packages locally
 
-These commands make local alpha artifacts in `release/`. They do not create a
-GitHub Release.
+These commands create local artifacts in `release/`. They do not publish a GitHub Release.
+
+### Debian package
 
 ```bash
-# Debian 13 / Ubuntu 24.04 or later. APT installs WebKitGTK dependencies.
 ./scripts/package-deb.sh v0.1.0-alpha.1
+```
 
-# Portable Linux x86_64 AppImage with bundled WebKitGTK runtime and plugins.
+### AppImage
+
+```bash
 ./scripts/package-appimage.sh v0.1.0-alpha.1
 ```
 
-Install the Debian package with `sudo apt install ./release/verstak_*.deb`,
-then launch `verstak`. Run the AppImage directly after making it executable:
+### Windows portable ZIP
 
-```bash
-chmod +x release/verstak-linux-x86_64-v0.1.0-alpha.1.AppImage
-./release/verstak-linux-x86_64-v0.1.0-alpha.1.AppImage
-```
-
-On distributions without FUSE support, use
-`APPIMAGE_EXTRACT_AND_RUN=1 ./release/verstak-linux-x86_64-v0.1.0-alpha.1.AppImage`.
-
-Build the Windows portable ZIP on Linux with MinGW:
+The Windows archive can be cross-compiled on Linux using MinGW:
 
 ```bash
 sudo apt install gcc-mingw-w64-x86-64 zip
 ./scripts/package-windows-portable.sh v0.1.0-alpha.1
 ```
 
-The ZIP uses the x64 Evergreen Microsoft WebView2 Runtime installed in Windows
-and writes `release/verstak-windows-amd64-<version>.zip`. Extract it to a local
-disk (not a network share) and launch `Verstak.cmd`. Windows 11 and most
-Windows 10 installations already include this runtime. If Verstak does not
-start, install the official [Microsoft WebView2 Runtime x64 standalone
-installer](https://go.microsoft.com/fwlink/p/?LinkId=2124701), then launch it
-again.
+## Project repositories
 
-Each format is listed in `release/SHA256SUMS` after packaging.
+| Repository                                                                         | Purpose                                                |
+| ---------------------------------------------------------------------------------- | ------------------------------------------------------ |
+| [verstak](https://github.com/mirivlad/verstak)                                     | Desktop application, core platform and UI shell        |
+| [verstak-official-plugins](https://github.com/mirivlad/verstak-official-plugins)   | Official Files, Notes, Journal, Todo and other plugins |
+| [verstak-sdk](https://github.com/mirivlad/verstak-sdk)                             | TypeScript SDK, schemas and plugin contracts           |
+| [verstak-browser-extension](https://github.com/mirivlad/verstak-browser-extension) | Browser capture and optional activity integration      |
+| [verstak-sync-server](https://github.com/mirivlad/verstak-sync-server)             | Optional self-hosted synchronization server            |
+| [verstak-docs](https://github.com/mirivlad/verstak-docs)                           | Product and platform architecture documentation        |
 
-## First local vault
+Compatible components should be built from the same release line.
 
-1. Launch the desktop application and choose or create a writable vault folder.
-   Verstak stores its local metadata in that vault; do not point it at a
-   read-only directory.
-2. Create a Дело (workspace) in the Files plugin before assigning captures or
-   activity to it.
-3. Open Notes, Files, Activity and Journal as needed. Activity candidates are
-   only suggestions: a Journal entry and a new Дело are always created by the
-   user.
+## Development status
 
-## Browser extension
+Verstak is under active development.
 
-The extension is optional. Build it locally with `npm ci && npm test && npm run
-build` in `verstak-browser-extension/`, then load `dist/chromium` as an
-unpacked Chromium extension or `dist/firefox` temporarily in Firefox. A signed
-Firefox XPI is available from the [extension's GitHub
-Releases](https://github.com/mirivlad/verstak-browser-extension/releases).
+The current alpha is intended for testing, feedback and experimentation. Backward compatibility is not guaranteed until the first stable release.
 
-To connect it to the desktop application:
-
-1. Ensure the `browser-inbox` plugin is installed and open its settings in
-   Verstak.
-2. Copy the displayed Receiver URL and Pairing Token.
-3. Paste both values into the extension's settings and save.
-4. Use a manual Send Page, selection, link or file action to create a Browser
-   Inbox capture.
-
-Passive domain activity is disabled by default. When the user explicitly turns
-it on, the extension sends only bounded time totals by normalized domain. It
-does not send URLs, page titles, page contents, keystrokes, navigation history
-or inactive-tab time. The extension settings provide a domain exclusion list.
-
-## Optional sync server
-
-The sync server is self-hosted and is not required for local use. Build and
-start a development instance from a sibling checkout:
-
-```bash
-git clone https://github.com/mirivlad/verstak-sync-server.git verstak-sync-server
-cd verstak-sync-server
-./scripts/build.sh
-./build/bin/verstak-sync-server --port 47732 --data ./server-data \
-  --admin-user admin --admin-pass 'choose-a-strong-password'
-```
-
-For a second device or a production host, follow the deployment, HTTPS and
-backup guidance in the [sync server
-README](https://github.com/mirivlad/verstak-sync-server#readme). In the desktop
-application, open the Sync plugin, enter the server URL and user credentials,
-test the connection, then select **Connect**. Each vault is paired separately.
-
-## Separate plugin archives
-
-The desktop artifacts already include matching official plugins. To distribute
-plugins separately, build OS-specific archives in the sibling repository:
-
-```bash
-cd ../verstak-official-plugins
-sudo apt install gcc-mingw-w64-x86-64 zip
-./scripts/package-portable.sh v0.1.0-alpha.1
-```
-
-It writes a Linux `tar.gz` and a Windows ZIP. Both archives expand directly
-into the `plugins/` directory beside the corresponding desktop executable.
-Separate archives are required because `platform-test` includes a native
-sidecar for its target OS.
-
-## Publish a GitHub Release
-
-```bash
-./scripts/publish-github-release.sh v0.1.0-alpha.1
-```
-
-The command requires an authenticated [`gh`](https://cli.github.com/) CLI, a
-clean local `main` equal to `origin/main`, and the sibling official-plugins
-checkout. It builds the Debian package, Linux AppImage and Windows portable
-ZIP, then creates or updates the GitHub Release with those three artifacts and
-`SHA256SUMS`. Alpha, beta and release-candidate tags are marked as GitHub
-prereleases; stable tags are marked latest. The command creates an annotated
-tag when needed and pushes it through `origin`, which also mirrors tags in this
-checkout. Publish the compatible official-plugins release before the desktop
-release that embeds those plugins.
+Bug reports and feature discussions are welcome in
+[GitHub Issues](https://github.com/mirivlad/verstak/issues).
 
 ## License
 
-Copyright © 2026 Verstak contributors. Licensed under
-[GNU AGPLv3 or later](LICENSE).
+Copyright © 2026 Verstak contributors.
+
+Verstak is licensed under the
+[GNU Affero General Public License v3.0 or later](LICENSE).
