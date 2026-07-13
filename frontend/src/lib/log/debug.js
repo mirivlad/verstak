@@ -127,9 +127,11 @@ export var debug = {
   log: log,
   logf: logf,
   isEnabled: function () { return ENABLED; },
-  enable: function () {
+  enable: function (options) {
     ENABLED = true;
-    try { localStorage.setItem('verstak-debug', 'true'); } catch (e) {}
+    if (!options || options.persist !== false) {
+      try { localStorage.setItem('verstak-debug', 'true'); } catch (e) {}
+    }
   },
   disable: function () {
     ENABLED = false;

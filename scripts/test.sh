@@ -43,6 +43,10 @@ WAILS_BINDINGS_STATUS=0
 (cd "$ROOT" && node frontend/tests/wails-bindings-test.mjs) || WAILS_BINDINGS_STATUS=$?
 report "Wails notification bindings" "$WAILS_BINDINGS_STATUS"
 
+DEBUG_MODE_STATUS=0
+(cd "$ROOT" && node --experimental-vm-modules frontend/tests/debug-mode-test.mjs) || DEBUG_MODE_STATUS=$?
+report "session-only debug mode" "$DEBUG_MODE_STATUS"
+
 # ── Frontend tests ──
 echo "[frontend]"
 if ensure_npm_deps "$ROOT/frontend"; then
