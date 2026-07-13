@@ -2,6 +2,7 @@
 frontend/node_modules/
 frontend/dist/
 build/bin/verstak-desktop
+build/windows-amd64/
 smoke-platform
 plugins/
 vendor/

@@ -78,6 +78,30 @@ diagnostic logs:
 ./build/bin/verstak-desktop --debug
 ```
 
+## Windows test bundle from Linux
+
+The current Windows path is intended for manual testing, not publication. On a
+Linux host install MinGW, then run:
+
+```bash
+sudo apt install gcc-mingw-w64-x86-64
+./scripts/build-windows.sh
+```
+
+The script builds Windows amd64 plugin packages from the sibling
+`verstak-official-plugins` checkout, cross-compiles the Wails host, and writes
+a folder ready to copy to a Windows machine:
+
+```text
+build/windows-amd64/
+├── verstak-desktop.exe
+└── plugins/
+```
+
+Copy the whole directory to Windows and run `verstak-desktop.exe`. Windows
+requires the Microsoft WebView2 Runtime; Windows 11 normally includes it.
+No Windows GitHub Release is created by this command.
+
 ## First local vault
 
 1. Launch the desktop application and choose or create a writable vault folder.
