@@ -188,21 +188,19 @@ sidecar for its target OS.
 
 ## Publish a GitHub Release
 
-The current publisher still uses the legacy Linux tarball. It will be switched
-to the portable artifacts after they have been manually checked:
-
 ```bash
 ./scripts/publish-github-release.sh v0.1.0-alpha.1
 ```
 
 The command requires an authenticated [`gh`](https://cli.github.com/) CLI, a
 clean local `main` equal to `origin/main`, and the sibling official-plugins
-checkout. It runs the local release script, creates an annotated Git tag when
-needed, pushes that tag through `origin`, then creates or updates the GitHub
-Release with the archive and `SHA256SUMS`. In this checkout `origin` also
-pushes the tag to the configured mirror; other maintainers can add a second
-push URL if they use a mirror too. Publish the compatible official-plugins
-release before publishing the desktop archive that embeds those plugins.
+checkout. It builds the Debian package, Linux AppImage and Windows portable
+ZIP, then creates or updates the GitHub Release with those three artifacts and
+`SHA256SUMS`. Alpha, beta and release-candidate tags are marked as GitHub
+prereleases; stable tags are marked latest. The command creates an annotated
+tag when needed and pushes it through `origin`, which also mirrors tags in this
+checkout. Publish the compatible official-plugins release before the desktop
+release that embeds those plugins.
 
 ## License
 

@@ -39,15 +39,18 @@ fi
 
 "$RELEASE_SCRIPT" "$VERSION"
 
-shopt -s nullglob
-ASSETS=("$RELEASE_DIR"/*.tar.gz "$RELEASE_DIR"/*.tgz)
-if [[ -f "$RELEASE_DIR/SHA256SUMS" ]]; then
-  ASSETS+=("$RELEASE_DIR/SHA256SUMS")
-fi
-if [[ ${#ASSETS[@]} -eq 0 ]]; then
-  echo "no release assets found in $RELEASE_DIR" >&2
-  exit 1
-fi
+ASSETS=(
+  "$RELEASE_DIR/verstak_${VERSION#v}_amd64.deb"
+  "$RELEASE_DIR/verstak-linux-x86_64-$VERSION.AppImage"
+  "$RELEASE_DIR/verstak-windows-amd64-$VERSION.zip"
+  "$RELEASE_DIR/SHA256SUMS"
+)
+for asset in "${ASSETS[@]}"; do
+  if [[ ! -s "$asset" ]]; then
+    echo "required release asset is missing or empty: $asset" >&2
+    exit 1
+  fi
+done
 
 if "$GIT_BIN" rev-parse -q --verify "refs/tags/$VERSION" >/dev/null; then
   if [[ "$("$GIT_BIN" rev-parse "${VERSION}^{commit}")" != "$HEAD" ]]; then
@@ -62,12 +65,16 @@ fi
 if "$GH_BIN" release view "$VERSION" --repo "$REPOSITORY" >/dev/null 2>&1; then
   "$GH_BIN" release upload "$VERSION" "${ASSETS[@]}" --repo "$REPOSITORY" --clobber
 else
+  RELEASE_OPTIONS=(--generate-notes --verify-tag)
+  if [[ "$VERSION" == *-* ]]; then
+    RELEASE_OPTIONS+=(--prerelease)
+  else
+    RELEASE_OPTIONS+=(--latest)
+  fi
   "$GH_BIN" release create "$VERSION" "${ASSETS[@]}" \
     --repo "$REPOSITORY" \
     --title "Verstak $VERSION" \
-    --generate-notes \
-    --latest \
-    --verify-tag
+    "${RELEASE_OPTIONS[@]}"
 fi
 
 echo "GitHub release:"

@@ -10,40 +10,17 @@ if [[ -z "$VERSION" || ! "$VERSION" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]]; then
   exit 2
 fi
 
-if ! command -v pkg-config >/dev/null || \
-  (! pkg-config --exists webkit2gtk-4.1 && ! pkg-config --exists webkit2gtk-4.0); then
-  echo "Linux desktop releases require libwebkit2gtk-4.1-dev or libwebkit2gtk-4.0-dev." >&2
-  exit 1
-fi
-
-OFFICIAL_PLUGINS="${VERSTAK_OFFICIAL_PLUGINS_DIR:-$ROOT/../verstak-official-plugins}"
-if [[ ! -d "$OFFICIAL_PLUGINS" ]]; then
-  echo "official plugins repository not found: $OFFICIAL_PLUGINS" >&2
-  exit 1
-fi
-
 echo "=== verstak desktop release $VERSION ==="
-(cd "$OFFICIAL_PLUGINS" && ./scripts/build.sh)
-"$ROOT/scripts/install-dev-plugins.sh"
-"$ROOT/scripts/build.sh"
-
-BINARY="$(find "$ROOT/build/bin" -maxdepth 1 -type f -name 'verstak-desktop*' -print -quit)"
-if [[ -z "$BINARY" ]]; then
-  echo "desktop binary was not produced in build/bin" >&2
-  exit 1
-fi
-
 RELEASE_ROOT="$ROOT/release"
-STAGING="$RELEASE_ROOT/verstak-desktop-$VERSION-linux-amd64"
-ARCHIVE="$RELEASE_ROOT/verstak-desktop-linux-amd64-$VERSION.tar.gz"
-rm -rf "$STAGING" "$ARCHIVE"
-mkdir -p "$STAGING"
+rm -rf "$RELEASE_ROOT"
+mkdir -p "$RELEASE_ROOT"
 
-cp "$BINARY" "$STAGING/verstak-desktop"
-cp "$ROOT/README.md" "$ROOT/LICENSE" "$STAGING/"
-cp -R "$ROOT/plugins" "$STAGING/plugins"
-tar -C "$RELEASE_ROOT" -czf "$ARCHIVE" "$(basename "$STAGING")"
-(cd "$RELEASE_ROOT" && sha256sum "$(basename "$ARCHIVE")" > SHA256SUMS)
+"$ROOT/scripts/package-deb.sh" "$VERSION"
+"$ROOT/scripts/package-appimage.sh" "$VERSION"
+"$ROOT/scripts/package-windows-portable.sh" "$VERSION"
 
-echo "release archive: $ARCHIVE"
-echo "checksums:       $RELEASE_ROOT/SHA256SUMS"
+(cd "$RELEASE_ROOT" && find . -maxdepth 1 -type f \( -name '*.deb' -o -name '*.AppImage' -o -name '*.zip' \) \
+  -printf '%f\n' | LC_ALL=C sort | xargs -r sha256sum > SHA256SUMS)
+
+echo "release assets: $RELEASE_ROOT"
+echo "checksums:      $RELEASE_ROOT/SHA256SUMS"

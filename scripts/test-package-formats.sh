@@ -33,6 +33,9 @@ fi
 grep -Fq 'zip -qr' "$ROOT/scripts/package-windows-portable.sh"
 grep -Fq 'LinkId=2124701' "$ROOT/README.md"
 grep -Fq 'WebView2 Runtime' "$ROOT/README.md"
+grep -Fq 'package-deb.sh' "$ROOT/scripts/release.sh"
+grep -Fq 'package-appimage.sh' "$ROOT/scripts/release.sh"
+grep -Fq 'package-windows-portable.sh' "$ROOT/scripts/release.sh"
 grep -Fq 'chmod -R a+rX' "$ROOT/scripts/build-linux-bundle.sh"
 
 echo "desktop package script contracts passed"
