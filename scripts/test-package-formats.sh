@@ -16,8 +16,11 @@ grep -Fq 'dpkg-deb' "$ROOT/scripts/package-deb.sh"
 grep -Fq -- '--build' "$ROOT/scripts/package-deb.sh"
 grep -Fq 'packaging/deb/control' "$ROOT/scripts/package-deb.sh"
 grep -Fq 'libwebkit2gtk-4.1-0' "$ROOT/packaging/deb/control"
+grep -Fq 'libayatana-appindicator3-1' "$ROOT/packaging/deb/control"
 grep -Fq 'appimagetool' "$ROOT/scripts/package-appimage.sh"
 grep -Fq 'WebKitWebProcess' "$ROOT/scripts/package-appimage.sh"
+grep -Fq 'libayatana-appindicator3.so.' "$ROOT/scripts/package-appimage.sh"
+grep -Fq 'ayatana-appindicator3-0.1' "$ROOT/scripts/build.sh"
 if grep -Fq 'FixedVersionRuntime' "$ROOT/scripts/package-windows-portable.sh"; then
   echo "Windows portable archive must not bundle Fixed Version WebView2" >&2
   exit 1

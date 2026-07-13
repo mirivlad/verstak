@@ -105,6 +105,11 @@ while IFS= read -r candidate; do
 done < "$APPDIR/.elf-queue"
 rm -f "$APPDIR/.elf-queue"
 
+if ! compgen -G "$APPDIR/usr/lib/libayatana-appindicator3.so.*" >/dev/null; then
+  echo "native tray runtime library was not bundled" >&2
+  exit 1
+fi
+
 if command -v glib-compile-schemas >/dev/null; then
   glib-compile-schemas "$APPDIR/usr/share/glib-2.0/schemas"
 fi
