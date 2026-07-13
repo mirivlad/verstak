@@ -231,7 +231,7 @@ Expected: absent packages/methods.
 
 - [ ] **Step 3: Implement adapter and Wails wiring**
 
-Add `github.com/getlantern/systray@v1.2.2`. The production adapter calls nonblocking `systray.Register`, sets an embedded existing icon, and starts goroutines for the two click channels. `main.go` embeds `build/windows/icon.ico` and `build/appicon.png`, registers `OnBeforeClose`, and uses `options.SingleInstanceLock` whose second launch calls `app.ShowWindow`.
+Add `github.com/getlantern/systray@v1.2.2`. The production adapter calls nonblocking `systray.Register`, sets compact source-controlled PNG bytes derived from the existing tracked logo, and starts goroutines for the two click channels. `main.go` registers `OnBeforeClose` and uses `options.SingleInstanceLock` whose second launch calls `app.ShowWindow`. Do not embed ignored Wails-generated files from `build/`.
 
 - [ ] **Step 4: Verify and commit**
 
@@ -339,4 +339,3 @@ gh release view v0.1.0-alpha.2 -R mirivlad/verstak
 ```
 
 The final report distinguishes automated verification from the two required real desktop manual checks: tray close/show/quit and a near-future Todo notification while the window is hidden.
-

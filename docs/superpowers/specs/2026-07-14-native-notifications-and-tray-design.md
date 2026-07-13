@@ -36,9 +36,10 @@ of creating a second process.
 
 The implementation uses `github.com/getlantern/systray` through a small
 `internal/shell/tray` adapter. It uses `Register`, rather than its blocking
-`Run`, so Wails remains the owner of the GUI event loop. The current project
-icon is embedded in the executable; Windows receives the existing `.ico`, and
-Linux receives the existing PNG.
+`Run`, so Wails remains the owner of the GUI event loop. A compact PNG derived
+from the tracked project logo is encoded in the tray package, so a clean build
+does not depend on ignored Wails-generated icon files. The library accepts PNG
+icon bytes on both target platforms.
 
 ## Notification capability and permission
 
