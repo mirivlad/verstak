@@ -126,6 +126,28 @@ copies non-glibc runtime libraries. Its verification is extended to prove that
 the appindicator library is present in the AppDir when the tray implementation
 is compiled in.
 
+## Public README and product screenshots
+
+The workspace-root `README.md` and `README.ru.md` supplied by the maintainer
+become the public repository documents: the English source replaces this
+repository's `README.md`, and the Russian source is committed as
+`README.ru.md`. Their existing language links and public-release instructions
+are retained.
+
+Three screenshots are captured from the real desktop application using the
+test vault, then committed under `docs/screenshots/`:
+
+1. `overview.png` — returning to recent work and useful next actions;
+2. `workspace-files-notes.png` — ordinary vault files and Markdown notes in a
+   workspace;
+3. `activity-journal.png` — review of a factual activity session as a Journal
+   entry.
+
+Both README variants include the same three images with localized alt text.
+They are factual UI captures, not generated illustrative mockups. Capture data
+must be limited to the disposable test vault and inspected before commit so no
+credentials or personal content are published.
+
 ## Test and manual verification
 
 Automated tests cover:
@@ -146,3 +168,6 @@ assert a real desktop notification area or OS toast:
    observe one native notification.
 3. Quit before a future reminder, relaunch after it expires, and observe one
    overdue notification with no duplicate on the next scheduler scan.
+4. Inspect all three README screenshots at their committed size and confirm
+   that they show only intended test-vault data and explain the feature named
+   in their localized captions.
