@@ -11,7 +11,9 @@ fi
 
 bash -n "$BUILDER"
 grep -Fq -- '-platform windows/amd64' "$BUILDER"
-grep -Fq -- '-compiler "$WINDOWS_CC"' "$BUILDER"
+grep -Fq 'CC="$WINDOWS_CC"' "$BUILDER"
+grep -Fq 'CGO_ENABLED=1' "$BUILDER"
+grep -Fq -- '-webview2 error' "$BUILDER"
 grep -Fq 'dist-windows' "$BUILDER"
 grep -Fq 'verstak-desktop.exe' "$BUILDER"
 grep -Fq 'x86_64-w64-mingw32-gcc' "$BUILDER"

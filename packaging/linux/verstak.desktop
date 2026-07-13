@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Verstak
+Comment=Local-first workspace
+Exec=verstak-desktop %U
+Icon=verstak
+Terminal=false
+Categories=Office;Utility;
+StartupNotify=true

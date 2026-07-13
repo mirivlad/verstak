@@ -26,8 +26,7 @@ No server account or browser extension is needed for a local desktop vault.
 
 ## Build the desktop and official plugins
 
-The current release scripts target Linux. Install Go 1.24+, Node.js 20+ with
-npm, Python 3, the [Wails v2 build
+To build from source, install Go 1.24+, Node.js 20+ with npm, Python 3, the [Wails v2 build
 prerequisites](https://wails.io/docs/gettingstarted/installation/), and your
 distribution's WebKitGTK development package.
 
@@ -78,29 +77,45 @@ diagnostic logs:
 ./build/bin/verstak-desktop --debug
 ```
 
-## Windows test bundle from Linux
+## Portable test artifacts
 
-The current Windows path is intended for manual testing, not publication. On a
-Linux host install MinGW, then run:
+These commands make local alpha artifacts in `release/`. They do not create a
+GitHub Release.
 
 ```bash
-sudo apt install gcc-mingw-w64-x86-64
-./scripts/build-windows.sh
+# Debian 13 / Ubuntu 24.04 or later. APT installs WebKitGTK dependencies.
+./scripts/package-deb.sh v0.1.0-alpha.1
+
+# Portable Linux x86_64 AppImage with bundled WebKitGTK runtime and plugins.
+./scripts/package-appimage.sh v0.1.0-alpha.1
 ```
 
-The script builds Windows amd64 plugin packages from the sibling
-`verstak-official-plugins` checkout, cross-compiles the Wails host, and writes
-a folder ready to copy to a Windows machine:
+Install the Debian package with `sudo apt install ./release/verstak_*.deb`,
+then launch `verstak`. Run the AppImage directly after making it executable:
 
-```text
-build/windows-amd64/
-├── verstak-desktop.exe
-└── plugins/
+```bash
+chmod +x release/verstak-linux-x86_64-v0.1.0-alpha.1.AppImage
+./release/verstak-linux-x86_64-v0.1.0-alpha.1.AppImage
 ```
 
-Copy the whole directory to Windows and run `verstak-desktop.exe`. Windows
-requires the Microsoft WebView2 Runtime; Windows 11 normally includes it.
-No Windows GitHub Release is created by this command.
+On distributions without FUSE support, use
+`APPIMAGE_EXTRACT_AND_RUN=1 ./release/verstak-linux-x86_64-v0.1.0-alpha.1.AppImage`.
+
+Build the Windows portable ZIP on Linux with MinGW:
+
+```bash
+sudo apt install gcc-mingw-w64-x86-64 cabextract zip
+./scripts/package-windows-portable.sh v0.1.0-alpha.1
+```
+
+The script downloads the current x64 Microsoft Fixed Version WebView2 Runtime,
+bundles it next to `verstak-desktop.exe`, and writes
+`release/verstak-windows-amd64-<version>.zip`. On Windows, extract the ZIP to a
+local disk (not a network share) and launch `Verstak.cmd`. No separate WebView2
+installation or download is required. To make a reproducible build from an
+already downloaded CAB, set `VERSTAK_WEBVIEW2_CAB=/path/to/FixedVersionRuntime.x64.cab`.
+
+Each format is listed in `release/SHA256SUMS` after packaging.
 
 ## First local vault
 
@@ -154,25 +169,26 @@ README](https://github.com/mirivlad/verstak-sync-server#readme). In the desktop
 application, open the Sync plugin, enter the server URL and user credentials,
 test the connection, then select **Connect**. Each vault is paired separately.
 
-## Release artifacts
+## Separate plugin archives
 
-Maintainers can produce a self-contained Linux desktop archive after the SDK
-and official plugins have been built:
+The desktop artifacts already include matching official plugins. To distribute
+plugins separately, build OS-specific archives in the sibling repository:
 
 ```bash
-cd verstak
-./scripts/release.sh v0.1.0-alpha.1
+cd ../verstak-official-plugins
+sudo apt install gcc-mingw-w64-x86-64 zip
+./scripts/package-portable.sh v0.1.0-alpha.1
 ```
 
-It writes `release/verstak-desktop-linux-amd64-<version>.tar.gz` and a matching
-`SHA256SUMS` file. Unpack the archive and run the included executable; its
-matching plugins are already in the archive. The browser extension, SDK,
-official plugins and sync server have their own build or release instructions
-in their repositories.
+It writes a Linux `tar.gz` and a Windows ZIP. Both archives expand directly
+into the `plugins/` directory beside the corresponding desktop executable.
+Separate archives are required because `platform-test` includes a native
+sidecar for its target OS.
 
 ## Publish a GitHub Release
 
-After checking the local archive, publish the same assets to GitHub:
+The current publisher still uses the legacy Linux tarball. It will be switched
+to the portable artifacts after they have been manually checked:
 
 ```bash
 ./scripts/publish-github-release.sh v0.1.0-alpha.1

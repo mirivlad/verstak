@@ -243,7 +243,7 @@ func main() {
 	}
 
 	// ─── Wails App ───────────────────────────────────────────
-	err = wails.Run(&options.App{
+	appOptions := &options.App{
 		Title:            "Verstak",
 		Width:            1200,
 		Height:           800,
@@ -257,7 +257,9 @@ func main() {
 		Bind: []interface{}{
 			app,
 		},
-	})
+	}
+	applyPlatformOptions(appOptions)
+	err = wails.Run(appOptions)
 
 	if err != nil {
 		log.Fatalf("Error: %v", err)

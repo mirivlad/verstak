@@ -53,9 +53,12 @@ if [[ ! -d "$WINDOWS_PLUGIN_DIST" ]]; then
   exit 1
 fi
 
-# Wails generates Windows resources and invokes the supplied MinGW compiler.
-# -clean resets build/bin, so copy the finished executable only afterwards.
-"$WAILS" build -clean -platform windows/amd64 -compiler "$WINDOWS_CC" -o verstak-desktop.exe
+# Wails' -compiler option selects a Go binary, not a C compiler. Cross-CGO
+# therefore has to be supplied through the standard Go environment instead.
+# The runtime is bundled by package-windows-portable.sh, so never compile an
+# Evergreen downloader into the portable executable.
+CC="$WINDOWS_CC" CGO_ENABLED=1 "$WAILS" build -clean -platform windows/amd64 \
+  -webview2 error -o verstak-desktop.exe
 
 WINDOWS_BINARY="$ROOT/build/bin/verstak-desktop.exe"
 if [[ ! -f "$WINDOWS_BINARY" ]]; then
