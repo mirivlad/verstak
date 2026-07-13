@@ -36,6 +36,7 @@ grep -Fq 'WebView2 Runtime' "$ROOT/README.md"
 grep -Fq 'package-deb.sh' "$ROOT/scripts/release.sh"
 grep -Fq 'package-appimage.sh' "$ROOT/scripts/release.sh"
 grep -Fq 'package-windows-portable.sh' "$ROOT/scripts/release.sh"
+git -C "$ROOT" check-ignore -q verstak-desktop-res.syso
 grep -Fq 'chmod -R a+rX' "$ROOT/scripts/build-linux-bundle.sh"
 
 echo "desktop package script contracts passed"

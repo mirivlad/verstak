@@ -2,6 +2,7 @@
 frontend/node_modules/
 frontend/dist/
 build/
+verstak-desktop-res.syso
 smoke-platform
 plugins/
 vendor/
