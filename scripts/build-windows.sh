@@ -55,8 +55,8 @@ fi
 
 # Wails' -compiler option selects a Go binary, not a C compiler. Cross-CGO
 # therefore has to be supplied through the standard Go environment instead.
-# The runtime is bundled by package-windows-portable.sh, so never compile an
-# Evergreen downloader into the portable executable.
+# The portable archive uses the installed Evergreen WebView2 Runtime, so never
+# compile an Evergreen downloader into the executable.
 CC="$WINDOWS_CC" CGO_ENABLED=1 "$WAILS" build -clean -platform windows/amd64 \
   -webview2 error -o verstak-desktop.exe
 

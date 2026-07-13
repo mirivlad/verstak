@@ -104,16 +104,17 @@ On distributions without FUSE support, use
 Build the Windows portable ZIP on Linux with MinGW:
 
 ```bash
-sudo apt install gcc-mingw-w64-x86-64 cabextract zip
+sudo apt install gcc-mingw-w64-x86-64 zip
 ./scripts/package-windows-portable.sh v0.1.0-alpha.1
 ```
 
-The script downloads the current x64 Microsoft Fixed Version WebView2 Runtime,
-bundles it next to `verstak-desktop.exe`, and writes
-`release/verstak-windows-amd64-<version>.zip`. On Windows, extract the ZIP to a
-local disk (not a network share) and launch `Verstak.cmd`. No separate WebView2
-installation or download is required. To make a reproducible build from an
-already downloaded CAB, set `VERSTAK_WEBVIEW2_CAB=/path/to/FixedVersionRuntime.x64.cab`.
+The ZIP uses the x64 Evergreen Microsoft WebView2 Runtime installed in Windows
+and writes `release/verstak-windows-amd64-<version>.zip`. Extract it to a local
+disk (not a network share) and launch `Verstak.cmd`. Windows 11 and most
+Windows 10 installations already include this runtime. If Verstak does not
+start, install the official [Microsoft WebView2 Runtime x64 standalone
+installer](https://go.microsoft.com/fwlink/p/?LinkId=2124701), then launch it
+again.
 
 Each format is listed in `release/SHA256SUMS` after packaging.
 

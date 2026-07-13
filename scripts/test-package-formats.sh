@@ -18,11 +18,21 @@ grep -Fq 'packaging/deb/control' "$ROOT/scripts/package-deb.sh"
 grep -Fq 'libwebkit2gtk-4.1-0' "$ROOT/packaging/deb/control"
 grep -Fq 'appimagetool' "$ROOT/scripts/package-appimage.sh"
 grep -Fq 'WebKitWebProcess' "$ROOT/scripts/package-appimage.sh"
-grep -Fq 'FixedVersionRuntime' "$ROOT/scripts/package-windows-portable.sh"
-grep -Fq 'msedgewebview2.exe' "$ROOT/scripts/package-windows-portable.sh"
+if grep -Fq 'FixedVersionRuntime' "$ROOT/scripts/package-windows-portable.sh"; then
+  echo "Windows portable archive must not bundle Fixed Version WebView2" >&2
+  exit 1
+fi
+if grep -Fq 'msedgewebview2.exe' "$ROOT/scripts/package-windows-portable.sh"; then
+  echo "Windows portable archive must not bundle WebView2 binaries" >&2
+  exit 1
+fi
+if [[ -e "$ROOT/platform_options_windows.go" ]]; then
+  echo "Windows runtime override must not be present" >&2
+  exit 1
+fi
 grep -Fq 'zip -qr' "$ROOT/scripts/package-windows-portable.sh"
-grep -Fq 'WebviewBrowserPath' "$ROOT/platform_options_windows.go"
-grep -Fq 'webview2' "$ROOT/platform_options_windows.go"
+grep -Fq 'LinkId=2124701' "$ROOT/README.md"
+grep -Fq 'WebView2 Runtime' "$ROOT/README.md"
 grep -Fq 'chmod -R a+rX' "$ROOT/scripts/build-linux-bundle.sh"
 
 echo "desktop package script contracts passed"

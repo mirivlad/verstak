@@ -1,16 +1,7 @@
 # .gitignore
 frontend/node_modules/
 frontend/dist/
-build/bin/verstak-desktop
-build/appicon.png
-build/windows/
-build/windows-amd64/
-build/linux-amd64/
-build/appimage/
-build/deb/
-build/downloads/
-build/tools/
-build/webview2-runtime/
+build/
 smoke-platform
 plugins/
 vendor/

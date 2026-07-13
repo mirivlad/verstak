@@ -258,7 +258,6 @@ func main() {
 			app,
 		},
 	}
-	applyPlatformOptions(appOptions)
 	err = wails.Run(appOptions)
 
 	if err != nil {
