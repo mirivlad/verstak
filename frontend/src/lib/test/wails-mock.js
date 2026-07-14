@@ -715,6 +715,7 @@ import journalSource from '../../../../../verstak-official-plugins/plugins/journ
     caps.push({ name: 'verstak/core/files/v1', description: 'Files API', pluginId: 'verstak-desktop', status: 'stable' });
     caps.push({ name: 'verstak/core/workbench/v1', description: 'Workbench routing', pluginId: 'verstak-desktop', status: 'stable' });
     caps.push({ name: 'verstak/core/sync/v1', description: 'Sync API', pluginId: 'verstak-desktop', status: 'stable' });
+    caps.push({ name: 'verstak/core/notifications/v1', description: 'Native notifications', pluginId: 'verstak-desktop', status: 'stable' });
     for (var id in pluginStates) {
       var s = pluginStates[id];
       if (s.status === 'loaded' && s.enabled && s.manifest && s.manifest.provides) {

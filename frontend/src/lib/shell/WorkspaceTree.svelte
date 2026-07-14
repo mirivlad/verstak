@@ -18,8 +18,11 @@
   let newWorkspaceName = '';
   let workspaceTemplates = [];
   let templatePluginNames = {};
+  let templatePlugins = {};
+  let templateCapabilities = new Set();
   let selectedTemplateId = 'default';
   let createError = '';
+  let templateWarning = null;
   let templatesLoading = false;
   let creating = false;
   let renamingId = '';
@@ -61,17 +64,67 @@
   }
 
   $: selectedTemplate = workspaceTemplates.find(template => template.id === selectedTemplateId) || workspaceTemplates[0] || null;
+  $: selectedTemplateTools = (selectedTemplate?.workspaceTools || []).map((pluginId) => (
+    templateToolState(pluginId, templatePlugins, templateCapabilities, templatePluginNames, tr)
+  ));
+  $: selectedTemplateIssues = selectedTemplateTools.filter(tool => tool.status !== 'available');
 
-  function toolLabel(pluginId) {
-    return templatePluginNames[pluginId] || String(pluginId || '').replace(/^verstak\./, '');
+  function toolLabel(pluginId, names = templatePluginNames) {
+    return names[pluginId] || String(pluginId || '').replace(/^verstak\./, '');
+  }
+
+  function templateToolState(pluginId, plugins, capabilities, names, translate) {
+    const plugin = plugins[pluginId];
+    if (!plugin) {
+      return {
+        pluginId,
+        name: toolLabel(pluginId, names),
+        tabs: [],
+        status: 'unavailable',
+        reason: translate('workspaceTree.templateMissingPlugin'),
+      };
+    }
+
+    const manifest = plugin.manifest || {};
+    const tabs = Array.isArray(manifest.contributes?.workspaceItems)
+      ? manifest.contributes.workspaceItems.map(item => item?.title || item?.id).filter(Boolean)
+      : [];
+    const pluginStatus = String(plugin.status || '').toLowerCase();
+    const missingCapability = Array.isArray(manifest.requires)
+      && manifest.requires.some(capabilityId => !capabilities.has(capabilityId));
+    let status = 'available';
+    let reason = translate('workspaceTree.templateAvailable');
+
+    if (!plugin.enabled || pluginStatus === 'disabled') {
+      status = 'unavailable';
+      reason = translate('workspaceTree.templatePluginDisabled');
+    } else if (pluginStatus === 'missing-required-capability' || missingCapability) {
+      status = 'unavailable';
+      reason = translate('workspaceTree.templateCapabilityUnavailable');
+    } else if (pluginStatus === 'incompatible') {
+      status = 'unavailable';
+      reason = translate('workspaceTree.templateIncompatible');
+    } else if (pluginStatus === 'failed') {
+      status = 'unavailable';
+      reason = translate('workspaceTree.templateLoadFailed');
+    } else if (pluginStatus === 'degraded') {
+      status = 'limited';
+      reason = translate('workspaceTree.templateLimited');
+    } else if (pluginStatus !== 'loaded') {
+      status = 'unavailable';
+      reason = translate('workspaceTree.templateNotReady');
+    }
+
+    return { pluginId, name: manifest.name || toolLabel(pluginId, names), tabs, status, reason };
   }
 
   async function loadWorkspaceTemplates() {
     templatesLoading = true;
     try {
-      const [templates, plugins] = await Promise.all([
+      const [templates, plugins, capabilities] = await Promise.all([
         App.ListWorkspaceTemplates ? App.ListWorkspaceTemplates() : [],
         App.GetPlugins ? App.GetPlugins() : [],
+        App.GetCapabilities ? App.GetCapabilities() : [],
       ]);
       const [list, err] = resultOrError(templates, []);
       if (err) {
@@ -83,12 +136,20 @@
       await Promise.all((Array.isArray(plugins) ? plugins : []).map((plugin) => (
         i18n.loadPlugin(plugin.manifest?.id, plugin.manifest?.localization).catch(() => {})
       )));
-      templatePluginNames = (Array.isArray(plugins) ? plugins : []).map((plugin) => i18n.localizePlugin(plugin)).reduce((names, plugin) => {
+      const localizedPlugins = (Array.isArray(plugins) ? plugins : []).map((plugin) => i18n.localizePlugin(plugin));
+      templatePluginNames = localizedPlugins.reduce((names, plugin) => {
         const id = plugin?.manifest?.id;
         const name = plugin?.manifest?.name;
         if (id && name) names[id] = name;
         return names;
       }, {});
+      templatePlugins = localizedPlugins.reduce((result, plugin) => {
+        const id = plugin?.manifest?.id;
+        if (id) result[id] = plugin;
+        return result;
+      }, {});
+      const [capabilityList] = resultOrError(capabilities, []);
+      templateCapabilities = new Set((Array.isArray(capabilityList) ? capabilityList : []).map(capability => capability?.name).filter(Boolean));
       if (!workspaceTemplates.some(template => template.id === selectedTemplateId)) {
         selectedTemplateId = workspaceTemplates[0]?.id || '';
       }
@@ -177,6 +238,11 @@
       createError = tr('workspaceTree.chooseTemplate');
       return;
     }
+    const creationIssues = selectedTemplateIssues.map(tool => ({
+      pluginId: tool.pluginId,
+      name: tool.name,
+      reason: tool.reason,
+    }));
     creating = true;
     createError = '';
     const [, err] = resultOrError(await App.CreateWorkspace(name, selectedTemplate.id), null);
@@ -191,13 +257,14 @@
     await loadWorkspaces();
     const created = workspaces.find((ws) => wsName(ws) === name);
     if (created) await selectWorkspace(created);
+    templateWarning = creationIssues.length > 0 ? { workspaceName: name, issues: creationIssues } : null;
   }
 
-  function openCreateDialog() {
+  async function openCreateDialog() {
     showCreate = true;
     newWorkspaceName = '';
     createError = '';
-    if (!workspaceTemplates.length && !templatesLoading) loadWorkspaceTemplates();
+    await loadWorkspaceTemplates();
   }
 
   function closeCreateDialog() {
@@ -205,6 +272,10 @@
     showCreate = false;
     newWorkspaceName = '';
     createError = '';
+  }
+
+  function dismissTemplateWarning() {
+    templateWarning = null;
   }
 
   function startRename(workspace) {
@@ -304,6 +375,18 @@
     {/each}
   </div>
 
+  {#if templateWarning}
+    <section class="workspace-template-warning" data-workspace-template-warning role="alert">
+      <div>
+        <strong>{tr('workspaceTree.templateIncompleteCreated', { name: templateWarning.workspaceName })}</strong>
+        {#each templateWarning.issues as issue (issue.pluginId)}
+          <div class="workspace-template-warning-item">{issue.name}: {issue.reason}</div>
+        {/each}
+      </div>
+      <button class="wt-btn" type="button" on:click={dismissTemplateWarning} title={tr('common.close')}>{tr('common.close')}</button>
+    </section>
+  {/if}
+
   {#if showCreate}
     <div class="workspace-create-overlay" data-workspace-create-modal role="dialog" aria-modal="true" aria-label={tr('workspaceTree.create')}>
       <div class="workspace-create-modal">
@@ -329,10 +412,23 @@
           <div class="workspace-template-summary">
             <p data-workspace-template-description>{selectedTemplate.description}</p>
             <div class="workspace-template-tools" data-workspace-template-tools>
-              {#each selectedTemplate.workspaceTools || [] as pluginId (pluginId)}
-                <span>{toolLabel(pluginId)}</span>
+              {#each selectedTemplateTools as tool (tool.pluginId)}
+                <div
+                  class="workspace-template-tool"
+                  class:limited={tool.status === 'limited'}
+                  class:unavailable={tool.status === 'unavailable'}
+                  data-workspace-template-tool={tool.pluginId}
+                  data-template-tool-status={tool.status}
+                >
+                  <span class="workspace-template-tool-name">{tool.name}</span>
+                  <span class="workspace-template-tool-tabs">{tool.tabs.length ? tr('workspaceTree.templateToolTabs', { tabs: tool.tabs.join(', ') }) : tr('workspaceTree.templateToolNoTabs')}</span>
+                  <span class="workspace-template-tool-reason">{tool.reason}</span>
+                </div>
               {/each}
             </div>
+            {#if selectedTemplateIssues.length > 0}
+              <p class="workspace-template-incomplete" data-workspace-template-incomplete>{tr('workspaceTree.templateWillBeIncomplete')}</p>
+            {/if}
           </div>
         {/if}
         {#if createError}
@@ -383,8 +479,20 @@
   .workspace-create-field input:focus, .workspace-create-field select:focus { outline: none; border-color: var(--vt-color-accent); box-shadow: var(--vt-focus-ring); }
   .workspace-template-summary { display: grid; gap: 0.55rem; padding: 0.75rem; border: 1px solid var(--vt-color-border); border-radius: var(--vt-radius-md); background: var(--vt-color-surface-muted); }
   .workspace-template-summary p { margin: 0; color: var(--vt-color-text-secondary); font-size: 0.8rem; line-height: 1.45; }
-  .workspace-template-tools { display: flex; flex-wrap: wrap; gap: 0.35rem; }
-  .workspace-template-tools span { min-height: 1.35rem; display: inline-flex; align-items: center; padding: 0 0.35rem; border: 1px solid var(--vt-color-border-strong); border-radius: var(--vt-radius-sm); color: var(--vt-color-text-secondary); font-size: 0.72rem; }
+  .workspace-template-tools { display: grid; gap: 0.4rem; }
+  .workspace-template-tool { display: grid; grid-template-columns: minmax(7rem, 1fr) minmax(0, 1.4fr) minmax(0, 1.2fr); gap: 0.5rem; align-items: center; padding: 0.45rem 0.55rem; border: 1px solid var(--vt-color-border-strong); border-radius: var(--vt-radius-sm); color: var(--vt-color-text-secondary); font-size: 0.72rem; }
+  .workspace-template-tool-name { color: var(--vt-color-text-primary); font-weight: 600; }
+  .workspace-template-tool-tabs { color: var(--vt-color-text-muted); }
+  .workspace-template-tool-reason { color: var(--vt-color-accent); }
+  .workspace-template-tool.limited { border-color: rgba(220, 164, 57, 0.58); background: rgba(220, 164, 57, 0.08); }
+  .workspace-template-tool.limited .workspace-template-tool-reason { color: #e8bc63; }
+  .workspace-template-tool.unavailable { border-color: rgba(233, 69, 96, 0.58); background: var(--vt-color-danger-muted); }
+  .workspace-template-tool.unavailable .workspace-template-tool-reason { color: var(--vt-color-danger); }
+  .workspace-template-incomplete { color: var(--vt-color-danger) !important; }
+  .workspace-template-warning { display: flex; gap: 0.5rem; align-items: flex-start; justify-content: space-between; margin: 0.25rem 0.6rem 0.5rem; padding: 0.6rem; border: 1px solid rgba(233, 69, 96, 0.58); border-radius: var(--vt-radius-md); background: var(--vt-color-danger-muted); color: var(--vt-color-text-secondary); font-size: 0.73rem; line-height: 1.4; }
+  .workspace-template-warning strong { color: var(--vt-color-danger); }
+  .workspace-template-warning-item { margin-top: 0.2rem; }
+  @media (max-width: 700px) { .workspace-template-tool { grid-template-columns: 1fr; gap: 0.18rem; } }
   .workspace-create-error { margin: 0; color: var(--vt-color-danger); font-size: 0.78rem; line-height: 1.4; }
   .workspace-create-actions { display: flex; gap: 0.4rem; justify-content: flex-end; }
   .wt-btn-primary { background: var(--vt-color-accent); color: #101827; border: none; padding: 0.3rem 0.6rem; border-radius: var(--vt-radius-sm); cursor: pointer; font-size: 0.75rem; font-weight: 600; }

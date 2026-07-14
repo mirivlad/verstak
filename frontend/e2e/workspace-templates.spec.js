@@ -77,6 +77,25 @@ test.describe('Workspace templates', () => {
     await expect(page.locator('.sidebar .plugin-item').filter({ hasText: 'Browser Inbox' })).toBeVisible();
   });
 
+  test('template explains an unavailable plugin and warns after incomplete creation', async ({ page }) => {
+    await page.evaluate(() => window.__wailsMock.setPluginStatus('verstak.todo', 'disabled', false));
+    const modal = await openCreateModal(page);
+    await modal.locator('[data-workspace-template]').selectOption('project');
+
+    const todo = modal.locator('[data-workspace-template-tool="verstak.todo"]');
+    await expect(todo).toContainText('Todos');
+    await expect(todo).toContainText('Plugin is disabled');
+    await expect(todo).toHaveAttribute('data-template-tool-status', 'unavailable');
+
+    await modal.locator('[data-workspace-name]').fill('ProjectWithWarning');
+    await modal.getByRole('button', { name: 'Create workspace' }).click();
+
+    const warning = page.locator('[data-workspace-template-warning]');
+    await expect(warning).toContainText('ProjectWithWarning');
+    await expect(warning).toContainText('Todos');
+    await expect(warning).toContainText('Plugin is disabled');
+  });
+
   test('Admin shows Secrets when available and missing workspace plugins degrade without breaking tabs', async ({ page }) => {
     let modal = await openCreateModal(page);
     await modal.locator('[data-workspace-name]').fill('AdminSpace');
