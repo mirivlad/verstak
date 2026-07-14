@@ -6,6 +6,7 @@
  */
 import defaultEditorSource from '../../../../../verstak-official-plugins/plugins/default-editor/frontend/src/index.js?raw';
 import secretsSource from '../../../../../verstak-official-plugins/plugins/secrets/frontend/src/index.js?raw';
+import activitySource from '../../../../../verstak-official-plugins/plugins/activity/frontend/src/index.js?raw';
 
 (function () {
   if (window.__wailsMockReady) return;
@@ -3536,8 +3537,8 @@ import secretsSource from '../../../../../verstak-official-plugins/plugins/secre
       if (pluginId === 'verstak.notes' && assetPath === 'frontend/dist/index.js') {
         return Promise.resolve(simplePluginBundle('verstak.notes', 'NotesView', 'notes-root', 'Notes'));
       }
-      if (pluginId === 'verstak.activity' && assetPath === 'frontend/dist/index.js') {
-        return Promise.resolve(activityBundle());
+      if (pluginId === 'verstak.activity') {
+        return Promise.resolve(activitySource);
       }
       if (pluginId === 'verstak.journal' && assetPath === 'frontend/dist/index.js') {
         return Promise.resolve(journalBundle());
