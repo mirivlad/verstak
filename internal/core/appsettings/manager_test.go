@@ -3,6 +3,7 @@ package appsettings
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 )
 
@@ -71,6 +72,34 @@ func TestUpdateLanguagePersistsAndPreservesUnrelatedSettings(t *testing.T) {
 	}
 	if got := reloaded.Get().Language; got != "ru" {
 		t.Fatalf("Language after rejected update = %q, want ru", got)
+	}
+}
+
+func TestUpdateLanguageNotifiesTheDesktopShellAfterPersisting(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.json")
+	manager := NewManager(path)
+	if err := manager.Load(); err != nil {
+		t.Fatal(err)
+	}
+
+	var received []string
+	manager.SetLanguageChangedHandler(func(language string) {
+		received = append(received, language)
+	})
+	if err := manager.UpdateLanguage(LanguageRussian); err != nil {
+		t.Fatalf("UpdateLanguage: %v", err)
+	}
+	if got := manager.Get().Language; got != LanguageRussian {
+		t.Fatalf("persisted language = %q, want %q", got, LanguageRussian)
+	}
+	if !reflect.DeepEqual(received, []string{LanguageRussian}) {
+		t.Fatalf("language notifications = %#v, want [%q]", received, LanguageRussian)
+	}
+	if err := manager.UpdateLanguage("de"); err == nil {
+		t.Fatal("UpdateLanguage(de) succeeded, want validation failure")
+	}
+	if !reflect.DeepEqual(received, []string{LanguageRussian}) {
+		t.Fatalf("language notification fired after rejected update: %#v", received)
 	}
 }
 

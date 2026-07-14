@@ -39,3 +39,15 @@ func (item systrayMenuItem) Clicked() <-chan struct{} {
 	}
 	return item.item.ClickedCh
 }
+
+func (item systrayMenuItem) SetTitle(title string) {
+	if item.item != nil {
+		item.item.SetTitle(title)
+	}
+}
+
+func (item systrayMenuItem) SetTooltip(tooltip string) {
+	if item.item != nil {
+		item.item.SetTooltip(tooltip)
+	}
+}

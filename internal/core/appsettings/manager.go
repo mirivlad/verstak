@@ -78,9 +78,10 @@ type WindowState struct {
 
 // Manager provides thread-safe access to app settings.
 type Manager struct {
-	mu         sync.RWMutex
-	config     *Config
-	configPath string
+	mu                sync.RWMutex
+	config            *Config
+	configPath        string
+	onLanguageChanged func(string)
 }
 
 // DefaultConfigPath returns the default path for app settings.
@@ -230,13 +231,32 @@ func (m *Manager) UpdateLanguage(language string) error {
 	}
 
 	m.mu.Lock()
-	defer m.mu.Unlock()
 	if m.config == nil {
 		m.config = defaultConfig()
 	}
 	m.config.Language = language
 	m.config.LastOpenedAt = time.Now().UTC().Format(time.RFC3339)
-	return m.saveLocked()
+	err := m.saveLocked()
+	handler := m.onLanguageChanged
+	m.mu.Unlock()
+	if err != nil {
+		return err
+	}
+	if handler != nil {
+		handler(language)
+	}
+	return nil
+}
+
+// SetLanguageChangedHandler registers the shell callback invoked after a
+// language preference has been durably updated.
+func (m *Manager) SetLanguageChangedHandler(handler func(string)) {
+	if m == nil {
+		return
+	}
+	m.mu.Lock()
+	m.onLanguageChanged = handler
+	m.mu.Unlock()
 }
 
 // UpdateSync replaces sync settings without changing unrelated app settings.

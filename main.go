@@ -230,6 +230,13 @@ func main() {
 	app = api.NewApp(capRegistry, contribRegistry, permRegistry, eventBus, plugins, vaultService, storageService, filesService, appSettingsMgr, pluginStateMgr, workspaceMgr, syncService, browserReceiver, debugEnabled)
 	app.SetNotificationService(notifications.New(vaultService, api.NewNativeNotificationSender(), time.Now))
 	trayController := tray.New(tray.NewNativeBackend(), tray.DefaultIcon())
+	trayLabels := func(language string) tray.Labels {
+		return tray.LabelsForPreference(language, os.Getenv("LC_ALL"), os.Getenv("LC_MESSAGES"), os.Getenv("LANG"))
+	}
+	trayController.SetLabels(trayLabels(cfg.Language))
+	appSettingsMgr.SetLanguageChangedHandler(func(language string) {
+		trayController.SetLabels(trayLabels(language))
+	})
 	if browserReceiver != nil {
 		browserReceiverServer, err := browserreceiver.Start(browserreceiver.DefaultAddr, browserReceiver)
 		if err != nil {
