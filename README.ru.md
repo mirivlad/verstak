@@ -244,15 +244,15 @@ sha256sum -c SHA256SUMS --ignore-missing
 Desktop, SDK и официальные плагины должны находиться в соседних каталогах:
 
 ```text
-verstak-workspace/
+verstak-source/
 ├── verstak/
 ├── verstak-sdk/
 └── verstak-official-plugins/
 ```
 
 ```bash
-mkdir verstak-workspace
-cd verstak-workspace
+mkdir verstak-source
+cd verstak-source
 
 git clone https://github.com/mirivlad/verstak.git
 git clone https://github.com/mirivlad/verstak-sdk.git

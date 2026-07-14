@@ -464,7 +464,7 @@ contributions summary.
   Conflicts are rejected unless `options.overwrite` is true.
 - `files.deleteTrash(trashId)` — permanently removes a file/folder already in
   internal trash. This operation cannot be undone.
-- UI policy: the workspace `Files` plugin displays only live files and folders.
+- UI policy: the Deal `Files` plugin displays only live files and folders.
   The global official `verstak.trash` plugin owns listing, restoring, filtering,
   and permanently deleting deleted items across the vault.
 - `files.openExternal(relativePath)` — opens a vault-relative file/folder in
@@ -635,7 +635,7 @@ bundled runtime. Это реальный runtime contract для cooperative bun
 
 1. Unregister contributions всех plugins предыдущего discovery.
 2. Unregister all non-core capabilities.
-3. Re-register core capabilities + vault + workspace (если открыт).
+3. Re-register core capabilities + vault + Deal manager (если открыт).
 4. Re-scan discovery directories и повторить capability resolution.
 5. Register contributions для loaded/degraded plugins (disabled/failed — не регистрируются).
 6. Update plugins list.
@@ -838,51 +838,52 @@ Vault plugin state хранится **внутри vault** в `.verstak/plugins.
 - `./scripts/smoke-platform.sh` — ✅ (enable/disable/plugins.json)
 - `./scripts/build.sh` — ✅
 
-## Workspace Core Capability
+## Дело: core capability
 
-Workspace — это физическая папка верхнего уровня внутри vault root. Filesystem
-является source of truth для списка workspaces.
+Дело — это физическая папка верхнего уровня внутри vault root. Filesystem
+является source of truth для списка Дел.
 
 Пример:
 
 ```
 <vault>/
-  Workspace/
+  Deal/
     Notes/
   Project/
   ClientA/
   .verstak/
 ```
 
-Нет единого `<vault>/Workspace/` контейнера для всех workspaces. Папка
-`Workspace/` может быть обычным workspace, но `Project/` и `ClientA/` являются
-такими же workspace на том же уровне.
+Нет единого `<vault>/Deal/` контейнера для всех Дел. Папка `Deal/` может быть
+обычным Делом, но `Project/` и `ClientA/` являются такими же Делами на том же
+уровне.
 
 ### Хранение
 
-Workspace existence/list хранится только в filesystem:
+Существование и список Дел хранятся только в filesystem:
 
 - `ListWorkspaces()` читает top-level directories из vault root.
 - `.verstak`, reserved/internal directories, top-level files и symlinks не
-  считаются workspaces.
-- `.verstak/workspace*.json` не является source of truth для списка workspaces.
-- Нет persisted workspace path mapping и нет virtual workspace tree, которое
+  считаются Делами.
+- `.verstak/workspace*.json` не является source of truth для списка Дел.
+- Нет virtual workspace tree, которое
   мапится на произвольные папки.
 
 `.verstak` может хранить только metadata, которая не заменяет filesystem:
 
-- UI state: selected workspace, expanded folders, sort/pin state, preferences.
+- UI state: выбранное Дело, expanded folders, sort/pin state, preferences.
 - Semantic snapshot: applied template snapshot, enabled feature areas, exact
   `workspaceTools`, and folder conventions.
 
-Template snapshot копируется в metadata при создании workspace. Workspace
-identity при этом остаётся именем top-level folder; `metadata.workspaceName`
-является presentation/snapshot field, not canonical identity. Если сохранённое
-значение расходится с именем папки, runtime возвращает canonical `workspaceName`
-равным имени папки без filesystem side effects.
+При создании Дела runtime генерирует UUID и сохраняет его в
+`.verstak/workspace.json`. `workspaceId` — постоянная личность Дела;
+`workspaceRootPath` и `workspaceName` — изменяемый адрес и presentation fields.
+Переименование обновляет путь, но не ID. Новая папка с прежним именем получает
+другой ID и не может перехватить старые привязки.
 
 ```json
 {
+  "workspaceId": "1eb7cc69-52e8-4a18-ae2a-50d5229c5b60",
   "workspaceName": "Project",
   "createdFromTemplate": {
     "templateId": "project",
@@ -921,25 +922,25 @@ identity при этом остаётся именем top-level folder; `metada
 }
 ```
 
-Если original template удалён или изменён позже, существующий workspace
+Если original template удалён или изменён позже, существующее Дело
 открывается по сохранённому snapshot и не мутирует автоматически. Template
 update/migration может быть только явной future feature. Если metadata
-отсутствует, workspace открывается как generic workspace минимум с `files: true`.
+отсутствует, Дело открывается как generic Deal минимум с `files: true`.
 
 ### API
 
-- `ListWorkspaces()` — список top-level physical folders.
+- `ListWorkspaces()` — список top-level папок Дел с их `workspaceId`.
 - `ListWorkspaceTemplates()` — selectable built-in templates с presentation
   metadata и `workspaceTools`.
 - `CreateWorkspace(name, templateId?)` — создать `<vault>/<name>/`, применить
   template один раз, сохранить snapshot metadata.
-- `RenameWorkspace(oldName, newName)` — физически переименовать top-level folder
-  и обновить metadata key/name.
-- `TrashWorkspace(name)` — перенести весь top-level workspace folder в internal
+- `RenameWorkspace(oldName, newName)` — физически переименовать top-level папку
+  Дела и обновить metadata name, не меняя `workspaceId`.
+- `TrashWorkspace(name)` — перенести весь top-level folder Дела в internal
   trash policy.
 - `GetWorkspaceMetadata(name)` — прочитать metadata или вернуть generic fallback.
 - `UpdateWorkspaceMetadata(name, patch)` — обновить metadata без влияния на
-  существование workspace.
+  существование Дела.
 
 Deprecated compatibility APIs:
 
@@ -949,7 +950,7 @@ Deprecated compatibility APIs:
 - `ArchiveWorkspaceNode(...)` — wrapper over `TrashWorkspace`.
 - `MoveWorkspaceNode(...)` — unsupported; old nested/mapped moves are rejected.
 - `GetCurrentWorkspaceNode()` / `SetCurrentWorkspaceNode(...)` — wrappers over
-  selected top-level workspace UI state.
+  selected top-level Deal UI state.
 
 Эти методы существуют только для постепенного frontend/Wails cleanup. Они не
 должны создавать или сохранять nested workspace tree и не должны восстанавливать
@@ -957,32 +958,33 @@ Deprecated compatibility APIs:
 
 ### Capability
 
-`verstak/core/workspace/v1` — регистрируется только когда vault открыт и workspace инициализирован.
+`verstak/core/workspace/v1` — техническое имя capability; оно регистрируется
+только когда vault открыт и Deal manager инициализирован.
 
 ### Правила
 
-- Workspace name — один safe folder name, не path.
+- Имя Дела — один safe folder name, не path.
 - Reject: empty, slash, backslash, absolute-looking paths, `..`, null byte,
-  `.verstak`, reserved/internal names, symlink workspaces, conflicts.
-- WorkspaceItems получают `workspaceRootPath`, равный имени top-level папки
+  `.verstak`, reserved/internal names, symlink Дел, conflicts.
+- WorkspaceItems получают техническое поле `workspaceRootPath`, равное имени top-level папки
   (`Project`, `ClientA`, etc). Files plugin показывает именно эту папку.
 - Files API остаётся raw vault-relative API: `Project/Notes/example.md`,
   `Project/docs/file.md`, `Test/readme.md`.
-- Notes are ordinary Markdown files under `<workspace>/Notes/`; нет
+- Notes are ordinary Markdown files under `<Deal>/Notes/`; нет
   `.verstak/notes`, UUID note storage или второго source of truth для note
   content.
 
 ### Lifecycle Events
 
-Runtime publishes workspace lifecycle events after successful operations:
+Runtime publishes lifecycle events Дел после успешных операций:
 
-- `workspace.created` — payload includes `operation: "create"`,
+- `workspace.created` — payload includes `operation: "create"`, `workspaceId`,
   `workspaceRootPath`, `workspaceName`, and optional `templateId`.
-- `workspace.renamed` — payload includes `operation: "rename"`, new
-  `workspaceRootPath` / `workspaceName`, and previous workspace fields.
-- `workspace.trashed` — payload includes `operation: "trash"`,
+- `workspace.renamed` — payload includes `operation: "rename"`, `workspaceId`,
+  new `workspaceRootPath` / `workspaceName`, and previous path fields.
+- `workspace.trashed` — payload includes `operation: "trash"`, `workspaceId`,
   `workspaceRootPath`, `workspaceName`, `trashId`, `trashPath`, and `deletedAt`.
-- `workspace.selected` — payload includes `operation: "select"`,
+- `workspace.selected` — payload includes `operation: "select"`, `workspaceId`,
   `workspaceRootPath`, and `workspaceName`.
 
 Official Activity subscribes to these events and stores them through the normal
@@ -990,11 +992,11 @@ activity provider path.
 
 ### UI
 
-Workspace list в sidebar:
-- Flat list of top-level workspace folders.
-- Create workspace, rename workspace, trash workspace.
-- Selection is stored as selected workspace name.
-- No expand/collapse workspace tree and no case/folder node creation in core.
+Список Дел в sidebar:
+- Flat list of top-level папок Дел.
+- Создать Дело, переименовать Дело, переместить Дело в корзину.
+- Selection is stored as selected Deal name.
+- No expand/collapse tree and no case/folder node creation in core.
 
 ---
 

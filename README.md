@@ -7,7 +7,7 @@
 ### Keep the context of your work together — locally.
 
 Files, notes, links, browser captures, activity and work history
-in one extensible local-first workspace.
+in one extensible local-first workbench.
 
 **English** · [Русский](README.ru.md)
 
@@ -29,7 +29,7 @@ in one extensible local-first workspace.
 
 Verstak is a local-first workbench that keeps the context around your work in one place.
 
-A **workspace** can represent almost anything:
+A **Deal** can represent almost anything:
 
 * a software project;
 * a client or customer;
@@ -47,11 +47,11 @@ No account, cloud service or sync server is required for local use.
 
 ## Verstak in use
 
-| Overview: return to a workspace and see its recent work, captures and items that need attention. | Files: manage ordinary folders and documents inside a workspace. |
+| Overview: return to a Deal and see its recent work, captures and items that need attention. | Files: manage ordinary folders and documents inside a Deal. |
 | --- | --- |
-| ![Verstak Overview in a test vault](docs/screenshots/overview.png) | ![Verstak workspace files in a test vault](docs/screenshots/workspace-files.png) |
+| ![Verstak Overview in a test vault](docs/screenshots/overview.png) | ![Verstak Deal files in a test vault](docs/screenshots/workspace-files.png) |
 
-| Notes: keep Markdown notes next to the workspace they describe. | Journal: record a completed session and retain its context. |
+| Notes: keep Markdown notes next to the Deal they describe. | Journal: record a completed session and retain its context. |
 | --- | --- |
 | ![Verstak notes in a test vault](docs/screenshots/notes.png) | ![Verstak journal in a test vault](docs/screenshots/journal.png) |
 
@@ -59,17 +59,17 @@ No account, cloud service or sync server is required for local use.
 
 | Feature                  | Description                                                                                  |
 | ------------------------ | -------------------------------------------------------------------------------------------- |
-| **Workspaces**           | Organize files, notes and activity around durable projects, clients and other areas of work. |
+| **Deals**                | Organize files, notes and activity around durable projects, clients and other areas of work. |
 | **Files**                | Browse and manage ordinary files stored inside your vault.                                   |
 | **Notes**                | Create Markdown notes, overview pages and links between related information.                 |
 | **Overview**             | Quickly return to recent work and see what may need attention.                               |
 | **Browser Inbox**        | Send pages, links, selections and files from a browser into Verstak.                         |
 | **Activity and Journal** | Reconstruct work sessions and turn selected activity into journal entries.                   |
-| **Todo**                 | Keep optional task lists inside individual workspaces and across the whole vault.            |
+| **Todo**                 | Keep optional task lists inside individual Deals and across the whole vault.                 |
 | **Search**               | Search across notes, files and supported plugin data.                                        |
 | **Trash**                | Restore deleted items or remove them permanently from one central location.                  |
-| **Secrets**              | Keep credentials and access information connected to the relevant workspace.                 |
-| **Templates**            | Create repeatable workspace structures for common types of work.                             |
+| **Secrets**              | Keep credentials and access information connected to the relevant Deal.                      |
+| **Templates**            | Create repeatable Deal structures for common types of work.                                  |
 | **Plugins**              | Add, replace or disable tools without turning Verstak into one rigid monolithic application. |
 | **Optional sync**        | Synchronize vaults between devices using a self-hosted Verstak Sync Server.                  |
 
@@ -151,9 +151,9 @@ Documents/
 
 Your files and notes remain ordinary files that can be accessed without Verstak.
 
-### 2. Create your first workspace
+### 2. Create your first Deal
 
-Inside the vault, create a workspace for a project, client, server, device or another area of work.
+Inside the vault, create a Deal for a project, client, server, device or another area of work.
 
 For example:
 
@@ -167,7 +167,7 @@ Training course
 
 ### 3. Add context
 
-Open the workspace and add the information needed to return to it later:
+Open the Deal and add the information needed to return to it later:
 
 * notes and decisions;
 * documents and source files;
@@ -245,15 +245,15 @@ for distribution-specific dependencies.
 The desktop, SDK and official plugin repositories must be cloned as sibling directories:
 
 ```text
-verstak-workspace/
+verstak-source/
 ├── verstak/
 ├── verstak-sdk/
 └── verstak-official-plugins/
 ```
 
 ```bash
-mkdir verstak-workspace
-cd verstak-workspace
+mkdir verstak-source
+cd verstak-source
 
 git clone https://github.com/mirivlad/verstak.git
 git clone https://github.com/mirivlad/verstak-sdk.git
