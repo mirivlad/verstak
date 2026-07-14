@@ -602,9 +602,11 @@ import journalSource from '../../../../../verstak-official-plugins/plugins/journ
         source: 'official',
         icon: 'key-round',
         provides: ['secret-store', 'secrets.read-ui', 'secrets.write-ui'],
-        permissions: ['secrets.read', 'secrets.write', 'ui.register'],
+        permissions: ['files.read', 'secrets.read', 'secrets.write', 'ui.register'],
         frontend: { entry: 'frontend/src/index.js' },
         contributes: {
+          views: [{ id: 'verstak.secrets.view', title: 'Secrets', icon: 'key-round', component: 'SecretsView' }],
+          sidebarItems: [{ id: 'verstak.secrets.sidebar', title: 'Secrets', icon: 'key-round', view: 'verstak.secrets.view', position: 45 }],
           openProviders: [{
             id: 'verstak.secrets.secret',
             title: 'Secrets',
