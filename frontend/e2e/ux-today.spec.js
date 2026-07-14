@@ -248,7 +248,7 @@ test.describe('UX Overview workspace flow', () => {
     await expect(overview.locator('[data-overview-summary="attention"]')).toContainText('3');
     const attention = overview.locator('[data-overview-section="attention"]');
     await expect(attention).toContainText('Possible journal entry');
-    await expect(attention).toContainText('Workspace: Project · 10 min · 2 activities');
+    await expect(attention).toContainText('Deal: Project · 10 min · 2 activities');
     await attention.locator('.overview-attention-row', { hasText: 'Possible journal entry' }).getByRole('button', { name: 'Review candidate' }).click();
     await expect(page.getByRole('tab', { name: 'Journal' })).toHaveAttribute('aria-selected', 'true');
     await expect(page.locator('.journal-root [data-journal-candidate]')).toContainText('Workspace: Project');
@@ -294,5 +294,29 @@ test.describe('UX Overview workspace flow', () => {
     await overview.locator('[data-overview-filter="journal"]').click();
     await expect(recent).toContainText('Added journal entry "Write project summary"');
     await expect(recent).not.toContainText('Changed file "draft.md"');
+  });
+
+  test('Overview localizes activity labels without exposing internal event names', async ({ page }) => {
+    await page.evaluate(async () => {
+      await window.go.api.App.WritePluginSettings('verstak.activity', {
+        'events:workspace:Project': [{
+          activityId: 'overview-russian-note',
+          occurredAt: '2026-06-30T08:25:00.000Z',
+          type: 'note.saved',
+          title: 'Локализация',
+          summary: 'Project/Notes/Localization.md',
+          workspaceRootPath: 'Project',
+        }],
+      });
+    });
+    await page.locator('[data-settings-menu-button]').click();
+    await page.locator('[data-settings-language="ru"]').click();
+
+    const overview = page.locator('[data-overview-root]');
+    await overview.locator('[data-overview-action="refresh"]').click();
+    const recent = overview.locator('[data-overview-section="recent"]');
+    await expect(recent).toContainText('Изменена заметка «Локализация»');
+    await expect(recent).not.toContainText('note.saved');
+    await expect(recent).not.toContainText('Edited note');
   });
 });

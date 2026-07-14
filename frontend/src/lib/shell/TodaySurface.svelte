@@ -195,7 +195,7 @@
   }
 
   function todoTitle(item) {
-    return String(item?.title || item?.name || 'Untitled todo').trim() || 'Untitled todo';
+    return String(item?.title || item?.name || tr('overview.untitledTodo')).trim() || tr('overview.untitledTodo');
   }
 
   function todoAttentionState(item) {
@@ -203,9 +203,9 @@
     const now = Date.now();
     const dueAt = todoDateMs(item?.dueAt);
     const reminderAt = todoDateMs(item?.reminderAt);
-    if (reminderAt && reminderAt <= now) return 'Reminder due';
-    if (dueAt && dueAt < now) return 'Overdue';
-    if (dueAt && dueAt <= now + 3 * 24 * 60 * 60 * 1000) return 'Due soon';
+    if (reminderAt && reminderAt <= now) return tr('overview.todo.reminderDue');
+    if (dueAt && dueAt < now) return tr('overview.todo.overdue');
+    if (dueAt && dueAt <= now + 3 * 24 * 60 * 60 * 1000) return tr('overview.todo.dueSoon');
     return '';
   }
 
@@ -238,17 +238,12 @@
     return fileName(path).replace(/\.(md|markdown|txt)$/i, '').replace(/_/g, ' ') || 'Untitled';
   }
 
-  function quoted(value) {
-    const clean = String(value || '').trim();
-    return clean ? `"${clean}"` : '';
-  }
-
   function entityName(item) {
     const payload = item?.payload && typeof item.payload === 'object' ? item.payload : {};
     const path = payload.path || payload.notePath || item?.path || item?.relativePath || looksLikePath(item?.summary);
     const title = String(item?.title || payload.title || '').trim();
     if (path && (!title || /^(saved note|file opened|file changed|activity event)$/i.test(title))) return titleFromPath(path);
-    return title || titleFromPath(path) || String(item?.summary || item?.activityId || 'item');
+    return title || titleFromPath(path) || String(item?.summary || item?.activityId || tr('overview.item'));
   }
 
   function looksLikePath(value) {
@@ -258,11 +253,11 @@
   }
 
   function captureTitle(capture) {
-    return capture?.title || capture?.fileName || capture?.url || capture?.captureId || 'Untitled capture';
+    return capture?.title || capture?.fileName || capture?.url || capture?.captureId || tr('overview.untitledCapture');
   }
 
   function journalTitle(entry) {
-    return entry?.title || entry?.summary || entry?.date || entry?.entryId || 'Journal entry';
+    return entry?.title || entry?.summary || entry?.date || entry?.entryId || tr('overview.untitledJournal');
   }
 
   function itemTimeLabel(item) {
@@ -312,22 +307,31 @@
   function activityTitle(item) {
     const type = String(item?.type || '').toLowerCase();
     const name = entityName(item);
-    if (type === 'note.saved' || type === 'note.edited') return `Edited note ${quoted(name)}`;
-    if (type === 'note.opened') return `Opened note ${quoted(name)}`;
-    if (type === 'note.created') return `Created note ${quoted(name)}`;
-    if (type === 'file.opened') return `Opened file ${quoted(name)}`;
-    if (type === 'file.changed') return `Changed file ${quoted(name)}`;
-    if (type === 'file.created') return `Created file ${quoted(name)}`;
-    if (type === 'file.deleted' || type === 'file.trashed') return `Removed file ${quoted(name)}`;
-    if (type === 'browser.capture.page') return `Captured page ${quoted(name)}`;
-    if (type === 'browser.capture.selection') return `Captured selection ${quoted(name)}`;
-    if (type === 'browser.capture.link') return `Captured link ${quoted(name)}`;
-    if (type === 'browser.capture.file') return `Captured file ${quoted(name)}`;
-    if (type === 'browser.capture.converted') return `Converted capture ${quoted(name)}`;
-    if (type === 'journal.entry.added' || type === 'worklog.entry.added') return `Added journal entry ${quoted(name)}`;
-    if (type === 'action.started') return 'Work session detected';
+    if (type === 'note.saved' || type === 'note.edited') return tr('overview.event.noteEdited', { name });
+    if (type === 'note.opened') return tr('overview.event.noteOpened', { name });
+    if (type === 'note.created') return tr('overview.event.noteCreated', { name });
+    if (type === 'file.opened') return tr('overview.event.fileOpened', { name });
+    if (type === 'file.changed') return tr('overview.event.fileChanged', { name });
+    if (type === 'file.created') return tr('overview.event.fileCreated', { name });
+    if (type === 'file.deleted' || type === 'file.trashed') return tr('overview.event.fileRemoved', { name });
+    if (type === 'browser.capture.page') return tr('overview.event.capturePage', { name });
+    if (type === 'browser.capture.selection') return tr('overview.event.captureSelection', { name });
+    if (type === 'browser.capture.link') return tr('overview.event.captureLink', { name });
+    if (type === 'browser.capture.file') return tr('overview.event.captureFile', { name });
+    if (type === 'browser.capture.converted') return tr('overview.event.captureConverted', { name });
+    if (type === 'journal.entry.added' || type === 'worklog.entry.added') return tr('overview.event.journalAdded', { name });
+    if (type === 'action.started') return tr('overview.event.workSessionDetected');
     if (type === 'workspace.opened') return tr('overview.event.workspaceOpened');
     return item?.title || item?.summary || tr('overview.event.activity');
+  }
+
+  function captureKindLabel(capture) {
+    const kind = String(capture?.kind || '').toLowerCase();
+    if (kind === 'page') return tr('overview.captureKind.page');
+    if (kind === 'selection') return tr('overview.captureKind.selection');
+    if (kind === 'link') return tr('overview.captureKind.link');
+    if (kind === 'file') return tr('overview.captureKind.file');
+    return tr('overview.captureKind.item');
   }
 
   function actionForCategory(category) {
@@ -348,7 +352,7 @@
           id: item.activityId || `${item.type}:${timeValue(item)}`,
           category,
           title: activityTitle(item),
-          meta: `${itemTimeLabel(item)}${item.sourcePluginId ? ' · ' + item.sourcePluginId.replace('verstak.', '') : ''}`,
+          meta: itemTimeLabel(item),
           time: timeValue(item),
           absolute: absoluteTime(timeValue(item)),
           actionKind: action.kind,
@@ -358,8 +362,8 @@
     const captureItems = captureRows.map(item => ({
       id: item.captureId || `capture:${timeValue(item)}`,
       category: 'captures',
-      title: `Captured ${item.kind || 'item'} ${quoted(captureTitle(item))}`,
-      meta: `${itemTimeLabel(item)} · ${item.domain || item.url || 'Browser capture'}`,
+      title: tr('overview.event.capture', { kind: captureKindLabel(item), title: captureTitle(item) }),
+      meta: `${itemTimeLabel(item)} · ${item.domain || item.url || tr('overview.browserCapture')}`,
       time: timeValue(item),
       absolute: absoluteTime(timeValue(item)),
       actionKind: 'browser-inbox',
@@ -368,8 +372,8 @@
     const journalItems = journalRows.map(item => ({
       id: item.entryId || `journal:${timeValue(item)}`,
       category: 'journal',
-      title: `Added journal entry ${quoted(journalTitle(item))}`,
-      meta: `${itemTimeLabel(item)}${item.minutes ? ' · ' + item.minutes + ' min' : ''}`,
+      title: tr('overview.event.journalAdded', { name: journalTitle(item) }),
+      meta: `${itemTimeLabel(item)}${item.minutes ? ' · ' + tr('overview.minutes', { count: item.minutes }) : ''}`,
       time: timeValue(item),
       absolute: absoluteTime(timeValue(item)),
       actionKind: 'journal',
@@ -409,8 +413,8 @@
     const todoCandidates = [...todoRows].sort((a, b) => todoDateMs(todoTimeValue(a)) - todoDateMs(todoTimeValue(b))).map(item => ({
       id: item.id || `todo:${todoTitle(item)}`,
       category: 'todo',
-      title: `Todo ${quoted(todoTitle(item))}`,
-      meta: `${todoAttentionState(item)}${item.dueAt ? ` · Due ${item.dueAt}` : ''}`,
+      title: tr('overview.event.todo', { title: todoTitle(item) }),
+      meta: `${todoAttentionState(item)}${item.dueAt ? ` · ${tr('overview.todo.due', { date: item.dueAt })}` : ''}`,
       time: todoTimeValue(item),
       absolute: absoluteTime(todoTimeValue(item)),
       actionKind: 'todo',
@@ -419,8 +423,8 @@
     const captureCandidates = sortByTime(captureRows).map(item => ({
       id: item.captureId || `capture:${timeValue(item)}`,
       category: 'captures',
-      title: `Review capture ${quoted(captureTitle(item))}`,
-      meta: `${itemTimeLabel(item)} · ${item.domain || item.kind || 'Browser capture'}`,
+      title: tr('overview.event.reviewCapture', { title: captureTitle(item) }),
+      meta: `${itemTimeLabel(item)} · ${item.domain || captureKindLabel(item) || tr('overview.browserCapture')}`,
       time: timeValue(item),
       absolute: absoluteTime(timeValue(item)),
       actionKind: 'browser-inbox',
@@ -435,7 +439,7 @@
     const journalCandidates = sortByTime(journalRows).map(item => ({
       id: item.entryId || `journal:${timeValue(item)}`,
       category: 'journal',
-      title: `Continue journal entry ${quoted(journalTitle(item))}`,
+      title: tr('overview.event.continueJournal', { title: journalTitle(item) }),
       meta: itemTimeLabel(item),
       time: timeValue(item),
       absolute: absoluteTime(timeValue(item)),
@@ -449,14 +453,18 @@
     const captureItems = sortByTime(captureRows).slice(0, 4).map(item => ({
       id: item.captureId || `capture:${timeValue(item)}`,
       title: captureTitle(item),
-      meta: `${item.kind || 'capture'} · ${itemTimeLabel(item)}`,
+      meta: `${captureKindLabel(item)} · ${itemTimeLabel(item)}`,
       actionKind: 'browser-inbox',
       actionLabel: tr('overview.reviewInbox'),
     }));
     const candidateItems = sortByTime(candidates).slice(0, 4).map(item => ({
       id: item.candidateId || `work-session:${timeValue(item)}`,
-      title: 'Possible journal entry',
-      meta: `Workspace: ${item.workspaceRootPath || workspaceRootPath || 'Unknown'} · ${item.estimatedMinutes || 0} min · ${item.activityCount || (item.activityIds || []).length || 0} activities`,
+      title: tr('overview.event.possibleJournalEntry'),
+      meta: tr('overview.candidateMeta', {
+        deal: item.workspaceRootPath || workspaceRootPath || tr('overview.unknownDeal'),
+        minutes: item.estimatedMinutes || 0,
+        activities: item.activityCount || (item.activityIds || []).length || 0,
+      }),
       actionKind: 'journal',
       actionLabel: tr('overview.reviewCandidate'),
       toolRequest: { type: 'work-session-candidate', candidate: item },
@@ -464,7 +472,7 @@
     const todoItems = [...todoRows].sort((a, b) => todoDateMs(todoTimeValue(a)) - todoDateMs(todoTimeValue(b))).slice(0, 4).map(item => ({
       id: item.id || `todo:${todoTitle(item)}`,
       title: todoTitle(item),
-      meta: `${todoAttentionState(item)}${item.dueAt ? ` · Due ${item.dueAt}` : ''}`,
+      meta: `${todoAttentionState(item)}${item.dueAt ? ` · ${tr('overview.todo.due', { date: item.dueAt })}` : ''}`,
       actionKind: 'todo',
       actionLabel: tr('overview.openTodos'),
     }));
