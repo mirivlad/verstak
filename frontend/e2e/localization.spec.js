@@ -33,6 +33,7 @@ test.describe('Desktop localization', () => {
     await expect(pluginManager).toContainText('Зарегистрировано возможностей:');
     await expect(pluginManager.locator('.registry-section')).toContainText('Реестр возможностей');
     await expect(pluginManager.locator('.registry-section')).toContainText('Возможность');
+    await expect(pluginManager).not.toContainText('Workspace-scoped');
 
     await page.reload();
     await waitForAppReady(page);
