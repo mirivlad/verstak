@@ -38,6 +38,11 @@ test.describe('UX P0 shell flow', () => {
     await expect(page.locator('.plugin-manager')).toHaveCount(0);
   });
 
+  test('Deal header does not expose the internal workspace type badge', async ({ page }) => {
+    await expect(page.locator('.workspace-host')).toBeVisible({ timeout: 10000 });
+    await expect(page.locator('.workspace-type')).toHaveCount(0);
+  });
+
   test('status bar plugin contribution failures do not render large error panels', async ({ page }) => {
     await expect(page.locator('.workspace-host')).toBeVisible({ timeout: 10000 });
     await expect(page.getByText('Plugin View Error')).toHaveCount(0);

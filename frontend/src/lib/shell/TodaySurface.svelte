@@ -326,8 +326,8 @@
     if (type === 'browser.capture.converted') return `Converted capture ${quoted(name)}`;
     if (type === 'journal.entry.added' || type === 'worklog.entry.added') return `Added journal entry ${quoted(name)}`;
     if (type === 'action.started') return 'Work session detected';
-    if (type === 'workspace.opened') return 'Workspace opened';
-    return item?.title || item?.summary || 'Workspace activity';
+    if (type === 'workspace.opened') return tr('overview.event.workspaceOpened');
+    return item?.title || item?.summary || tr('overview.event.activity');
   }
 
   function actionForCategory(category) {
@@ -519,7 +519,7 @@
       keyResources: overview ? [{
         id: overview.relativePath || overview.name,
         title: overview.name || fileName(overview.relativePath) || 'Overview.md',
-        meta: overview.relativePath || 'Workspace overview note',
+        meta: overview.relativePath || tr('overview.overviewNote'),
         actionKind: toolState.notes ? 'notes' : 'files',
         actionLabel: toolState.notes ? tr('overview.openNotes') : tr('overview.openFiles'),
       }] : [],

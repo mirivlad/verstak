@@ -45,7 +45,6 @@
   $: workspaceRootPath = selectedWorkspace?.rootPath || selectedWorkspace?.name || selectedWorkspace?.id || '';
   $: workspaceId = selectedWorkspace?.workspaceId || '';
   $: workspaceTitle = selectedWorkspace?.title || selectedWorkspace?.name || selectedWorkspace?.id || selectedWorkspaceName;
-  $: workspaceType = selectedWorkspace?.type || 'workspace';
   $: if (workspaceRootPath !== metadataWorkspaceRoot) {
     metadataWorkspaceRoot = workspaceRootPath;
     workspaceMetadata = null;
@@ -207,7 +206,6 @@
     <div class="workspace-header vt-page-header">
       <div class="workspace-title-group">
         <span class="workspace-title vt-page-title">{workspaceTitle}</span>
-        <span class="workspace-type vt-badge accent">{workspaceType}</span>
       </div>
       <div class="workspace-search" aria-label={tr('workspace.search')}>
         <GlobalSearch />
@@ -292,14 +290,6 @@
     color: var(--vt-color-text-primary);
     font-size: 0.95rem;
     font-weight: 600;
-  }
-
-  .workspace-type {
-    color: var(--vt-color-accent);
-    font-size: 0.75rem;
-    padding: 0.1rem 0.4rem;
-    border-radius: var(--vt-radius-sm);
-    background: var(--vt-color-accent-muted);
   }
 
   .workspace-search {

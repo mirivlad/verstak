@@ -16,7 +16,7 @@ test.describe('Workspace templates', () => {
   });
 
   async function openCreateModal(page) {
-    await page.locator('button[title="New workspace"]').click();
+    await page.locator('button[title="New Deal"]').click();
     const modal = page.locator('[data-workspace-create-modal]');
     await expect(modal).toBeVisible();
     return modal;
@@ -30,18 +30,18 @@ test.describe('Workspace templates', () => {
     await expect(modal.locator('[data-workspace-template-tools]')).toContainText('Notes');
     await expect(modal.locator('[data-workspace-template-tools]')).toContainText('Browser Inbox');
 
-    await modal.getByRole('button', { name: 'Create workspace' }).click();
+    await modal.getByRole('button', { name: 'Create Deal' }).click();
     await expect(modal.locator('[data-workspace-create-error]')).toContainText('Name is required');
 
     await modal.locator('[data-workspace-name]').fill('bad/name');
-    await modal.getByRole('button', { name: 'Create workspace' }).click();
-    await expect(modal.locator('[data-workspace-create-error]')).toContainText('invalid-workspace-name');
+    await modal.getByRole('button', { name: 'Create Deal' }).click();
+    await expect(modal.locator('[data-workspace-create-error]')).toContainText('Could not create the Deal. Please try again.');
 
     await modal.locator('[data-workspace-name]').fill('ProjectPlan');
     await modal.locator('[data-workspace-template]').selectOption('project');
     await expect(modal.locator('[data-workspace-template-description]')).toContainText('Project planning');
     await expect(modal.locator('[data-workspace-template-tools]')).toContainText('Todos');
-    await modal.getByRole('button', { name: 'Create workspace' }).click();
+    await modal.getByRole('button', { name: 'Create Deal' }).click();
 
     await expect(page.locator('.wt-label').filter({ hasText: 'ProjectPlan' })).toBeVisible();
     await expect.poll(async () => page.evaluate(async () => {
@@ -65,7 +65,7 @@ test.describe('Workspace templates', () => {
     const modal = await openCreateModal(page);
     await modal.locator('[data-workspace-name]').fill('MinimalSpace');
     await modal.locator('[data-workspace-template]').selectOption('minimal');
-    await modal.getByRole('button', { name: 'Create workspace' }).click();
+    await modal.getByRole('button', { name: 'Create Deal' }).click();
 
     await expect(page.getByRole('tab', { name: 'Overview' })).toBeVisible();
     await expect(page.getByRole('tab', { name: 'Notes' })).toBeVisible();
@@ -88,7 +88,7 @@ test.describe('Workspace templates', () => {
     await expect(todo).toHaveAttribute('data-template-tool-status', 'unavailable');
 
     await modal.locator('[data-workspace-name]').fill('ProjectWithWarning');
-    await modal.getByRole('button', { name: 'Create workspace' }).click();
+    await modal.getByRole('button', { name: 'Create Deal' }).click();
 
     const warning = page.locator('[data-workspace-template-warning]');
     await expect(warning).toContainText('ProjectWithWarning');
@@ -100,14 +100,14 @@ test.describe('Workspace templates', () => {
     let modal = await openCreateModal(page);
     await modal.locator('[data-workspace-name]').fill('AdminSpace');
     await modal.locator('[data-workspace-template]').selectOption('admin');
-    await modal.getByRole('button', { name: 'Create workspace' }).click();
+    await modal.getByRole('button', { name: 'Create Deal' }).click();
     await expect(page.getByRole('tab', { name: 'Secrets' })).toBeVisible();
 
     await page.evaluate(() => window.__wailsMock.setPluginStatus('verstak.todo', 'disabled', false));
     modal = await openCreateModal(page);
     await modal.locator('[data-workspace-name]').fill('ProjectWithoutTodo');
     await modal.locator('[data-workspace-template]').selectOption('project');
-    await modal.getByRole('button', { name: 'Create workspace' }).click();
+    await modal.getByRole('button', { name: 'Create Deal' }).click();
 
     await expect(page.getByRole('tab', { name: 'Notes' })).toBeVisible();
     await expect(page.getByRole('tab', { name: 'Files' })).toBeVisible();

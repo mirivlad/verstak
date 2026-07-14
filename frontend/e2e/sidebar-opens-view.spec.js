@@ -44,6 +44,33 @@ test.describe('B: Sidebar opens plugin view by item.view', () => {
     await expect(page.locator('.view-container .view-header h2')).toHaveText('Browser Inbox', { timeout: 10000 });
   });
 
+  test('selected global tool remains visibly active through navigation and sidebar reloads', async ({ page }) => {
+    const activity = page.locator('.sidebar .plugin-item').filter({ hasText: 'Activity' });
+    const browserInbox = page.locator('.sidebar .plugin-item').filter({ hasText: 'Browser Inbox' });
+
+    await activity.click();
+    await expect(activity).toHaveAttribute('aria-current', 'page');
+    await expect(activity).toHaveClass(/is-active/);
+
+    await page.evaluate(() => {
+      window.dispatchEvent(new CustomEvent('verstak:plugins-changed'));
+    });
+    await expect(activity).toHaveAttribute('aria-current', 'page');
+
+    await page.evaluate(() => {
+      window.dispatchEvent(new CustomEvent('verstak:open-view', {
+        detail: { viewId: 'verstak.browser-inbox.view', pluginId: 'verstak.browser-inbox' },
+      }));
+    });
+    await expect(page.locator('.view-container .view-header h2')).toHaveText('Browser Inbox', { timeout: 10000 });
+    await expect(browserInbox).toHaveAttribute('aria-current', 'page');
+    await expect(browserInbox).toHaveClass(/is-active/);
+    await expect(activity).not.toHaveAttribute('aria-current', 'page');
+
+    await page.locator('.wt-label').filter({ hasText: 'Project' }).click();
+    await expect(browserInbox).not.toHaveAttribute('aria-current', 'page');
+  });
+
   test('Click sidebar item opens diagnostics view by view ID, not sidebar ID', async ({ page }) => {
     const sidebarItem = page.locator('.sidebar .plugin-item').filter({ hasText: 'Platform Test' });
     await expect(sidebarItem).toBeVisible();

@@ -8,6 +8,8 @@
   import { i18n } from '../i18n/index.js';
 
   export let showGlobalSearch = true;
+  export let activeView = null;
+  export let activeViewPluginId = '';
 
   function flog(msg) {
     App.WriteFrontendLog('Sidebar', msg);
@@ -26,6 +28,7 @@
   })(locale);
 
   $: vaultOpen = vaultStatus.status === 'open';
+  $: activeSidebarKey = activeView ? `${activeViewPluginId}:${activeView}` : '';
 
   async function loadSidebar() {
     debug.log('[Sidebar] onMount: START');
@@ -107,6 +110,8 @@
       {#each sidebarItems as item}
         <button
           class="nav-item plugin-item vt-list-row"
+          class:is-active={activeSidebarKey === `${item.pluginId || ''}:${item.view || item.id}`}
+          aria-current={activeSidebarKey === `${item.pluginId || ''}:${item.view || item.id}` ? 'page' : undefined}
           on:click={() => handleSidebarItem(item)}
           type="button"
         >
@@ -208,6 +213,16 @@
   .nav-item:hover {
     background: var(--vt-color-surface-hover);
     color: var(--vt-color-text-primary);
+  }
+
+  .nav-item.is-active {
+    background: var(--vt-color-surface-selected);
+    color: var(--vt-color-accent);
+  }
+
+  .nav-item.is-active :global(.nav-icon.icon-plugin) {
+    color: currentColor;
+    opacity: 1;
   }
 
   :global(.nav-icon) {

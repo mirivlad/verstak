@@ -395,7 +395,11 @@
   <VaultSelection />
 {:else}
   <main>
-    <Sidebar showGlobalSearch={currentView !== 'workspace' && currentView !== 'workspace-empty'} />
+    <Sidebar
+      showGlobalSearch={currentView !== 'workspace' && currentView !== 'workspace-empty'}
+      {activeView}
+      {activeViewPluginId}
+    />
     <CommandPalette />
 
     <section class="content-shell">
