@@ -28,6 +28,7 @@ mkdir -p "$STAGING/DEBIAN" "$STAGING/opt/verstak" "$STAGING/usr/bin" \
   "$STAGING/usr/share/doc/verstak"
 
 sed "s/@VERSION@/$PACKAGE_VERSION/g" "$ROOT/packaging/deb/control" > "$STAGING/DEBIAN/control"
+install -m 755 "$ROOT/packaging/deb/postinst" "$STAGING/DEBIAN/postinst"
 install -m 755 "$ROOT/packaging/deb/verstak" "$STAGING/usr/bin/verstak"
 install -m 755 "$BUNDLE/verstak-desktop" "$STAGING/opt/verstak/verstak-desktop"
 install -m 644 "$BUNDLE/README.md" "$BUNDLE/LICENSE" "$STAGING/usr/share/doc/verstak/"

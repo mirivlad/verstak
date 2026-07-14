@@ -10,4 +10,4 @@ export GST_PLUGIN_SYSTEM_PATH_1_0="$HERE/usr/lib/gstreamer-1.0"
 export WEBKIT_EXEC_PATH="$HERE/usr/lib/webkit2gtk-4.1"
 
 cd "$HERE/usr/bin"
-exec "$HERE/usr/bin/verstak-desktop" "$@"
+exec "$HERE/usr/bin/verstak" "$@"

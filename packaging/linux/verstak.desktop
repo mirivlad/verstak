@@ -2,8 +2,10 @@
 Type=Application
 Name=Verstak
 Comment=Local-first workspace
-Exec=verstak-desktop %U
+Exec=verstak %U
 Icon=verstak
 Terminal=false
-Categories=Office;Utility;
+Categories=Office;
 StartupNotify=true
+X-Verstak-Desktop-Entry=true
+X-AppImage-Name=Verstak

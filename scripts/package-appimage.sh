@@ -45,6 +45,7 @@ mkdir -p "$APPDIR/usr/bin" "$APPDIR/usr/lib" "$APPDIR/usr/share/applications" \
   "$APPDIR/usr/share/icons/hicolor/scalable/apps"
 install -m 755 "$ROOT/packaging/linux/AppRun" "$APPDIR/AppRun"
 install -m 755 "$BUNDLE/verstak-desktop" "$APPDIR/usr/bin/verstak-desktop"
+install -m 755 "$ROOT/packaging/linux/verstak" "$APPDIR/usr/bin/verstak"
 install -m 644 "$ROOT/packaging/linux/verstak.desktop" "$APPDIR/verstak.desktop"
 install -m 644 "$ROOT/packaging/linux/verstak.desktop" "$APPDIR/usr/share/applications/verstak.desktop"
 install -m 644 "$ROOT/packaging/linux/verstak.svg" "$APPDIR/verstak.svg"
