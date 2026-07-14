@@ -106,7 +106,7 @@ test.describe('Activity workflow', () => {
     await expect(candidateSection).toContainText('Possible journal entries');
     const candidate = candidateSection.locator('[data-work-session-candidate]');
     await expect(candidate).toHaveCount(1);
-    await expect(candidate).toContainText('Workspace: Project');
+    await expect(candidate).toContainText('Deal: Project');
     await expect(candidate).toContainText('Estimated duration: 10 min');
     await expect(candidate).toContainText('Activities: 2');
     await expect(candidate).not.toContainText('Project work on');
@@ -142,7 +142,7 @@ test.describe('Activity workflow', () => {
     await expect(page.getByRole('tab', { name: 'Journal' })).toHaveAttribute('aria-selected', 'true');
     const journal = page.locator('.journal-root');
     await expect(journal).toBeVisible({ timeout: 10000 });
-    await expect(journal.locator('[data-journal-candidate]')).toContainText('Workspace: Project');
+    await expect(journal.locator('[data-journal-candidate]')).toContainText('Deal: Project');
     await expect(journal.locator('[data-journal-candidate]')).toContainText('Estimated duration: 10 min');
     await expect(journal.locator('[data-journal-input="title"]')).toHaveValue('');
     await expect(journal.locator('[data-journal-input="summary"]')).toHaveValue('');
