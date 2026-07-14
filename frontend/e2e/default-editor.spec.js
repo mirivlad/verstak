@@ -36,6 +36,69 @@ test.describe('F: Default Editor Plugin', () => {
     await expect(textarea).toHaveValue('Buy groceries\nWrite tests');
   });
 
+  test('secret link opens its exact secret and closing it restores the note preview', async ({ page }) => {
+    const notePath = 'Notes/Secret Link.md';
+    const noteContent = '# Secret link\n\n[Target secret](verstak-secret://target.secret)';
+
+    await page.evaluate(async ({ notePath, noteContent }) => {
+      const writeError = await window.go.api.App.WriteVaultTextFile(
+        'verstak.platform-test',
+        notePath,
+        noteContent,
+        { createIfMissing: true, overwrite: true },
+      );
+      if (writeError) throw new Error(writeError);
+      const [result, openError] = await window.go.api.App.OpenWorkbenchResource('verstak.platform-test', {
+        kind: 'vault-file',
+        path: notePath,
+        extension: '.md',
+        context: { sourceView: 'notes', isInsideNotesFolder: true, notesMode: true },
+      });
+      if (openError) throw new Error(openError);
+      window.dispatchEvent(new CustomEvent('verstak:workbench-opened', { detail: result }));
+    }, { notePath, noteContent });
+
+    const note = page.locator('[data-editor-mode="notes-markdown"]');
+    await expect(note).toBeVisible({ timeout: 10000 });
+    await expect(note.locator('[data-preview]')).toContainText('Target secret');
+    await note.locator('.secret-link').click();
+
+    const secrets = page.locator('.secrets-root');
+    await expect(secrets).toBeVisible({ timeout: 10000 });
+    await expect(secrets.locator('.secrets-item.active .secrets-item-title')).toHaveText('Target secret');
+    await expect(secrets.locator('.secrets-card h2')).toHaveText('Target secret');
+
+    await page.locator('.workbench-host .close-btn').click();
+    await expect(note).toBeVisible({ timeout: 10000 });
+    await expect(note.locator('[data-preview]')).toContainText('Target secret');
+    await expect(note.locator('[data-editor-textarea]')).toHaveCount(0);
+    await expect(note.locator('[data-save-state]')).toHaveText('');
+
+    const storedContent = await page.evaluate(async ({ notePath }) => {
+      const [content, readError] = await window.go.api.App.ReadVaultTextFile('verstak.platform-test', notePath);
+      if (readError) throw new Error(readError);
+      return content;
+    }, { notePath });
+    expect(storedContent).toBe(noteContent);
+  });
+
+  test('unavailable secret does not fall back to the first secret', async ({ page }) => {
+    await page.evaluate(async () => {
+      const [result, openError] = await window.go.api.App.OpenWorkbenchResource('verstak.default-editor', {
+        kind: 'secret',
+        path: 'missing.secret',
+        mode: 'view',
+      });
+      if (openError) throw new Error(openError);
+      window.dispatchEvent(new CustomEvent('verstak:workbench-opened', { detail: result }));
+    });
+
+    const secrets = page.locator('.secrets-root');
+    await expect(secrets).toBeVisible({ timeout: 10000 });
+    await expect(secrets.locator('.secrets-item.active')).toHaveCount(0);
+    await expect(secrets.locator('.secrets-status.error')).toContainText(/unavailable|недоступен/i);
+  });
+
   test('editor supports markdown toolbar split save reopen and revert', async ({ page }) => {
     await page.evaluate(async () => {
       const err = await window.go.api.App.WriteVaultTextFile(

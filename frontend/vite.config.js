@@ -1,3 +1,4 @@
+import { resolve } from 'node:path';
 import { defineConfig } from 'vite';
 import { svelte } from '@sveltejs/vite-plugin-svelte';
 
@@ -13,6 +14,9 @@ export default defineConfig(({ mode }) => {
     server: {
       port: isTest ? 5174 : 5173,
       strictPort: true,
+      fs: {
+        allow: [resolve(__dirname, '..', '..')],
+      },
     },
     optimizeDeps: {
       include: [

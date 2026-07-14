@@ -4,6 +4,9 @@
  * Каждый метод возвращает Promise с данными, совместимыми с Wails-контрактом.
  * Состояние мутабельно — тесты могут менять его между сценариями.
  */
+import defaultEditorSource from '../../../../../verstak-official-plugins/plugins/default-editor/frontend/src/index.js?raw';
+import secretsSource from '../../../../../verstak-official-plugins/plugins/secrets/frontend/src/index.js?raw';
+
 (function () {
   if (window.__wailsMockReady) return;
 
@@ -360,6 +363,7 @@
     'verstak.platform-test': { savedText: 'initial value' }
   };
   var pluginData = {};
+  var secretRecords = makeDefaultSecretRecords();
   var vaultFiles = makeDefaultVaultFiles();
   var externalOpens = [];
   var trashEntries = [];
@@ -402,6 +406,27 @@
 
   function cloneJson(value) {
     return JSON.parse(JSON.stringify(value));
+  }
+
+  function makeDefaultSecretRecords() {
+    return [
+      {
+        id: 'first.secret',
+        title: 'First secret',
+        username: 'first-user',
+        value: 'first-value',
+        scope: { kind: 'global' },
+        updatedAt: '2026-07-14T00:00:00Z'
+      },
+      {
+        id: 'target.secret',
+        title: 'Target secret',
+        username: 'target-user',
+        value: 'target-value',
+        scope: { kind: 'global' },
+        updatedAt: '2026-07-14T00:00:00Z'
+      }
+    ];
   }
 
   function builtInWorkspaceTemplates() {
@@ -573,8 +598,15 @@
         icon: 'key-round',
         provides: ['secret-store', 'secrets.read-ui', 'secrets.write-ui'],
         permissions: ['secrets.read', 'secrets.write', 'ui.register'],
-        frontend: { entry: 'frontend/dist/index.js' },
+        frontend: { entry: 'frontend/src/index.js' },
         contributes: {
+          openProviders: [{
+            id: 'verstak.secrets.secret',
+            title: 'Secrets',
+            priority: 100,
+            component: 'SecretsView',
+            supports: [{ kind: 'secret', modes: ['view'] }]
+          }],
           workspaceItems: [{ id: 'verstak.secrets.workspace', title: 'Secrets', icon: 'key-round', component: 'SecretsView' }]
         }
       },
@@ -3328,6 +3360,43 @@
     GetPluginLocalization: function (pluginId, locale) {
       return Promise.resolve([mockPluginCatalog(pluginId, locale), '']);
     },
+    PluginSecretsStatus: function () {
+      return Promise.resolve([{ initialized: true, unlocked: true }, '']);
+    },
+    PluginSecretsUnlock: function () {
+      return Promise.resolve('');
+    },
+    PluginSecretsList: function () {
+      return Promise.resolve([secretRecords.map(function (record) {
+        var listed = cloneJson(record);
+        delete listed.value;
+        return listed;
+      }), '']);
+    },
+    PluginSecretsRead: function (_pluginId, secretID) {
+      var record = secretRecords.find(function (item) { return item.id === secretID; });
+      if (!record) return Promise.resolve([{}, 'not-found: secret ' + secretID]);
+      return Promise.resolve([cloneJson(record), '']);
+    },
+    PluginSecretsWrite: function (_pluginId, nextRecord) {
+      var record = Object.assign({}, nextRecord || {});
+      if (!record.id) return Promise.resolve([{}, 'secret id is required']);
+      record.scope = record.scope || { kind: 'global' };
+      record.updatedAt = new Date().toISOString();
+      var index = secretRecords.findIndex(function (item) { return item.id === record.id; });
+      if (index === -1) secretRecords.push(record);
+      else secretRecords[index] = record;
+      return Promise.resolve([cloneJson(record), '']);
+    },
+    PluginSecretsDelete: function (_pluginId, secretID) {
+      secretRecords = secretRecords.filter(function (record) { return record.id !== secretID; });
+      return Promise.resolve('');
+    },
+    PluginSecretsCopyLink: function (_pluginId, secretID) {
+      var record = secretRecords.find(function (item) { return item.id === secretID; });
+      if (!record) return Promise.resolve(['', 'not-found: secret ' + secretID]);
+      return Promise.resolve(['[' + (record.title || record.id) + '](verstak-secret://' + encodeURIComponent(record.id) + ')', '']);
+    },
     ReadPluginSettings: function (pluginId) {
       return Promise.resolve([Object.assign({}, pluginSettings[pluginId] || {}), '']);
     },
@@ -3455,8 +3524,8 @@
       if (pluginId === 'verstak.platform-test' && assetPath === 'frontend/dist/index.js') {
         return Promise.resolve(platformTestBundle());
       }
-      if (pluginId === 'verstak.default-editor' && assetPath === 'frontend/dist/index.js') {
-        return Promise.resolve(defaultEditorBundle());
+      if (pluginId === 'verstak.default-editor') {
+        return Promise.resolve(defaultEditorSource);
       }
       if (pluginId === 'verstak.files' && assetPath === 'frontend/dist/index.js') {
         return Promise.resolve(filesPluginBundle());
@@ -3479,8 +3548,8 @@
       if (pluginId === 'verstak.todo' && assetPath === 'frontend/dist/index.js') {
         return Promise.resolve(todoBundle());
       }
-      if (pluginId === 'verstak.secrets' && assetPath === 'frontend/dist/index.js') {
-        return Promise.resolve(simplePluginBundle('verstak.secrets', 'SecretsView', 'secrets-root', 'Secrets'));
+      if (pluginId === 'verstak.secrets') {
+        return Promise.resolve(secretsSource);
       }
       if (pluginId === 'verstak.search' && assetPath === 'frontend/dist/index.js') {
         return Promise.resolve(searchPluginBundle());
@@ -4164,6 +4233,7 @@
       workbenchPreferences = {};
       openedResources = [];
       pluginSettings = { 'verstak.platform-test': { savedText: 'initial value' } };
+      secretRecords = makeDefaultSecretRecords();
       vaultFiles = makeDefaultVaultFiles();
       externalOpens = [];
       trashEntries = [];
