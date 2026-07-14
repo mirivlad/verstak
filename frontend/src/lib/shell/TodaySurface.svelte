@@ -30,6 +30,7 @@
   let keyResources = [];
   let totalNotes = 0;
   let loadedWorkspaceRoot = '';
+  let loadedToolKey = '';
   let toolProbe = 0;
   let locale = i18n.getLocale();
   let unsubscribeLocale = null;
@@ -38,17 +39,25 @@
     void activeLocale;
     return i18n.t(key, params, fallback);
   })(locale);
-  $: FILTERS = ['all', 'notes', 'files', 'captures', 'journal'].map((key) => ({
-    key,
-    label: tr(`overview.filter.${key}`),
-  }));
   function countText(key, count, params = {}) {
     return tr(`${key}.${count === 1 ? 'one' : 'many'}`, { count, ...params });
   }
 
   $: hasNotes = hasTool('notes', availableTools);
+  $: hasFiles = hasTool('files', availableTools);
+  $: hasBrowserInbox = hasTool('browser-inbox', availableTools);
+  $: hasActivity = hasTool('activity', availableTools);
+  $: hasJournal = hasTool('journal', availableTools);
   $: hasTodos = hasTool('todo', availableTools);
-  $: recentChanges = buildRecentChanges(activityEvents, captures, journalEntries);
+  $: overviewToolKey = [hasNotes, hasFiles, hasBrowserInbox, hasActivity, hasJournal, hasTodos].join('|');
+  $: FILTERS = ['all']
+    .concat(hasNotes ? ['notes'] : [])
+    .concat(hasFiles ? ['files'] : [])
+    .concat(hasBrowserInbox ? ['captures'] : [])
+    .concat(hasJournal ? ['journal'] : [])
+    .map((key) => ({ key, label: tr(`overview.filter.${key}`) }));
+  $: if (!FILTERS.some(filter => filter.key === activeFilter)) activeFilter = 'all';
+  $: recentChanges = filterAvailableItems(buildRecentChanges(activityEvents, captures, journalEntries), overviewToolKey);
   $: filteredRecentChanges = activeFilter === 'all'
     ? recentChanges
     : recentChanges.filter(item => item.category === activeFilter);
@@ -58,18 +67,19 @@
   $: linkedCandidateIds = new Set(journalEntries.map(item => String(item?.sourceCandidateId || '')).filter(Boolean));
   $: pendingWorkSessionCandidates = workSessionCandidates.filter(item => !linkedCandidateIds.has(String(item?.candidateId || '')));
   $: urgentTodos = hasTodos ? todos.filter(item => todoAttentionState(item)) : [];
-  $: needsAttention = buildNeedsAttention(unprocessedCaptures, pendingWorkSessionCandidates, urgentTodos);
-  $: continueItems = buildContinueItems(activityEvents, unprocessedCaptures, journalEntries, urgentTodos);
-  $: attentionActionKind = needsAttention[0]?.actionKind || 'browser-inbox';
+  $: needsAttention = filterAvailableItems(buildNeedsAttention(unprocessedCaptures, pendingWorkSessionCandidates, urgentTodos), overviewToolKey);
+  $: continueItems = filterAvailableItems(buildContinueItems(activityEvents, unprocessedCaptures, journalEntries, urgentTodos), overviewToolKey);
+  $: hasAttentionTools = hasBrowserInbox || hasTodos || (hasActivity && hasJournal);
+  $: attentionActionKind = needsAttention[0]?.actionKind || fallbackAttentionAction();
   $: lastActive = lastActiveDate([...recentChanges, ...continueItems], captures, journalEntries, todos);
   $: summaryItems = [
-    { key: 'notes', label: tr('overview.notes'), count: totalNotes, detail: countText('overview.count.totalRecent', noteRecentChanges, { total: totalNotes, recent: noteRecentChanges }), actionKind: 'notes', actionLabel: tr('overview.openNotes') },
-    { key: 'files', label: tr('overview.files'), count: fileRecentChanges, detail: countText('overview.count.recentChanges', fileRecentChanges), actionKind: 'files', actionLabel: tr('overview.openFiles') },
-    { key: 'captures', label: tr('overview.captures'), count: unprocessedCaptures.length, detail: countText('overview.count.captures', unprocessedCaptures.length), actionKind: 'browser-inbox', actionLabel: tr('overview.reviewInbox') },
-    { key: 'activity', label: tr('overview.activity'), count: activityEvents.length, detail: countText('overview.count.events', activityEvents.length), actionKind: 'activity', actionLabel: tr('overview.viewActivity') },
-    { key: 'journal', label: tr('overview.journal'), count: journalEntries.length, detail: countText('overview.count.journal', journalEntries.length), actionKind: 'journal', actionLabel: tr('overview.openJournal') },
-    { key: 'attention', label: tr('overview.attention'), count: needsAttention.length, detail: countText('overview.count.pending', needsAttention.length), actionKind: attentionActionKind, actionLabel: tr('overview.reviewPending') },
-  ];
+    hasNotes ? { key: 'notes', label: tr('overview.notes'), count: totalNotes, detail: countText('overview.count.totalRecent', noteRecentChanges, { total: totalNotes, recent: noteRecentChanges }), actionKind: 'notes', actionLabel: tr('overview.openNotes') } : null,
+    hasFiles ? { key: 'files', label: tr('overview.files'), count: fileRecentChanges, detail: countText('overview.count.recentChanges', fileRecentChanges), actionKind: 'files', actionLabel: tr('overview.openFiles') } : null,
+    hasBrowserInbox ? { key: 'captures', label: tr('overview.captures'), count: unprocessedCaptures.length, detail: countText('overview.count.captures', unprocessedCaptures.length), actionKind: 'browser-inbox', actionLabel: tr('overview.reviewInbox') } : null,
+    hasActivity ? { key: 'activity', label: tr('overview.activity'), count: activityEvents.length, detail: countText('overview.count.events', activityEvents.length), actionKind: 'activity', actionLabel: tr('overview.viewActivity') } : null,
+    hasJournal ? { key: 'journal', label: tr('overview.journal'), count: journalEntries.length, detail: countText('overview.count.journal', journalEntries.length), actionKind: 'journal', actionLabel: tr('overview.openJournal') } : null,
+    hasAttentionTools ? { key: 'attention', label: tr('overview.attention'), count: needsAttention.length, detail: countText('overview.count.pending', needsAttention.length), actionKind: attentionActionKind, actionLabel: tr('overview.reviewPending') } : null,
+  ].filter(Boolean);
 
   onMount(() => {
     unsubscribeLocale = i18n.subscribe((nextLocale) => locale = nextLocale);
@@ -78,7 +88,7 @@
 
   onDestroy(() => unsubscribeLocale?.());
 
-  $: if (workspaceRootPath && workspaceRootPath !== loadedWorkspaceRoot) {
+  $: if (workspaceRootPath && (workspaceRootPath !== loadedWorkspaceRoot || overviewToolKey !== loadedToolKey)) {
     loadOverview();
   }
 
@@ -89,11 +99,29 @@
       const label = `${tool?.title || ''} ${tool?.id || ''} ${tool?.pluginId || ''}`.toLowerCase();
       return label.includes(name);
     });
-    if (fromProps) return true;
-    if (typeof document === 'undefined') return false;
-    return Array.from(document.querySelectorAll('.workspace-tabs [role="tab"]')).some(tab => {
-      return String(tab.textContent || '').trim().toLowerCase().includes(name);
-    });
+    return fromProps;
+  }
+
+  function actionIsAvailable(kind) {
+    if (kind === 'notes') return hasNotes;
+    if (kind === 'files') return hasFiles;
+    if (kind === 'browser-inbox') return hasBrowserInbox;
+    if (kind === 'activity') return hasActivity;
+    if (kind === 'journal') return hasJournal;
+    if (kind === 'todo') return hasTodos;
+    return false;
+  }
+
+  function filterAvailableItems(items, _toolKey) {
+    void _toolKey;
+    return (items || []).filter(item => actionIsAvailable(item?.actionKind));
+  }
+
+  function fallbackAttentionAction() {
+    if (hasBrowserInbox) return 'browser-inbox';
+    if (hasTodos) return 'todo';
+    if (hasActivity && hasJournal) return 'journal';
+    return '';
   }
 
   function decodeTuple(response, fallback) {
@@ -477,12 +505,12 @@
     }
   }
 
-  async function loadWorkspaceResources() {
+  async function loadWorkspaceResources(toolState) {
     const workspace = String(workspaceRootPath || '').trim();
     if (!workspace) return { keyResources: [], totalNotes: 0 };
     const [rootEntries, notesEntries] = await Promise.all([
-      listFiles('verstak.files', workspace),
-      listFiles('verstak.notes', `${workspace}/Notes`),
+      toolState.files ? listFiles('verstak.files', workspace) : Promise.resolve([]),
+      toolState.notes ? listFiles('verstak.notes', `${workspace}/Notes`) : Promise.resolve([]),
     ]);
     const noteFiles = notesEntries.filter(item => item?.type === 'file');
     const overview = [...notesEntries, ...rootEntries].find(item => /(^|\/)overview\.md$/i.test(String(item.relativePath || item.name || '')));
@@ -492,43 +520,53 @@
         id: overview.relativePath || overview.name,
         title: overview.name || fileName(overview.relativePath) || 'Overview.md',
         meta: overview.relativePath || 'Workspace overview note',
-        actionKind: hasNotes ? 'notes' : 'files',
-        actionLabel: hasNotes ? tr('overview.openNotes') : tr('overview.openFiles'),
+        actionKind: toolState.notes ? 'notes' : 'files',
+        actionLabel: toolState.notes ? tr('overview.openNotes') : tr('overview.openFiles'),
       }] : [],
     };
   }
 
   async function loadOverview() {
     const workspaceAtStart = String(workspaceRootPath || '').trim();
+    const toolKeyAtStart = overviewToolKey;
+    const toolState = {
+      notes: hasNotes,
+      files: hasFiles,
+      browserInbox: hasBrowserInbox,
+      activity: hasActivity,
+      journal: hasJournal,
+      todos: hasTodos,
+    };
     loadedWorkspaceRoot = workspaceAtStart;
+    loadedToolKey = toolKeyAtStart;
     loading = true;
     const [browserSettings, activitySettings, activityRecords, journalSettings, todoSettings, resources] = await Promise.all([
-      readPluginSettings('verstak.browser-inbox'),
-      readPluginSettings('verstak.activity'),
-      App.ReadPluginDataNDJSON
+      toolState.browserInbox ? readPluginSettings('verstak.browser-inbox') : Promise.resolve({}),
+      toolState.activity ? readPluginSettings('verstak.activity') : Promise.resolve({}),
+      toolState.activity && App.ReadPluginDataNDJSON
         ? App.ReadPluginDataNDJSON('verstak.activity', 'activity-events')
           .then(value => decodeTuple(value, []))
           .catch(() => [])
         : Promise.resolve([]),
-      readPluginSettings('verstak.journal'),
-      readPluginSettings('verstak.todo'),
-      loadWorkspaceResources(),
+      toolState.journal ? readPluginSettings('verstak.journal') : Promise.resolve({}),
+      toolState.todos ? readPluginSettings('verstak.todo') : Promise.resolve({}),
+      loadWorkspaceResources(toolState),
     ]);
-    if (workspaceAtStart !== String(workspaceRootPath || '').trim()) return;
+    if (workspaceAtStart !== String(workspaceRootPath || '').trim() || toolKeyAtStart !== overviewToolKey) return;
 
-    captures = browserCaptureRowsForWorkspace(browserSettings);
-    activityEvents = normalizeRows(activityRecords).filter(item => {
+    captures = toolState.browserInbox ? browserCaptureRowsForWorkspace(browserSettings) : [];
+    activityEvents = toolState.activity ? normalizeRows(activityRecords).filter(item => {
       const tagged = String(item.workspaceRootPath || item.workspaceName || item.workspaceNodeId || '').trim();
       return !tagged || tagged === workspaceAtStart;
-    });
-    journalEntries = rowsFor(journalSettings, [
+    }) : [];
+    journalEntries = toolState.journal ? rowsFor(journalSettings, [
       workspaceKey('worklog:workspace:'),
       'worklog',
-    ]);
-    todos = todoRowsForWorkspace(todoSettings);
-    workSessionCandidates = rowsFor(activitySettings, [
+    ]) : [];
+    todos = toolState.todos ? todoRowsForWorkspace(todoSettings) : [];
+    workSessionCandidates = toolState.activity && toolState.journal ? rowsFor(activitySettings, [
       workspaceKey('work-session-candidates:workspace:'),
-    ]);
+    ]) : [];
     keyResources = resources.keyResources;
     totalNotes = resources.totalNotes;
     loading = false;
@@ -657,7 +695,7 @@
     </main>
 
     <aside class="overview-side">
-      {#if needsAttention.length || !loading}
+      {#if hasAttentionTools && (needsAttention.length || !loading)}
         <section class="today-panel overview-panel" data-overview-section="attention">
           <div class="today-panel-head overview-panel-head">
             <div>

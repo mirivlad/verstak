@@ -80,6 +80,54 @@ test.describe('UX Overview workspace flow', () => {
     await expect(page.locator('[data-overview-summary="notes"]')).toContainText('1 total');
   });
 
+  test('Overview hides Browser Inbox cards and actions when the current Deal does not include it', async ({ page }) => {
+    await page.locator('button[title="New workspace"]').click();
+    const modal = page.locator('[data-workspace-create-modal]');
+    await modal.locator('[data-workspace-name]').fill('MinimalOverview');
+    await modal.locator('[data-workspace-template]').selectOption('minimal');
+    await modal.getByRole('button', { name: 'Create workspace' }).click();
+    await expect(page.getByRole('tab', { name: 'Browser Inbox' })).toHaveCount(0);
+
+    await page.evaluate(async () => {
+      await window.go.api.App.WritePluginSettings('verstak.browser-inbox', {
+        'captures:global': [{
+          captureId: 'hidden-browser-capture',
+          capturedAt: '2026-07-14T08:00:00.000Z',
+          kind: 'page',
+          title: 'Inbox material must stay hidden',
+          workspaceRootPath: 'MinimalOverview',
+        }],
+      });
+    });
+    const overview = page.locator('[data-overview-root]');
+    await overview.locator('[data-overview-action="refresh"]').click();
+
+    await expect(overview.locator('[data-overview-summary="captures"]')).toHaveCount(0);
+    await expect(overview.locator('[data-overview-action="browser-inbox"]')).toHaveCount(0);
+    await expect(overview).not.toContainText('Inbox material must stay hidden');
+  });
+
+  test('Overview refreshes when Browser Inbox is disabled through plugin state changes', async ({ page }) => {
+    await page.evaluate(async () => {
+      await window.go.api.App.WritePluginSettings('verstak.browser-inbox', {
+        'captures:global': [{
+          captureId: 'disabled-browser-capture',
+          capturedAt: '2026-07-14T08:00:00.000Z',
+          kind: 'page',
+          title: 'Disabled inbox material',
+          workspaceRootPath: 'Project',
+        }],
+      });
+      window.__wailsMock.setPluginStatus('verstak.browser-inbox', 'disabled', false);
+      window.dispatchEvent(new CustomEvent('verstak:plugins-changed'));
+    });
+
+    const overview = page.locator('[data-overview-root]');
+    await expect(page.getByRole('tab', { name: 'Browser Inbox' })).toHaveCount(0);
+    await expect(overview.locator('[data-overview-summary="captures"]')).toHaveCount(0);
+    await expect(overview.locator('[data-overview-action="browser-inbox"]')).toHaveCount(0);
+  });
+
   test('Overview prioritizes resume work and filters meaningful recent changes', async ({ page }) => {
     await page.evaluate(async () => {
       await window.go.api.App.WritePluginSettings('verstak.browser-inbox', {

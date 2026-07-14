@@ -80,11 +80,13 @@
       if (changed && selectedWorkspaceName) loadTools();
     });
     window.addEventListener('verstak:workspace-open-tool', handleWorkspaceOpenTool);
+    window.addEventListener('verstak:plugins-changed', handlePluginsChanged);
   });
 
   onDestroy(() => {
     if (unsubscribeLocale) unsubscribeLocale();
     window.removeEventListener('verstak:workspace-open-tool', handleWorkspaceOpenTool);
+    window.removeEventListener('verstak:plugins-changed', handlePluginsChanged);
   });
 
   function toolKey(tool) {
@@ -168,6 +170,10 @@
 
   function handleWorkspaceOpenTool(event) {
     requestWorkspaceTool(event?.detail?.kind, event?.detail?.toolRequest || null);
+  }
+
+  function handlePluginsChanged() {
+    if (selectedWorkspaceName) loadTools();
   }
 
   async function loadTools() {
