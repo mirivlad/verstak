@@ -47,6 +47,10 @@ DEBUG_MODE_STATUS=0
 (cd "$ROOT" && node --experimental-vm-modules frontend/tests/debug-mode-test.mjs) || DEBUG_MODE_STATUS=$?
 report "session-only debug mode" "$DEBUG_MODE_STATUS"
 
+SELECT_STYLE_STATUS=0
+(cd "$ROOT" && node frontend/tests/select-styles-test.mjs) || SELECT_STYLE_STATUS=$?
+report "workspace select styles" "$SELECT_STYLE_STATUS"
+
 # ── Frontend tests ──
 echo "[frontend]"
 if ensure_npm_deps "$ROOT/frontend"; then

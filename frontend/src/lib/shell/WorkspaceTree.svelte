@@ -378,6 +378,8 @@
   .workspace-create-header h2 { margin: 0; font-size: 1rem; }
   .workspace-create-field { display: grid; gap: 0.35rem; color: var(--vt-color-text-muted); font-size: 0.75rem; }
   .workspace-create-field input, .workspace-create-field select { width: 100%; min-height: 2rem; box-sizing: border-box; border: 1px solid var(--vt-color-border-strong); border-radius: var(--vt-radius-sm); background: #0f1424; color: var(--vt-color-text-primary); padding: 0.35rem 0.5rem; font: inherit; font-size: 0.84rem; }
+  .workspace-create-field select { appearance: none; background-color: #0f1424; background-image: linear-gradient(45deg, transparent 50%, var(--vt-color-text-muted) 50%), linear-gradient(135deg, var(--vt-color-text-muted) 50%, transparent 50%); background-position: calc(100% - 14px) 50%, calc(100% - 9px) 50%; background-size: 5px 5px, 5px 5px; background-repeat: no-repeat; padding-right: 1.7rem; }
+  .workspace-create-field select option { background: #0f1424; color: var(--vt-color-text-primary); }
   .workspace-create-field input:focus, .workspace-create-field select:focus { outline: none; border-color: var(--vt-color-accent); box-shadow: var(--vt-focus-ring); }
   .workspace-template-summary { display: grid; gap: 0.55rem; padding: 0.75rem; border: 1px solid var(--vt-color-border); border-radius: var(--vt-radius-md); background: var(--vt-color-surface-muted); }
   .workspace-template-summary p { margin: 0; color: var(--vt-color-text-secondary); font-size: 0.8rem; line-height: 1.45; }
