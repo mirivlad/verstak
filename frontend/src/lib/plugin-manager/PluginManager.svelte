@@ -585,7 +585,6 @@
   .hint { font-size: 0.85rem; margin-top: 0.5rem; opacity: 0.7; }
   .hint-list { list-style: none; padding: 0; margin: 0.5rem 0; font-size: 0.8rem; opacity: 0.7; }
   .hint-list li { margin: 0.25rem 0; }
-  .hint code { background: #0f3460; padding: 0.1rem 0.3rem; border-radius: 3px; }
   .plugin-list { display: flex; flex-direction: column; gap: 0.75rem; margin-bottom: 1.5rem; min-width: 0; }
 
   .missing-section { margin-bottom: 1.5rem; }
