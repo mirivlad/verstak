@@ -251,7 +251,7 @@ test.describe('UX Overview workspace flow', () => {
     await expect(attention).toContainText('Deal: Project · 10 min · 2 activities');
     await attention.locator('.overview-attention-row', { hasText: 'Possible journal entry' }).getByRole('button', { name: 'Review candidate' }).click();
     await expect(page.getByRole('tab', { name: 'Journal' })).toHaveAttribute('aria-selected', 'true');
-    await expect(page.locator('.journal-root [data-journal-candidate]')).toContainText('Workspace: Project');
+    await expect(page.locator('.journal-root [data-journal-candidate]')).toContainText('Deal: Project');
     await page.locator('.journal-modal-actions').getByRole('button', { name: 'Cancel' }).click();
     await page.getByRole('tab', { name: 'Overview' }).click();
 
