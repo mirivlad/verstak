@@ -13,6 +13,7 @@ fi
 echo "=== verstak desktop Linux amd64 bundle ==="
 (cd "$OFFICIAL_PLUGINS" && ./scripts/build.sh)
 "$ROOT/scripts/install-dev-plugins.sh"
+(cd "$ROOT" && go test ./internal/core/plugin -run TestBundledOfficialPluginRequirementsResolve -count=1)
 "$ROOT/scripts/build.sh"
 
 BINARY="$ROOT/build/bin/verstak-desktop"

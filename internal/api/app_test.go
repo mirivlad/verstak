@@ -225,6 +225,19 @@ func TestReplaceAndClearPluginNotificationsStayWithinPluginNamespace(t *testing.
 	}
 }
 
+func TestReloadPluginsRestoresNotificationCoreCapability(t *testing.T) {
+	app := &App{
+		capRegistry:     capability.NewRegistry(),
+		contribRegistry: contribution.NewRegistry(),
+	}
+
+	app.ReloadPlugins()
+
+	if !app.capRegistry.Has("verstak/core/notifications/v1") {
+		t.Fatal("ReloadPlugins did not restore verstak/core/notifications/v1")
+	}
+}
+
 func TestDomReadyInitializesNotificationsBeforeScheduler(t *testing.T) {
 	oldInitialize := initializeNativeNotifications
 	defer func() { initializeNativeNotifications = oldInitialize }()

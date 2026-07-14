@@ -1064,30 +1064,23 @@ func (a *App) ReloadPlugins() (int, string) {
 	// Unregister all non-core capabilities
 	a.capRegistry.UnregisterAll()
 
-	// Re-register core capabilities
-	coreCaps := []string{
-		"verstak/core/plugin-manager/v1",
-		"verstak/core/capability-registry/v1",
-		"verstak/core/contribution-registry/v1",
-		"verstak/core/permissions/v1",
-		"verstak/core/events/v1",
-		"verstak/core/files/v1",
-		"verstak/core/workbench/v1",
-	}
-	if err := a.capRegistry.Register("verstak-desktop", coreCaps); err != nil {
+	// Re-register the same core capabilities as initial startup. Keeping this
+	// list in the capability package prevents a plugin reload from dropping a
+	// required capability such as native notifications.
+	if err := a.capRegistry.Register(capability.CorePluginID, capability.CorePlatformCapabilities()); err != nil {
 		log.Printf("[api] ReloadPlugins: failed to re-register core capabilities: %v", err)
 	}
 
 	// Re-register vault capability if vault is open
 	if a.vault != nil && a.vault.GetVaultStatus() == vault.StatusOpen {
-		if err := a.capRegistry.Register("verstak-desktop", []string{"verstak/core/vault/v1"}); err != nil {
+		if err := a.capRegistry.Register(capability.CorePluginID, []string{"verstak/core/vault/v1"}); err != nil {
 			log.Printf("[api] ReloadPlugins: failed to re-register vault capability: %v", err)
 		}
 	}
 
 	// Re-register workspace capability if workspace is initialized
 	if a.workspace != nil && a.workspace.IsInitialized() {
-		if err := a.capRegistry.Register("verstak-desktop", []string{"verstak/core/workspace/v1"}); err != nil {
+		if err := a.capRegistry.Register(capability.CorePluginID, []string{"verstak/core/workspace/v1"}); err != nil {
 			log.Printf("[api] ReloadPlugins: failed to re-register workspace capability: %v", err)
 		}
 	}

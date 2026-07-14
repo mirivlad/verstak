@@ -41,5 +41,7 @@ grep -Fq 'package-appimage.sh' "$ROOT/scripts/release.sh"
 grep -Fq 'package-windows-portable.sh' "$ROOT/scripts/release.sh"
 git -C "$ROOT" check-ignore -q verstak-desktop-res.syso
 grep -Fq 'chmod -R a+rX' "$ROOT/scripts/build-linux-bundle.sh"
+grep -Fq 'TestBundledOfficialPluginRequirementsResolve' "$ROOT/scripts/build-linux-bundle.sh"
+grep -Fq 'TestBundledOfficialPluginRequirementsResolve' "$ROOT/scripts/build-windows.sh"
 
 echo "desktop package script contracts passed"

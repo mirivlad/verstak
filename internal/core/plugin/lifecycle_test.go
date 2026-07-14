@@ -3,25 +3,16 @@ package plugin
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/verstak/verstak-desktop/internal/core/capability"
 )
 
-// coreCapabilities lists the 5 core capabilities that the platform registers
-// before any plugins are loaded.
-var coreCapabilities = []string{
-	"verstak/core/plugin-manager/v1",
-	"verstak/core/capability-registry/v1",
-	"verstak/core/contribution-registry/v1",
-	"verstak/core/permissions/v1",
-	"verstak/core/events/v1",
-}
-
-// registerCoreCapabilities registers the 5 core capabilities on a registry.
+// registerCoreCapabilities registers the desktop's core capabilities on a registry.
 func registerCoreCapabilities(t *testing.T, reg *capability.Registry) {
 	t.Helper()
-	if err := reg.Register("verstak-core", coreCapabilities); err != nil {
+	if err := reg.Register(capability.CorePluginID, capability.CorePlatformCapabilities()); err != nil {
 		t.Fatalf("failed to register core capabilities: %v", err)
 	}
 }
@@ -74,6 +65,43 @@ func TestLifecycle_CoreCapabilitiesRegisteredBeforePlugins(t *testing.T) {
 	if len(missing) != 0 {
 		t.Errorf("expected no missing required capabilities, got: %v", missing)
 	}
+}
+
+func TestBundledOfficialPluginRequirementsResolve(t *testing.T) {
+	plugins, errs := DiscoverPlugins([]string{bundledPluginDir(t)})
+	if len(errs) > 0 {
+		t.Fatalf("discover bundled plugins: %v", errs)
+	}
+
+	reg := capability.NewRegistry()
+	registerCoreCapabilities(t, reg)
+	ResolveLifecycle(plugins, reg, nil)
+
+	foundTodo := false
+	for _, loaded := range plugins {
+		if loaded.Manifest.ID == "verstak.todo" {
+			foundTodo = true
+		}
+		if loaded.Status == StatusMissingRequiredCapability {
+			t.Fatalf("bundled plugin %q is missing required capabilities: %s", loaded.Manifest.ID, loaded.Error)
+		}
+	}
+
+	if !foundTodo {
+		t.Fatal("bundled Todo manifest was not discovered")
+	}
+}
+
+func bundledPluginDir(t *testing.T) string {
+	t.Helper()
+	if configured := os.Getenv("VERSTAK_RELEASE_PLUGIN_DIR"); configured != "" {
+		return configured
+	}
+	_, sourceFile, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("could not resolve lifecycle test path")
+	}
+	return filepath.Join(filepath.Dir(sourceFile), "../../../plugins")
 }
 
 // TestLifecycle_MissingRequiredCapability verifies that when the required

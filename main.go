@@ -86,17 +86,8 @@ func main() {
 	}
 
 	// ─── Register Core Capabilities ─────────────────────────
-	corePluginID := "verstak-desktop"
-	coreCaps := []string{
-		"verstak/core/plugin-manager/v1",
-		"verstak/core/capability-registry/v1",
-		"verstak/core/contribution-registry/v1",
-		"verstak/core/permissions/v1",
-		"verstak/core/events/v1",
-		"verstak/core/files/v1",
-		"verstak/core/workbench/v1",
-		"verstak/core/notifications/v1",
-	}
+	corePluginID := capability.CorePluginID
+	coreCaps := capability.CorePlatformCapabilities()
 	if err := capRegistry.Register(corePluginID, coreCaps); err != nil {
 		log.Fatalf("[main] failed to register core capabilities: %v", err)
 	}

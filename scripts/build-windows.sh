@@ -52,6 +52,7 @@ if [[ ! -d "$WINDOWS_PLUGIN_DIST" ]]; then
   echo "Windows plugin packages were not produced: $WINDOWS_PLUGIN_DIST" >&2
   exit 1
 fi
+VERSTAK_RELEASE_PLUGIN_DIR="$WINDOWS_PLUGIN_DIST" go test ./internal/core/plugin -run TestBundledOfficialPluginRequirementsResolve -count=1
 
 # Wails' -compiler option selects a Go binary, not a C compiler. Cross-CGO
 # therefore has to be supplied through the standard Go environment instead.
