@@ -124,4 +124,20 @@ test.describe('Command Palette', () => {
     await expect(page.locator('.modal[aria-label="Plugin Settings"]')).toBeVisible({ timeout: 10000 });
     await expect(page.locator('.modal-header h3')).toContainText('Sync');
   });
+
+  test('keeps technical command failures out of the palette status', async ({ page }) => {
+    await page.evaluate(() => {
+      window.go.api.App.PluginSyncNow = () => Promise.resolve('[plugin:verstak.sync] sync.now failed: internal service code 42');
+    });
+
+    await page.keyboard.press(process.platform === 'darwin' ? 'Meta+K' : 'Control+K');
+    const palette = page.locator('.command-palette');
+    await palette.locator('[data-command-palette-input]').fill('sync now');
+    await page.keyboard.press('Enter');
+
+    const status = page.locator('[data-command-palette-status="error"]');
+    await expect(status).toContainText('Could not run Sync Now. Please try again.');
+    await expect(status).not.toContainText('[plugin:');
+    await expect(status).not.toContainText('sync.now');
+  });
 });

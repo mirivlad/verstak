@@ -83,6 +83,11 @@
     return { value: result, error: '' };
   }
 
+  function reportError(key, fallback, details) {
+    console.warn('[PluginBundleHost] ' + key + ':', details);
+    return tr(key, undefined, fallback);
+  }
+
   async function loadAndMount(pId, compId, nextPropsKey) {
     // If same plugin+component and already mounted, skip
     if (currentPluginId === pId && currentComponent === compId && currentPropsKey === nextPropsKey && loadState === 'loaded') {
@@ -125,7 +130,7 @@
         const content = assetResult.value;
         if (assetResult.error || !content) {
           loadState = 'error';
-          errorText = tr('bundle.loadFailed', { error: assetResult.error || tr('bundle.emptyContent') });
+          errorText = reportError('bundle.loadFailed', 'Could not load the plugin interface. Please try again.', assetResult.error || tr('bundle.emptyContent'));
           return;
         }
 
@@ -136,8 +141,7 @@
           fn();
         } catch (e) {
           loadState = 'error';
-          errorText = tr('bundle.executionError', { error: e.message });
-          console.error('[PluginBundleHost] bundle exec error:', e);
+          errorText = reportError('bundle.executionError', 'Could not start the plugin interface. Please try again.', e);
           return;
         }
 
@@ -154,10 +158,7 @@
       const comp = components[compId];
       if (!comp || !comp.mount) {
         loadState = 'error';
-        errorText = tr('bundle.componentMissing', {
-          component: compId,
-          available: Object.keys(components).join(', ') || tr('common.none'),
-        });
+        errorText = tr('bundle.componentMissing', undefined, 'The requested plugin interface is unavailable.');
         return;
       }
 
@@ -177,8 +178,7 @@
           errorText = '';
         } catch (e) {
           loadState = 'error';
-          errorText = tr('bundle.mountError', { error: e.message });
-          console.error('[PluginBundleHost] mount error:', e);
+          errorText = reportError('bundle.mountError', 'Could not open the plugin interface. Please try again.', e);
         }
       } else {
         loadState = 'error';
@@ -186,8 +186,7 @@
       }
     } catch (e) {
       loadState = 'error';
-      errorText = tr('bundle.unexpectedError', { error: e.message || e });
-      console.error('[PluginBundleHost] error:', e);
+      errorText = reportError('bundle.unexpectedError', 'Could not open the plugin interface. Please try again.', e);
     }
   }
 
@@ -208,17 +207,18 @@
     <div class="host-state error">
       <Icon name="warning" size={24} class="error-icon" />
       <p class="error-title">{tr('pluginView.error')}</p>
-      <div class="error-details">
+      <p class="error-message">{errorText || tr('bundle.unknownError')}</p>
+      <details class="error-details">
+        <summary>{tr('common.details')}</summary>
         <p><strong>{tr('common.plugin')}:</strong> {currentPluginId || tr('common.unknown')}</p>
         <p><strong>{tr('common.component')}:</strong> {currentComponent || tr('common.unknown')}</p>
-        <p class="error-message">{errorText || tr('bundle.unknownError')}</p>
         {#if pluginInfo}
           <p class="error-meta">{tr('bundle.frontendEntry')}: {pluginInfo.entry || tr('common.none')}</p>
         {/if}
         {#if getComponentList().length > 0}
           <p class="error-meta">{tr('bundle.availableComponents')}: {getComponentList().join(', ')}</p>
         {/if}
-      </div>
+      </details>
     </div>
 
   {:else}
@@ -303,9 +303,19 @@
     max-width: 400px;
     text-align: left;
     background: #16213e;
-    padding: 1rem;
+    padding: 0.5rem 0.75rem;
     border-radius: 6px;
     border: 1px solid #0f3460;
+  }
+
+  .error-details[open] {
+    padding: 0.75rem 1rem;
+  }
+
+  .error-details summary {
+    cursor: pointer;
+    color: #e0e0f0;
+    font-weight: 600;
   }
 
   .error-details p {
@@ -318,12 +328,8 @@
 
   .error-message {
     color: #e94560;
-    font-family: monospace;
-    font-size: 0.8rem;
-    margin-top: 0.5rem !important;
-    padding: 0.5rem;
-    background: rgba(233, 69, 96, 0.1);
-    border-radius: 4px;
+    max-width: 400px;
+    margin: 0 0 0.75rem;
   }
 
   .error-meta {

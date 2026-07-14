@@ -35,6 +35,11 @@
     return i18n.t(key, params, fallback);
   })(locale);
 
+  function reportError(key, fallback, details) {
+    console.warn('[WorkspaceTree] operation failed:', details);
+    return tr(key, undefined, fallback);
+  }
+
   onMount(() => {
     unsubscribeLocale = i18n.subscribe((nextLocale) => {
       const changed = locale !== nextLocale;
@@ -128,7 +133,7 @@
       ]);
       const [list, err] = resultOrError(templates, []);
       if (err) {
-        createError = err;
+        createError = reportError('workspaceTree.templatesError', 'Could not load Deal templates. Please try again.', err);
         workspaceTemplates = [];
         return;
       }
@@ -154,7 +159,7 @@
         selectedTemplateId = workspaceTemplates[0]?.id || '';
       }
     } catch (error) {
-      createError = String(error);
+      createError = reportError('workspaceTree.templatesError', 'Could not load Deal templates. Please try again.', error);
       workspaceTemplates = [];
     } finally {
       templatesLoading = false;
@@ -188,7 +193,7 @@
     try {
       const [list, err] = resultOrError(await App.ListWorkspaces(), []);
       if (err) {
-        localError = err;
+        localError = reportError('workspaceTree.loadError', 'Could not load Deals. Please try again.', err);
         workspaces = [];
       } else {
         workspaces = list || [];
@@ -209,7 +214,7 @@
         activeWorkspaceId.set(currentWorkspaceId);
       }
     } catch (e) {
-      localError = String(e);
+      localError = reportError('workspaceTree.loadError', 'Could not load Deals. Please try again.', e);
     }
     loading = false;
   }
@@ -218,7 +223,7 @@
     const id = wsName(workspace);
     const err = await App.SetCurrentWorkspace(id);
     if (err) {
-      localError = err;
+      localError = reportError('workspaceTree.selectError', 'Could not select this Deal. Please try again.', err);
       return;
     }
     currentWorkspaceId = id;
@@ -247,7 +252,7 @@
     createError = '';
     const [, err] = resultOrError(await App.CreateWorkspace(name, selectedTemplate.id), null);
     if (err) {
-      createError = err;
+      createError = reportError('workspaceTree.createError', 'Could not create the Deal. Please try again.', err);
       creating = false;
       return;
     }
@@ -299,7 +304,7 @@
     busyId = oldName;
     const err = await App.RenameWorkspace(oldName, newName);
     if (err) {
-      localError = err;
+      localError = reportError('workspaceTree.renameError', 'Could not rename the Deal. Please try again.', err);
       busyId = '';
       return;
     }
@@ -317,7 +322,7 @@
     busyId = name;
     const [, err] = resultOrError(await App.TrashWorkspace(name), null);
     if (err) {
-      localError = err;
+      localError = reportError('workspaceTree.trashError', 'Could not move the Deal to trash. Please try again.', err);
       busyId = '';
       return;
     }

@@ -53,6 +53,12 @@
     }, 4000);
   }
 
+  function reportError(key, fallback, details) {
+    debug.log('[PluginManager] ' + key + ':', String(details));
+    WriteFrontendLog('PluginManager', key + ': ' + String(details)).catch(() => {});
+    return tr(key, undefined, fallback);
+  }
+
   function notifyPluginsChanged() {
     window.dispatchEvent(new CustomEvent('verstak:plugins-changed'));
   }
@@ -89,14 +95,14 @@
       ReadPluginSettings(pluginId).then(result => {
         const unpacked = unpackBackendResult(result);
         if (unpacked.error) {
-          settingsError = unpacked.error;
+          settingsError = reportError('pluginManager.settingsLoadError', 'Could not load plugin settings. Please try again.', unpacked.error);
           settingsData = {};
           return;
         }
         settingsData = unpacked.value || {};
       }).catch(() => { settingsData = {}; });
     } else {
-      settingsError = `Settings panel not found for plugin "${pluginId}". Check that the plugin is enabled and has settingsPanels in its manifest.`;
+      settingsError = tr('pluginManager.settingsUnavailable', undefined, 'Plugin settings are unavailable.');
     }
   }
 
@@ -127,7 +133,7 @@
     } catch (e) {
       debug.log('[PluginManager] loadAll: GetPlugins ERROR:', String(e));
       WriteFrontendLog('PluginManager', 'loadAll: GetPlugins ERROR: ' + String(e));
-      error = 'GetPlugins: ' + String(e);
+      error = reportError('pluginManager.loadError', 'Could not load plugins. Please try again.', e);
       loading = false;
       return;
     }
@@ -191,7 +197,7 @@
       resultMsg = `Reloaded ${count} plugin(s). ${summary}`;
     } catch (e) {
       debug.log('[PluginManager] reload: ReloadPlugins ERROR:', String(e));
-      error = 'Reload: ' + String(e);
+      error = reportError('pluginManager.reloadError', 'Could not reload plugins. Please try again.', e);
       reloading = false;
       return;
     }
@@ -211,7 +217,7 @@
     if (err) {
       debug.log('[PluginManager] enablePlugin: ERROR:', err);
       actionFeedback = { ...actionFeedback, [pluginId]: null };
-      error = 'Enable: ' + err;
+      error = reportError('pluginManager.enableError', 'Could not enable the plugin. Please try again.', err);
       return;
     }
     debug.log('[PluginManager] enablePlugin: success, reloading...');
@@ -232,7 +238,7 @@
     if (err) {
       debug.log('[PluginManager] disablePlugin: ERROR:', err);
       actionFeedback = { ...actionFeedback, [pluginId]: null };
-      error = 'Disable: ' + err;
+      error = reportError('pluginManager.disableError', 'Could not disable the plugin. Please try again.', err);
       return;
     }
     debug.log('[PluginManager] disablePlugin: success, reloading...');

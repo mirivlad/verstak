@@ -3,6 +3,7 @@
   import * as App from '../../../wailsjs/go/api/App';
   import { executePluginCommand } from '../plugin-host/VerstakPluginAPI.js';
   import { i18n } from '../i18n/index.js';
+  import { debug } from '../log/debug.js';
 
   let open = false;
   let query = '';
@@ -194,7 +195,12 @@
       closePalette();
       setStatus('success', tr('command.result', { title: command.title || command.id, status: result.status || tr('command.statusHandled') }));
     } catch (err) {
-      setStatus('error', `${command.title || command.id}: ${err?.message || String(err)}`);
+      const details = err?.message || String(err);
+      debug.log('[CommandPalette] command failed:', details);
+      App.WriteFrontendLog('CommandPalette', `command failed: ${details}`).catch(() => {});
+      setStatus('error', tr('command.failed', {
+        title: command.title || command.id,
+      }, `Could not run ${command.title || command.id}. Please try again.`));
     }
   }
 

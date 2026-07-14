@@ -18,6 +18,12 @@
     void activeLocale;
     return i18n.t(key, params, fallback);
   })(locale);
+
+  function reportError(key, fallback, details) {
+    console.warn('[VaultSelection] operation failed:', details);
+    return tr(key, undefined, fallback);
+  }
+
   onDestroy(unsubscribeLocale);
 
   onMount(async () => {
@@ -54,13 +60,13 @@
     try {
       const createErr = await App.CreateVault(newVaultPath.trim());
       if (createErr) {
-        error = tr('vaultSelection.createError', { error: createErr });
+        error = reportError('vaultSelection.createError', 'Could not create the vault. Please try again.', createErr);
         creating = false;
         return;
       }
       const openErr = await App.OpenVault(newVaultPath.trim());
       if (openErr) {
-        error = tr('vaultSelection.openError', { error: openErr });
+        error = reportError('vaultSelection.openError', 'Could not open the vault. Please try again.', openErr);
         creating = false;
         return;
       }
@@ -70,7 +76,7 @@
       }
       window.dispatchEvent(new CustomEvent('verstak:vault-opened'));
     } catch (e) {
-      error = String(e);
+      error = reportError('vaultSelection.createError', 'Could not create the vault. Please try again.', e);
       creating = false;
     }
   }
@@ -85,7 +91,7 @@
     try {
       const openErr = await App.OpenVault(openVaultPath.trim());
       if (openErr) {
-        error = tr('vaultSelection.openError', { error: openErr });
+        error = reportError('vaultSelection.openError', 'Could not open the vault. Please try again.', openErr);
         opening = false;
         return;
       }
@@ -95,7 +101,7 @@
       }
       window.dispatchEvent(new CustomEvent('verstak:vault-opened'));
     } catch (e) {
-      error = String(e);
+      error = reportError('vaultSelection.openError', 'Could not open the vault. Please try again.', e);
       opening = false;
     }
   }
@@ -106,7 +112,7 @@
     try {
       const openErr = await App.OpenVault(path);
       if (openErr) {
-        error = tr('vaultSelection.openError', { error: openErr });
+        error = reportError('vaultSelection.openError', 'Could not open the vault. Please try again.', openErr);
         opening = false;
         return;
       }
@@ -116,7 +122,7 @@
       }
       window.dispatchEvent(new CustomEvent('verstak:vault-opened'));
     } catch (e) {
-      error = String(e);
+      error = reportError('vaultSelection.openError', 'Could not open the vault. Please try again.', e);
       opening = false;
     }
   }
