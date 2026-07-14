@@ -58,7 +58,7 @@ test.describe('D: Plugin API bridge', () => {
 
     const workbench = page.locator('.workbench-host');
     await expect(workbench).toBeVisible({ timeout: 10000 });
-    await expect(workbench.locator('.workbench-title')).toHaveText('Notes/Overview.md');
+    await expect(workbench.locator('.workbench-title')).toHaveText('Overview');
   });
 
   test('workbench routes markdown files to default-editor provider', async ({ page }) => {
@@ -76,7 +76,7 @@ test.describe('D: Plugin API bridge', () => {
     const workbench = page.locator('.workbench-host');
     await expect(workbench).toBeVisible({ timeout: 10000 });
     const title = workbench.locator('.workbench-title');
-    await expect(title).toHaveText('Docs/readme.md');
+    await expect(title).toHaveText('readme.md');
   });
 
   test('workbench shows no-provider fallback when no provider matches', async ({ page }) => {
@@ -91,8 +91,10 @@ test.describe('D: Plugin API bridge', () => {
       window.dispatchEvent(new CustomEvent('verstak:workbench-opened', { detail: result }));
     });
 
-    await expect(page.locator('[data-workbench-status="no-provider"]')).toBeVisible();
-    await expect(page.locator('[data-workbench-status="no-provider"]')).toContainText('No viewer/editor available');
+    const fallback = page.locator('[data-workbench-status="no-provider"]');
+    await expect(fallback).toBeVisible();
+    await expect(fallback).toContainText('No viewer/editor available');
+    await expect(fallback).not.toContainText('generic-text');
   });
 
   test('sync plugin API routes through mocked Wails bridge', async ({ page }) => {

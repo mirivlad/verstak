@@ -175,10 +175,10 @@ test.describe('F: Default Editor Plugin', () => {
     const workbench = page.locator('.workbench-host');
     await expect(workbench).toBeVisible({ timeout: 10000 });
     const title = workbench.locator('.workbench-title');
-    await expect(title).toHaveText('Docs/readme.md');
+    await expect(title).toHaveText('readme.md');
   });
 
-  test('open .md with notes context routes to highest-priority provider', async ({ page }) => {
+  test('opening a note uses its title rather than its technical path', async ({ page }) => {
     await page.evaluate(async () => {
       const [result, err] = await window.go.api.App.OpenWorkbenchResource('verstak.platform-test', {
         kind: 'vault-file',
@@ -193,7 +193,7 @@ test.describe('F: Default Editor Plugin', () => {
     const workbench = page.locator('.workbench-host');
     await expect(workbench).toBeVisible({ timeout: 10000 });
     const title = workbench.locator('.workbench-title');
-    await expect(title).toHaveText('Notes/Overview.md');
+    await expect(title).toHaveText('Overview');
   });
 
   test('default-editor plugin is listed as loaded in plugin manager', async ({ page }) => {

@@ -513,7 +513,7 @@ test.describe('G: Files Plugin', () => {
 
     const workbench = page.locator('.workbench-host');
     await expect(workbench).toBeVisible({ timeout: 10000 });
-    await expect(workbench.locator('.workbench-title')).toHaveText('Docs/readme.md');
+    await expect(workbench.locator('.workbench-title')).toHaveText('readme.md');
 
     const preview = page.locator('.de-preview');
     await expect(preview).toBeVisible({ timeout: 10000 });
@@ -535,7 +535,7 @@ test.describe('G: Files Plugin', () => {
 
     const workbench = page.locator('.workbench-host');
     await expect(workbench).toBeVisible({ timeout: 10000 });
-    await expect(workbench.locator('.workbench-title')).toHaveText('Notes/Overview.md');
+    await expect(workbench.locator('.workbench-title')).toHaveText('Overview');
   });
 
   test('files plugin card shows openProviders in contributions', async ({ page }) => {

@@ -22,6 +22,7 @@
   $: requestContext = openedResource?.request?.context?.notesMode || openedResource?.request?.context?.isInsideNotesFolder
     ? 'notes-markdown'
     : ((openedResource?.request?.extension === '.md' || openedResource?.request?.extension === '.markdown') ? 'generic-markdown' : 'generic-text');
+  $: resourceTitle = resourceDisplayTitle(resourcePath, requestContext);
   $: componentProps = openedResource || {};
   $: mountKey = [
     providerPluginId,
@@ -30,6 +31,11 @@
     requestMode,
     requestContext,
   ].join(':');
+
+  function resourceDisplayTitle(path, context) {
+    const fileName = String(path || '').split('/').filter(Boolean).pop() || String(path || '');
+    return context === 'notes-markdown' ? fileName.replace(/\.(md|markdown)$/i, '') : fileName;
+  }
 
   function closeWorkbench() {
     window.dispatchEvent(new CustomEvent('verstak:close-workbench', { cancelable: true }));
@@ -41,7 +47,7 @@
 <div class="workbench-host vt-page">
   {#if openedResource?.status === 'no-provider'}
     <div class="workbench-header vt-page-header">
-      <span class="workbench-title vt-page-title">{resourcePath}</span>
+      <span class="workbench-title vt-page-title">{resourceTitle}</span>
       <span class="workbench-provider vt-badge">{tr('workbench.noProvider')}</span>
       <button class="close-btn btn-ghost btn-icon" type="button" title={tr('common.close')} aria-label={tr('common.close')} on:click={closeWorkbench}>
         <Icon name="x" size={18} />
@@ -49,11 +55,13 @@
     </div>
     <div class="workbench-empty no-provider vt-empty-state" data-workbench-status="no-provider">
       <p class="vt-empty-title">{tr('workbench.noViewer')}</p>
-      <p class="workbench-meta">{requestMode} · {requestContext}</p>
+      {#if debug.isEnabled()}
+        <p class="workbench-meta">{requestMode} · {requestContext}</p>
+      {/if}
     </div>
   {:else if openedResource}
     <div class="workbench-header vt-page-header">
-      <span class="workbench-title vt-page-title">{resourcePath}</span>
+      <span class="workbench-title vt-page-title">{resourceTitle}</span>
       {#if debug.isEnabled() && providerId}
         <span class="workbench-provider vt-badge accent" data-debug-provider>{providerId}</span>
       {/if}
