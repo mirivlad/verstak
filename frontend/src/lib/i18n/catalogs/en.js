@@ -35,6 +35,7 @@ export default {
   'pluginView.select': 'Select a plugin view from the sidebar',
   'pluginView.selectHint': 'Plugin views will appear here',
   'common.retry': '⟳ Retry',
+  'common.save': 'Save',
   'common.source': 'Source',
   'common.status': 'Status',
   'common.capability': 'Capability',

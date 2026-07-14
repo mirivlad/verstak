@@ -35,6 +35,7 @@ export default {
   'pluginView.select': 'Выберите представление плагина на боковой панели',
   'pluginView.selectHint': 'Представления плагинов появятся здесь',
   'common.retry': '⟳ Повторить',
+  'common.save': 'Сохранить',
   'common.source': 'Источник',
   'common.status': 'Состояние',
   'common.capability': 'Возможность',

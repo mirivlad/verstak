@@ -25,6 +25,11 @@ test.describe('Desktop localization', () => {
     await expect(page.locator('.sidebar .plugin-item').filter({ hasText: 'Тест платформы' })).toBeVisible();
     await expect(page.locator('[data-status-item-id="verstak.platform-test.status"]')).toContainText('Все тесты пройдены');
 
+    const project = page.locator('.wt-node').filter({ hasText: 'Project' });
+    await project.locator('button[title="Переименовать Дело"]').click();
+    await expect(page.locator('button[title="Сохранить новое название"]')).toHaveText('Сохранить');
+    await page.locator('.wt-rename').press('Escape');
+
     await page.locator('[data-settings-menu-button]').click();
     await expect(page.locator('[data-settings-action="plugin-manager"]')).toContainText('Менеджер плагинов');
     await expect(page.locator('[data-settings-language="ru"]')).toHaveAttribute('aria-checked', 'true');

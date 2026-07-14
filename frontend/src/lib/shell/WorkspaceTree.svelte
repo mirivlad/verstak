@@ -364,7 +364,7 @@
                 if (e.key === 'Escape') cancelRename();
               }}
             />
-            <button class="wt-btn wt-btn-small wt-always" on:click={() => commitRename(workspace)} title={tr('workspaceTree.saveRename')} type="button" disabled={busyId === id}>OK</button>
+            <button class="wt-btn wt-btn-small wt-always" on:click={() => commitRename(workspace)} title={tr('workspaceTree.saveRename')} type="button" disabled={busyId === id}>{tr('common.save')}</button>
             <button class="wt-btn wt-btn-small wt-always" on:click={cancelRename} title={tr('common.cancel')} type="button" disabled={busyId === id}>{tr('common.cancel')}</button>
           {:else}
             <button class="wt-label" on:click={() => selectWorkspace(workspace)} type="button">{id}</button>
