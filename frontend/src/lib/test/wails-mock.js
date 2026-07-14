@@ -8,6 +8,7 @@ import defaultEditorSource from '../../../../../verstak-official-plugins/plugins
 import secretsSource from '../../../../../verstak-official-plugins/plugins/secrets/frontend/src/index.js?raw';
 import activitySource from '../../../../../verstak-official-plugins/plugins/activity/frontend/src/index.js?raw';
 import todoSource from '../../../../../verstak-official-plugins/plugins/todo/frontend/src/index.js?raw';
+import journalSource from '../../../../../verstak-official-plugins/plugins/journal/frontend/src/index.js?raw';
 
 (function () {
   if (window.__wailsMockReady) return;
@@ -224,7 +225,7 @@ import todoSource from '../../../../../verstak-official-plugins/plugins/todo/fro
         source: 'official',
         icon: 'book-open',
         provides: ['worklog', 'journal', 'report.worklog'],
-        permissions: ['storage.namespace', 'ui.register'],
+        permissions: ['events.publish', 'files.read', 'storage.namespace', 'ui.register'],
         frontend: { entry: 'frontend/dist/index.js' },
         contributes: {
           views: [{ id: 'verstak.journal.view', title: 'Journal', icon: 'book-open', component: 'JournalView' }],
@@ -3558,7 +3559,7 @@ import todoSource from '../../../../../verstak-official-plugins/plugins/todo/fro
         return Promise.resolve(activitySource);
       }
       if (pluginId === 'verstak.journal' && assetPath === 'frontend/dist/index.js') {
-        return Promise.resolve(journalBundle());
+        return Promise.resolve(journalSource);
       }
       if (pluginId === 'verstak.browser-inbox' && assetPath === 'frontend/dist/index.js') {
         return Promise.resolve(browserInboxBundle());
@@ -4175,7 +4176,7 @@ import todoSource from '../../../../../verstak-official-plugins/plugins/todo/fro
             source: 'official',
             icon: 'book-open',
             provides: ['worklog', 'journal', 'report.worklog'],
-            permissions: ['storage.namespace', 'ui.register'],
+            permissions: ['events.publish', 'files.read', 'storage.namespace', 'ui.register'],
             frontend: { entry: 'frontend/dist/index.js' },
             contributes: {
               views: [{ id: 'verstak.journal.view', title: 'Journal', icon: 'book-open', component: 'JournalView' }],
