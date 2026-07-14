@@ -49,11 +49,11 @@ No account, cloud service or sync server is required for local use.
 
 | Overview: return to a Deal and see its recent work, captures and items that need attention. | Files: manage ordinary folders and documents inside a Deal. |
 | --- | --- |
-| ![Verstak Overview in a test vault](docs/screenshots/overview.png) | ![Verstak Deal files in a test vault](docs/screenshots/workspace-files.png) |
+| ![Current Verstak Overview in a test vault](docs/screenshots/overview-en.png) | ![Current Verstak Deal files in a test vault](docs/screenshots/files-en.png) |
 
 | Notes: keep Markdown notes next to the Deal they describe. | Journal: record a completed session and retain its context. |
 | --- | --- |
-| ![Verstak notes in a test vault](docs/screenshots/notes.png) | ![Verstak journal in a test vault](docs/screenshots/journal.png) |
+| ![Current Verstak notes in a test vault](docs/screenshots/notes-en.png) | ![Current Verstak journal in a test vault](docs/screenshots/journal-en.png) |
 
 ## Main features
 
