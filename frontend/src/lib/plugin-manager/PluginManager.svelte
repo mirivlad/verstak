@@ -773,9 +773,15 @@
     border: 1px solid #0f3460;
     border-radius: 5px;
     background: #16213e;
+    background-image: linear-gradient(45deg, transparent 50%, #a0a0b8 50%), linear-gradient(135deg, #a0a0b8 50%, transparent 50%);
+    background-position: calc(100% - 14px) 50%, calc(100% - 9px) 50%;
+    background-size: 5px 5px, 5px 5px;
+    background-repeat: no-repeat;
     color: #e0e0e0;
     font: inherit;
+    appearance: none;
   }
+  .filter-select option { background: #16213e; color: #e0e0e0; }
   .filter-select:focus { outline: 2px solid #533483; outline-offset: 1px; }
   .filter-options {
     min-width: 0;

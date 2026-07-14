@@ -95,6 +95,12 @@ test.describe('E: Plugin Manager layout', () => {
 
     const results = page.locator('[data-plugin-filter-results]');
     await expect(results).toContainText('Showing');
+    const filterSelectStyle = await page.locator('[data-plugin-filter="status"]').evaluate((node) => {
+      const style = getComputedStyle(node);
+      return { appearance: style.appearance, backgroundImage: style.backgroundImage };
+    });
+    expect(filterSelectStyle.appearance).toBe('none');
+    expect(filterSelectStyle.backgroundImage).not.toBe('none');
 
     await page.locator('[data-plugin-filter="status"]').selectOption('disabled');
     await expect(page.locator('.plugin-card')).toHaveCount(1);
