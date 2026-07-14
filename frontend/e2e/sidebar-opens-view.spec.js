@@ -30,23 +30,23 @@ test.describe('B: Sidebar opens plugin view by item.view', () => {
   test('Sidebar item exists with correct label', async ({ page }) => {
     await expect(page.locator('.sidebar .nav-item').filter({ hasText: 'Plugin Manager' })).not.toBeVisible();
     await expect(page.locator('.sidebar .plugin-item').filter({ hasText: 'Activity' })).toBeVisible();
-    await expect(page.locator('.sidebar .plugin-item').filter({ hasText: 'Browser Inbox' })).toBeVisible();
+    await expect(page.locator('.sidebar .plugin-item').filter({ hasText: 'Browser' })).toBeVisible();
 
     const sidebarItem = page.locator('.sidebar .plugin-item').filter({ hasText: 'Platform Test' });
     await expect(sidebarItem).toBeVisible();
   });
 
-  test('Global Activity and Browser Inbox sidebar items open plugin views', async ({ page }) => {
+  test('Global Activity and Browser sidebar items open plugin views', async ({ page }) => {
     await page.locator('.sidebar .plugin-item').filter({ hasText: 'Activity' }).click();
     await expect(page.locator('.view-container .view-header h2')).toHaveText('Activity', { timeout: 10000 });
 
-    await page.locator('.sidebar .plugin-item').filter({ hasText: 'Browser Inbox' }).click();
-    await expect(page.locator('.view-container .view-header h2')).toHaveText('Browser Inbox', { timeout: 10000 });
+    await page.locator('.sidebar .plugin-item').filter({ hasText: 'Browser' }).click();
+    await expect(page.locator('.view-container .view-header h2')).toHaveText('Browser', { timeout: 10000 });
   });
 
   test('selected global tool remains visibly active through navigation and sidebar reloads', async ({ page }) => {
     const activity = page.locator('.sidebar .plugin-item').filter({ hasText: 'Activity' });
-    const browserInbox = page.locator('.sidebar .plugin-item').filter({ hasText: 'Browser Inbox' });
+    const browserInbox = page.locator('.sidebar .plugin-item').filter({ hasText: 'Browser' });
 
     await activity.click();
     await expect(activity).toHaveAttribute('aria-current', 'page');
@@ -62,7 +62,7 @@ test.describe('B: Sidebar opens plugin view by item.view', () => {
         detail: { viewId: 'verstak.browser-inbox.view', pluginId: 'verstak.browser-inbox' },
       }));
     });
-    await expect(page.locator('.view-container .view-header h2')).toHaveText('Browser Inbox', { timeout: 10000 });
+    await expect(page.locator('.view-container .view-header h2')).toHaveText('Browser', { timeout: 10000 });
     await expect(browserInbox).toHaveAttribute('aria-current', 'page');
     await expect(browserInbox).toHaveClass(/is-active/);
     await expect(activity).not.toHaveAttribute('aria-current', 'page');

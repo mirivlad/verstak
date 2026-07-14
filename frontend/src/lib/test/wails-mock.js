@@ -242,19 +242,19 @@ import journalSource from '../../../../../verstak-official-plugins/plugins/journ
       manifest: {
         schemaVersion: 1,
         id: 'verstak.browser-inbox',
-        name: 'Browser Inbox',
+        name: 'Browser',
         version: '0.1.0',
         apiVersion: '0.1.0',
-        description: 'Global browser capture queue with explicit workspace assignment.',
+        description: 'Global browser materials with explicit Deal assignment.',
         source: 'official',
         icon: 'inbox',
         provides: ['browser.inbox'],
         permissions: ['events.subscribe', 'files.read', 'storage.namespace', 'ui.register'],
         frontend: { entry: 'frontend/dist/index.js' },
         contributes: {
-          views: [{ id: 'verstak.browser-inbox.view', title: 'Browser Inbox', icon: 'inbox', component: 'BrowserInboxView' }],
-          sidebarItems: [{ id: 'verstak.browser-inbox.sidebar', title: 'Browser Inbox', icon: 'inbox', view: 'verstak.browser-inbox.view', position: 30 }],
-          workspaceItems: [{ id: 'verstak.browser-inbox.workspace', title: 'Browser Inbox', icon: 'inbox', component: 'BrowserInboxView' }]
+          views: [{ id: 'verstak.browser-inbox.view', title: 'Browser', icon: 'inbox', component: 'BrowserInboxView' }],
+          sidebarItems: [{ id: 'verstak.browser-inbox.sidebar', title: 'Browser', icon: 'inbox', view: 'verstak.browser-inbox.view', position: 30 }],
+          workspaceItems: [{ id: 'verstak.browser-inbox.workspace', title: 'Browser', icon: 'inbox', component: 'BrowserInboxView' }]
         }
       },
       rootPath: '/tmp/verstak-test/plugins/browser-inbox',
@@ -297,7 +297,7 @@ import journalSource from '../../../../../verstak-official-plugins/plugins/journ
     'verstak.sync': 'Синхронизация',
     'verstak.activity': 'Активность',
     'verstak.journal': 'Журнал',
-    'verstak.browser-inbox': 'Входящие из браузера',
+    'verstak.browser-inbox': 'Браузер',
     'verstak.search': 'Поиск',
     'verstak.trash': 'Корзина',
     'verstak.todo': 'Задачи',
@@ -2456,7 +2456,7 @@ import journalSource from '../../../../../verstak-official-plugins/plugins/journ
       }
 
       function title(capture) {
-        return capture.title || capture.fileName || capture.url || capture.captureId || 'Untitled capture';
+        return capture.title || capture.fileName || capture.url || capture.captureId || 'Untitled material';
       }
 
       function renderBrowserInbox(containerEl, props, api) {
@@ -2473,7 +2473,7 @@ import journalSource from '../../../../../verstak-official-plugins/plugins/journ
         containerEl.innerHTML = '';
         var root = el('div', { className: 'browser-inbox-root', 'data-plugin-id': PLUGIN_ID });
         var toolbar = el('div', { className: 'browser-inbox-toolbar' });
-        var titleEl = el('span', { className: 'browser-inbox-title', textContent: rootPath ? 'Browser Inbox · ' + rootPath : 'Browser Inbox' });
+        var titleEl = el('span', { className: 'browser-inbox-title', textContent: rootPath ? 'Browser · ' + rootPath : 'Browser' });
         var countEl = el('span', { className: 'browser-inbox-count' });
         var statusEl = el('span', { className: 'browser-inbox-status' });
         var filtersEl = el('div', { className: 'browser-inbox-filters' });
@@ -2557,7 +2557,7 @@ import journalSource from '../../../../../verstak-official-plugins/plugins/journ
         function renderWorkspaceFilterOptions() {
           if (rootPath) return;
           workspaceFilterEl.innerHTML = '';
-          workspaceFilterEl.appendChild(option('', 'All workspaces'));
+          workspaceFilterEl.appendChild(option('', 'All Deals'));
           workspaceRoots().forEach(function (workspace) {
             workspaceFilterEl.appendChild(option(workspace, workspace));
           });
@@ -2630,7 +2630,7 @@ import journalSource from '../../../../../verstak-official-plugins/plugins/journ
           }) : captures).map(function (capture) { return capture.captureId; });
           captures = captures.filter(function (capture) { return ids.indexOf(capture.captureId) === -1; });
           selectedId = '';
-          statusText = rootPath ? 'Workspace captures cleared' : 'Inbox cleared';
+          statusText = rootPath ? 'Deal materials cleared' : 'Inbox cleared';
           return persist();
         }
 
@@ -2672,7 +2672,7 @@ import journalSource from '../../../../../verstak-official-plugins/plugins/journ
             listEl.appendChild(el('div', {
               className: 'browser-inbox-empty',
               textContent: captures.length === 0
-                ? 'No browser captures yet. Keep this view open, then send a page, selection, link, or file from the browser extension.'
+                ? 'No browser materials yet. Send a page, selection, or link from the extension.'
                 : 'No captures match the current filters.'
             }));
             return;
@@ -2717,7 +2717,7 @@ import journalSource from '../../../../../verstak-official-plugins/plugins/journ
             el('div', { className: 'browser-inbox-meta-value', textContent: capture.domain || '-' }),
             el('div', { className: 'browser-inbox-meta-label', textContent: 'Browser' }),
             el('div', { className: 'browser-inbox-meta-value', textContent: capture.browserName || capture.source || '-' }),
-            el('div', { className: 'browser-inbox-meta-label', textContent: 'Workspace' }),
+            el('div', { className: 'browser-inbox-meta-label', textContent: 'Deal' }),
             el('div', { className: 'browser-inbox-meta-value', textContent: capture.workspaceRootPath || 'Unassigned' }),
             el('div', { className: 'browser-inbox-meta-label', textContent: 'Status' }),
             el('div', { className: 'browser-inbox-meta-value', textContent: capture.processed ? 'Processed' : 'Unprocessed' })
@@ -4196,19 +4196,19 @@ import journalSource from '../../../../../verstak-official-plugins/plugins/journ
           manifest: {
             schemaVersion: 1,
             id: 'verstak.browser-inbox',
-            name: 'Browser Inbox',
+            name: 'Browser',
             version: '0.1.0',
             apiVersion: '0.1.0',
-            description: 'Global browser capture queue with explicit workspace assignment.',
+            description: 'Global browser materials with explicit Deal assignment.',
             source: 'official',
             icon: 'inbox',
             provides: ['browser.inbox'],
             permissions: ['events.subscribe', 'files.read', 'storage.namespace', 'ui.register'],
             frontend: { entry: 'frontend/dist/index.js' },
             contributes: {
-              views: [{ id: 'verstak.browser-inbox.view', title: 'Browser Inbox', icon: 'inbox', component: 'BrowserInboxView' }],
-              sidebarItems: [{ id: 'verstak.browser-inbox.sidebar', title: 'Browser Inbox', icon: 'inbox', view: 'verstak.browser-inbox.view', position: 30 }],
-              workspaceItems: [{ id: 'verstak.browser-inbox.workspace', title: 'Browser Inbox', icon: 'inbox', component: 'BrowserInboxView' }]
+              views: [{ id: 'verstak.browser-inbox.view', title: 'Browser', icon: 'inbox', component: 'BrowserInboxView' }],
+              sidebarItems: [{ id: 'verstak.browser-inbox.sidebar', title: 'Browser', icon: 'inbox', view: 'verstak.browser-inbox.view', position: 30 }],
+              workspaceItems: [{ id: 'verstak.browser-inbox.workspace', title: 'Browser', icon: 'inbox', component: 'BrowserInboxView' }]
             }
           },
           rootPath: '/tmp/verstak-test/plugins/browser-inbox',

@@ -18,7 +18,7 @@ test.describe('UX follow-up fixes', () => {
     await expect(search).toBeVisible();
     await expect(page.locator('.sidebar [data-global-search-input]')).toBeVisible();
 
-    await page.locator('.sidebar .nav-item').filter({ hasText: 'Browser Inbox' }).click();
+    await page.locator('.sidebar .nav-item').filter({ hasText: 'Browser' }).click();
     await expect(page.locator('.browser-inbox-root')).toBeVisible({ timeout: 10000 });
     await expect(search).toBeVisible();
   });
@@ -67,7 +67,7 @@ test.describe('UX follow-up fixes', () => {
 
     const search = page.locator('[data-global-search-input]');
     await search.fill('Research Search Result');
-    const result = page.locator('[data-global-search-result-type="Browser Inbox"]').filter({ hasText: 'Research Search Result' });
+    const result = page.locator('[data-global-search-result-type="Browser"]').filter({ hasText: 'Research Search Result' });
     await expect(result).toBeVisible({ timeout: 10000 });
     await result.click();
 

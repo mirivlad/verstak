@@ -28,7 +28,7 @@ test.describe('Workspace templates', () => {
     await expect(templateSelect).toHaveValue('default');
     await expect(templateSelect).toHaveCSS('appearance', 'none');
     await expect(modal.locator('[data-workspace-template-tools]')).toContainText('Notes');
-    await expect(modal.locator('[data-workspace-template-tools]')).toContainText('Browser Inbox');
+    await expect(modal.locator('[data-workspace-template-tools]')).toContainText('Browser');
 
     await modal.getByRole('button', { name: 'Create Deal' }).click();
     await expect(modal.locator('[data-workspace-create-error]')).toContainText('Name is required');
@@ -74,7 +74,7 @@ test.describe('Workspace templates', () => {
     await expect(page.getByRole('tab', { name: 'Journal' })).toHaveCount(0);
     await expect(page.getByRole('tab', { name: 'Secrets' })).toHaveCount(0);
     await expect(page.locator('.sidebar .plugin-item').filter({ hasText: 'Todos' })).toBeVisible();
-    await expect(page.locator('.sidebar .plugin-item').filter({ hasText: 'Browser Inbox' })).toBeVisible();
+    await expect(page.locator('.sidebar .plugin-item').filter({ hasText: 'Browser' })).toBeVisible();
   });
 
   test('template explains an unavailable plugin and warns after incomplete creation', async ({ page }) => {

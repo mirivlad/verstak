@@ -56,7 +56,7 @@ test.describe('UX Overview workspace flow', () => {
     await page.getByRole('tab', { name: 'Overview' }).click();
     await overview.locator('[data-overview-summary="captures"]').click();
 
-    await expect(page.getByRole('tab', { name: 'Browser Inbox' })).toHaveAttribute('aria-selected', 'true');
+    await expect(page.getByRole('tab', { name: 'Browser' })).toHaveAttribute('aria-selected', 'true');
     await expect(page.locator('.browser-inbox-root')).toBeVisible({ timeout: 10000 });
 
     await page.getByRole('tab', { name: 'Overview' }).click();
@@ -70,7 +70,7 @@ test.describe('UX Overview workspace flow', () => {
 
     await page.getByRole('tab', { name: 'Overview' }).click();
     await overview.locator('[data-overview-summary="attention"]').click();
-    await expect(page.getByRole('tab', { name: 'Browser Inbox' })).toHaveAttribute('aria-selected', 'true');
+    await expect(page.getByRole('tab', { name: 'Browser' })).toHaveAttribute('aria-selected', 'true');
   });
 
   test('Overview keeps the Notes total factual when the Files plugin is unavailable', async ({ page }) => {
@@ -80,13 +80,13 @@ test.describe('UX Overview workspace flow', () => {
     await expect(page.locator('[data-overview-summary="notes"]')).toContainText('1 total');
   });
 
-  test('Overview hides Browser Inbox cards and actions when the current Deal does not include it', async ({ page }) => {
-    await page.locator('button[title="New workspace"]').click();
+  test('Overview hides Browser cards and actions when the current Deal does not include it', async ({ page }) => {
+    await page.locator('button[title="New Deal"]').click();
     const modal = page.locator('[data-workspace-create-modal]');
     await modal.locator('[data-workspace-name]').fill('MinimalOverview');
     await modal.locator('[data-workspace-template]').selectOption('minimal');
-    await modal.getByRole('button', { name: 'Create workspace' }).click();
-    await expect(page.getByRole('tab', { name: 'Browser Inbox' })).toHaveCount(0);
+    await modal.getByRole('button', { name: 'Create Deal' }).click();
+    await expect(page.getByRole('tab', { name: 'Browser' })).toHaveCount(0);
 
     await page.evaluate(async () => {
       await window.go.api.App.WritePluginSettings('verstak.browser-inbox', {
@@ -107,7 +107,7 @@ test.describe('UX Overview workspace flow', () => {
     await expect(overview).not.toContainText('Inbox material must stay hidden');
   });
 
-  test('Overview refreshes when Browser Inbox is disabled through plugin state changes', async ({ page }) => {
+  test('Overview refreshes when Browser is disabled through plugin state changes', async ({ page }) => {
     await page.evaluate(async () => {
       await window.go.api.App.WritePluginSettings('verstak.browser-inbox', {
         'captures:global': [{
@@ -123,7 +123,7 @@ test.describe('UX Overview workspace flow', () => {
     });
 
     const overview = page.locator('[data-overview-root]');
-    await expect(page.getByRole('tab', { name: 'Browser Inbox' })).toHaveCount(0);
+    await expect(page.getByRole('tab', { name: 'Browser' })).toHaveCount(0);
     await expect(overview.locator('[data-overview-summary="captures"]')).toHaveCount(0);
     await expect(overview.locator('[data-overview-action="browser-inbox"]')).toHaveCount(0);
   });
@@ -264,7 +264,7 @@ test.describe('UX Overview workspace flow', () => {
     await expect(candidates.nth(3)).toContainText('Changed file "draft.md"');
     await candidates.nth(0).click();
 
-    await expect(page.getByRole('tab', { name: 'Browser Inbox' })).toHaveAttribute('aria-selected', 'true');
+    await expect(page.getByRole('tab', { name: 'Browser' })).toHaveAttribute('aria-selected', 'true');
     await expect(page.locator('.browser-inbox-root')).toBeVisible({ timeout: 10000 });
 
     await page.getByRole('tab', { name: 'Overview' }).click();
