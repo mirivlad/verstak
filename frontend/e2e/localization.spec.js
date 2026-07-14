@@ -28,6 +28,11 @@ test.describe('Desktop localization', () => {
     await page.locator('[data-settings-menu-button]').click();
     await expect(page.locator('[data-settings-action="plugin-manager"]')).toContainText('Менеджер плагинов');
     await expect(page.locator('[data-settings-language="ru"]')).toHaveAttribute('aria-checked', 'true');
+    await page.locator('[data-settings-action="plugin-manager"]').click();
+    const pluginManager = page.locator('.plugin-manager');
+    await expect(pluginManager).toContainText('Зарегистрировано возможностей:');
+    await expect(pluginManager.locator('.registry-section')).toContainText('Реестр возможностей');
+    await expect(pluginManager.locator('.registry-section')).toContainText('Возможность');
 
     await page.reload();
     await waitForAppReady(page);
