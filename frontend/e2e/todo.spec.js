@@ -27,7 +27,13 @@ test.describe('Todo plugin workflow', () => {
     await todos.locator('[data-todo-input="description"]').fill('Collect factual review notes.');
     await todos.locator('[data-todo-input="priority"]').selectOption('high');
     await todos.locator('[data-todo-input="dueAt"]').fill('2000-01-01');
-    await todos.locator('[data-todo-input="reminderAt"]').fill('2000-01-01T09:00');
+    await todos.locator('[data-todo-input="reminderDate"]').fill('2000-01-01');
+    const reminderHour = todos.locator('[data-todo-input="reminderHour"]');
+    const reminderMinute = todos.locator('[data-todo-input="reminderMinute"]');
+    await expect(reminderHour).toHaveCSS('appearance', 'none');
+    await expect(reminderMinute).toHaveCSS('appearance', 'none');
+    await reminderHour.selectOption('09');
+    await reminderMinute.selectOption('30');
     await todos.locator('[data-todo-action="save"]').click();
 
     await expect(todos).toContainText('Overdue');
@@ -37,7 +43,7 @@ test.describe('Todo plugin workflow', () => {
       const settings = Array.isArray(result) ? result[0] : result;
       const todo = settings['todos:global'].find((item) => item.title === 'Prepare project review');
       return todo && [todo.workspaceRootPath, todo.priority, todo.dueAt, todo.reminderAt].join('|');
-    })).toBe('Project|high|2000-01-01|2000-01-01T09:00');
+    })).toBe('Project|high|2000-01-01|2000-01-01T09:30');
 
     await todos.locator('[data-todo-action="edit"]').click();
     await todos.locator('[data-todo-input="title"]').fill('Prepare project review updated');

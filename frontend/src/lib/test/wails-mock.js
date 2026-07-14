@@ -7,6 +7,7 @@
 import defaultEditorSource from '../../../../../verstak-official-plugins/plugins/default-editor/frontend/src/index.js?raw';
 import secretsSource from '../../../../../verstak-official-plugins/plugins/secrets/frontend/src/index.js?raw';
 import activitySource from '../../../../../verstak-official-plugins/plugins/activity/frontend/src/index.js?raw';
+import todoSource from '../../../../../verstak-official-plugins/plugins/todo/frontend/src/index.js?raw';
 
 (function () {
   if (window.__wailsMockReady) return;
@@ -363,6 +364,7 @@ import activitySource from '../../../../../verstak-official-plugins/plugins/acti
   var pluginSettings = {
     'verstak.platform-test': { savedText: 'initial value' }
   };
+  var pluginNotifications = {};
   var pluginData = {};
   var secretRecords = makeDefaultSecretRecords();
   var vaultFiles = makeDefaultVaultFiles();
@@ -571,7 +573,8 @@ import activitySource from '../../../../../verstak-official-plugins/plugins/acti
         source: 'official',
         icon: 'list-todo',
         provides: ['todo.list', 'todo.workspace'],
-        permissions: ['files.read', 'storage.namespace', 'ui.register'],
+        requires: ['verstak/core/notifications/v1'],
+        permissions: ['files.read', 'storage.namespace', 'ui.register', 'notifications.schedule'],
         frontend: { entry: 'frontend/dist/index.js' },
         contributes: {
           views: [{ id: 'verstak.todo.view', title: 'Todos', icon: 'list-todo', component: 'TodoView' }],
@@ -3405,8 +3408,22 @@ import activitySource from '../../../../../verstak-official-plugins/plugins/acti
       pluginSettings[pluginId] = Object.assign({}, settings || {});
       return Promise.resolve('');
     },
-    ReadPluginSetting: function () { return Promise.resolve(null); },
-    WritePluginSetting: function () { return Promise.resolve(null); },
+    ReadPluginSetting: function (pluginId, key) {
+      return Promise.resolve([pluginSettings[pluginId] && pluginSettings[pluginId][key], '']);
+    },
+    WritePluginSetting: function (pluginId, key, value) {
+      pluginSettings[pluginId] = pluginSettings[pluginId] || {};
+      pluginSettings[pluginId][key] = value;
+      return Promise.resolve('');
+    },
+    ReplacePluginNotifications: function (pluginId, items) {
+      pluginNotifications[pluginId] = Array.isArray(items) ? items.slice() : [];
+      return Promise.resolve('');
+    },
+    ClearPluginNotifications: function (pluginId) {
+      delete pluginNotifications[pluginId];
+      return Promise.resolve('');
+    },
     ReadPluginDataJSON: function (pluginId, name) {
       var data = (pluginData[pluginId] && pluginData[pluginId][name]) || {};
       return Promise.resolve([Object.assign({}, data), '']);
@@ -3547,7 +3564,7 @@ import activitySource from '../../../../../verstak-official-plugins/plugins/acti
         return Promise.resolve(browserInboxBundle());
       }
       if (pluginId === 'verstak.todo' && assetPath === 'frontend/dist/index.js') {
-        return Promise.resolve(todoBundle());
+        return Promise.resolve(todoSource);
       }
       if (pluginId === 'verstak.secrets') {
         return Promise.resolve(secretsSource);
@@ -4234,6 +4251,7 @@ import activitySource from '../../../../../verstak-official-plugins/plugins/acti
       workbenchPreferences = {};
       openedResources = [];
       pluginSettings = { 'verstak.platform-test': { savedText: 'initial value' } };
+      pluginNotifications = {};
       secretRecords = makeDefaultSecretRecords();
       vaultFiles = makeDefaultVaultFiles();
       externalOpens = [];

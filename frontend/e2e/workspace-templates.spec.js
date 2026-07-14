@@ -24,7 +24,9 @@ test.describe('Workspace templates', () => {
 
   test('creation modal validates names, shows template tools, and persists the selected snapshot', async ({ page }) => {
     const modal = await openCreateModal(page);
-    await expect(modal.locator('[data-workspace-template]')).toHaveValue('default');
+    const templateSelect = modal.locator('[data-workspace-template]');
+    await expect(templateSelect).toHaveValue('default');
+    await expect(templateSelect).toHaveCSS('appearance', 'none');
     await expect(modal.locator('[data-workspace-template-tools]')).toContainText('Notes');
     await expect(modal.locator('[data-workspace-template-tools]')).toContainText('Browser Inbox');
 
