@@ -28,12 +28,9 @@ test.describe('Todo plugin workflow', () => {
     await todos.locator('[data-todo-input="priority"]').selectOption('high');
     await todos.locator('[data-todo-input="dueAt"]').fill('2000-01-01');
     await todos.locator('[data-todo-input="reminderDate"]').fill('2000-01-01');
-    const reminderHour = todos.locator('[data-todo-input="reminderHour"]');
-    const reminderMinute = todos.locator('[data-todo-input="reminderMinute"]');
-    await expect(reminderHour).toHaveCSS('appearance', 'none');
-    await expect(reminderMinute).toHaveCSS('appearance', 'none');
-    await reminderHour.selectOption('09');
-    await reminderMinute.selectOption('30');
+    const reminderTime = todos.locator('[data-todo-input="reminderTime"]');
+    await expect(reminderTime).toHaveAttribute('type', 'text');
+    await reminderTime.fill('09:30');
     await todos.locator('[data-todo-action="save"]').click();
 
     await expect(todos).toContainText('Overdue');
@@ -42,13 +39,23 @@ test.describe('Todo plugin workflow', () => {
       const result = await window.go.api.App.ReadPluginSettings('verstak.todo');
       const settings = Array.isArray(result) ? result[0] : result;
       const todo = settings['todos:global'].find((item) => item.title === 'Prepare project review');
-      return todo && [todo.workspaceRootPath, todo.priority, todo.dueAt, todo.reminderAt].join('|');
-    })).toBe('Project|high|2000-01-01|2000-01-01T09:30');
+      return todo && [todo.workspaceRootPath, todo.priority, todo.dueAt, todo.reminderDate, todo.reminderAt].join('|');
+    })).toBe('Project|high|2000-01-01|2000-01-01|2000-01-01T09:30');
 
     await todos.locator('[data-todo-action="edit"]').click();
     await todos.locator('[data-todo-input="title"]').fill('Prepare project review updated');
+    await todos.locator('[data-todo-input="reminderTime"]').fill('not-a-time');
+    await todos.locator('[data-todo-action="save"]').click();
+    await expect(todos).toContainText('Enter a valid reminder time');
+    await todos.locator('[data-todo-input="reminderTime"]').fill('');
     await todos.locator('[data-todo-action="save"]').click();
     await expect(todos).toContainText('Prepare project review updated');
+    await expect.poll(async () => page.evaluate(async () => {
+      const result = await window.go.api.App.ReadPluginSettings('verstak.todo');
+      const settings = Array.isArray(result) ? result[0] : result;
+      const todo = settings['todos:global'].find((item) => item.title === 'Prepare project review updated');
+      return todo && [todo.reminderDate, todo.reminderAt].join('|');
+    })).toBe('2000-01-01|');
 
     await todos.locator('[data-todo-action="mark-done"]').click();
     await expect(todos.locator('[data-todo-action="create-journal-entry"]')).toBeVisible();
