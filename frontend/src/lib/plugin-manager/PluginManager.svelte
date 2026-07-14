@@ -33,6 +33,11 @@
   let reloading = false;
   let toastMessage = '';
   let toastType = 'success'; // 'success' | 'error' | 'info'
+  let statusFilter = 'all';
+  let permissionFilters = [];
+  let capabilityFilters = [];
+  let settingsFilter = 'all';
+  let sourceFilter = 'all';
 
   export let activeSettingsPluginId = '';
   export let activeSettingsPanelId = '';
@@ -256,6 +261,11 @@
   $: totalPerms = permissions.length;
   $: statusSummary = computeStatusSummary(plugins);
   $: elevatedPermissionPluginCount = computeElevatedPermissionPluginCount(plugins, permissions);
+  $: filterPermissions = collectManifestValues(plugins, 'permissions');
+  $: filterCapabilities = collectCapabilities(plugins);
+  $: hasReliableSourceMetadata = plugins.some((plugin) => sourceGroup(plugin) !== '');
+  $: visiblePlugins = filterPlugins(plugins, statusFilter, permissionFilters, capabilityFilters, settingsFilter, sourceFilter, contributions);
+  $: filtersActive = statusFilter !== 'all' || permissionFilters.length > 0 || capabilityFilters.length > 0 || settingsFilter !== 'all' || sourceFilter !== 'all';
 
   function computeStatusSummary(pluginRows) {
     return pluginRows.reduce((summary, plugin) => {
@@ -272,6 +282,69 @@
   function computeElevatedPermissionPluginCount(pluginRows, permissionRows) {
     const dangerous = new Set((permissionRows || []).filter(permission => permission.dangerous).map(permission => permission.name));
     return (pluginRows || []).filter(plugin => (plugin?.manifest?.permissions || []).some(permission => dangerous.has(permission))).length;
+  }
+
+  function collectManifestValues(pluginRows, key) {
+    return Array.from(new Set((pluginRows || []).flatMap((plugin) => plugin?.manifest?.[key] || [])))
+      .sort((left, right) => left.localeCompare(right));
+  }
+
+  function collectCapabilities(pluginRows) {
+    return Array.from(new Set((pluginRows || []).flatMap((plugin) => [
+      ...(plugin?.manifest?.provides || []),
+      ...(plugin?.manifest?.requires || []),
+      ...(plugin?.manifest?.optionalRequires || []),
+    ]))).sort((left, right) => left.localeCompare(right));
+  }
+
+  function pluginStatusGroup(plugin) {
+    const status = plugin?.status || '';
+    if (status === 'failed' || status === 'incompatible' || status === 'missing-required-capability') return 'failed';
+    if (status === 'degraded') return 'degraded';
+    if (status === 'disabled' || plugin?.enabled === false) return 'disabled';
+    return 'enabled';
+  }
+
+  function sourceGroup(plugin) {
+    const source = plugin?.manifest?.source;
+    if (source === 'official') return 'official';
+    if (source === 'local' || source === 'third-party') return 'third-party';
+    return '';
+  }
+
+  function hasSettings(plugin, activeContributions) {
+    const pluginId = plugin?.manifest?.id;
+    return Boolean(pluginId && (activeContributions.settingsPanels || []).some((panel) => panel.pluginId === pluginId));
+  }
+
+  function includesAny(values, expected) {
+    return expected.length === 0 || expected.some((value) => values.includes(value));
+  }
+
+  function filterPlugins(pluginRows, activeStatusFilter, activePermissionFilters, activeCapabilityFilters, activeSettingsFilter, activeSourceFilter, activeContributions) {
+    return pluginRows.filter((plugin) => matchesFilters(plugin, activeStatusFilter, activePermissionFilters, activeCapabilityFilters, activeSettingsFilter, activeSourceFilter, activeContributions));
+  }
+
+  function matchesFilters(plugin, activeStatusFilter, activePermissionFilters, activeCapabilityFilters, activeSettingsFilter, activeSourceFilter, activeContributions) {
+    if (activeStatusFilter !== 'all' && pluginStatusGroup(plugin) !== activeStatusFilter) return false;
+    if (!includesAny(plugin?.manifest?.permissions || [], activePermissionFilters)) return false;
+    const declaredCapabilities = [
+      ...(plugin?.manifest?.provides || []),
+      ...(plugin?.manifest?.requires || []),
+      ...(plugin?.manifest?.optionalRequires || []),
+    ];
+    if (!includesAny(declaredCapabilities, activeCapabilityFilters)) return false;
+    if (activeSettingsFilter === 'with' && !hasSettings(plugin, activeContributions)) return false;
+    if (activeSettingsFilter === 'without' && hasSettings(plugin, activeContributions)) return false;
+    return activeSourceFilter === 'all' || sourceGroup(plugin) === activeSourceFilter;
+  }
+
+  function resetFilters() {
+    statusFilter = 'all';
+    permissionFilters = [];
+    capabilityFilters = [];
+    settingsFilter = 'all';
+    sourceFilter = 'all';
   }
 
   function closeSettings() {
@@ -345,6 +418,70 @@
       </section>
     </div>
 
+    <section class="plugin-filters" aria-label={tr('pluginManager.filters')}>
+      <div class="filter-header">
+        <div>
+          <h3>{tr('pluginManager.filters')}</h3>
+          <p data-plugin-filter-results>{tr('pluginManager.filterResults', { visible: visiblePlugins.length, total: totalPlugins })}</p>
+        </div>
+        <button class="filter-reset" data-plugin-filter-reset type="button" on:click={resetFilters} disabled={!filtersActive}>{tr('pluginManager.filterReset')}</button>
+      </div>
+      <div class="filter-grid">
+        <label class="filter-select-label">
+          <span>{tr('pluginManager.filterState')}</span>
+          <select class="filter-select" data-plugin-filter="status" bind:value={statusFilter}>
+            <option value="all">{tr('pluginManager.filterAll')}</option>
+            <option value="enabled">{tr('pluginManager.filterEnabled')}</option>
+            <option value="disabled">{tr('pluginManager.filterDisabled')}</option>
+            <option value="failed">{tr('pluginManager.filterFailed')}</option>
+            <option value="degraded">{tr('pluginManager.filterDegraded')}</option>
+          </select>
+        </label>
+
+        <label class="filter-select-label">
+          <span>{tr('pluginManager.filterSettings')}</span>
+          <select class="filter-select" data-plugin-filter="settings" bind:value={settingsFilter}>
+            <option value="all">{tr('pluginManager.filterAll')}</option>
+            <option value="with">{tr('pluginManager.filterWithSettings')}</option>
+            <option value="without">{tr('pluginManager.filterWithoutSettings')}</option>
+          </select>
+        </label>
+
+        {#if hasReliableSourceMetadata}
+          <label class="filter-select-label">
+            <span>{tr('pluginManager.filterSource')}</span>
+            <select class="filter-select" data-plugin-filter="source" bind:value={sourceFilter}>
+              <option value="all">{tr('pluginManager.filterAll')}</option>
+              <option value="official">{tr('pluginManager.filterOfficial')}</option>
+              <option value="third-party">{tr('pluginManager.filterThirdParty')}</option>
+            </select>
+          </label>
+        {/if}
+      </div>
+
+      {#if filterPermissions.length > 0}
+        <fieldset class="filter-options">
+          <legend>{tr('pluginManager.filterPermissions')}</legend>
+          <div class="filter-option-list">
+            {#each filterPermissions as permission}
+              <label><input data-plugin-filter-permission={permission} type="checkbox" bind:group={permissionFilters} value={permission} /> <code>{permission}</code></label>
+            {/each}
+          </div>
+        </fieldset>
+      {/if}
+
+      {#if filterCapabilities.length > 0}
+        <fieldset class="filter-options">
+          <legend>{tr('pluginManager.filterCapabilities')}</legend>
+          <div class="filter-option-list">
+            {#each filterCapabilities as capability}
+              <label><input data-plugin-filter-capability={capability} type="checkbox" bind:group={capabilityFilters} value={capability} /> <code>{capability}</code></label>
+            {/each}
+          </div>
+        </fieldset>
+      {/if}
+    </section>
+
     {#if plugins.length === 0 && missingInstalled.length === 0}
       <div class="empty">
         <div class="empty-icon">
@@ -360,9 +497,13 @@
         </ul>
         <p class="hint">{tr('pluginManager.installHint')}</p>
       </div>
+    {:else if visiblePlugins.length === 0}
+      <div class="empty filter-empty" data-plugin-filter-empty>
+        <p>{tr('pluginManager.filterEmpty')}</p>
+      </div>
     {:else}
       <div class="plugin-list">
-        {#each plugins as p}
+        {#each visiblePlugins as p}
           <PluginCard {p} {capabilities} {permissions} {contributions} {vaultOpen} {actionFeedback} settingsPanels={(contributions.settingsPanels || []).filter(sp => sp.pluginId === p.manifest?.id)} onEnable={enablePlugin} onDisable={disablePlugin} />
         {/each}
       </div>
@@ -577,6 +718,99 @@
     color: #f4f7fb;
     font-size: 0.88rem;
   }
+  .plugin-filters {
+    margin-bottom: 1rem;
+    padding: 0.75rem;
+    border: 1px solid #0f3460;
+    border-radius: 8px;
+    background: #121a2c;
+  }
+  .filter-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 0.75rem;
+    margin-bottom: 0.75rem;
+  }
+  .filter-header h3 {
+    margin: 0;
+    color: #e0e0f0;
+    font-size: 0.9rem;
+  }
+  .filter-header p {
+    margin: 0.2rem 0 0;
+    color: #a0a0b8;
+    font-size: 0.78rem;
+  }
+  .filter-reset {
+    flex: 0 0 auto;
+    padding: 0.35rem 0.65rem;
+    border: 1px solid #533483;
+    border-radius: 5px;
+    background: #16213e;
+    color: #e0e0e0;
+    cursor: pointer;
+    font-size: 0.78rem;
+  }
+  .filter-reset:hover:not(:disabled) { background: #0f3460; }
+  .filter-reset:disabled { cursor: not-allowed; opacity: 0.5; }
+  .filter-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.65rem;
+  }
+  .filter-select-label {
+    display: grid;
+    gap: 0.28rem;
+    min-width: 10rem;
+    color: #a0a0b8;
+    font-size: 0.76rem;
+    font-weight: 600;
+  }
+  .filter-select {
+    min-height: 2rem;
+    padding: 0.3rem 1.9rem 0.3rem 0.55rem;
+    border: 1px solid #0f3460;
+    border-radius: 5px;
+    background: #16213e;
+    color: #e0e0e0;
+    font: inherit;
+  }
+  .filter-select:focus { outline: 2px solid #533483; outline-offset: 1px; }
+  .filter-options {
+    min-width: 0;
+    margin: 0.75rem 0 0;
+    padding: 0.55rem 0.65rem 0.65rem;
+    border: 1px solid rgba(15, 52, 96, 0.85);
+    border-radius: 6px;
+  }
+  .filter-options legend {
+    padding: 0 0.25rem;
+    color: #a0a0b8;
+    font-size: 0.76rem;
+    font-weight: 600;
+  }
+  .filter-option-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem 0.75rem;
+  }
+  .filter-option-list label {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.28rem;
+    min-width: 0;
+    color: #c6c6d8;
+    font-size: 0.75rem;
+  }
+  .filter-option-list input { accent-color: #6c4fa3; }
+  .filter-option-list code {
+    max-width: min(31rem, 72vw);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .filter-empty { margin-bottom: 1.5rem; }
   .empty {
     padding: 2rem; text-align: center; color: #a0a0b8;
     background: #16213e; border-radius: 8px; border: 1px dashed #0f3460;
@@ -649,6 +883,19 @@
 
     .scan-summary {
       grid-template-columns: 1fr;
+    }
+
+    .filter-header {
+      align-items: stretch;
+      flex-direction: column;
+    }
+
+    .filter-reset {
+      width: 100%;
+    }
+
+    .filter-select-label {
+      flex: 1 1 10rem;
     }
 
     .modal {

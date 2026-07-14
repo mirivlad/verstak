@@ -4276,8 +4276,9 @@ import journalSource from '../../../../../verstak-official-plugins/plugins/journ
     getPluginState: function (pluginId) {
       return pluginStates[pluginId] ? Object.assign({}, pluginStates[pluginId]) : null;
     },
-    addSyntheticPlugins: function (count) {
+    addSyntheticPlugins: function (count, source) {
       var total = Number(count || 0);
+      var pluginSource = source === 'official' || source === 'local' || source === 'third-party' ? source : 'third-party';
       for (var i = 1; i <= total; i++) {
         var id = 'verstak.synthetic-layout-' + String(i).padStart(2, '0');
         pluginStates[id] = {
@@ -4290,7 +4291,7 @@ import journalSource from '../../../../../verstak-official-plugins/plugins/journ
             version: '0.0.' + i,
             apiVersion: '0.1.0',
             description: 'Synthetic plugin used by frontend layout tests.',
-            source: 'test',
+            source: pluginSource,
             provides: ['verstak/synthetic-layout-' + i + '/v1'],
             requires: [],
             optionalRequires: [],
@@ -4310,7 +4311,7 @@ import journalSource from '../../../../../verstak-official-plugins/plugins/journ
           vaultPluginState.enabledPlugins.push(id);
         }
         if (!vaultPluginState.desiredPlugins.some(function (p) { return p.id === id; })) {
-          vaultPluginState.desiredPlugins.push({ id: id, version: '0.0.' + i, source: 'test' });
+          vaultPluginState.desiredPlugins.push({ id: id, version: '0.0.' + i, source: pluginSource });
         }
       }
     },

@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { waitForAppReady, setupConsoleCollector, resetMockState, openPluginManager } from './helpers.js';
+import { waitForAppReady, setupConsoleCollector, resetMockState, openPluginManager, setPluginStatus } from './helpers.js';
 
 test.describe('E: Plugin Manager layout', () => {
   let consoleCollector;
@@ -88,6 +88,50 @@ test.describe('E: Plugin Manager layout', () => {
     await expect(risk).toContainText('elevated permissions');
   });
 
+  test('plugin manager filters by state, declared permissions, capabilities, settings and source', async ({ page }) => {
+    await setPluginStatus(page, 'verstak.todo', 'disabled', false);
+    await page.evaluate(() => window.__wailsMock.addSyntheticPlugins(1, 'third-party'));
+    await openPluginManager(page);
+
+    const results = page.locator('[data-plugin-filter-results]');
+    await expect(results).toContainText('Showing');
+
+    await page.locator('[data-plugin-filter="status"]').selectOption('disabled');
+    await expect(page.locator('.plugin-card')).toHaveCount(1);
+    await expect(page.locator('.plugin-card')).toContainText('Todos');
+    await page.locator('button.reload-btn').click();
+    await expect(page.locator('[data-plugin-filter="status"]')).toHaveValue('disabled');
+    await expect(page.locator('.plugin-card')).toHaveCount(1);
+
+    await page.locator('[data-plugin-filter-reset]').click();
+    await page.locator('[data-plugin-filter-permission="notifications.schedule"]').check();
+    await expect(page.locator('.plugin-card')).toHaveCount(1);
+    await expect(page.locator('.plugin-card')).toContainText('Todos');
+    await page.locator('[data-plugin-filter-permission="secrets.read"]').check();
+    await expect(page.locator('.plugin-card')).toHaveCount(2);
+    await page.locator('[data-plugin-filter-permission="secrets.read"]').uncheck();
+
+    await page.locator('[data-plugin-filter-reset]').click();
+    await page.locator('[data-plugin-filter-capability="verstak/core/notifications/v1"]').check();
+    await expect(page.locator('.plugin-card')).toHaveCount(1);
+    await expect(page.locator('.plugin-card')).toContainText('Todos');
+    await page.locator('[data-plugin-filter-capability="secret-store"]').check();
+    await expect(page.locator('.plugin-card')).toHaveCount(2);
+    await page.locator('[data-plugin-filter-capability="secret-store"]').uncheck();
+
+    await page.locator('[data-plugin-filter-reset]').click();
+    await page.locator('[data-plugin-filter="settings"]').selectOption('with');
+    await expect(page.locator('.plugin-card').filter({ hasText: 'Platform Test' })).toBeVisible();
+    await expect(page.locator('.plugin-card').filter({ hasText: 'Default Editor' })).toHaveCount(0);
+
+    await page.locator('[data-plugin-filter="source"]').selectOption('third-party');
+    await expect(page.locator('.plugin-card')).toHaveCount(0);
+    await expect(page.locator('[data-plugin-filter-empty]')).toBeVisible();
+
+    await page.locator('[data-plugin-filter-reset]').click();
+    await expect(page.locator('.plugin-card')).toHaveCount(13);
+  });
+
   test('workspace selection keeps exactly one active node', async ({ page }) => {
     const selected = page.locator('.wt-node.selected .wt-label');
     await expect(selected).toHaveCount(1);
@@ -118,15 +162,15 @@ test.describe('E: Plugin Manager layout', () => {
   });
 
   test('workspace sidebar creates renames and trashes top-level workspaces', async ({ page }) => {
-    await page.locator('button[title="New workspace"]').click();
+    await page.locator('button[title="New Deal"]').click();
     const modal = page.locator('[data-workspace-create-modal]');
     await modal.locator('[data-workspace-name]').fill('ClientA');
-    await modal.getByRole('button', { name: 'Create workspace' }).click();
+    await modal.getByRole('button', { name: 'Create Deal' }).click();
 
     await expect(page.locator('.wt-label').filter({ hasText: 'ClientA' })).toBeVisible();
 
     const client = page.locator('.wt-node').filter({ hasText: 'ClientA' });
-    await client.locator('button[title="Rename workspace"]').click();
+    await client.locator('button[title="Rename Deal"]').click();
     await page.locator('.wt-rename').fill('ClientB');
     await page.locator('button[title="Save rename"]').click();
 
@@ -134,7 +178,7 @@ test.describe('E: Plugin Manager layout', () => {
     await expect(page.locator('.wt-label').filter({ hasText: 'ClientA' })).toHaveCount(0);
 
     const renamed = page.locator('.wt-node').filter({ hasText: 'ClientB' });
-    await renamed.locator('button[title="Trash workspace"]').click();
+    await renamed.locator('button[title="Move Deal to trash"]').click();
 
     await expect(page.locator('.wt-label').filter({ hasText: 'ClientB' })).toHaveCount(0);
   });

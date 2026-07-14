@@ -33,6 +33,9 @@ test.describe('Desktop localization', () => {
     await expect(pluginManager).toContainText('Зарегистрировано возможностей:');
     await expect(pluginManager.locator('.registry-section')).toContainText('Реестр возможностей');
     await expect(pluginManager.locator('.registry-section')).toContainText('Возможность');
+    await expect(pluginManager.locator('.plugin-filters')).toContainText('Фильтры');
+    await expect(pluginManager.locator('[data-plugin-filter-results]')).toContainText('Показано плагинов:');
+    await expect(pluginManager.locator('[data-plugin-filter="status"]')).toContainText('Выключенные');
     await expect(pluginManager).not.toContainText('Workspace-scoped');
 
     await page.reload();
