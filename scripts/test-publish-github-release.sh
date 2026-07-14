@@ -18,9 +18,10 @@ if [[ ! -x "$PUBLISHER" ]]; then
   exit 1
 fi
 
-mkdir -p "$WORK/bin" "$WORK/release" "$WORK/state"
+mkdir -p "$WORK/bin" "$WORK/release" "$WORK/release-notes" "$WORK/state"
 LOG="$WORK/log"
 export LOG
+printf '## Highlights\n\nHuman-readable release notes.\n' > "$WORK/release-notes/$VERSION.md"
 
 cat > "$WORK/release.sh" <<'SCRIPT'
 #!/usr/bin/env bash
@@ -51,6 +52,7 @@ case "${1:-}" in
     fi
     echo test-commit
     ;;
+  describe) echo v0.0.0-previous ;;
   tag) touch "$TEST_STATE/tag"; printf 'tag:%s\n' "${3:-}" >> "$LOG" ;;
   push) printf 'push:%s:%s\n' "${2:-}" "${3:-}" >> "$LOG" ;;
   *) echo "unexpected git invocation: $*" >&2; exit 1 ;;
@@ -76,6 +78,7 @@ chmod +x "$WORK/bin/gh"
 run_publisher() {
   VERSTAK_RELEASE_SCRIPT="$WORK/release.sh" \
   VERSTAK_RELEASE_DIR="$WORK/release" \
+  VERSTAK_RELEASE_NOTES_DIR="$WORK/release-notes" \
   GIT_BIN="$WORK/bin/git" \
   GH_BIN="$WORK/bin/gh" \
   EXPECTED_ROOT="$ROOT" \
@@ -92,6 +95,9 @@ for asset in "${ASSET_NAMES[@]}"; do
   grep -F "$asset" "$LOG" >/dev/null
 done
 grep -F "SHA256SUMS" "$LOG" >/dev/null
+grep -F -- "--notes-file $WORK/release-notes/$VERSION.md" "$LOG" >/dev/null
+grep -F -- "--generate-notes" "$LOG" >/dev/null
+grep -F -- "--notes-start-tag v0.0.0-previous" "$LOG" >/dev/null
 grep -F -- "--prerelease" "$LOG" >/dev/null
 
 run_publisher
