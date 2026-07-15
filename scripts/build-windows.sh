@@ -35,6 +35,8 @@ fi
 cd "$ROOT"
 echo "=== verstak desktop Windows amd64 build ==="
 
+"$ROOT/scripts/generate-brand-icons.sh"
+
 if [[ ! -d "$ROOT/frontend/node_modules" ]]; then
   if [[ -f "$ROOT/frontend/package-lock.json" ]]; then
     (cd "$ROOT/frontend" && npm ci --no-audit --no-fund)

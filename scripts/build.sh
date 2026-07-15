@@ -6,6 +6,8 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 echo "=== verstak-desktop build ==="
 echo ""
 
+"$ROOT/scripts/generate-brand-icons.sh"
+
 # ── Dependency checks ──
 echo "[deps]"
 if ! command -v go &>/dev/null; then

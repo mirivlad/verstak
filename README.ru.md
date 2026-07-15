@@ -232,6 +232,7 @@ sha256sum -c SHA256SUMS --ignore-missing
 * Node.js 20 или новее и npm;
 * Python 3;
 * Git;
+* ImageMagick (`magick`) для генерации фирменных значков трея и приложения;
 * зависимости для сборки Wails v2;
 * пакеты разработки WebKitGTK в Linux.
 

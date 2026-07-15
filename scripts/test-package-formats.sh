@@ -53,6 +53,8 @@ grep -Fq 'LinkId=2124701' "$ROOT/README.md"
 grep -Fq 'WebView2 Runtime' "$ROOT/README.md"
 grep -Fq 'package-deb.sh' "$ROOT/scripts/release.sh"
 grep -Fq 'package-appimage.sh' "$ROOT/scripts/release.sh"
+grep -Fq 'generate-brand-icons.sh' "$ROOT/scripts/build.sh"
+grep -Fq 'generate-brand-icons.sh' "$ROOT/scripts/build-windows.sh"
 grep -Fq 'package-windows-portable.sh' "$ROOT/scripts/release.sh"
 git -C "$ROOT" check-ignore -q verstak-desktop-res.syso
 grep -Fq 'chmod -R a+rX' "$ROOT/scripts/build-linux-bundle.sh"

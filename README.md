@@ -232,6 +232,7 @@ Each vault is connected separately. The local vault remains the primary copy of 
 * Node.js 20 or newer with npm;
 * Python 3;
 * Git;
+* ImageMagick (`magick`) to generate the branded tray and application icons;
 * Wails v2 build dependencies;
 * WebKitGTK development packages on Linux.
 
