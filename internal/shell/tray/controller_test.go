@@ -1,6 +1,8 @@
 package tray
 
 import (
+	"errors"
+	"sync"
 	"testing"
 	"time"
 )
@@ -11,47 +13,65 @@ type fakeMenuItem struct {
 	tooltip string
 }
 
-func (i *fakeMenuItem) Clicked() <-chan struct{} {
-	return i.clicked
-}
-
-func (i *fakeMenuItem) SetTitle(title string) {
-	i.title = title
-}
-
-func (i *fakeMenuItem) SetTooltip(tooltip string) {
-	i.tooltip = tooltip
-}
+func (i *fakeMenuItem) Clicked() <-chan struct{}  { return i.clicked }
+func (i *fakeMenuItem) SetTitle(title string)     { i.title = title }
+func (i *fakeMenuItem) SetTooltip(tooltip string) { i.tooltip = tooltip }
 
 type fakeBackend struct {
-	icon        []byte
-	tooltip     string
-	items       map[string]*fakeMenuItem
-	quitCalls   int
-	registering bool
+	callbacks BackendCallbacks
+	icon      []byte
+	tooltip   string
+	items     map[string]*fakeMenuItem
+	startErr  error
+	iconErr   error
+	menuErr   error
+	starts    int
+	stops     int
 }
 
-func (b *fakeBackend) Register(onReady func(), _ func()) {
-	b.registering = true
-	onReady()
+func (b *fakeBackend) Start(callbacks BackendCallbacks) error {
+	b.starts++
+	b.callbacks = callbacks
+	return b.startErr
 }
 
-func (b *fakeBackend) SetIcon(icon []byte) {
+func (b *fakeBackend) SetIcon(icon []byte) error {
 	b.icon = append([]byte(nil), icon...)
+	return b.iconErr
 }
 
-func (b *fakeBackend) SetTooltip(tooltip string) {
+func (b *fakeBackend) SetTooltip(tooltip string) error {
 	b.tooltip = tooltip
+	return nil
 }
 
-func (b *fakeBackend) AddMenuItem(title, _ string) MenuItem {
-	item := &fakeMenuItem{clicked: make(chan struct{}, 1), title: title}
+func (b *fakeBackend) AddMenuItem(title, tooltip string) (MenuItem, error) {
+	if b.menuErr != nil {
+		return nil, b.menuErr
+	}
+	item := &fakeMenuItem{clicked: make(chan struct{}, 1), title: title, tooltip: tooltip}
 	b.items[title] = item
-	return item
+	return item, nil
 }
 
-func (b *fakeBackend) Quit() {
-	b.quitCalls++
+func (b *fakeBackend) Stop() { b.stops++ }
+
+func (b *fakeBackend) ready() {
+	if b.callbacks.Ready != nil {
+		b.callbacks.Ready()
+	}
+}
+
+func (b *fakeBackend) exited() {
+	if b.callbacks.Exit != nil {
+		b.callbacks.Exit()
+	}
+}
+
+func (b *fakeBackend) leftClick() {
+	if b.callbacks.LeftClick != nil {
+		b.callbacks.LeftClick()
+	}
 }
 
 func waitFor(t *testing.T, signal <-chan struct{}) {
@@ -63,64 +83,112 @@ func waitFor(t *testing.T, signal <-chan struct{}) {
 	}
 }
 
-func TestControllerInitializesTrayAndRoutesMenuActions(t *testing.T) {
+func TestControllerBecomesReadyOnlyAfterBackendCallback(t *testing.T) {
 	backend := &fakeBackend{items: make(map[string]*fakeMenuItem)}
-	showCalls := make(chan struct{}, 1)
-	quitCalls := make(chan struct{}, 1)
 	controller := New(backend, []byte{1, 2, 3})
 
-	controller.Start(Actions{
+	if err := controller.Start(Actions{}); err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
+	if controller.Ready() {
+		t.Fatal("tray became ready before backend callback")
+	}
+
+	backend.ready()
+	if !controller.Ready() {
+		t.Fatal("tray did not become ready after backend callback")
+	}
+	if string(backend.icon) != string([]byte{1, 2, 3}) || backend.tooltip != "Verstak" {
+		t.Fatalf("tray initialization = icon:%v tooltip:%q", backend.icon, backend.tooltip)
+	}
+}
+
+func TestControllerRoutesLeftClickAndMenuActionsToShowAndQuit(t *testing.T) {
+	backend := &fakeBackend{items: make(map[string]*fakeMenuItem)}
+	showCalls := make(chan struct{}, 2)
+	quitCalls := make(chan struct{}, 1)
+	controller := New(backend, []byte{1})
+
+	if err := controller.Start(Actions{
 		Show: func() { showCalls <- struct{}{} },
 		Quit: func() { quitCalls <- struct{}{} },
-	})
-
-	if !backend.registering || string(backend.icon) != string([]byte{1, 2, 3}) || backend.tooltip != "Verstak" {
-		t.Fatalf("tray initialization = registering:%t icon:%v tooltip:%q", backend.registering, backend.icon, backend.tooltip)
+	}); err != nil {
+		t.Fatalf("Start() error = %v", err)
 	}
+	backend.ready()
+
+	backend.leftClick()
+	waitFor(t, showCalls)
 	showItem := backend.items["Show Verstak"]
 	quitItem := backend.items["Quit"]
 	if showItem == nil || quitItem == nil {
 		t.Fatalf("tray menu = %#v, want Show Verstak and Quit", backend.items)
 	}
-
 	showItem.clicked <- struct{}{}
 	waitFor(t, showCalls)
 	quitItem.clicked <- struct{}{}
 	waitFor(t, quitCalls)
 }
 
-func TestControllerStopsNativeTrayBackend(t *testing.T) {
+func TestControllerStopCallsBackendOnce(t *testing.T) {
 	backend := &fakeBackend{items: make(map[string]*fakeMenuItem)}
 	controller := New(backend, []byte{1})
+	if err := controller.Start(Actions{}); err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
 
 	controller.Stop()
+	controller.Stop()
 
-	if backend.quitCalls != 1 {
-		t.Fatalf("backend quit calls = %d, want 1", backend.quitCalls)
+	if backend.stops != 1 {
+		t.Fatalf("backend stop calls = %d, want 1", backend.stops)
 	}
 }
 
-func TestControllerUsesAndUpdatesLocalizedLabels(t *testing.T) {
+func TestControllerStartupAndSetupFailuresNeverBecomeReady(t *testing.T) {
+	for name, backend := range map[string]*fakeBackend{
+		"start": {items: make(map[string]*fakeMenuItem), startErr: errors.New("start failed")},
+		"icon":  {items: make(map[string]*fakeMenuItem), iconErr: errors.New("icon failed")},
+		"menu":  {items: make(map[string]*fakeMenuItem), menuErr: errors.New("menu failed")},
+	} {
+		t.Run(name, func(t *testing.T) {
+			controller := New(backend, []byte{1})
+			err := controller.Start(Actions{})
+			if name == "start" && err == nil {
+				t.Fatal("Start() error = nil, want startup failure")
+			}
+			if name != "start" && err != nil {
+				t.Fatalf("Start() error = %v, want nil before ready callback", err)
+			}
+			backend.ready()
+			if controller.Ready() {
+				t.Fatal("failed tray became ready")
+			}
+		})
+	}
+}
+
+func TestControllerExitRevokesReadinessAndKeepsLocalizedMenuItems(t *testing.T) {
 	backend := &fakeBackend{items: make(map[string]*fakeMenuItem)}
 	controller := New(backend, []byte{1})
 	controller.SetLabels(LabelsForPreference("ru"))
-	controller.Start(Actions{})
+	if err := controller.Start(Actions{}); err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
+	backend.ready()
 
 	show := backend.items["Показать Верстак"]
 	quit := backend.items["Выйти"]
 	if show == nil || quit == nil {
 		t.Fatalf("Russian tray menu = %#v", backend.items)
 	}
-	if show.tooltip != "Показать окно Верстака" || quit.tooltip != "Завершить Верстак" {
-		t.Fatalf("Russian tray tooltips = show:%q quit:%q", show.tooltip, quit.tooltip)
-	}
-
 	controller.SetLabels(LabelsForPreference("en"))
 	if show.title != "Show Verstak" || quit.title != "Quit" {
 		t.Fatalf("English tray menu after update = show:%q quit:%q", show.title, quit.title)
 	}
-	if show.tooltip != "Show the Verstak window" || quit.tooltip != "Quit Verstak" {
-		t.Fatalf("English tray tooltips after update = show:%q quit:%q", show.tooltip, quit.tooltip)
+	backend.exited()
+	if controller.Ready() {
+		t.Fatal("tray stayed ready after backend exit")
 	}
 }
 
@@ -132,5 +200,28 @@ func TestLabelsForSystemRussianLocale(t *testing.T) {
 	labels = LabelsForPreference("system", "C.UTF-8", "", "ru_RU.UTF-8")
 	if labels.ShowTitle != "Show Verstak" || labels.QuitTitle != "Quit" {
 		t.Fatalf("higher-priority system locale must win, got %#v", labels)
+	}
+}
+
+func TestControllerReadyNotificationIsSafeAcrossCallbacks(t *testing.T) {
+	backend := &fakeBackend{items: make(map[string]*fakeMenuItem)}
+	controller := New(backend, []byte{1})
+	var changes []bool
+	var mu sync.Mutex
+	controller.SetReadyChangedHandler(func(ready bool) {
+		mu.Lock()
+		changes = append(changes, ready)
+		mu.Unlock()
+	})
+	if err := controller.Start(Actions{}); err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
+	backend.ready()
+	backend.exited()
+
+	mu.Lock()
+	defer mu.Unlock()
+	if len(changes) != 2 || !changes[0] || changes[1] {
+		t.Fatalf("ready changes = %#v, want [true false]", changes)
 	}
 }

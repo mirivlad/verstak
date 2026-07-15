@@ -230,6 +230,7 @@ func main() {
 	app = api.NewApp(capRegistry, contribRegistry, permRegistry, eventBus, plugins, vaultService, storageService, filesService, appSettingsMgr, pluginStateMgr, workspaceMgr, syncService, browserReceiver, debugEnabled)
 	app.SetNotificationService(notifications.New(vaultService, api.NewNativeNotificationSender(), time.Now))
 	trayController := tray.New(tray.NewNativeBackend(), tray.DefaultIcon())
+	trayController.SetReadyChangedHandler(app.SetTrayReady)
 	trayLabels := func(language string) tray.Labels {
 		return tray.LabelsForPreference(language, os.Getenv("LC_ALL"), os.Getenv("LC_MESSAGES"), os.Getenv("LANG"))
 	}
@@ -258,7 +259,9 @@ func main() {
 		OnStartup:        app.Startup,
 		OnDomReady: func(ctx context.Context) {
 			app.DomReady(ctx)
-			trayController.Start(tray.Actions{Show: app.ShowWindow, Quit: app.Quit})
+			if err := trayController.Start(tray.Actions{Show: app.ShowWindow, Quit: app.Quit}); err != nil {
+				log.Printf("[tray] disabled: %v; normal window close will exit", err)
+			}
 		},
 		OnShutdown: func(ctx context.Context) {
 			trayController.Stop()

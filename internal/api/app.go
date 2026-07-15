@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -100,6 +101,8 @@ type App struct {
 	browserInboxEvents  map[string]bool
 	browserInboxEnabled atomic.Bool
 	allowQuit           atomic.Bool
+	trayReady           atomic.Bool
+	quitOnce            sync.Once
 }
 
 // SetNotificationService attaches the core-owned plugin notification scheduler.
@@ -221,9 +224,21 @@ func (a *App) Shutdown(ctx context.Context) {
 	cleanupNativeNotifications(ctx)
 }
 
-// BeforeClose hides the primary window until the user explicitly quits from the tray.
+// SetTrayReady reports whether the native tray can safely return a hidden window.
+func (a *App) SetTrayReady(ready bool) {
+	if a != nil {
+		a.trayReady.Store(ready)
+	}
+}
+
+// BeforeClose hides the primary window only after the native tray has confirmed
+// that it can return the window. Otherwise the normal Wails close path exits.
 func (a *App) BeforeClose(ctx context.Context) bool {
 	if a.allowQuit.Load() {
+		return false
+	}
+	if !a.trayReady.Load() {
+		log.Printf("[app] tray is unavailable; allowing normal window close")
 		return false
 	}
 	hideNativeWindow(ctx)
@@ -243,10 +258,12 @@ func (a *App) Quit() {
 	if a == nil {
 		return
 	}
-	a.allowQuit.Store(true)
-	if a.ctx != nil {
-		quitNativeApplication(a.ctx)
-	}
+	a.quitOnce.Do(func() {
+		a.allowQuit.Store(true)
+		if a.ctx != nil {
+			quitNativeApplication(a.ctx)
+		}
+	})
 }
 
 // NativeNotificationSender delivers scheduler items through the Wails runtime.

@@ -124,7 +124,7 @@ Verstak uses the Microsoft WebView2 Runtime. It is already included with Windows
 
 ## Background and tray mode
 
-Closing the main window keeps Verstak running in the system tray. Use **Show Verstak** to bring it back and **Quit** to exit the application completely. This lets scheduled Todo reminders continue while the window is hidden.
+After the tray icon is ready, closing the main window keeps Verstak running in the system tray. One left click restores and focuses the window; a right click opens the native **Show Verstak** and **Quit** menu. **Quit** exits the application completely. If the tray cannot start, closing the window exits normally rather than leaving an unreachable process. Scheduled Todo reminders continue while the window is hidden.
 
 ### Verify a download
 
@@ -234,7 +234,6 @@ Each vault is connected separately. The local vault remains the primary copy of 
 * Git;
 * Wails v2 build dependencies;
 * WebKitGTK development packages on Linux.
-* Ayatana AppIndicator development files on Linux (`sudo apt install libayatana-appindicator3-dev`).
 
 See the
 [Wails installation documentation](https://wails.io/docs/gettingstarted/installation/)

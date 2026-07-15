@@ -26,11 +26,16 @@ grep -Fq 'gtk-update-icon-cache' "$ROOT/packaging/deb/postinst"
 grep -Fq 'packaging/linux/verstak' "$ROOT/scripts/package-appimage.sh"
 grep -Fq 'usr/bin/verstak' "$ROOT/packaging/linux/AppRun"
 grep -Fq 'libwebkit2gtk-4.1-0' "$ROOT/packaging/deb/control"
-grep -Fq 'libayatana-appindicator3-1' "$ROOT/packaging/deb/control"
+if grep -Fq 'appindicator' "$ROOT/packaging/deb/control"; then
+  echo "Debian package must not require the removed AppIndicator tray backend" >&2
+  exit 1
+fi
 grep -Fq 'appimagetool' "$ROOT/scripts/package-appimage.sh"
 grep -Fq 'WebKitWebProcess' "$ROOT/scripts/package-appimage.sh"
-grep -Fq 'libayatana-appindicator3.so.' "$ROOT/scripts/package-appimage.sh"
-grep -Fq 'ayatana-appindicator3-0.1' "$ROOT/scripts/build.sh"
+if grep -Fq 'appindicator' "$ROOT/scripts/package-appimage.sh" "$ROOT/scripts/build.sh"; then
+  echo "Linux build and AppImage scripts must not require AppIndicator" >&2
+  exit 1
+fi
 if grep -Fq 'FixedVersionRuntime' "$ROOT/scripts/package-windows-portable.sh"; then
   echo "Windows portable archive must not bundle Fixed Version WebView2" >&2
   exit 1

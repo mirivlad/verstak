@@ -3,7 +3,7 @@ Version: @VERSION@
 Section: utils
 Priority: optional
 Architecture: amd64
-Depends: libwebkit2gtk-4.1-0, libgtk-3-0t64 | libgtk-3-0, libayatana-appindicator3-1
+Depends: libwebkit2gtk-4.1-0, libgtk-3-0t64 | libgtk-3-0
 Maintainer: Verstak contributors <dev@verstak.app>
 Homepage: https://github.com/mirivlad/verstak
 Description: Local-first workspace

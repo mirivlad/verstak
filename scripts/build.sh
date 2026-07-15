@@ -26,15 +26,6 @@ if ! command -v npm &>/dev/null; then
 fi
 echo "  ✅ npm $(npm --version)"
 
-if [[ "$(go env GOOS)" == "linux" ]]; then
-  if ! command -v pkg-config &>/dev/null || ! pkg-config --exists ayatana-appindicator3-0.1; then
-    echo "  ❌ native tray development files are missing"
-    echo "     Debian/Ubuntu: sudo apt install libayatana-appindicator3-dev"
-    exit 1
-  fi
-  echo "  ✅ ayatana-appindicator3 $(pkg-config --modversion ayatana-appindicator3-0.1)"
-fi
-
 # ── Frontend (build first — Go //go:embed needs frontend/dist/) ──
 echo ""
 echo "[frontend]"

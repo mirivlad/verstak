@@ -319,7 +319,7 @@ func TestNativeNotificationSenderUsesStablePluginScopedID(t *testing.T) {
 	}
 }
 
-func TestBeforeCloseHidesWindowUntilUserChoosesQuit(t *testing.T) {
+func TestBeforeCloseAllowsExitUntilTrayIsReady(t *testing.T) {
 	oldHide := hideNativeWindow
 	defer func() { hideNativeWindow = oldHide }()
 
@@ -327,8 +327,25 @@ func TestBeforeCloseHidesWindowUntilUserChoosesQuit(t *testing.T) {
 	hideNativeWindow = func(context.Context) { hideCalls++ }
 	app := &App{}
 
+	if prevent := app.BeforeClose(context.Background()); prevent {
+		t.Fatal("BeforeClose() = true, want false while tray is unavailable")
+	}
+	if hideCalls != 0 {
+		t.Fatalf("hide calls = %d, want 0", hideCalls)
+	}
+}
+
+func TestBeforeCloseHidesWindowAfterTrayIsReady(t *testing.T) {
+	oldHide := hideNativeWindow
+	defer func() { hideNativeWindow = oldHide }()
+
+	hideCalls := 0
+	hideNativeWindow = func(context.Context) { hideCalls++ }
+	app := &App{}
+	app.SetTrayReady(true)
+
 	if prevent := app.BeforeClose(context.Background()); !prevent {
-		t.Fatal("BeforeClose() = false, want true while tray mode is active")
+		t.Fatal("BeforeClose() = false, want true while tray is ready")
 	}
 	if hideCalls != 1 {
 		t.Fatalf("hide calls = %d, want 1", hideCalls)
@@ -350,6 +367,22 @@ func TestTrayQuitAllowsWindowCloseAndQuitsApplication(t *testing.T) {
 	}
 	if prevent := app.BeforeClose(context.Background()); prevent {
 		t.Fatal("BeforeClose() = true after Quit(), want false")
+	}
+}
+
+func TestTrayQuitRequestsNativeShutdownOnlyOnce(t *testing.T) {
+	oldQuit := quitNativeApplication
+	defer func() { quitNativeApplication = oldQuit }()
+
+	quitCalls := 0
+	quitNativeApplication = func(context.Context) { quitCalls++ }
+	app := &App{ctx: context.Background()}
+
+	app.Quit()
+	app.Quit()
+
+	if quitCalls != 1 {
+		t.Fatalf("native quit calls = %d, want 1", quitCalls)
 	}
 }
 

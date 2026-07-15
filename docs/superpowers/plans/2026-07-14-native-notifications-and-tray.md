@@ -6,12 +6,13 @@
 
 **Architecture:** Desktop core stores and delivers plugin-owned notification schedules and controls the tray lifecycle. Todo uses the public plugin API to replace its desired reminders. A small core tray adapter keeps the Wails process alive after window close. Documentation uses the supplied English and Russian README sources plus screenshots from an actual test vault.
 
-**Tech Stack:** Go 1.24, Wails v2.12 runtime notifications, `getlantern/systray`, plain JavaScript plugin API, Node smoke tests, Playwright, bash packaging.
+**Tech Stack:** Go 1.24, Wails v2.12 runtime notifications, `fyne.io/systray`, plain JavaScript plugin API, Node smoke tests, Playwright, bash packaging.
 
 ## Global constraints
 
 - Support Windows and Linux only; no background daemon after an explicit Quit.
-- Closing a window hides it; only tray **Quit** ends the process.
+- Closing a window hides it only after the tray reports ready; otherwise normal
+  window close ends the process.
 - `verstak.todo` requires `verstak/core/notifications/v1` and `notifications.schedule`.
 - Plugins cannot receive Wails runtime access.
 - Keep Wails generated bindings out of commits.
@@ -231,7 +232,12 @@ Expected: absent packages/methods.
 
 - [ ] **Step 3: Implement adapter and Wails wiring**
 
-Add `github.com/getlantern/systray@v1.2.2`. The production adapter calls nonblocking `systray.Register`, sets compact source-controlled PNG bytes derived from the existing tracked logo, and starts goroutines for the two click channels. `main.go` registers `OnBeforeClose` and uses `options.SingleInstanceLock` whose second launch calls `app.ShowWindow`. Do not embed ignored Wails-generated files from `build/`.
+Use `fyne.io/systray`. The production adapter calls `RunWithExternalLoop` so the
+Windows native message loop runs alongside Wails, embeds a multi-resolution
+ICO on Windows and PNG on Linux, routes one left click to `app.ShowWindow`, and
+leaves the platform-native right-click menu active. `main.go` registers
+`OnBeforeClose` and uses `options.SingleInstanceLock` whose second launch calls
+`app.ShowWindow`. Do not embed ignored Wails-generated files from `build/`.
 
 - [ ] **Step 4: Verify and commit**
 
@@ -239,7 +245,7 @@ Add `github.com/getlantern/systray@v1.2.2`. The production adapter calls nonbloc
 gofmt -w main.go internal/api/app.go internal/api/app_test.go internal/shell/tray/*.go
 GOCACHE=/tmp/verstak-go-cache go test ./internal/shell/tray ./internal/api -count=1
 ./scripts/build.sh
-ldd build/bin/verstak-desktop | grep -E 'ayatana-appindicator|appindicator'
+! rg -n 'getlantern|appindicator' go.mod go.sum packaging scripts/build.sh
 git diff --check
 ```
 
@@ -265,7 +271,8 @@ git push mirror main
 
 - [ ] **Step 1: Add failing package-contract checks**
 
-Add assertions for `libayatana-appindicator3-dev` in the Linux build guidance, `libayatana-appindicator3-1` in Debian dependencies, and `ayatana-appindicator` in the AppImage packing verification.
+Add assertions that the Linux build guidance, Debian metadata, and AppImage
+packager no longer require the removed AppIndicator backend.
 
 - [ ] **Step 2: Confirm red**
 
@@ -275,7 +282,9 @@ Expected: the first tray dependency assertion fails.
 
 - [ ] **Step 3: Implement portable package support**
 
-Declare the Debian runtime dependency. Make the Linux build error name the appindicator development header. Require the dynamically discovered appindicator library to appear in AppDir after the existing `ldd` traversal. Keep the Windows system-WebView2 policy unchanged.
+Keep Debian and AppImage focused on the Wails/WebKitGTK runtime. Do not add a
+tray-specific AppIndicator dependency. Keep the Windows system-WebView2 policy
+unchanged.
 
 - [ ] **Step 4: Install the supplied public README sources**
 

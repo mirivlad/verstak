@@ -1,6 +1,6 @@
 # Native Notifications and System Tray Design
 
-**Status:** approved for implementation on 2026-07-14
+**Status:** implemented; tray reliability update recorded on 2026-07-15
 
 ## Goal
 
@@ -19,27 +19,33 @@ must work in the portable Windows archive, Debian package, and AppImage.
 
 ## Tray behavior
 
-On Windows and Linux, a tray icon is registered before the Wails event loop
-starts. Its menu contains exactly two actions:
+On Windows and Linux, a tray icon is initialized after Wails reaches
+`OnDomReady`. Its menu contains exactly two actions:
 
 1. **Show Verstak** — shows and focuses the existing main window.
 2. **Quit** — exits the process deliberately.
 
-Closing the main window with its window-manager close control hides the window
-and keeps the process, plugins, local browser receiver, and reminder scheduler
-alive. It does not terminate the application. The quit action temporarily
-allows the close lifecycle to finish and then exits normally.
+One left click restores and focuses the existing main window. A native right
+click opens the menu. Closing the main window with its window-manager close
+control hides the window only after the tray has successfully initialized; it
+then keeps the process, plugins, local browser receiver, and reminder scheduler
+alive. If tray initialization fails or the native message loop exits, the
+ordinary close path exits normally rather than leaving an unreachable process.
+The quit action allows the close lifecycle to finish and exits normally.
 
 The app has a single-instance lock. If a user launches the executable while an
 instance is hidden in the tray, the existing instance shows its window instead
 of creating a second process.
 
-The implementation uses `github.com/getlantern/systray` through a small
-`internal/shell/tray` adapter. It uses `Register`, rather than its blocking
-`Run`, so Wails remains the owner of the GUI event loop. A compact PNG derived
-from the tracked project logo is encoded in the tray package, so a clean build
-does not depend on ignored Wails-generated icon files. The library accepts PNG
-icon bytes on both target platforms.
+The implementation uses `fyne.io/systray` through a small
+`internal/shell/tray` adapter. `RunWithExternalLoop` starts the Windows native
+message loop without making Wails relinquish ownership of its GUI lifecycle.
+The icon is a source-controlled multi-resolution ICO on Windows (16, 20, 24,
+32, 48, and 256 pixels with transparency) and a PNG on Linux. Both are embedded
+in the binary, so a clean build does not depend on ignored Wails-generated
+files. Tray readiness is published only after icon, tooltip, and menu creation
+all succeed; lifecycle diagnostics are logged for startup, readiness, clicks,
+failure fallback, and shutdown.
 
 ## Notification capability and permission
 
@@ -116,16 +122,14 @@ is not removed.
 
 ## Packaging
 
-`getlantern/systray` requires CGO. The Windows release build already uses
-`x86_64-w64-mingw32-gcc`; the Windows packaging tests must compile it with the
-tray dependency included. Linux build instructions add
-`libayatana-appindicator3-dev`. The Debian package declares the corresponding
-runtime dependency `libayatana-appindicator3-1`.
+`fyne.io/systray` supplies the Windows message loop and uses the session D-Bus
+on Linux. It does not require the removed AppIndicator development or runtime
+package. The Windows release build still uses `x86_64-w64-mingw32-gcc` for the
+Wails application itself.
 
 The existing AppImage packager traverses `ldd` for the desktop executable and
-copies non-glibc runtime libraries. Its verification is extended to prove that
-the appindicator library is present in the AppDir when the tray implementation
-is compiled in.
+copies non-glibc runtime libraries; it does not require a tray-specific shared
+library.
 
 ## Public README and product screenshots
 
@@ -156,15 +160,19 @@ Automated tests cover:
 - schedule replacement, cancellation, rescheduling, persistence, one-time
   overdue delivery, failed-send retry, and permission/capability rejection;
 - Todo desired-list derivation and calls after create/edit/status/delete;
-- close policy: ordinary close hides, explicit quit permits shutdown;
-- tray controller action wiring and second-instance window reveal;
-- Linux/Windows build scripts and package dependency expectations.
+- close policy: ordinary close hides only after tray readiness, while explicit
+  quit permits shutdown;
+- tray controller action wiring, readiness/failure fallback, idempotent stop,
+  left-click reveal, and second-instance window reveal;
+- true multi-resolution Windows ICO data, Linux PNG data, and Linux/Windows
+  build and package dependency expectations.
 
 Manual smoke tests are required because neither unit tests nor Playwright can
 assert a real desktop notification area or OS toast:
 
-1. On Linux and Windows, start Verstak, close its window, use the tray menu to
-   reveal it, and use **Quit** to terminate it.
+1. On Linux and Windows, start Verstak, verify the tray icon and tooltip, use
+   one left click to reveal the window, use the right-click menu to reveal it,
+   close the window, and use **Quit** to terminate it.
 2. Set a Todo reminder for a near future time, hide the window in the tray, and
    observe one native notification.
 3. Quit before a future reminder, relaunch after it expires, and observe one
