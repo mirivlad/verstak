@@ -39,6 +39,10 @@ OUTPUT=$(cd "$ROOT" && go test -count=1 -v ./... 2>&1) || GO_TEST_STATUS=$?
 echo "$OUTPUT" | grep -E '(FAIL|PASS|---)' || true
 report "go test" "$GO_TEST_STATUS"
 
+BRAND_ICONS_STATUS=0
+(cd "$ROOT" && ./scripts/test-brand-icons.sh) || BRAND_ICONS_STATUS=$?
+report "desktop brand icon generation" "$BRAND_ICONS_STATUS"
+
 WAILS_BINDINGS_STATUS=0
 (cd "$ROOT" && node frontend/tests/wails-bindings-test.mjs) || WAILS_BINDINGS_STATUS=$?
 report "Wails notification bindings" "$WAILS_BINDINGS_STATUS"

@@ -18,7 +18,7 @@ render_png() {
   local size="$1"
   local target="$2"
   mkdir -p "$(dirname "$target")"
-  "$MAGICK" -background none "$SOURCE" -resize "${size}x${size}" "PNG32:$target"
+  "$MAGICK" -background none "$SOURCE" -resize "${size}x${size}" -strip "PNG32:$target"
 }
 
 render_ico() {
