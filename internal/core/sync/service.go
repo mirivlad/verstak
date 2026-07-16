@@ -5,25 +5,30 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
 )
 
 const (
-	EntityNode    = "node"
-	EntityNote    = "note"
-	EntityFile    = "file"
-	EntityFolder  = "folder"
-	EntityAction  = "action"
-	EntityWorklog = "worklog"
+	EntityNode      = "node"
+	EntityNote      = "note"
+	EntityFile      = "file"
+	EntityFolder    = "folder"
+	EntityWorkspace = "workspace"
+	EntityAction    = "action"
+	EntityWorklog   = "worklog"
 )
 
 const (
-	OpCreate = "create"
-	OpUpdate = "update"
-	OpDelete = "delete"
-	OpMove   = "move"
+	OpCreate  = "create"
+	OpUpdate  = "update"
+	OpDelete  = "delete"
+	OpMove    = "move"
+	OpRename  = "rename"
+	OpTrash   = "trash"
+	OpRestore = "restore"
 )
 
 // Op represents a sync operation.
@@ -45,11 +50,14 @@ type Op struct {
 
 // syncState persists connection state to JSON file.
 type syncState struct {
-	ServerURL   string `json:"server_url"`
-	APIKey      string `json:"api_key"`
-	DeviceID    string `json:"device_id"`
-	LastPullSeq int    `json:"last_pull_seq"`
-	LastSyncAt  string `json:"last_sync_at"`
+	ServerURL         string `json:"server_url"`
+	APIKey            string `json:"api_key"`
+	DeviceID          string `json:"device_id"`
+	LastPullSeq       int    `json:"last_pull_seq"`
+	LastSyncAt        string `json:"last_sync_at"`
+	BootstrapComplete bool   `json:"bootstrap_complete"`
+	LastWarning       string `json:"last_warning"`
+	RemoteVaultID     string `json:"remote_vault_id"`
 }
 
 // Service records and manages sync operations using JSON file storage.
@@ -79,6 +87,14 @@ func (s *Service) opsPath() string {
 
 func (s *Service) statePath() string {
 	return filepath.Join(s.syncDir(), "state.json")
+}
+
+func (s *Service) snapshotPath() string {
+	return filepath.Join(s.syncDir(), "snapshot.json")
+}
+
+func (s *Service) scanJournalPath() string {
+	return filepath.Join(s.syncDir(), "scan-journal.json")
 }
 
 func (s *Service) ensureDir() error {
@@ -113,11 +129,33 @@ func (s *Service) RecordOp(entityType, entityID, opType string, payload interfac
 		CreatedAt:   now,
 	}
 
+	return s.recordOps([]Op{op})
+}
+
+// recordOps is idempotent by op ID so a scanner recovery journal can safely
+// resume after a crash between recording operations and replacing its snapshot.
+func (s *Service) recordOps(newOps []Op) error {
+	if err := s.ensureDir(); err != nil {
+		return err
+	}
 	ops, err := s.loadOps()
 	if err != nil {
 		return err
 	}
-	ops = append(ops, op)
+	existing := make(map[string]bool, len(ops))
+	for _, op := range ops {
+		existing[op.OpID] = true
+	}
+	for _, op := range newOps {
+		if op.OpID == "" || existing[op.OpID] {
+			continue
+		}
+		if op.ID == "" {
+			op.ID = op.OpID
+		}
+		ops = append(ops, op)
+		existing[op.OpID] = true
+	}
 	return s.saveOps(ops)
 }
 
@@ -158,6 +196,42 @@ func (s *Service) GetUnpushedOps() ([]Op, error) {
 		}
 	}
 	return unpushed, nil
+}
+
+// HasUnpushedPath reports whether a local operation still owns a path (or one
+// of its descendants). Pull uses it to turn an incoming overwrite/delete into
+// a visible conflict instead of silently replacing a local external edit.
+func (s *Service) HasUnpushedPath(path string) (bool, error) {
+	ops, err := s.GetUnpushedOps()
+	if err != nil {
+		return false, err
+	}
+	for _, op := range ops {
+		if syncPathsOverlap(path, op.EntityID) {
+			return true, nil
+		}
+		var payload struct {
+			Path     string `json:"path"`
+			FromPath string `json:"fromPath"`
+			ToPath   string `json:"toPath"`
+		}
+		if op.PayloadJSON == "" || json.Unmarshal([]byte(op.PayloadJSON), &payload) != nil {
+			continue
+		}
+		if syncPathsOverlap(path, payload.Path) || syncPathsOverlap(path, payload.FromPath) || syncPathsOverlap(path, payload.ToPath) {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+func syncPathsOverlap(left, right string) bool {
+	left = strings.Trim(left, "/")
+	right = strings.Trim(right, "/")
+	if left == "" || right == "" {
+		return false
+	}
+	return left == right || strings.HasPrefix(left, right+"/") || strings.HasPrefix(right, left+"/")
 }
 
 // MarkPushed marks ops as pushed to server.
@@ -244,6 +318,66 @@ func (s *Service) SetLastSyncAt(t string) error {
 	return s.saveState(st)
 }
 
+// BootstrapComplete reports whether the initial pull/reconcile/bootstrap cycle
+// finished successfully for this vault connection.
+func (s *Service) BootstrapComplete() (bool, error) {
+	st, err := s.loadState()
+	if err != nil {
+		return false, err
+	}
+	return st.BootstrapComplete, nil
+}
+
+// SetBootstrapComplete marks the initial reconciliation as complete only after
+// all remote operations were applied and the local initial snapshot was queued.
+func (s *Service) SetBootstrapComplete(done bool) error {
+	st, err := s.loadState()
+	if err != nil {
+		return err
+	}
+	st.BootstrapComplete = done
+	return s.saveState(st)
+}
+
+// LastWarning returns the persistent scanner warning shown by sync status.
+func (s *Service) LastWarning() (string, error) {
+	st, err := s.loadState()
+	if err != nil {
+		return "", err
+	}
+	return st.LastWarning, nil
+}
+
+// SetLastWarning persists an unresolved scanner condition. An empty string
+// clears the warning once a later complete scan no longer reports it.
+func (s *Service) SetLastWarning(message string) error {
+	st, err := s.loadState()
+	if err != nil {
+		return err
+	}
+	st.LastWarning = message
+	return s.saveState(st)
+}
+
+// RemoteVaultID returns the optional target vault chosen while pairing a new
+// local vault for restore. Empty means this vault's own durable ID was used.
+func (s *Service) RemoteVaultID() (string, error) {
+	st, err := s.loadState()
+	if err != nil {
+		return "", err
+	}
+	return st.RemoteVaultID, nil
+}
+
+func (s *Service) SetRemoteVaultID(vaultID string) error {
+	st, err := s.loadState()
+	if err != nil {
+		return err
+	}
+	st.RemoteVaultID = vaultID
+	return s.saveState(st)
+}
+
 // GetDeviceID returns the device ID used by this service.
 func (s *Service) GetDeviceID() string {
 	return s.deviceID
@@ -288,7 +422,7 @@ func (s *Service) saveOps(ops []Op) error {
 	if err != nil {
 		return fmt.Errorf("marshal ops: %w", err)
 	}
-	return os.WriteFile(s.opsPath(), data, 0o644)
+	return atomicWriteFile(s.opsPath(), data, 0o600)
 }
 
 func (s *Service) loadState() (*syncState, error) {
@@ -311,5 +445,42 @@ func (s *Service) saveState(st *syncState) error {
 	if err != nil {
 		return fmt.Errorf("marshal state: %w", err)
 	}
-	return os.WriteFile(s.statePath(), data, 0o644)
+	return atomicWriteFile(s.statePath(), data, 0o600)
+}
+
+func atomicWriteFile(path string, data []byte, perm os.FileMode) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
+		return err
+	}
+	tmp, err := os.CreateTemp(filepath.Dir(path), ".verstak-sync-*")
+	if err != nil {
+		return err
+	}
+	tmpPath := tmp.Name()
+	cleanup := true
+	defer func() {
+		if cleanup {
+			_ = os.Remove(tmpPath)
+		}
+	}()
+	if err := tmp.Chmod(perm); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if _, err := tmp.Write(data); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Sync(); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	if err := os.Rename(tmpPath, path); err != nil {
+		return err
+	}
+	cleanup = false
+	return nil
 }

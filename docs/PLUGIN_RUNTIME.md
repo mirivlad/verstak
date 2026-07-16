@@ -477,8 +477,8 @@ contributions summary.
 - All paths are canonical vault-relative slash paths. Backslashes, POSIX
   absolute paths, Windows drive paths, UNC/network paths, `..`, null bytes,
   symlink traversal, and public access to `.verstak/` are rejected.
-- `.verstak` is reserved case-insensitively: `.verstak`, `.Verstak`, and any
-  first path segment with that spelling are internal-only.
+- `.verstak` is reserved case-insensitively in every path segment: its marker,
+  sync snapshot, trash, and workspace identity are internal-only.
 - `files.metadata` may report a final symlink as `type: "symlink"`, but
   `files.list` through a symlink directory and all read/write/move/trash
   operations through symlinks are forbidden in Milestone 6a.
@@ -486,20 +486,37 @@ contributions summary.
   `writeBytes` are bounded byte contracts up to 8 MB; chunked streaming is
   deferred.
 - Live watcher refresh is active while Verstak is running and a vault is open.
-  It performs an initial no-event snapshot, then publishes `file.changed` for
-  external creates, updates, and deletes outside `.verstak/`. It does not keep a
-  persistent snapshot or report what changed while Verstak was closed.
+  It publishes `file.changed` as a UI hint and debounces a full core scanner;
+  the persistent `.verstak/sync/snapshot.json` scanner, not the watcher, is the
+  source of truth. It runs on open, before manual sync, after watcher events,
+  and therefore detects changes made while Verstak was closed. Internal paths,
+  trash, temporary files, and symlinks are excluded.
 
 `sync`
 
-- `sync.now()` pushes local operations, pulls remote operations, and returns
-  `{ pushed, pulled, serverSequence, conflicts?, applyErrors? }`.
+- `sync.now()` scans local files, pulls/reconciles in `server_sequence` order,
+  then pushes local operations and returns `{ pushed, pulled, serverSequence,
+  conflicts? }`. A remote apply failure stops the batch immediately, keeps that
+  operation and later sequences unacknowledged, and retries it on the next run.
 - `conflicts` is an array of server-reported sync conflicts. Conflict objects
   may include `op_id`, `entity_type`, `entity_id`, `reason`, and additional
   server fields. The Sync plugin must show conflict details instead of only a
   count, and it must not silently resolve or overwrite local data.
-- `applyErrors` lists local apply failures for pulled operations. These are
-  user-visible warnings and do not imply that sync was fully successful.
+- `sync.status()` includes `vaultId` (the paired remote scope) and
+  `lastWarning` for unresolved scanner input. A first connection pulls before
+  bootstrap: an empty local snapshot never publishes deletes, and incompatible
+  local/remote content is an explicit conflict rather than an overwrite.
+- File and folder operations come from the scanner. An external rename is
+  intentionally represented as delete + create in this milestone. Workspace
+  lifecycle is a separate core `workspace` entity (`create`, `rename`,
+  `trash`, `restore`) carrying the durable `workspaceId`; plugins never obtain
+  access to the nested workspace marker.
+- File transport remains bounded: UTF-8 text uses the 2 MB Files API limit and
+  binary/other regular files use the existing base64 path up to 8 MB. Larger or
+  unsupported files remain visible unresolved warnings and are not added to a
+  successful snapshot. Blob transport, quotas, pagination, retention, and
+  synchronization of Secrets, plugin settings, Todo, Journal, Activity, and
+  Browser Inbox are future work.
 - Transport push/pull uses bounded retry/backoff for transient HTTP/network
   failures. Client/auth errors are not retried.
 
@@ -585,8 +602,8 @@ bundled runtime. Это реальный runtime contract для cooperative bun
 | `api.files.showInFolder(relativePath)` | ✅ Работает | Показывает vault file/folder в системном файловом менеджере, требует `files.openExternal` |
 | `api.workbench.openResource(request)` | ✅ Работает | Routes vault resources to `openProviders` |
 | `api.workbench.editResource(request)` | ✅ Работает | Same routing, forcing `mode: "edit"` |
-| `api.sync.now()` | ✅ Работает | Push/pull с bounded retry/backoff для transient HTTP/network failures |
-| `api.sync.status()` | ✅ Работает | Возвращает configured/connected/error/revoked state, lastError, unpushed count |
+| `api.sync.now()` | ✅ Работает | Snapshot scan, строгий ordered pull/retry и bounded retry/backoff для transient HTTP/network failures |
+| `api.sync.status()` | ✅ Работает | Возвращает configured/connected/error/revoked, remote `vaultId`, lastError/lastWarning и unpushed count |
 | `api.dispose()` | ✅ Работает | Очищает command handlers и event subscriptions текущего API instance |
 
 Ограничения:

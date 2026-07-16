@@ -470,23 +470,33 @@ func (m *Manager) CreateWorkspace(name, templateID string) (Workspace, error) {
 
 func writeWorkspaceIdentity(workspacePath string) (string, error) {
 	workspaceID := uuid.NewString()
-	data, err := json.Marshal(workspaceIdentityMarker{WorkspaceID: workspaceID})
-	if err != nil {
-		return "", err
-	}
-	markerPath := filepath.Join(workspacePath, filepath.FromSlash(workspaceIdentityRelativePath))
-	if err := os.MkdirAll(filepath.Dir(markerPath), 0o755); err != nil {
-		return "", err
-	}
-	tmpPath := markerPath + ".tmp"
-	if err := os.WriteFile(tmpPath, data, 0o644); err != nil {
-		return "", err
-	}
-	if err := os.Rename(tmpPath, markerPath); err != nil {
-		_ = os.Remove(tmpPath)
+	if err := writeWorkspaceIdentityValue(workspacePath, workspaceID); err != nil {
 		return "", err
 	}
 	return workspaceID, nil
+}
+
+func writeWorkspaceIdentityValue(workspacePath, workspaceID string) error {
+	if _, err := uuid.Parse(workspaceID); err != nil {
+		return fmt.Errorf("invalid workspace identity: %w", err)
+	}
+	data, err := json.Marshal(workspaceIdentityMarker{WorkspaceID: workspaceID})
+	if err != nil {
+		return err
+	}
+	markerPath := filepath.Join(workspacePath, filepath.FromSlash(workspaceIdentityRelativePath))
+	if err := os.MkdirAll(filepath.Dir(markerPath), 0o755); err != nil {
+		return err
+	}
+	tmpPath := markerPath + ".tmp"
+	if err := os.WriteFile(tmpPath, data, 0o644); err != nil {
+		return err
+	}
+	if err := os.Rename(tmpPath, markerPath); err != nil {
+		_ = os.Remove(tmpPath)
+		return err
+	}
+	return nil
 }
 
 func ensureWorkspaceIdentity(workspacePath string) (string, error) {
@@ -737,6 +747,213 @@ func (m *Manager) RestoreWorkspaceTrash(trashID, targetName string) (Workspace, 
 	}
 	restored = false
 	return Workspace{ID: workspaceID, Name: targetName, RootPath: targetName}, nil
+}
+
+// CreateWorkspaceFromSync creates a workspace from the core-only sync contract.
+// It deliberately does not apply a live template: child folders and files are
+// represented by normal file operations, while the captured metadata preserves
+// the historical template snapshot that matters for restoration.
+func (m *Manager) CreateWorkspaceFromSync(name, workspaceID string, meta Metadata) (Workspace, error) {
+	name = strings.TrimSpace(name)
+	if err := validateWorkspaceName(name); err != nil {
+		return Workspace{}, err
+	}
+	if _, err := uuid.Parse(workspaceID); err != nil {
+		return Workspace{}, fmt.Errorf("invalid workspace identity: %w", err)
+	}
+	if existing, found, err := m.findActiveWorkspaceByID(workspaceID); err != nil {
+		return Workspace{}, err
+	} else if found {
+		if existing.Name == name {
+			return existing, nil
+		}
+		return Workspace{}, fmt.Errorf("conflict: workspace identity %s already belongs to %s", workspaceID, existing.Name)
+	}
+
+	full := filepath.Join(m.vaultDir, name)
+	if _, err := os.Lstat(full); err == nil {
+		return Workspace{}, fmt.Errorf("conflict: %s", name)
+	} else if !os.IsNotExist(err) {
+		return Workspace{}, err
+	}
+	if err := os.Mkdir(full, 0o755); err != nil {
+		return Workspace{}, err
+	}
+	created := true
+	defer func() {
+		if created {
+			_ = os.RemoveAll(full)
+		}
+	}()
+	if err := writeWorkspaceIdentityValue(full, workspaceID); err != nil {
+		return Workspace{}, err
+	}
+	meta.WorkspaceID = workspaceID
+	meta.WorkspaceName = name
+	if meta.Features == nil {
+		meta.Features = map[string]bool{"files": true}
+	}
+	if meta.Folders == nil {
+		meta.Folders = defaultFolders()
+	}
+	if meta.UpdatedAt == "" {
+		meta.UpdatedAt = time.Now().UTC().Format(time.RFC3339Nano)
+	}
+	for _, folder := range meta.Folders {
+		if strings.TrimSpace(folder) == "" {
+			continue
+		}
+		if err := validateWorkspaceFolderPath(folder); err != nil {
+			return Workspace{}, err
+		}
+		if err := os.MkdirAll(filepath.Join(full, folder), 0o755); err != nil {
+			return Workspace{}, err
+		}
+	}
+	if err := m.writeMetadata(name, meta); err != nil {
+		return Workspace{}, err
+	}
+	created = false
+	return Workspace{ID: workspaceID, Name: name, RootPath: name}, nil
+}
+
+func validateWorkspaceFolderPath(folder string) error {
+	folder = strings.TrimSpace(folder)
+	if folder == "" || filepath.IsAbs(folder) || strings.Contains(folder, `\`) {
+		return fmt.Errorf("invalid workspace folder path")
+	}
+	cleaned := filepath.ToSlash(filepath.Clean(filepath.FromSlash(folder)))
+	if cleaned == "." || cleaned == ".." || strings.HasPrefix(cleaned, "../") {
+		return fmt.Errorf("invalid workspace folder path")
+	}
+	for _, segment := range strings.Split(cleaned, "/") {
+		if strings.EqualFold(segment, ".verstak") {
+			return fmt.Errorf("invalid workspace folder path")
+		}
+	}
+	return nil
+}
+
+// RenameWorkspaceFromSync applies an idempotent rename only to the durable
+// identity named by the operation. A different local path is a visible conflict.
+func (m *Manager) RenameWorkspaceFromSync(workspaceID, oldName, newName string) error {
+	newName = strings.TrimSpace(newName)
+	if err := validateWorkspaceName(newName); err != nil {
+		return err
+	}
+	workspace, found, err := m.findActiveWorkspaceByID(workspaceID)
+	if err != nil {
+		return err
+	}
+	if !found {
+		return fmt.Errorf("not-found: workspace identity %s", workspaceID)
+	}
+	if workspace.Name == newName {
+		return nil
+	}
+	if strings.TrimSpace(oldName) != "" && workspace.Name != oldName {
+		return fmt.Errorf("conflict: workspace identity %s is at %s, expected %s", workspaceID, workspace.Name, oldName)
+	}
+	return m.RenameWorkspace(workspace.Name, newName)
+}
+
+// TrashWorkspaceFromSync moves the identified active workspace into this
+// device's local trash. Local trash IDs are intentionally not synchronized.
+func (m *Manager) TrashWorkspaceFromSync(workspaceID, name string) (TrashResult, error) {
+	workspace, found, err := m.findActiveWorkspaceByID(workspaceID)
+	if err != nil {
+		return TrashResult{}, err
+	}
+	if !found {
+		if _, trashed, err := m.findTrashedWorkspaceByID(workspaceID); err != nil {
+			return TrashResult{}, err
+		} else if trashed {
+			return TrashResult{WorkspaceID: workspaceID}, nil
+		}
+		return TrashResult{}, fmt.Errorf("not-found: workspace identity %s", workspaceID)
+	}
+	if strings.TrimSpace(name) != "" && workspace.Name != name {
+		return TrashResult{}, fmt.Errorf("conflict: workspace identity %s is at %s, expected %s", workspaceID, workspace.Name, name)
+	}
+	return m.TrashWorkspace(workspace.Name)
+}
+
+// RestoreWorkspaceFromSync restores a workspace by durable identity. It is
+// idempotent at the requested target and rejects a workspace of another ID.
+func (m *Manager) RestoreWorkspaceFromSync(workspaceID, targetName string) (Workspace, error) {
+	targetName = strings.TrimSpace(targetName)
+	if err := validateWorkspaceName(targetName); err != nil {
+		return Workspace{}, err
+	}
+	if active, found, err := m.findActiveWorkspaceByID(workspaceID); err != nil {
+		return Workspace{}, err
+	} else if found {
+		if active.Name == targetName {
+			return active, nil
+		}
+		return Workspace{}, fmt.Errorf("conflict: workspace identity %s is already active at %s", workspaceID, active.Name)
+	}
+	trashID, found, err := m.findTrashedWorkspaceByID(workspaceID)
+	if err != nil {
+		return Workspace{}, err
+	}
+	if !found {
+		return Workspace{}, fmt.Errorf("not-found: trashed workspace identity %s", workspaceID)
+	}
+	return m.RestoreWorkspaceTrash(trashID, targetName)
+}
+
+func (m *Manager) findActiveWorkspaceByID(workspaceID string) (Workspace, bool, error) {
+	if _, err := uuid.Parse(workspaceID); err != nil {
+		return Workspace{}, false, fmt.Errorf("invalid workspace identity: %w", err)
+	}
+	workspaces, err := m.ListWorkspaces()
+	if err != nil {
+		return Workspace{}, false, err
+	}
+	var match Workspace
+	for _, workspace := range workspaces {
+		if workspace.ID != workspaceID {
+			continue
+		}
+		if match.ID != "" {
+			return Workspace{}, false, fmt.Errorf("conflict: duplicated workspace identity %s", workspaceID)
+		}
+		match = workspace
+	}
+	return match, match.ID != "", nil
+}
+
+func (m *Manager) findTrashedWorkspaceByID(workspaceID string) (string, bool, error) {
+	if _, err := uuid.Parse(workspaceID); err != nil {
+		return "", false, fmt.Errorf("invalid workspace identity: %w", err)
+	}
+	trashRoot := filepath.Join(m.vaultDir, ".verstak", "trash", "workspaces")
+	entries, err := os.ReadDir(trashRoot)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return "", false, nil
+		}
+		return "", false, err
+	}
+	var match string
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		identity, err := m.GetWorkspaceTrashIdentity(entry.Name())
+		if err != nil {
+			continue
+		}
+		if identity.WorkspaceID != workspaceID {
+			continue
+		}
+		if match != "" {
+			return "", false, fmt.Errorf("conflict: duplicated trashed workspace identity %s", workspaceID)
+		}
+		match = entry.Name()
+	}
+	return match, match != "", nil
 }
 
 func validateWorkspaceTrashID(trashID string) error {

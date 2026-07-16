@@ -30,7 +30,10 @@ fi
 ) >"$LOG_FILE" 2>&1 &
 SERVER_PID="$!"
 
-for _ in $(seq 1 80); do
+# A cold Go cache can take longer than 20 seconds to compile `go run`; wait
+# for the real listener rather than treating a still-running compiler as a
+# healthy server.
+for _ in $(seq 1 300); do
   if curl -fsS "http://127.0.0.1:$PORT/api/v1/health" >/dev/null 2>&1; then
     break
   fi
@@ -45,10 +48,12 @@ curl -fsS "http://127.0.0.1:$PORT/api/v1/health" >/dev/null
 
 NOW="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 sqlite3 "$DATA_DIR/server.db" "
-INSERT INTO server_devices (id, name, api_key, last_seen, created_at)
-VALUES ('smoke-device-a', 'Smoke Device A', 'smoke-key-a', '$NOW', '$NOW');
-INSERT INTO server_devices (id, name, api_key, last_seen, created_at)
-VALUES ('smoke-device-b', 'Smoke Device B', 'smoke-key-b', '$NOW', '$NOW');
+INSERT INTO server_users (id, username, email, password_hash, confirmed, created_at)
+VALUES ('smoke-user', 'smoke-user', 'smoke@example.test', 'unused', 1, '$NOW');
+INSERT INTO server_devices (id, name, api_key, user_id, vault_id, last_seen, created_at)
+VALUES ('smoke-device-a', 'Smoke Device A', 'smoke-key-a', 'smoke-user', 'smoke-vault', '$NOW', '$NOW');
+INSERT INTO server_devices (id, name, api_key, user_id, vault_id, last_seen, created_at)
+VALUES ('smoke-device-b', 'Smoke Device B', 'smoke-key-b', 'smoke-user', 'smoke-vault', '$NOW', '$NOW');
 "
 
 (

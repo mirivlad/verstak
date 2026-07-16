@@ -99,7 +99,7 @@ test.describe('Command Palette', () => {
 
   test('runs sync workflow commands', async ({ page }) => {
     await page.evaluate(async () => {
-      const err = await window.go.api.App.PluginSyncConfigure('verstak.sync', 'https://sync.example.test', 'alice', 'secret');
+      const err = await window.go.api.App.PluginSyncConfigure('verstak.sync', 'https://sync.example.test', 'alice', 'secret', '');
       if (err) throw new Error(err);
     });
 

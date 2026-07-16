@@ -3,8 +3,11 @@ package api
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net/url"
 	"os"
@@ -95,6 +98,9 @@ type App struct {
 	browserReceiver     *browserreceiver.Receiver
 	secretsSession      *coresecrets.VaultSession
 	fileWatcher         *filewatcher.Service
+	syncRunMu           sync.Mutex
+	syncTimerMu         sync.Mutex
+	syncScanTimer       *time.Timer
 	notifications       notificationService
 	debug               bool
 	activityEvents      map[string]bool
@@ -1228,6 +1234,7 @@ func (a *App) CloseVault() error {
 	if a.fileWatcher != nil {
 		a.fileWatcher.Stop()
 	}
+	a.stopScheduledSnapshotScan()
 	a.vault.CloseVault()
 	a.syncSvc = nil
 	a.secretsSession = nil
@@ -1738,10 +1745,30 @@ func (a *App) externalOpenService() externalOpenService {
 }
 
 func (a *App) recordFileSyncOp(entityType, entityID, opType string, payload interface{}) error {
-	if a.syncSvc == nil {
+	_, err := a.scanLocalChanges()
+	return err
+}
+
+func (a *App) recordWorkspaceSyncOp(opType, workspaceID, path, previousPath, name string) error {
+	if a.syncSvc == nil || a.workspace == nil {
 		return nil
 	}
-	return a.syncSvc.RecordOp(entityType, entityID, opType, payload)
+	meta, err := a.workspace.GetWorkspaceMetadata(path)
+	if err != nil && opType != syncsvc.OpTrash {
+		return err
+	}
+	payload := syncWorkspacePayload{
+		WorkspaceID:  workspaceID,
+		Path:         path,
+		PreviousPath: previousPath,
+		Name:         name,
+		Metadata:     meta,
+	}
+	if err := a.syncSvc.RecordOp(syncsvc.EntityWorkspace, workspaceID, opType, payload); err != nil {
+		return err
+	}
+	_, err = a.syncSvc.RebaseSnapshot()
+	return err
 }
 
 func (a *App) publishFileActivity(eventName, pluginID, relativePath string, extra map[string]interface{}) {
@@ -2314,9 +2341,69 @@ func (a *App) startFileWatcherForOpenVault() {
 	if a.fileWatcher == nil {
 		a.fileWatcher = filewatcher.NewService(a.eventBus, 0)
 	}
+	a.fileWatcher.SetOnChange(a.scheduleSnapshotScan)
 	if err := a.fileWatcher.Start(a.vault.GetVaultPath()); err != nil {
 		log.Printf("[api] file watcher start failed: %v", err)
 	}
+	if _, err := a.scanLocalChanges(); err != nil {
+		log.Printf("[api] initial sync snapshot scan failed: %v", err)
+	}
+}
+
+const snapshotScanDebounce = 300 * time.Millisecond
+
+func (a *App) scheduleSnapshotScan() {
+	if a == nil {
+		return
+	}
+	a.syncTimerMu.Lock()
+	if a.syncScanTimer != nil {
+		a.syncScanTimer.Stop()
+	}
+	a.syncScanTimer = time.AfterFunc(snapshotScanDebounce, func() {
+		if _, err := a.scanLocalChanges(); err != nil {
+			log.Printf("[api] watcher sync snapshot scan failed: %v", err)
+		}
+	})
+	a.syncTimerMu.Unlock()
+}
+
+func (a *App) stopScheduledSnapshotScan() {
+	if a == nil {
+		return
+	}
+	a.syncTimerMu.Lock()
+	if a.syncScanTimer != nil {
+		a.syncScanTimer.Stop()
+		a.syncScanTimer = nil
+	}
+	a.syncTimerMu.Unlock()
+}
+
+func (a *App) scanLocalChanges() ([]string, error) {
+	if a == nil {
+		return nil, nil
+	}
+	a.syncRunMu.Lock()
+	defer a.syncRunMu.Unlock()
+	return a.scanLocalChangesLocked()
+}
+
+func (a *App) scanLocalChangesLocked() ([]string, error) {
+	if a.syncSvc == nil {
+		return nil, nil
+	}
+	warnings, err := a.syncSvc.ScanAndRecord()
+	if err != nil {
+		if a.appSettings != nil {
+			_ = a.updateSyncError("snapshot scan: " + err.Error())
+		}
+		return nil, err
+	}
+	if err := a.syncSvc.SetLastWarning(strings.Join(warnings, "\n")); err != nil {
+		return nil, err
+	}
+	return warnings, nil
 }
 
 // ─── Workspace API ─────────────────────────────────────────
@@ -2373,6 +2460,9 @@ func (a *App) CreateWorkspace(name, templateID string) (workspace.Workspace, str
 	if err != nil {
 		return workspace.Workspace{}, err.Error()
 	}
+	if err := a.recordWorkspaceSyncOp(syncsvc.OpCreate, ws.ID, ws.RootPath, "", ws.Name); err != nil {
+		return workspace.Workspace{}, err.Error()
+	}
 	a.publishWorkspaceLifecycleEvent(workspaceCreatedEventName, map[string]interface{}{
 		"operation":         "create",
 		"workspaceId":       ws.ID,
@@ -2395,6 +2485,9 @@ func (a *App) RenameWorkspace(oldName, newName string) string {
 	if err != nil {
 		return err.Error()
 	}
+	if err := a.recordWorkspaceSyncOp(syncsvc.OpRename, identity.WorkspaceID, newName, oldName, newName); err != nil {
+		return err.Error()
+	}
 	a.publishWorkspaceLifecycleEvent(workspaceRenamedEventName, map[string]interface{}{
 		"operation":                 "rename",
 		"workspaceId":               identity.WorkspaceID,
@@ -2413,6 +2506,9 @@ func (a *App) TrashWorkspace(name string) (workspace.TrashResult, string) {
 	}
 	result, err := a.workspace.TrashWorkspace(name)
 	if err != nil {
+		return workspace.TrashResult{}, err.Error()
+	}
+	if err := a.recordWorkspaceSyncOp(syncsvc.OpTrash, result.WorkspaceID, name, "", name); err != nil {
 		return workspace.TrashResult{}, err.Error()
 	}
 	a.publishWorkspaceLifecycleEvent(workspaceTrashedEventName, map[string]interface{}{
@@ -2434,6 +2530,9 @@ func (a *App) RestoreWorkspaceTrash(trashID, targetName string) (workspace.Works
 	}
 	restored, err := a.workspace.RestoreWorkspaceTrash(trashID, targetName)
 	if err != nil {
+		return workspace.Workspace{}, err.Error()
+	}
+	if err := a.recordWorkspaceSyncOp(syncsvc.OpRestore, restored.ID, restored.RootPath, "", restored.Name); err != nil {
 		return workspace.Workspace{}, err.Error()
 	}
 	a.publishWorkspaceLifecycleEvent(workspaceRestoredEventName, map[string]interface{}{
@@ -2943,6 +3042,7 @@ func (a *App) vaultPath() string {
 type SyncStatusDTO struct {
 	Configured   bool   `json:"configured"`
 	ServerURL    string `json:"serverUrl"`
+	VaultID      string `json:"vaultId"`
 	DeviceID     string `json:"deviceId"`
 	DeviceName   string `json:"deviceName"`
 	Connected    bool   `json:"connected"`
@@ -2952,6 +3052,7 @@ type SyncStatusDTO struct {
 	LastSyncAt   string `json:"lastSyncAt"`
 	SyncInterval int    `json:"syncInterval"`
 	LastError    string `json:"lastError"`
+	LastWarning  string `json:"lastWarning"`
 	StatusLabel  string `json:"statusLabel"`
 }
 
@@ -2972,15 +3073,19 @@ func (a *App) syncStatus() (*SyncStatusDTO, error) {
 
 	cfg := a.appSettings.Get()
 	deviceToken := syncsvc.LoadDeviceToken(vaultPath)
+	remoteVaultID, _ := a.syncSvc.RemoteVaultID()
+	lastWarning, _ := a.syncSvc.LastWarning()
 
 	dto := &SyncStatusDTO{
 		Configured:   serverURL != "" && (apiKey != "" || deviceToken != ""),
 		ServerURL:    serverURL,
+		VaultID:      remoteVaultID,
 		LastSyncAt:   lastSyncAt,
 		UnpushedOps:  0,
 		TokenStored:  deviceToken != "",
 		SyncInterval: cfg.Sync.SyncInterval,
 		LastError:    cfg.Sync.LastError,
+		LastWarning:  lastWarning,
 	}
 
 	if deviceID := a.syncSvc.GetDeviceID(); deviceID != "" {
@@ -3048,7 +3153,7 @@ func (a *App) PluginSyncStatus(pluginID string) (*SyncStatusDTO, string) {
 	return dto, ""
 }
 
-func (a *App) syncConfigure(serverURL, username, password string) error {
+func (a *App) syncConfigure(serverURL, username, password, remoteVaultID string) error {
 	if err := a.requireVault(); err != nil {
 		return err
 	}
@@ -3061,8 +3166,28 @@ func (a *App) syncConfigure(serverURL, username, password string) error {
 	if hostname == "" {
 		hostname = "unknown"
 	}
+	targetVaultID := strings.TrimSpace(remoteVaultID)
+	if targetVaultID == "" {
+		targetVaultID = meta.VaultID
+	}
+	if a.syncSvc != nil {
+		previousServerURL, _, _, _, stateErr := a.syncSvc.GetState()
+		previousVaultID, _ := a.syncSvc.RemoteVaultID()
+		if previousVaultID == "" {
+			previousVaultID = meta.VaultID
+		}
+		if stateErr == nil && previousServerURL != "" && previousVaultID != targetVaultID {
+			pending, err := a.syncSvc.GetUnpushedOps()
+			if err != nil {
+				return fmt.Errorf("read pending operations before changing remote vault: %w", err)
+			}
+			if len(pending) > 0 {
+				return fmt.Errorf("cannot change remote vault with %d unpushed local operation(s); synchronize or resolve them first", len(pending))
+			}
+		}
+	}
 	client := newSyncClient(serverURL, "", "", vaultPath)
-	deviceID, deviceToken, err := client.PairDevice(serverURL, username, password, hostname, "verstak-desktop/v2", meta.VaultID)
+	deviceID, deviceToken, err := client.PairDevice(serverURL, username, password, hostname, "verstak-desktop/v2", targetVaultID)
 	if err != nil {
 		return fmt.Errorf("pair: %w", err)
 	}
@@ -3071,6 +3196,18 @@ func (a *App) syncConfigure(serverURL, username, password string) error {
 	}
 	a.syncSvc = syncsvc.NewService(vaultPath, deviceID)
 	if err := a.syncSvc.SetState(serverURL, ""); err != nil {
+		return err
+	}
+	if err := a.syncSvc.SetRemoteVaultID(targetVaultID); err != nil {
+		return err
+	}
+	if err := a.syncSvc.SetLastPullSeq(0); err != nil {
+		return err
+	}
+	if err := a.syncSvc.SetBootstrapComplete(false); err != nil {
+		return err
+	}
+	if err := a.syncSvc.SetLastWarning(""); err != nil {
 		return err
 	}
 
@@ -3087,11 +3224,11 @@ func (a *App) syncConfigure(serverURL, username, password string) error {
 }
 
 // PluginSyncConfigure pairs the current vault with a sync server for a plugin.
-func (a *App) PluginSyncConfigure(pluginID, serverURL, username, password string) string {
+func (a *App) PluginSyncConfigure(pluginID, serverURL, username, password, remoteVaultID string) string {
 	if err := a.requirePluginSyncAccess(pluginID, true); err != nil {
 		return err.Error()
 	}
-	if err := a.syncConfigure(serverURL, username, password); err != nil {
+	if err := a.syncConfigure(serverURL, username, password, remoteVaultID); err != nil {
 		return err.Error()
 	}
 	return ""
@@ -3130,7 +3267,13 @@ func (a *App) syncDisconnect() error {
 	if a.syncSvc == nil {
 		return nil
 	}
-	return a.syncSvc.SetState("", "")
+	if err := a.syncSvc.SetState("", ""); err != nil {
+		return err
+	}
+	if err := a.syncSvc.SetRemoteVaultID(""); err != nil {
+		return err
+	}
+	return a.syncSvc.SetLastWarning("")
 }
 
 // PluginSyncDisconnect disconnects sync for a plugin with sync permission.
@@ -3230,6 +3373,8 @@ func (a *App) PluginSyncResetKey(pluginID string) string {
 }
 
 func (a *App) syncNow() (map[string]interface{}, error) {
+	a.syncRunMu.Lock()
+	defer a.syncRunMu.Unlock()
 	if err := a.requireVault(); err != nil {
 		return nil, err
 	}
@@ -3239,6 +3384,9 @@ func (a *App) syncNow() (map[string]interface{}, error) {
 	}
 	if a.syncSvc == nil {
 		return nil, fmt.Errorf("sync service not initialized")
+	}
+	if _, err := a.scanLocalChangesLocked(); err != nil {
+		return nil, fmt.Errorf("snapshot scan: %w", err)
 	}
 
 	serverURL, apiKey, lastPullSeq, _, err := a.syncSvc.GetState()
@@ -3270,12 +3418,44 @@ func (a *App) syncNow() (map[string]interface{}, error) {
 		client.DeviceID = deviceID
 	}
 
+	bootstrapComplete, err := a.syncSvc.BootstrapComplete()
+	if err != nil {
+		return nil, fmt.Errorf("read bootstrap state: %w", err)
+	}
+	initialSnapshot, err := a.syncSvc.LoadSnapshot()
+	if err != nil {
+		return nil, fmt.Errorf("load initial snapshot: %w", err)
+	}
+
+	// Pull before publishing. This makes the first reconciliation safe: remote
+	// state is applied or reported as a conflict before a pre-existing local
+	// vault can enqueue its bootstrap creates.
+	pulled, cursor, serverSequence, err := a.pullRemoteOps(client, lastPullSeq, !bootstrapComplete)
+	if err != nil {
+		return nil, err
+	}
+	if pulled > 0 {
+		if warnings, err := a.syncSvc.RebaseSnapshot(); err != nil {
+			return nil, fmt.Errorf("rebase remote snapshot: %w", err)
+		} else if err := a.syncSvc.SetLastWarning(strings.Join(warnings, "\n")); err != nil {
+			return nil, fmt.Errorf("save sync warning: %w", err)
+		}
+	}
+	if !bootstrapComplete {
+		if err := a.syncSvc.RecordBootstrapOps(initialSnapshot); err != nil {
+			return nil, fmt.Errorf("record initial local snapshot: %w", err)
+		}
+		if err := a.syncSvc.SetBootstrapComplete(true); err != nil {
+			return nil, fmt.Errorf("save bootstrap state: %w", err)
+		}
+	}
+
 	unpushed, err := a.syncSvc.GetUnpushedOps()
 	if err != nil {
 		return nil, fmt.Errorf("get ops: %w", err)
 	}
 	for i := range unpushed {
-		unpushed[i].LastSeenServerSeq = lastPullSeq
+		unpushed[i].LastSeenServerSeq = cursor
 	}
 	pushResult := &syncsvc.PushResponse{}
 	if len(unpushed) > 0 {
@@ -3289,55 +3469,108 @@ func (a *App) syncNow() (map[string]interface{}, error) {
 		}
 	}
 
-	pullResult, err := client.Pull(lastPullSeq)
+	// Pull once more so this device durably acknowledges its own accepted
+	// operations and any concurrent remote operations without reapplying its own.
+	pulledAfterPush, _, finalServerSequence, err := a.pullRemoteOps(client, cursor, false)
 	if err != nil {
-		_ = a.updateSyncError(fmt.Sprintf("pull: %v", err))
-		return nil, fmt.Errorf("pull: %w", err)
+		return nil, err
 	}
-
-	var applyErrors []string
-	for _, op := range pullResult.Ops {
-		if err := a.applyRemoteOp(op); err != nil {
-			applyErrors = append(applyErrors, fmt.Sprintf("%s/%s: %v", op.EntityType, op.OpID, err))
+	if pulledAfterPush > 0 {
+		if warnings, err := a.syncSvc.RebaseSnapshot(); err != nil {
+			return nil, fmt.Errorf("rebase final remote snapshot: %w", err)
+		} else if err := a.syncSvc.SetLastWarning(strings.Join(warnings, "\n")); err != nil {
+			return nil, fmt.Errorf("save sync warning: %w", err)
 		}
-		_ = a.syncSvc.RecordRemoteOp(op)
 	}
-	if len(pullResult.Ops) > 0 {
-		opIDs := make([]string, len(pullResult.Ops))
-		for i, op := range pullResult.Ops {
-			opIDs[i] = op.OpID
-		}
-		_ = a.syncSvc.MarkApplied(opIDs)
+	if finalServerSequence > serverSequence {
+		serverSequence = finalServerSequence
 	}
-
 	if len(pushResult.Conflicts) > 0 {
 		log.Printf("[sync] %d conflict(s) detected on push", len(pushResult.Conflicts))
-		for _, c := range pushResult.Conflicts {
-			log.Printf("[sync] conflict: op=%v entity=%v/%v",
-				c["op_id"], c["entity_type"], c["entity_id"])
-		}
 	}
-
-	if pullResult.ServerSequence > lastPullSeq {
-		_ = a.syncSvc.SetLastPullSeq(pullResult.ServerSequence)
-	}
-	_ = a.syncSvc.SetLastSyncAt(time.Now().UTC().Format(time.RFC3339))
-
 	now := time.Now().UTC().Format(time.RFC3339)
-	a.updateSyncSuccess(now)
+	if err := a.syncSvc.SetLastSyncAt(now); err != nil {
+		return nil, fmt.Errorf("save sync time: %w", err)
+	}
+	_ = a.updateSyncSuccess(now)
 
 	result := map[string]interface{}{
 		"pushed":         len(pushResult.Accepted),
-		"pulled":         len(pullResult.Ops),
-		"serverSequence": pullResult.ServerSequence,
-	}
-	if len(applyErrors) > 0 {
-		result["applyErrors"] = applyErrors
+		"pulled":         pulled + pulledAfterPush,
+		"serverSequence": serverSequence,
 	}
 	if len(pushResult.Conflicts) > 0 {
 		result["conflicts"] = pushResult.Conflicts
 	}
 	return result, nil
+}
+
+func (a *App) pullRemoteOps(client *syncsvc.Client, cursor int, initialReconciliation bool) (pulled, nextCursor, serverSequence int, err error) {
+	pullResult, err := client.Pull(cursor)
+	if err != nil {
+		_ = a.updateSyncError(fmt.Sprintf("pull: %v", err))
+		return 0, cursor, cursor, fmt.Errorf("pull: %w", err)
+	}
+	nextCursor = cursor
+	lastSequenceInBatch := cursor
+	for _, op := range pullResult.Ops {
+		if op.ServerSequence <= cursor {
+			continue
+		}
+		if op.ServerSequence <= lastSequenceInBatch {
+			errMsg := fmt.Sprintf("pull response is not strictly ordered at sequence %d (%s)", op.ServerSequence, op.OpID)
+			_ = a.updateSyncError(errMsg)
+			return pulled, nextCursor, pullResult.ServerSequence, fmt.Errorf("%s", errMsg)
+		}
+		lastSequenceInBatch = op.ServerSequence
+		if err := a.applyRemoteOpForReconciliation(op, initialReconciliation); err != nil {
+			path := syncOperationPath(op)
+			errMsg := fmt.Sprintf("pull apply failed at sequence %d for %s %s (%s): %v", op.ServerSequence, op.EntityType, path, op.OpID, err)
+			_ = a.updateSyncError(errMsg)
+			return pulled, nextCursor, pullResult.ServerSequence, fmt.Errorf("%s", errMsg)
+		}
+		if err := a.syncSvc.RecordRemoteOp(op); err != nil {
+			errMsg := fmt.Sprintf("record applied remote operation at sequence %d (%s): %v", op.ServerSequence, op.OpID, err)
+			_ = a.updateSyncError(errMsg)
+			return pulled, nextCursor, pullResult.ServerSequence, fmt.Errorf("%s", errMsg)
+		}
+		if err := a.syncSvc.SetLastPullSeq(op.ServerSequence); err != nil {
+			errMsg := fmt.Sprintf("save pull cursor at sequence %d (%s): %v", op.ServerSequence, op.OpID, err)
+			_ = a.updateSyncError(errMsg)
+			return pulled, nextCursor, pullResult.ServerSequence, fmt.Errorf("%s", errMsg)
+		}
+		if warnings, err := a.syncSvc.RebaseSnapshot(); err != nil {
+			errMsg := fmt.Sprintf("rebase snapshot after sequence %d (%s): %v", op.ServerSequence, op.OpID, err)
+			_ = a.updateSyncError(errMsg)
+			return pulled, nextCursor, pullResult.ServerSequence, fmt.Errorf("%s", errMsg)
+		} else if err := a.syncSvc.SetLastWarning(strings.Join(warnings, "\n")); err != nil {
+			return pulled, nextCursor, pullResult.ServerSequence, fmt.Errorf("save sync warning: %w", err)
+		}
+		nextCursor = op.ServerSequence
+		pulled++
+	}
+	if pullResult.ServerSequence > nextCursor {
+		if err := a.syncSvc.SetLastPullSeq(pullResult.ServerSequence); err != nil {
+			_ = a.updateSyncError(fmt.Sprintf("save pull cursor at sequence %d: %v", pullResult.ServerSequence, err))
+			return pulled, nextCursor, pullResult.ServerSequence, fmt.Errorf("save pull cursor: %w", err)
+		}
+		nextCursor = pullResult.ServerSequence
+	}
+	return pulled, nextCursor, pullResult.ServerSequence, nil
+}
+
+func syncOperationPath(op syncsvc.Op) string {
+	if op.EntityType == syncsvc.EntityWorkspace {
+		if payload, err := parseSyncWorkspacePayload(op.PayloadJSON); err == nil && payload.Path != "" {
+			return payload.Path
+		}
+		return op.EntityID
+	}
+	payload, _ := parseSyncFilePayload(op.PayloadJSON)
+	if path := syncPayloadPath(op, payload); path != "" {
+		return path
+	}
+	return op.EntityID
 }
 
 // PluginSyncNow triggers sync for a plugin with sync permission.
@@ -3368,11 +3601,22 @@ func (a *App) updateSyncSuccess(lastSyncAt string) error {
 }
 
 func (a *App) applyRemoteOp(op syncsvc.Op) error {
+	return a.applyRemoteOpForReconciliation(op, false)
+}
+
+func (a *App) applyRemoteOpForReconciliation(op syncsvc.Op, initialReconciliation bool) error {
 	if a.debug {
 		log.Printf("[sync] applyRemoteOp: type=%s entity=%s/%s", op.OpType, op.EntityType, op.EntityID)
 	}
 	if op.DeviceID != "" && op.DeviceID == a.localSyncDeviceID() {
 		return nil
+	}
+	if op.EntityType == syncsvc.EntityWorkspace {
+		payload, err := parseSyncWorkspacePayload(op.PayloadJSON)
+		if err != nil {
+			return err
+		}
+		return a.applyRemoteWorkspaceOp(op, payload)
 	}
 	if a.files == nil {
 		return fmt.Errorf("files service not initialized")
@@ -3384,20 +3628,29 @@ func (a *App) applyRemoteOp(op syncsvc.Op) error {
 	}
 	switch op.EntityType {
 	case syncsvc.EntityFile:
-		return a.applyRemoteFileOp(op, payload)
+		return a.applyRemoteFileOp(op, payload, initialReconciliation)
 	case syncsvc.EntityFolder:
-		return a.applyRemoteFolderOp(op, payload)
+		return a.applyRemoteFolderOp(op, payload, initialReconciliation)
 	default:
 		return fmt.Errorf("unsupported sync entity type: %s", op.EntityType)
 	}
 }
 
 type syncFilePayload struct {
-	Path       string  `json:"path"`
-	Content    string  `json:"content"`
-	DataBase64 *string `json:"dataBase64"`
-	FromPath   string  `json:"fromPath"`
-	ToPath     string  `json:"toPath"`
+	Path        string  `json:"path"`
+	Content     string  `json:"content"`
+	DataBase64  *string `json:"dataBase64"`
+	ContentHash string  `json:"contentHash"`
+	FromPath    string  `json:"fromPath"`
+	ToPath      string  `json:"toPath"`
+}
+
+type syncWorkspacePayload struct {
+	WorkspaceID  string             `json:"workspaceId"`
+	Path         string             `json:"path"`
+	PreviousPath string             `json:"previousPath,omitempty"`
+	Name         string             `json:"name"`
+	Metadata     workspace.Metadata `json:"metadata"`
 }
 
 func parseSyncFilePayload(payloadJSON string) (syncFilePayload, error) {
@@ -3411,12 +3664,63 @@ func parseSyncFilePayload(payloadJSON string) (syncFilePayload, error) {
 	return payload, nil
 }
 
-func (a *App) applyRemoteFileOp(op syncsvc.Op, payload syncFilePayload) error {
+func parseSyncWorkspacePayload(payloadJSON string) (syncWorkspacePayload, error) {
+	if payloadJSON == "" {
+		return syncWorkspacePayload{}, fmt.Errorf("workspace sync payload is empty")
+	}
+	var payload syncWorkspacePayload
+	if err := json.Unmarshal([]byte(payloadJSON), &payload); err != nil {
+		return syncWorkspacePayload{}, fmt.Errorf("invalid workspace sync payload: %w", err)
+	}
+	if payload.WorkspaceID == "" {
+		return syncWorkspacePayload{}, fmt.Errorf("workspace sync payload is missing workspaceId")
+	}
+	if payload.Path == "" {
+		payload.Path = payload.Name
+	}
+	return payload, nil
+}
+
+func (a *App) applyRemoteWorkspaceOp(op syncsvc.Op, payload syncWorkspacePayload) error {
+	if a.workspace == nil {
+		return fmt.Errorf("workspace service not initialized")
+	}
+	if payload.WorkspaceID != op.EntityID {
+		return fmt.Errorf("workspace identity mismatch: entity %s payload %s", op.EntityID, payload.WorkspaceID)
+	}
+	switch op.OpType {
+	case syncsvc.OpCreate:
+		_, err := a.workspace.CreateWorkspaceFromSync(payload.Path, payload.WorkspaceID, payload.Metadata)
+		return err
+	case syncsvc.OpRename:
+		return a.workspace.RenameWorkspaceFromSync(payload.WorkspaceID, payload.PreviousPath, payload.Path)
+	case syncsvc.OpTrash:
+		_, err := a.workspace.TrashWorkspaceFromSync(payload.WorkspaceID, payload.Path)
+		return err
+	case syncsvc.OpRestore:
+		_, err := a.workspace.RestoreWorkspaceFromSync(payload.WorkspaceID, payload.Path)
+		return err
+	default:
+		return fmt.Errorf("unsupported workspace sync op type: %s", op.OpType)
+	}
+}
+
+func (a *App) applyRemoteFileOp(op syncsvc.Op, payload syncFilePayload, initialReconciliation bool) error {
 	switch op.OpType {
 	case syncsvc.OpCreate:
 		path := syncPayloadPath(op, payload)
 		if path == "" {
 			return fmt.Errorf("missing file path")
+		}
+		matches, exists, err := a.remoteFileMatches(path, payload)
+		if err != nil {
+			return err
+		}
+		if matches {
+			return nil
+		}
+		if exists {
+			return fmt.Errorf("conflict: remote create would replace local file %s", path)
 		}
 		if payload.DataBase64 != nil {
 			return a.files.WriteVaultFileBytes(path, *payload.DataBase64, corefiles.WriteOptions{CreateIfMissing: true})
@@ -3427,14 +3731,43 @@ func (a *App) applyRemoteFileOp(op syncsvc.Op, payload syncFilePayload) error {
 		if path == "" {
 			return fmt.Errorf("missing file path")
 		}
-		if payload.DataBase64 != nil {
-			return a.files.WriteVaultFileBytes(path, *payload.DataBase64, corefiles.WriteOptions{CreateIfMissing: true, Overwrite: true})
+		matches, exists, err := a.remoteFileMatches(path, payload)
+		if err != nil {
+			return err
 		}
-		return a.files.WriteVaultTextFile(path, payload.Content, corefiles.WriteOptions{CreateIfMissing: true, Overwrite: true})
+		if matches {
+			return nil
+		}
+		if initialReconciliation && exists {
+			return fmt.Errorf("conflict: initial reconciliation would replace local file %s", path)
+		}
+		if pending, err := a.syncSvc.HasUnpushedPath(path); err != nil {
+			return err
+		} else if pending {
+			return fmt.Errorf("conflict: remote update would replace unpushed local file %s", path)
+		}
+		if payload.DataBase64 != nil {
+			return a.files.WriteVaultFileBytes(path, *payload.DataBase64, corefiles.WriteOptions{CreateIfMissing: !exists, Overwrite: exists})
+		}
+		return a.files.WriteVaultTextFile(path, payload.Content, corefiles.WriteOptions{CreateIfMissing: !exists, Overwrite: exists})
 	case syncsvc.OpDelete:
 		path := syncPayloadPath(op, payload)
 		if path == "" {
 			return fmt.Errorf("missing file path")
+		}
+		if initialReconciliation {
+			exists, err := a.syncPathExists(path)
+			if err != nil {
+				return err
+			}
+			if exists {
+				return fmt.Errorf("conflict: initial reconciliation would delete local file %s", path)
+			}
+		}
+		if pending, err := a.syncSvc.HasUnpushedPath(path); err != nil {
+			return err
+		} else if pending {
+			return fmt.Errorf("conflict: remote delete would remove unpushed local file %s", path)
 		}
 		_, err := a.files.TrashVaultPath(path)
 		if isSyncNotFound(err) {
@@ -3449,6 +3782,24 @@ func (a *App) applyRemoteFileOp(op syncsvc.Op, payload syncFilePayload) error {
 		if fromPath == "" || payload.ToPath == "" {
 			return fmt.Errorf("missing file move path")
 		}
+		if initialReconciliation {
+			fromExists, err := a.syncPathExists(fromPath)
+			if err != nil {
+				return err
+			}
+			toExists, err := a.syncPathExists(payload.ToPath)
+			if err != nil {
+				return err
+			}
+			if fromExists || toExists {
+				return fmt.Errorf("conflict: initial reconciliation would move local file %s", fromPath)
+			}
+		}
+		if pending, err := a.syncSvc.HasUnpushedPath(fromPath); err != nil {
+			return err
+		} else if pending {
+			return fmt.Errorf("conflict: remote move would replace unpushed local file %s", fromPath)
+		}
 		err := a.files.MoveVaultPath(fromPath, payload.ToPath, corefiles.MoveOptions{})
 		if isSyncNotFound(err) {
 			return nil
@@ -3459,7 +3810,54 @@ func (a *App) applyRemoteFileOp(op syncsvc.Op, payload syncFilePayload) error {
 	}
 }
 
-func (a *App) applyRemoteFolderOp(op syncsvc.Op, payload syncFilePayload) error {
+func (a *App) remoteFileMatches(path string, payload syncFilePayload) (matches, exists bool, err error) {
+	normalized, err := corefiles.NormalizeRelativeFile(path)
+	if err != nil {
+		return false, false, err
+	}
+	info, err := os.Lstat(filepath.Join(a.vaultPath(), filepath.FromSlash(normalized)))
+	if err != nil {
+		if os.IsNotExist(err) {
+			return false, false, nil
+		}
+		return false, false, err
+	}
+	if info.Mode()&os.ModeSymlink != 0 || !info.Mode().IsRegular() {
+		return false, true, fmt.Errorf("conflict: remote file target is not a regular file: %s", normalized)
+	}
+	want, err := remotePayloadHash(payload)
+	if err != nil {
+		return false, true, err
+	}
+	file, err := os.Open(filepath.Join(a.vaultPath(), filepath.FromSlash(normalized)))
+	if err != nil {
+		return false, true, err
+	}
+	defer file.Close()
+	hash := sha256.New()
+	if _, err := io.Copy(hash, file); err != nil {
+		return false, true, err
+	}
+	return fmt.Sprintf("%x", hash.Sum(nil)) == want, true, nil
+}
+
+func remotePayloadHash(payload syncFilePayload) (string, error) {
+	if payload.ContentHash != "" {
+		return payload.ContentHash, nil
+	}
+	data := []byte(payload.Content)
+	if payload.DataBase64 != nil {
+		decoded, err := base64.StdEncoding.DecodeString(*payload.DataBase64)
+		if err != nil {
+			return "", fmt.Errorf("invalid remote base64 payload: %w", err)
+		}
+		data = decoded
+	}
+	sum := sha256.Sum256(data)
+	return fmt.Sprintf("%x", sum[:]), nil
+}
+
+func (a *App) applyRemoteFolderOp(op syncsvc.Op, payload syncFilePayload, initialReconciliation bool) error {
 	switch op.OpType {
 	case syncsvc.OpCreate:
 		path := syncPayloadPath(op, payload)
@@ -3476,6 +3874,15 @@ func (a *App) applyRemoteFolderOp(op syncsvc.Op, payload syncFilePayload) error 
 		if path == "" {
 			return fmt.Errorf("missing folder path")
 		}
+		if initialReconciliation {
+			exists, err := a.syncPathExists(path)
+			if err != nil {
+				return err
+			}
+			if exists {
+				return fmt.Errorf("conflict: initial reconciliation would delete local folder %s", path)
+			}
+		}
 		_, err := a.files.TrashVaultPath(path)
 		if isSyncNotFound(err) {
 			return nil
@@ -3489,6 +3896,19 @@ func (a *App) applyRemoteFolderOp(op syncsvc.Op, payload syncFilePayload) error 
 		if fromPath == "" || payload.ToPath == "" {
 			return fmt.Errorf("missing folder move path")
 		}
+		if initialReconciliation {
+			fromExists, err := a.syncPathExists(fromPath)
+			if err != nil {
+				return err
+			}
+			toExists, err := a.syncPathExists(payload.ToPath)
+			if err != nil {
+				return err
+			}
+			if fromExists || toExists {
+				return fmt.Errorf("conflict: initial reconciliation would move local folder %s", fromPath)
+			}
+		}
 		err := a.files.MoveVaultPath(fromPath, payload.ToPath, corefiles.MoveOptions{})
 		if isSyncNotFound(err) {
 			return nil
@@ -3497,6 +3917,21 @@ func (a *App) applyRemoteFolderOp(op syncsvc.Op, payload syncFilePayload) error 
 	default:
 		return fmt.Errorf("unsupported folder sync op type: %s", op.OpType)
 	}
+}
+
+func (a *App) syncPathExists(path string) (bool, error) {
+	normalized, err := corefiles.NormalizeRelativeFile(path)
+	if err != nil {
+		return false, err
+	}
+	_, err = os.Lstat(filepath.Join(a.vaultPath(), filepath.FromSlash(normalized)))
+	if err == nil {
+		return true, nil
+	}
+	if os.IsNotExist(err) {
+		return false, nil
+	}
+	return false, err
 }
 
 func syncPayloadPath(op syncsvc.Op, payload syncFilePayload) string {

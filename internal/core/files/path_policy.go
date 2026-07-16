@@ -25,8 +25,7 @@ func IsReservedPath(relativePath string) bool {
 	if cleaned == "" {
 		return false
 	}
-	first := strings.Split(cleaned, "/")[0]
-	return strings.EqualFold(first, ".verstak")
+	return containsReservedSegment(cleaned)
 }
 
 func normalizeRelativePath(input string, allowRoot bool) (string, error) {
@@ -67,8 +66,16 @@ func IsReservedPathNoNormalize(cleaned string) bool {
 	if cleaned == "" {
 		return false
 	}
-	first := strings.Split(cleaned, "/")[0]
-	return strings.EqualFold(first, ".verstak")
+	return containsReservedSegment(cleaned)
+}
+
+func containsReservedSegment(cleaned string) bool {
+	for _, segment := range strings.Split(cleaned, "/") {
+		if strings.EqualFold(segment, ".verstak") {
+			return true
+		}
+	}
+	return false
 }
 
 func looksAbsolute(input string) bool {

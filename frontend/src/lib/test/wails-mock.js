@@ -626,6 +626,7 @@ import journalSource from '../../../../../verstak-official-plugins/plugins/journ
     return {
       configured: false,
       serverUrl: '',
+      vaultId: '',
       deviceId: 'mock-device',
       deviceName: '',
       connected: false,
@@ -635,6 +636,7 @@ import journalSource from '../../../../../verstak-official-plugins/plugins/journ
       lastSyncAt: '',
       syncInterval: 0,
       lastError: '',
+      lastWarning: '',
       statusLabel: 'disabled',
       serverSequence: 0
     };
@@ -649,7 +651,7 @@ import journalSource from '../../../../../verstak-official-plugins/plugins/journ
     if (p.charAt(0) === '/' || /^[A-Za-z]:/.test(p)) return { error: 'invalid-path: absolute path rejected' };
     var parts = p.split('/').filter(Boolean);
     if (parts.indexOf('..') !== -1) return { error: 'invalid-path: path-traversal' };
-    if (parts[0] && parts[0].toLowerCase() === '.verstak') return { error: 'reserved-path: .verstak is internal' };
+    if (parts.some(function(part) { return part.toLowerCase() === '.verstak'; })) return { error: 'reserved-path: .verstak is internal' };
     return { path: parts.join('/') };
   }
 
@@ -751,6 +753,7 @@ import journalSource from '../../../../../verstak-official-plugins/plugins/journ
     return {
       configured: syncState.configured,
       serverUrl: syncState.serverUrl,
+      vaultId: syncState.vaultId,
       deviceId: syncState.deviceId,
       deviceName: syncState.deviceName,
       connected: syncState.connected,
@@ -760,6 +763,7 @@ import journalSource from '../../../../../verstak-official-plugins/plugins/journ
       lastSyncAt: syncState.lastSyncAt,
       syncInterval: syncState.syncInterval,
       lastError: syncState.lastError,
+      lastWarning: syncState.lastWarning,
       statusLabel: syncState.statusLabel
     };
   }
@@ -3477,11 +3481,12 @@ import journalSource from '../../../../../verstak-official-plugins/plugins/journ
       if (err) return Promise.resolve([{}, err]);
       return Promise.resolve([syncStatusDTO(), '']);
     },
-    PluginSyncConfigure: function (pluginId, serverUrl) {
+    PluginSyncConfigure: function (pluginId, serverUrl, username, password, vaultId) {
       var err = requirePluginSyncPermission(pluginId, true);
       if (err) return Promise.resolve(err);
       syncState.configured = true;
       syncState.serverUrl = serverUrl || '';
+      syncState.vaultId = vaultId || 'test-vault-001';
       syncState.deviceId = 'mock-device';
       syncState.deviceName = 'mock-device';
       syncState.connected = true;
@@ -3491,6 +3496,7 @@ import journalSource from '../../../../../verstak-official-plugins/plugins/journ
       syncState.statusLabel = 'connected';
       pluginSettings[pluginId] = Object.assign({}, pluginSettings[pluginId] || {}, {
         serverUrl: syncState.serverUrl,
+        vaultId: syncState.vaultId,
         syncStatus: syncState.statusLabel
       });
       return Promise.resolve('');

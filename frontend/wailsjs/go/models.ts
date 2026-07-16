@@ -310,6 +310,7 @@ export namespace api {
 	export class SyncStatusDTO {
 	    configured: boolean;
 	    serverUrl: string;
+	    vaultId: string;
 	    deviceId: string;
 	    deviceName: string;
 	    connected: boolean;
@@ -319,6 +320,7 @@ export namespace api {
 	    lastSyncAt: string;
 	    syncInterval: number;
 	    lastError: string;
+	    lastWarning: string;
 	    statusLabel: string;
 
 	    static createFrom(source: any = {}) {
@@ -329,6 +331,7 @@ export namespace api {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.configured = source["configured"];
 	        this.serverUrl = source["serverUrl"];
+	        this.vaultId = source["vaultId"];
 	        this.deviceId = source["deviceId"];
 	        this.deviceName = source["deviceName"];
 	        this.connected = source["connected"];
@@ -338,6 +341,7 @@ export namespace api {
 	        this.lastSyncAt = source["lastSyncAt"];
 	        this.syncInterval = source["syncInterval"];
 	        this.lastError = source["lastError"];
+	        this.lastWarning = source["lastWarning"];
 	        this.statusLabel = source["statusLabel"];
 	    }
 	}

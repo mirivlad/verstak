@@ -102,7 +102,7 @@ test.describe('D: Plugin API bridge', () => {
       const api = window.createPluginAPI('verstak.sync');
       const initial = await api.sync.status();
       await api.sync.testConnection('https://sync.example.test', 'alice', 'secret');
-      await api.sync.configure('https://sync.example.test', 'alice', 'secret');
+      await api.sync.configure('https://sync.example.test', 'alice', 'secret', 'existing-remote-vault');
       await api.sync.setInterval(15);
       const configured = await api.sync.status();
       const syncNow = await api.sync.now();
@@ -117,6 +117,8 @@ test.describe('D: Plugin API bridge', () => {
     expect(result.initial.statusLabel).toBe('disabled');
     expect(result.configured.configured).toBe(true);
     expect(result.configured.serverUrl).toBe('https://sync.example.test');
+    expect(result.configured.vaultId).toBe('existing-remote-vault');
+    expect(result.configured.lastWarning).toBe('');
     expect(result.configured.syncInterval).toBe(15);
     expect(result.syncNow).toEqual({ pushed: 0, pulled: 0, serverSequence: 0 });
     expect(result.reset.configured).toBe(false);

@@ -114,7 +114,7 @@ export function PluginSecretsUnlock(arg1:string,arg2:string):Promise<string>;
 
 export function PluginSecretsWrite(arg1:string,arg2:Record<string, any>):Promise<Record<string, any>|string>;
 
-export function PluginSyncConfigure(arg1:string,arg2:string,arg3:string,arg4:string):Promise<string>;
+export function PluginSyncConfigure(arg1:string,arg2:string,arg3:string,arg4:string,arg5:string):Promise<string>;
 
 export function PluginSyncDisconnect(arg1:string):Promise<string>;
 

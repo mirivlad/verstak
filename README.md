@@ -224,6 +224,24 @@ For synchronization between devices, deploy the optional self-hosted
 
 Each vault is connected separately. The local vault remains the primary copy of your data.
 
+Desktop core maintains an atomic local sync snapshot under `.verstak/sync/`.
+It scans when a vault opens, before a manual sync, and after debounced external
+file-watcher events, so files changed in an editor or while Desktop was closed
+are reconciled too. The watcher only speeds up discovery. A first connection
+pulls before it publishes a local bootstrap: an empty local vault does not send
+deletes, and incompatible files become visible conflicts rather than silent
+overwrites. Pairing can optionally use an existing remote vault ID to restore
+that scope on a new device.
+
+The current operation transport supports ordinary files and folders plus
+workspace (Deal) create/rename/trash/restore with a durable workspace UUID.
+`.verstak`, trash, temporary files, and symlinks are excluded from ordinary
+file sync. Text remains bounded to 2 MB and binary payloads to 8 MB; a larger
+or unsupported file is left as a visible unresolved sync warning instead of
+being treated as synchronized. Blob transfer, quotas, pagination, retention,
+and Secrets, plugin settings, Todo, Journal, Activity, and Browser Inbox sync
+are future milestones.
+
 ## Build from source
 
 ### Requirements

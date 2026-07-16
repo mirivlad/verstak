@@ -43,6 +43,7 @@ func TestNormalizeRelativeFileRejectsUnsafePaths(t *testing.T) {
 		".verstak/vault.json",
 		"./.verstak",
 		".verstak/trash",
+		"Workspace/.verstak/workspace.json",
 		"folder/../.verstak",
 		".Verstak",
 	}
@@ -69,6 +70,9 @@ func TestReservedPathPolicy(t *testing.T) {
 	}
 	if IsReservedPath("Notes/.verstak.md") {
 		t.Fatal("Notes/.verstak.md should not be reserved")
+	}
+	if !IsReservedPath("Workspace/.verstak/workspace.json") {
+		t.Fatal("nested .verstak should be reserved")
 	}
 }
 

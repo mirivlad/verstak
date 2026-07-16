@@ -175,6 +175,12 @@ func newSyncFilesTestApp(t *testing.T, perms []string, deviceID string) (*App, s
 	t.Helper()
 	app, root := newFilesTestApp(t, perms)
 	app.syncSvc = syncsvc.NewService(root, deviceID)
+	if _, err := app.syncSvc.ScanAndRecord(); err != nil {
+		t.Fatalf("initial sync snapshot: %v", err)
+	}
+	if err := app.syncSvc.SetBootstrapComplete(true); err != nil {
+		t.Fatalf("mark test sync bootstrap complete: %v", err)
+	}
 	app.appSettings = appsettings.NewManager(filepath.Join(t.TempDir(), "config.json"))
 	if err := app.appSettings.Load(); err != nil {
 		t.Fatalf("settings Load: %v", err)
@@ -1692,6 +1698,63 @@ func TestApplyRemoteOpSkipsLocalDevice(t *testing.T) {
 	}
 }
 
+func TestApplyRemoteWorkspaceLifecyclePreservesDurableIdentity(t *testing.T) {
+	app, root := newSyncFilesTestApp(t, []string{"files.read", "files.write", "files.delete"}, "local-device")
+	app.workspace = workspace.NewManager(root)
+	if err := app.workspace.Load(); err != nil {
+		t.Fatal(err)
+	}
+	workspaceID := "5f0f96d9-61c8-4b6b-8c3a-a1b9a0f40002"
+	payload := syncWorkspacePayload{
+		WorkspaceID: workspaceID,
+		Path:        "Remote",
+		Name:        "Remote",
+		Metadata: workspace.Metadata{
+			WorkspaceID:   workspaceID,
+			WorkspaceName: "Remote",
+			Folders:       map[string]string{"notes": "Notes"},
+			Features:      map[string]bool{"files": true},
+		},
+	}
+	encoded, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatal(err)
+	}
+	create := syncsvc.Op{OpID: "workspace-create", DeviceID: "remote-device", EntityType: syncsvc.EntityWorkspace, EntityID: workspaceID, OpType: syncsvc.OpCreate, PayloadJSON: string(encoded)}
+	if err := app.applyRemoteOp(create); err != nil {
+		t.Fatalf("apply workspace create: %v", err)
+	}
+	if err := app.applyRemoteOp(create); err != nil {
+		t.Fatalf("replay workspace create: %v", err)
+	}
+	if identity, err := app.workspace.GetWorkspaceIdentity("Remote"); err != nil || identity.WorkspaceID != workspaceID {
+		t.Fatalf("remote workspace identity = %+v err=%v", identity, err)
+	}
+
+	payload.PreviousPath = "Remote"
+	payload.Path = "Remote-Renamed"
+	payload.Name = "Remote-Renamed"
+	encoded, _ = json.Marshal(payload)
+	rename := syncsvc.Op{OpID: "workspace-rename", DeviceID: "remote-device", EntityType: syncsvc.EntityWorkspace, EntityID: workspaceID, OpType: syncsvc.OpRename, PayloadJSON: string(encoded)}
+	if err := app.applyRemoteOp(rename); err != nil {
+		t.Fatalf("apply workspace rename: %v", err)
+	}
+	trash := syncsvc.Op{OpID: "workspace-trash", DeviceID: "remote-device", EntityType: syncsvc.EntityWorkspace, EntityID: workspaceID, OpType: syncsvc.OpTrash, PayloadJSON: string(encoded)}
+	if err := app.applyRemoteOp(trash); err != nil {
+		t.Fatalf("apply workspace trash: %v", err)
+	}
+	payload.Path = "Remote-Restored"
+	payload.Name = "Remote-Restored"
+	encoded, _ = json.Marshal(payload)
+	restore := syncsvc.Op{OpID: "workspace-restore", DeviceID: "remote-device", EntityType: syncsvc.EntityWorkspace, EntityID: workspaceID, OpType: syncsvc.OpRestore, PayloadJSON: string(encoded)}
+	if err := app.applyRemoteOp(restore); err != nil {
+		t.Fatalf("apply workspace restore: %v", err)
+	}
+	if identity, err := app.workspace.GetWorkspaceIdentity("Remote-Restored"); err != nil || identity.WorkspaceID != workspaceID {
+		t.Fatalf("restored workspace identity = %+v err=%v", identity, err)
+	}
+}
+
 func TestFileBridgeRecordsSyncOps(t *testing.T) {
 	app, _ := newSyncFilesTestApp(t, []string{"files.read", "files.write", "files.delete"}, "local-device")
 
@@ -1718,8 +1781,8 @@ func TestFileBridgeRecordsSyncOps(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetUnpushedOps: %v", err)
 	}
-	if len(ops) != 6 {
-		t.Fatalf("ops len = %d, want 6: %#v", len(ops), ops)
+	if len(ops) != 7 {
+		t.Fatalf("ops len = %d, want 7: %#v", len(ops), ops)
 	}
 
 	want := []struct {
@@ -1732,7 +1795,10 @@ func TestFileBridgeRecordsSyncOps(t *testing.T) {
 		{syncsvc.EntityFile, "Docs/one.txt", syncsvc.OpCreate, `"content":"hello"`},
 		{syncsvc.EntityFile, "Docs/one.txt", syncsvc.OpUpdate, `"content":"updated"`},
 		{syncsvc.EntityFile, "Docs/image.bin", syncsvc.OpCreate, `"dataBase64":"AQID"`},
-		{syncsvc.EntityFile, "Docs/one.txt", syncsvc.OpMove, `"toPath":"Docs/two.txt"`},
+		// Snapshot reconciliation represents external and API renames uniformly
+		// as a create at the destination followed by a delete at the source.
+		{syncsvc.EntityFile, "Docs/two.txt", syncsvc.OpCreate, `"content":"updated"`},
+		{syncsvc.EntityFile, "Docs/one.txt", syncsvc.OpDelete, `"path":"Docs/one.txt"`},
 		{syncsvc.EntityFile, "Docs/two.txt", syncsvc.OpDelete, `"path":"Docs/two.txt"`},
 	}
 	for i, w := range want {
@@ -1854,8 +1920,8 @@ func TestSyncNowPushesLocalOpsAndAppliesPulledFileOps(t *testing.T) {
 		t.Fatalf("pushed ops len = %d, want 2", len(pushedOps))
 	}
 	for i, op := range pushedOps {
-		if op.LastSeenServerSeq != 0 {
-			t.Fatalf("pushed op[%d] last seen = %d, want 0", i, op.LastSeenServerSeq)
+		if op.LastSeenServerSeq != 2 {
+			t.Fatalf("pushed op[%d] last seen = %d, want 2 after initial pull", i, op.LastSeenServerSeq)
 		}
 	}
 
@@ -1879,6 +1945,323 @@ func TestSyncNowPushesLocalOpsAndAppliesPulledFileOps(t *testing.T) {
 	}
 	if lastPullSeq != 2 {
 		t.Fatalf("last pull seq = %d, want 2", lastPullSeq)
+	}
+}
+
+func TestSyncNowStopsAtFailedRemoteOperationAndRetriesAfterRestart(t *testing.T) {
+	app, root := newSyncFilesTestApp(t, []string{"files.read", "files.write", "files.delete"}, "local-device")
+	pullCalls := 0
+	server := newLocalHTTPTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "Bearer device-token" {
+			http.Error(w, "missing auth", http.StatusUnauthorized)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/api/v1/sync/pull":
+			pullCalls++
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{
+				"server_sequence": 3,
+				"ops": []map[string]interface{}{
+					{
+						"op_id":           "remote-folder",
+						"server_sequence": 1,
+						"device_id":       "remote-device",
+						"entity_type":     syncsvc.EntityFolder,
+						"entity_id":       "Remote",
+						"op_type":         syncsvc.OpCreate,
+						"payload_json":    `{"path":"Remote"}`,
+					},
+					{
+						"op_id":           "blocked-file",
+						"server_sequence": 2,
+						"device_id":       "remote-device",
+						"entity_type":     syncsvc.EntityFile,
+						"entity_id":       "Missing/blocked.txt",
+						"op_type":         syncsvc.OpCreate,
+						"payload_json":    `{"path":"Missing/blocked.txt","content":"blocked"}`,
+					},
+					{
+						"op_id":           "after-failure",
+						"server_sequence": 3,
+						"device_id":       "remote-device",
+						"entity_type":     syncsvc.EntityFile,
+						"entity_id":       "Remote/after.txt",
+						"op_type":         syncsvc.OpCreate,
+						"payload_json":    `{"path":"Remote/after.txt","content":"must wait"}`,
+					},
+				},
+			})
+		case "/api/v1/sync/push":
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{"accepted": []string{}, "count": 0, "conflicts": []map[string]interface{}{}})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+	if err := app.syncSvc.SetState(server.URL, ""); err != nil {
+		t.Fatal(err)
+	}
+	if err := syncsvc.SaveDeviceToken(root, "device-token"); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := app.syncNow(); err == nil || !strings.Contains(err.Error(), "sequence 2") {
+		t.Fatalf("first sync error = %v, want failed sequence", err)
+	}
+	assertLastPullSequence(t, app.syncSvc, 1)
+	if _, errStr := app.GetVaultFileMetadata("files.plugin", "Remote/after.txt"); !strings.Contains(errStr, "not-found") {
+		t.Fatalf("operation after failure applied early: %q", errStr)
+	}
+	cfg := app.appSettings.Get()
+	if cfg.Sync.LastError == "" || !strings.Contains(cfg.Sync.LastError, "sequence 2") || !strings.Contains(cfg.Sync.LastError, "Missing/blocked.txt") {
+		t.Fatalf("sync status after failed apply = %#v", cfg.Sync)
+	}
+
+	if err := os.Mkdir(filepath.Join(root, "Missing"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	restarted := &App{
+		vault:       app.vault,
+		files:       app.files,
+		plugins:     app.plugins,
+		appSettings: app.appSettings,
+		syncSvc:     syncsvc.NewService(root, ""),
+	}
+	if _, err := restarted.syncNow(); err != nil {
+		t.Fatalf("retry after restart: %v", err)
+	}
+	if pullCalls < 2 {
+		t.Fatalf("pull calls = %d, want retry", pullCalls)
+	}
+	assertLastPullSequence(t, restarted.syncSvc, 3)
+	expectText(t, restarted, "Missing/blocked.txt", "blocked")
+	expectText(t, restarted, "Remote/after.txt", "must wait")
+}
+
+func TestSyncNowBootstrapsExistingLocalSnapshotAfterInitialPull(t *testing.T) {
+	app, root := newFilesTestApp(t, []string{"files.read", "files.write", "files.delete"})
+	if err := os.Mkdir(filepath.Join(root, "Existing"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "Existing", "before-connect.txt"), []byte("local before connect"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	app.syncSvc = syncsvc.NewService(root, "local-device")
+	if _, err := app.syncSvc.ScanAndRecord(); err != nil {
+		t.Fatalf("initial baseline scan: %v", err)
+	}
+	app.appSettings = appsettings.NewManager(filepath.Join(t.TempDir(), "config.json"))
+	if err := app.appSettings.Load(); err != nil {
+		t.Fatal(err)
+	}
+
+	var pushed []syncsvc.PushOp
+	server := newLocalHTTPTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "Bearer device-token" {
+			http.Error(w, "missing auth", http.StatusUnauthorized)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/api/v1/sync/pull":
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{"server_sequence": 0, "ops": []map[string]interface{}{}})
+		case "/api/v1/sync/push":
+			var request struct {
+				Ops []syncsvc.PushOp `json:"ops"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+			pushed = request.Ops
+			accepted := make([]string, 0, len(request.Ops))
+			for _, op := range request.Ops {
+				accepted = append(accepted, op.OpID)
+			}
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{"accepted": accepted, "count": len(accepted), "conflicts": []map[string]interface{}{}})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+	if err := app.syncSvc.SetState(server.URL, ""); err != nil {
+		t.Fatal(err)
+	}
+	if err := syncsvc.SaveDeviceToken(root, "device-token"); err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := app.syncNow()
+	if err != nil {
+		t.Fatalf("syncNow: %v", err)
+	}
+	if result["pushed"] != len(pushed) || len(pushed) < 2 {
+		t.Fatalf("result=%#v pushed=%#v, want initial entries", result, pushed)
+	}
+	foundFolder, foundFile := false, false
+	for _, op := range pushed {
+		if op.EntityID == "Existing" && op.EntityType == syncsvc.EntityFolder && op.OpType == syncsvc.OpCreate {
+			foundFolder = true
+		}
+		if op.EntityID == "Existing/before-connect.txt" && op.EntityType == syncsvc.EntityFile && op.OpType == syncsvc.OpCreate {
+			foundFile = true
+		}
+		if strings.Contains(op.EntityID, "/.verstak/") {
+			t.Fatalf("ordinary bootstrap operation leaked internal path: %+v", op)
+		}
+	}
+	if !foundFolder || !foundFile {
+		t.Fatalf("bootstrap push = %#v, missing existing file or folder", pushed)
+	}
+	bootstrapped, err := app.syncSvc.BootstrapComplete()
+	if err != nil || !bootstrapped {
+		t.Fatalf("bootstrap complete = %v err=%v", bootstrapped, err)
+	}
+}
+
+func TestInitialSyncConflictDoesNotOverwriteLocalFileOrAdvanceCursor(t *testing.T) {
+	app, root := newFilesTestApp(t, []string{"files.read", "files.write", "files.delete"})
+	if err := os.WriteFile(filepath.Join(root, "same-name.txt"), []byte("local value"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	app.syncSvc = syncsvc.NewService(root, "local-device")
+	if _, err := app.syncSvc.ScanAndRecord(); err != nil {
+		t.Fatalf("initial baseline scan: %v", err)
+	}
+	app.appSettings = appsettings.NewManager(filepath.Join(t.TempDir(), "config.json"))
+	if err := app.appSettings.Load(); err != nil {
+		t.Fatal(err)
+	}
+
+	pushCalls := 0
+	server := newLocalHTTPTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "Bearer device-token" {
+			http.Error(w, "missing auth", http.StatusUnauthorized)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/api/v1/sync/pull":
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{
+				"server_sequence": 1,
+				"ops": []map[string]interface{}{{
+					"op_id":           "remote-update",
+					"server_sequence": 1,
+					"device_id":       "remote-device",
+					"entity_type":     syncsvc.EntityFile,
+					"entity_id":       "same-name.txt",
+					"op_type":         syncsvc.OpUpdate,
+					"payload_json":    `{"path":"same-name.txt","content":"remote value"}`,
+				}},
+			})
+		case "/api/v1/sync/push":
+			pushCalls++
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{"accepted": []string{}, "count": 0, "conflicts": []map[string]interface{}{}})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+	if err := app.syncSvc.SetState(server.URL, ""); err != nil {
+		t.Fatal(err)
+	}
+	if err := syncsvc.SaveDeviceToken(root, "device-token"); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := app.syncNow(); err == nil || !strings.Contains(err.Error(), "initial reconciliation") || !strings.Contains(err.Error(), "same-name.txt") {
+		t.Fatalf("sync error = %v, want explicit initial conflict", err)
+	}
+	expectText(t, app, "same-name.txt", "local value")
+	assertLastPullSequence(t, app.syncSvc, 0)
+	if pushCalls != 0 {
+		t.Fatalf("push calls = %d, conflict must not overwrite remote state", pushCalls)
+	}
+	bootstrapped, err := app.syncSvc.BootstrapComplete()
+	if err != nil || bootstrapped {
+		t.Fatalf("bootstrap state = %v err=%v, conflict must remain unresolved", bootstrapped, err)
+	}
+}
+
+func TestInitialSyncEmptyVaultRestoresRemoteDataWithoutDeletePush(t *testing.T) {
+	app, root := newFilesTestApp(t, []string{"files.read", "files.write", "files.delete"})
+	app.syncSvc = syncsvc.NewService(root, "empty-device")
+	if _, err := app.syncSvc.ScanAndRecord(); err != nil {
+		t.Fatalf("initial empty baseline: %v", err)
+	}
+	app.appSettings = appsettings.NewManager(filepath.Join(t.TempDir(), "config.json"))
+	if err := app.appSettings.Load(); err != nil {
+		t.Fatal(err)
+	}
+
+	var pushed []syncsvc.PushOp
+	server := newLocalHTTPTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "Bearer device-token" {
+			http.Error(w, "missing auth", http.StatusUnauthorized)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/api/v1/sync/pull":
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{
+				"server_sequence": 1,
+				"ops": []map[string]interface{}{{
+					"op_id":           "remote-file",
+					"server_sequence": 1,
+					"device_id":       "remote-device",
+					"entity_type":     syncsvc.EntityFile,
+					"entity_id":       "restored.txt",
+					"op_type":         syncsvc.OpCreate,
+					"payload_json":    `{"path":"restored.txt","content":"from remote"}`,
+				}},
+			})
+		case "/api/v1/sync/push":
+			var request struct {
+				Ops []syncsvc.PushOp `json:"ops"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+			pushed = append(pushed, request.Ops...)
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{"accepted": []string{}, "count": 0, "conflicts": []map[string]interface{}{}})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+	if err := app.syncSvc.SetState(server.URL, ""); err != nil {
+		t.Fatal(err)
+	}
+	if err := syncsvc.SaveDeviceToken(root, "device-token"); err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := app.syncNow()
+	if err != nil {
+		t.Fatalf("sync empty vault: %v", err)
+	}
+	expectText(t, app, "restored.txt", "from remote")
+	for _, op := range pushed {
+		if op.OpType == syncsvc.OpDelete {
+			t.Fatalf("empty vault published delete operation: %+v", op)
+		}
+	}
+	if result["pushed"] != 0 && len(pushed) == 0 {
+		t.Fatalf("result reports pushed operations without a push payload: %#v", result)
+	}
+	assertLastPullSequence(t, app.syncSvc, 1)
+}
+
+func assertLastPullSequence(t *testing.T, service *syncsvc.Service, want int) {
+	t.Helper()
+	_, _, got, _, err := service.GetState()
+	if err != nil {
+		t.Fatalf("GetState: %v", err)
+	}
+	if got != want {
+		t.Fatalf("last pull sequence = %d, want %d", got, want)
 	}
 }
 
@@ -1911,11 +2294,84 @@ func TestSyncConfigurePairsCurrentVaultID(t *testing.T) {
 	}))
 	defer server.Close()
 
-	if err := app.syncConfigure(server.URL, "alice", "secret"); err != nil {
+	if err := app.syncConfigure(server.URL, "alice", "secret", ""); err != nil {
 		t.Fatalf("syncConfigure: %v", err)
 	}
 	if pairedVaultID != meta.VaultID {
 		t.Fatalf("paired vault ID = %q, want %q", pairedVaultID, meta.VaultID)
+	}
+}
+
+func TestSyncConfigurePairsSpecifiedRemoteVaultID(t *testing.T) {
+	app, _ := newSyncFilesTestApp(t, []string{"files.read", "files.write", "files.delete"}, "local-device")
+	const remoteVaultID = "existing-remote-vault"
+	var pairedVaultID string
+	server := newLocalHTTPTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/client/pair" {
+			http.NotFound(w, r)
+			return
+		}
+		var request struct {
+			VaultID string `json:"vault_id"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		pairedVaultID = request.VaultID
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"device_id":    "paired-device",
+			"device_token": "paired-token",
+		})
+	}))
+	defer server.Close()
+
+	if err := app.syncConfigure(server.URL, "alice", "secret", remoteVaultID); err != nil {
+		t.Fatalf("syncConfigure: %v", err)
+	}
+	if pairedVaultID != remoteVaultID {
+		t.Fatalf("paired vault ID = %q, want %q", pairedVaultID, remoteVaultID)
+	}
+	storedRemoteVaultID, err := app.syncSvc.RemoteVaultID()
+	if err != nil || storedRemoteVaultID != remoteVaultID {
+		t.Fatalf("stored remote vault ID = %q err=%v, want %q", storedRemoteVaultID, err, remoteVaultID)
+	}
+	bootstrapped, err := app.syncSvc.BootstrapComplete()
+	if err != nil || bootstrapped {
+		t.Fatalf("bootstrap state after new pairing = %v err=%v, want false", bootstrapped, err)
+	}
+}
+
+func TestSyncConfigureRefusesRemoteScopeChangeWithUnpushedOperations(t *testing.T) {
+	app, _ := newSyncFilesTestApp(t, []string{"files.read", "files.write", "files.delete"}, "local-device")
+	if err := app.syncSvc.SetState("https://old-sync.example.test", ""); err != nil {
+		t.Fatal(err)
+	}
+	if err := app.syncSvc.SetRemoteVaultID("old-remote-vault"); err != nil {
+		t.Fatal(err)
+	}
+	if err := app.syncSvc.RecordOp(syncsvc.EntityFile, "pending.txt", syncsvc.OpCreate, map[string]string{"path": "pending.txt", "content": "local"}); err != nil {
+		t.Fatal(err)
+	}
+
+	err := app.syncConfigure("https://new-sync.example.test", "alice", "secret", "new-remote-vault")
+	if err == nil || !strings.Contains(err.Error(), "unpushed local operation") {
+		t.Fatalf("scope-change error = %v, want pending-operation refusal", err)
+	}
+}
+
+func TestSyncStatusExposesPersistentScannerWarning(t *testing.T) {
+	app, _ := newSyncFilesTestApp(t, []string{"files.read", "files.write", "files.delete"}, "local-device")
+	if err := app.syncSvc.SetLastWarning("file-too-large: archive.bin"); err != nil {
+		t.Fatal(err)
+	}
+	status, err := app.syncStatus()
+	if err != nil {
+		t.Fatalf("syncStatus: %v", err)
+	}
+	if status.LastWarning != "file-too-large: archive.bin" {
+		t.Fatalf("last warning = %q", status.LastWarning)
 	}
 }
 

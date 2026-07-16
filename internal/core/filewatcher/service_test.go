@@ -74,6 +74,26 @@ func TestServiceIgnoresReservedVerstakPaths(t *testing.T) {
 	}
 }
 
+func TestServiceCallsChangeCallbackForExternalChanges(t *testing.T) {
+	root := t.TempDir()
+	service := NewService(events.NewBus(), 10*time.Millisecond)
+	changed := make(chan struct{}, 1)
+	service.SetOnChange(func() { changed <- struct{}{} })
+	if err := service.Start(root); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	t.Cleanup(service.Stop)
+
+	if err := os.WriteFile(filepath.Join(root, "external.txt"), []byte("change"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-changed:
+	case <-time.After(500 * time.Millisecond):
+		t.Fatal("timed out waiting for watcher callback")
+	}
+}
+
 func waitForEvent(t *testing.T, eventCh <-chan events.Event) events.Event {
 	t.Helper()
 	select {

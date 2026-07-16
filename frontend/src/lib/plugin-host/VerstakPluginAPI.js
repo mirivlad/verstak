@@ -468,10 +468,10 @@ export function createPluginAPI(pluginId) {
           return App.PluginSyncStatus(pluginId);
         });
       },
-      configure: function(serverURL, username, password) {
+      configure: function(serverURL, username, password, vaultId) {
         assertActive('sync.configure');
         return callBackendErrorString(pluginId, 'sync.configure', function() {
-          return App.PluginSyncConfigure(pluginId, serverURL || '', username || '', password || '');
+          return App.PluginSyncConfigure(pluginId, serverURL || '', username || '', password || '', vaultId || '');
         });
       },
       disconnect: function() {

@@ -7,6 +7,8 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+
+	"github.com/google/uuid"
 )
 
 func TestListWorkspacesReadsTopLevelPhysicalFolders(t *testing.T) {
@@ -432,6 +434,93 @@ func TestRestoreWorkspaceTrashPreservesIdentity(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(vaultDir, "Client-Restored", ".verstak", "workspace.json")); err != nil {
 		t.Fatalf("restored marker: %v", err)
+	}
+}
+
+func TestApplySyncedWorkspaceLifecycleKeepsIdentityAndRejectsNameConflict(t *testing.T) {
+	vaultDir := newVaultDir(t)
+	m := NewManager(vaultDir)
+	workspaceID := "5f0f96d9-61c8-4b6b-8c3a-a1b9a0f40001"
+	meta := Metadata{
+		WorkspaceID:   workspaceID,
+		WorkspaceName: "Remote",
+		CreatedFromTemplate: &TemplateSnapshot{
+			TemplateID:      "minimal",
+			TemplateName:    "Minimal",
+			TemplateVersion: 1,
+			AppliedAt:       "2026-07-17T00:00:00Z",
+		},
+		Features: map[string]bool{"files": true},
+		Folders:  map[string]string{"notes": "Notes"},
+	}
+
+	created, err := m.CreateWorkspaceFromSync("Remote", workspaceID, meta)
+	if err != nil {
+		t.Fatalf("CreateWorkspaceFromSync: %v", err)
+	}
+	if created.ID != workspaceID || created.Name != "Remote" {
+		t.Fatalf("created = %+v", created)
+	}
+	if _, err := m.CreateWorkspaceFromSync("Remote", workspaceID, meta); err != nil {
+		t.Fatalf("replayed create: %v", err)
+	}
+
+	if err := m.RenameWorkspaceFromSync(workspaceID, "Remote", "Remote-Renamed"); err != nil {
+		t.Fatalf("RenameWorkspaceFromSync: %v", err)
+	}
+	if err := m.RenameWorkspaceFromSync(workspaceID, "Remote", "Remote-Renamed"); err != nil {
+		t.Fatalf("replayed rename: %v", err)
+	}
+	trashed, err := m.TrashWorkspaceFromSync(workspaceID, "Remote-Renamed")
+	if err != nil {
+		t.Fatalf("TrashWorkspaceFromSync: %v", err)
+	}
+	if trashed.WorkspaceID != workspaceID {
+		t.Fatalf("trashed = %+v", trashed)
+	}
+	if _, err := m.TrashWorkspaceFromSync(workspaceID, "Remote-Renamed"); err != nil {
+		t.Fatalf("replayed trash: %v", err)
+	}
+	restored, err := m.RestoreWorkspaceFromSync(workspaceID, "Remote-Restored")
+	if err != nil {
+		t.Fatalf("RestoreWorkspaceFromSync: %v", err)
+	}
+	if restored.ID != workspaceID || restored.Name != "Remote-Restored" {
+		t.Fatalf("restored = %+v", restored)
+	}
+	if _, err := m.RestoreWorkspaceFromSync(workspaceID, "Remote-Restored"); err != nil {
+		t.Fatalf("replayed restore: %v", err)
+	}
+
+	if _, err := m.CreateWorkspace("Taken", "minimal"); err != nil {
+		t.Fatalf("CreateWorkspace Taken: %v", err)
+	}
+	if err := m.RenameWorkspaceFromSync(workspaceID, "Remote-Restored", "Taken"); err == nil || !strings.Contains(err.Error(), "conflict") {
+		t.Fatalf("rename conflict error = %v, want conflict", err)
+	}
+	if _, err := m.CreateWorkspaceFromSync("Copied", workspaceID, meta); err == nil || !strings.Contains(err.Error(), "conflict") {
+		t.Fatalf("duplicate workspace ID error = %v, want conflict", err)
+	}
+
+	stored, err := m.GetWorkspaceMetadata("Remote-Restored")
+	if err != nil {
+		t.Fatalf("GetWorkspaceMetadata: %v", err)
+	}
+	if stored.WorkspaceID != workspaceID || stored.CreatedFromTemplate == nil || stored.CreatedFromTemplate.TemplateID != "minimal" {
+		t.Fatalf("stored metadata = %+v", stored)
+	}
+}
+
+func TestCreateWorkspaceFromSyncRejectsUnsafeMetadataFolder(t *testing.T) {
+	vaultDir := newVaultDir(t)
+	m := NewManager(vaultDir)
+	if _, err := m.CreateWorkspaceFromSync("Remote", uuid.NewString(), Metadata{
+		Folders: map[string]string{"files": "../escaped"},
+	}); err == nil || !strings.Contains(err.Error(), "invalid workspace folder") {
+		t.Fatalf("unsafe synced metadata error = %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(vaultDir, "escaped")); !os.IsNotExist(err) {
+		t.Fatalf("unsafe synced metadata created path outside workspace: %v", err)
 	}
 }
 

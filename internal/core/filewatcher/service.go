@@ -35,11 +35,23 @@ type Service struct {
 	bus      *events.Bus
 	interval time.Duration
 
-	mu      sync.Mutex
-	root    string
-	cancel  chan struct{}
-	done    chan struct{}
-	current map[string]snapshotEntry
+	mu       sync.Mutex
+	root     string
+	cancel   chan struct{}
+	done     chan struct{}
+	current  map[string]snapshotEntry
+	onChange func()
+}
+
+// SetOnChange installs a lightweight notification used by core services that
+// need a debounced reconciliation after the watcher has observed a change.
+func (s *Service) SetOnChange(callback func()) {
+	if s == nil {
+		return
+	}
+	s.mu.Lock()
+	s.onChange = callback
+	s.mu.Unlock()
 }
 
 // NewService creates a watcher. The interval parameter is mainly for tests.
@@ -133,21 +145,29 @@ func (s *Service) poll(root string) {
 	s.mu.Lock()
 	prev := s.current
 	s.current = next
+	callback := s.onChange
 	s.mu.Unlock()
+	changed := false
 	for path, entry := range next {
 		old, ok := prev[path]
 		if !ok {
 			s.publish(path, "external.create", entry.kind)
+			changed = true
 			continue
 		}
 		if entry.kind == entryFile && (entry.size != old.size || !entry.modTime.Equal(old.modTime)) {
 			s.publish(path, "external.update", entry.kind)
+			changed = true
 		}
 	}
 	for path, entry := range prev {
 		if _, ok := next[path]; !ok {
 			s.publish(path, "external.delete", entry.kind)
+			changed = true
 		}
+	}
+	if changed && callback != nil {
+		callback()
 	}
 }
 
@@ -217,8 +237,12 @@ func kindFromInfo(info fs.FileInfo) entryKind {
 }
 
 func isReserved(rel string) bool {
-	first := strings.Split(filepath.ToSlash(rel), "/")[0]
-	return strings.EqualFold(first, ".verstak")
+	for _, segment := range strings.Split(filepath.ToSlash(rel), "/") {
+		if strings.EqualFold(segment, ".verstak") {
+			return true
+		}
+	}
+	return false
 }
 
 func workspaceRoot(path string) string {
