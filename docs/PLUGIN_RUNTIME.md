@@ -511,12 +511,14 @@ contributions summary.
   lifecycle is a separate core `workspace` entity (`create`, `rename`,
   `trash`, `restore`) carrying the durable `workspaceId`; plugins never obtain
   access to the nested workspace marker.
-- File transport remains bounded: UTF-8 text uses the 2 MB Files API limit and
-  binary/other regular files use the existing base64 path up to 8 MB. Larger or
-  unsupported files remain visible unresolved warnings and are not added to a
-  successful snapshot. Blob transport, quotas, pagination, retention, and
-  synchronization of Secrets, plugin settings, Todo, Journal, Activity, and
-  Browser Inbox are future work.
+- File transport remains bounded: UTF-8 text uses the 2 MB Files API limit;
+  binary and larger regular files are staged privately, sent through Blob API,
+  and referenced by SHA-256/size rather than base64 in `payload_json`. Desktop
+  streams and verifies downloads before atomic apply. Pull is paginated and the
+  durable cursor advances only after every applied sequence. Files above the
+  configured blob limit or otherwise unsupported remain unresolved warnings.
+  Operation retention/checkpoints and synchronization of Secrets, plugin
+  settings, Todo, Journal, Activity, and Browser Inbox are future work.
 - Transport push/pull uses bounded retry/backoff for transient HTTP/network
   failures. Client/auth errors are not retried.
 

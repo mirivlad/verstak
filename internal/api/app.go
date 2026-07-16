@@ -3459,6 +3459,15 @@ func (a *App) syncNow() (map[string]interface{}, error) {
 	}
 	pushResult := &syncsvc.PushResponse{}
 	if len(unpushed) > 0 {
+		if err := a.uploadPendingBlobs(client, unpushed); err != nil {
+			message := fmt.Sprintf("blob upload: %v", err)
+			_ = a.updateSyncError(message)
+			// A server-side file/quota limit is unresolved scanner input from the
+			// user's perspective: retain it visibly and keep the operation pending
+			// so a later sync retries rather than silently accepting the snapshot.
+			_ = a.syncSvc.SetLastWarning(message)
+			return nil, fmt.Errorf("blob upload: %w", err)
+		}
 		pushResult, err = client.Push(unpushed)
 		if err != nil {
 			_ = a.updateSyncError(fmt.Sprintf("push: %v", err))
@@ -3505,58 +3514,96 @@ func (a *App) syncNow() (map[string]interface{}, error) {
 	return result, nil
 }
 
-func (a *App) pullRemoteOps(client *syncsvc.Client, cursor int, initialReconciliation bool) (pulled, nextCursor, serverSequence int, err error) {
-	pullResult, err := client.Pull(cursor)
-	if err != nil {
-		_ = a.updateSyncError(fmt.Sprintf("pull: %v", err))
-		return 0, cursor, cursor, fmt.Errorf("pull: %w", err)
-	}
-	nextCursor = cursor
-	lastSequenceInBatch := cursor
-	for _, op := range pullResult.Ops {
-		if op.ServerSequence <= cursor {
+// uploadPendingBlobs ensures every operation referring to binary content has
+// its immutable local cache uploaded before the operation reaches the log.
+func (a *App) uploadPendingBlobs(client *syncsvc.Client, ops []syncsvc.Op) error {
+	for _, op := range ops {
+		if op.EntityType != syncsvc.EntityFile || (op.OpType != syncsvc.OpCreate && op.OpType != syncsvc.OpUpdate) {
 			continue
 		}
-		if op.ServerSequence <= lastSequenceInBatch {
-			errMsg := fmt.Sprintf("pull response is not strictly ordered at sequence %d (%s)", op.ServerSequence, op.OpID)
-			_ = a.updateSyncError(errMsg)
-			return pulled, nextCursor, pullResult.ServerSequence, fmt.Errorf("%s", errMsg)
+		payload, err := parseSyncFilePayload(op.PayloadJSON)
+		if err != nil {
+			return fmt.Errorf("parse operation %s: %w", op.OpID, err)
 		}
-		lastSequenceInBatch = op.ServerSequence
-		if err := a.applyRemoteOpForReconciliation(op, initialReconciliation); err != nil {
-			path := syncOperationPath(op)
-			errMsg := fmt.Sprintf("pull apply failed at sequence %d for %s %s (%s): %v", op.ServerSequence, op.EntityType, path, op.OpID, err)
-			_ = a.updateSyncError(errMsg)
-			return pulled, nextCursor, pullResult.ServerSequence, fmt.Errorf("%s", errMsg)
+		if payload.Blob == nil {
+			continue
 		}
-		if err := a.syncSvc.RecordRemoteOp(op); err != nil {
-			errMsg := fmt.Sprintf("record applied remote operation at sequence %d (%s): %v", op.ServerSequence, op.OpID, err)
-			_ = a.updateSyncError(errMsg)
-			return pulled, nextCursor, pullResult.ServerSequence, fmt.Errorf("%s", errMsg)
+		if payload.Blob.Size < 0 || payload.Blob.SHA256 == "" {
+			return fmt.Errorf("invalid blob reference in operation %s", op.OpID)
 		}
-		if err := a.syncSvc.SetLastPullSeq(op.ServerSequence); err != nil {
-			errMsg := fmt.Sprintf("save pull cursor at sequence %d (%s): %v", op.ServerSequence, op.OpID, err)
-			_ = a.updateSyncError(errMsg)
-			return pulled, nextCursor, pullResult.ServerSequence, fmt.Errorf("%s", errMsg)
+		cachePath := syncsvc.BlobCachePath(a.vaultPath(), payload.Blob.SHA256)
+		ref, err := client.UploadBlob(cachePath)
+		if err != nil {
+			return fmt.Errorf("%s: %w", syncPayloadPath(op, payload), err)
 		}
-		if warnings, err := a.syncSvc.RebaseSnapshot(); err != nil {
-			errMsg := fmt.Sprintf("rebase snapshot after sequence %d (%s): %v", op.ServerSequence, op.OpID, err)
-			_ = a.updateSyncError(errMsg)
-			return pulled, nextCursor, pullResult.ServerSequence, fmt.Errorf("%s", errMsg)
-		} else if err := a.syncSvc.SetLastWarning(strings.Join(warnings, "\n")); err != nil {
-			return pulled, nextCursor, pullResult.ServerSequence, fmt.Errorf("save sync warning: %w", err)
+		if ref.SHA256 != payload.Blob.SHA256 || ref.Size != payload.Blob.Size {
+			return fmt.Errorf("%s: uploaded blob does not match operation reference", syncPayloadPath(op, payload))
 		}
-		nextCursor = op.ServerSequence
-		pulled++
 	}
-	if pullResult.ServerSequence > nextCursor {
-		if err := a.syncSvc.SetLastPullSeq(pullResult.ServerSequence); err != nil {
-			_ = a.updateSyncError(fmt.Sprintf("save pull cursor at sequence %d: %v", pullResult.ServerSequence, err))
-			return pulled, nextCursor, pullResult.ServerSequence, fmt.Errorf("save pull cursor: %w", err)
+	return nil
+}
+
+func (a *App) pullRemoteOps(client *syncsvc.Client, cursor int, initialReconciliation bool) (pulled, nextCursor, serverSequence int, err error) {
+	nextCursor = cursor
+	for {
+		pageStartCursor := nextCursor
+		pullResult, pullErr := client.PullPage(nextCursor, 0)
+		if pullErr != nil {
+			_ = a.updateSyncError(fmt.Sprintf("pull: %v", pullErr))
+			return pulled, nextCursor, serverSequence, fmt.Errorf("pull: %w", pullErr)
 		}
-		nextCursor = pullResult.ServerSequence
+		serverSequence = pullResult.ServerSequence
+		lastSequenceInPage := nextCursor
+		for _, op := range pullResult.Ops {
+			if op.ServerSequence <= nextCursor {
+				continue
+			}
+			if op.ServerSequence <= lastSequenceInPage {
+				errMsg := fmt.Sprintf("pull response is not strictly ordered at sequence %d (%s)", op.ServerSequence, op.OpID)
+				_ = a.updateSyncError(errMsg)
+				return pulled, nextCursor, serverSequence, fmt.Errorf("%s", errMsg)
+			}
+			lastSequenceInPage = op.ServerSequence
+			if err := a.applyRemoteOpWithClient(client, op, initialReconciliation); err != nil {
+				path := syncOperationPath(op)
+				errMsg := fmt.Sprintf("pull apply failed at sequence %d for %s %s (%s): %v", op.ServerSequence, op.EntityType, path, op.OpID, err)
+				_ = a.updateSyncError(errMsg)
+				return pulled, nextCursor, serverSequence, fmt.Errorf("%s", errMsg)
+			}
+			if err := a.syncSvc.RecordRemoteOp(op); err != nil {
+				errMsg := fmt.Sprintf("record applied remote operation at sequence %d (%s): %v", op.ServerSequence, op.OpID, err)
+				_ = a.updateSyncError(errMsg)
+				return pulled, nextCursor, serverSequence, fmt.Errorf("%s", errMsg)
+			}
+			if err := a.syncSvc.SetLastPullSeq(op.ServerSequence); err != nil {
+				errMsg := fmt.Sprintf("save pull cursor at sequence %d (%s): %v", op.ServerSequence, op.OpID, err)
+				_ = a.updateSyncError(errMsg)
+				return pulled, nextCursor, serverSequence, fmt.Errorf("%s", errMsg)
+			}
+			if warnings, err := a.syncSvc.RebaseSnapshot(); err != nil {
+				errMsg := fmt.Sprintf("rebase snapshot after sequence %d (%s): %v", op.ServerSequence, op.OpID, err)
+				_ = a.updateSyncError(errMsg)
+				return pulled, nextCursor, serverSequence, fmt.Errorf("%s", errMsg)
+			} else if err := a.syncSvc.SetLastWarning(strings.Join(warnings, "\n")); err != nil {
+				return pulled, nextCursor, serverSequence, fmt.Errorf("save sync warning: %w", err)
+			}
+			nextCursor = op.ServerSequence
+			pulled++
+		}
+		if pullResult.PageLastSequence != lastSequenceInPage {
+			errMsg := fmt.Sprintf("pull page cursor mismatch: got %d, applied %d", pullResult.PageLastSequence, lastSequenceInPage)
+			_ = a.updateSyncError(errMsg)
+			return pulled, nextCursor, serverSequence, fmt.Errorf("%s", errMsg)
+		}
+		if !pullResult.HasMore {
+			return pulled, nextCursor, serverSequence, nil
+		}
+		if pullResult.PageLastSequence <= pageStartCursor {
+			errMsg := "pull page declared more operations without advancing cursor"
+			_ = a.updateSyncError(errMsg)
+			return pulled, nextCursor, serverSequence, fmt.Errorf("%s", errMsg)
+		}
 	}
-	return pulled, nextCursor, pullResult.ServerSequence, nil
 }
 
 func syncOperationPath(op syncsvc.Op) string {
@@ -3601,10 +3648,14 @@ func (a *App) updateSyncSuccess(lastSyncAt string) error {
 }
 
 func (a *App) applyRemoteOp(op syncsvc.Op) error {
-	return a.applyRemoteOpForReconciliation(op, false)
+	return a.applyRemoteOpWithClient(nil, op, false)
 }
 
 func (a *App) applyRemoteOpForReconciliation(op syncsvc.Op, initialReconciliation bool) error {
+	return a.applyRemoteOpWithClient(nil, op, initialReconciliation)
+}
+
+func (a *App) applyRemoteOpWithClient(client *syncsvc.Client, op syncsvc.Op, initialReconciliation bool) error {
 	if a.debug {
 		log.Printf("[sync] applyRemoteOp: type=%s entity=%s/%s", op.OpType, op.EntityType, op.EntityID)
 	}
@@ -3628,7 +3679,7 @@ func (a *App) applyRemoteOpForReconciliation(op syncsvc.Op, initialReconciliatio
 	}
 	switch op.EntityType {
 	case syncsvc.EntityFile:
-		return a.applyRemoteFileOp(op, payload, initialReconciliation)
+		return a.applyRemoteFileOp(client, op, payload, initialReconciliation)
 	case syncsvc.EntityFolder:
 		return a.applyRemoteFolderOp(op, payload, initialReconciliation)
 	default:
@@ -3637,12 +3688,13 @@ func (a *App) applyRemoteOpForReconciliation(op syncsvc.Op, initialReconciliatio
 }
 
 type syncFilePayload struct {
-	Path        string  `json:"path"`
-	Content     string  `json:"content"`
-	DataBase64  *string `json:"dataBase64"`
-	ContentHash string  `json:"contentHash"`
-	FromPath    string  `json:"fromPath"`
-	ToPath      string  `json:"toPath"`
+	Path        string                 `json:"path"`
+	Content     string                 `json:"content"`
+	DataBase64  *string                `json:"dataBase64"`
+	Blob        *syncsvc.BlobReference `json:"blob"`
+	ContentHash string                 `json:"contentHash"`
+	FromPath    string                 `json:"fromPath"`
+	ToPath      string                 `json:"toPath"`
 }
 
 type syncWorkspacePayload struct {
@@ -3705,7 +3757,7 @@ func (a *App) applyRemoteWorkspaceOp(op syncsvc.Op, payload syncWorkspacePayload
 	}
 }
 
-func (a *App) applyRemoteFileOp(op syncsvc.Op, payload syncFilePayload, initialReconciliation bool) error {
+func (a *App) applyRemoteFileOp(client *syncsvc.Client, op syncsvc.Op, payload syncFilePayload, initialReconciliation bool) error {
 	switch op.OpType {
 	case syncsvc.OpCreate:
 		path := syncPayloadPath(op, payload)
@@ -3721,6 +3773,9 @@ func (a *App) applyRemoteFileOp(op syncsvc.Op, payload syncFilePayload, initialR
 		}
 		if exists {
 			return fmt.Errorf("conflict: remote create would replace local file %s", path)
+		}
+		if payload.Blob != nil {
+			return a.applyRemoteBlobFile(client, path, payload, corefiles.WriteOptions{CreateIfMissing: true})
 		}
 		if payload.DataBase64 != nil {
 			return a.files.WriteVaultFileBytes(path, *payload.DataBase64, corefiles.WriteOptions{CreateIfMissing: true})
@@ -3745,6 +3800,9 @@ func (a *App) applyRemoteFileOp(op syncsvc.Op, payload syncFilePayload, initialR
 			return err
 		} else if pending {
 			return fmt.Errorf("conflict: remote update would replace unpushed local file %s", path)
+		}
+		if payload.Blob != nil {
+			return a.applyRemoteBlobFile(client, path, payload, corefiles.WriteOptions{CreateIfMissing: !exists, Overwrite: exists})
 		}
 		if payload.DataBase64 != nil {
 			return a.files.WriteVaultFileBytes(path, *payload.DataBase64, corefiles.WriteOptions{CreateIfMissing: !exists, Overwrite: exists})
@@ -3810,6 +3868,26 @@ func (a *App) applyRemoteFileOp(op syncsvc.Op, payload syncFilePayload, initialR
 	}
 }
 
+func (a *App) applyRemoteBlobFile(client *syncsvc.Client, path string, payload syncFilePayload, options corefiles.WriteOptions) error {
+	if client == nil {
+		return fmt.Errorf("blob operation requires an active sync client")
+	}
+	if payload.Blob == nil || payload.Blob.Size < 0 || payload.Blob.SHA256 == "" {
+		return fmt.Errorf("invalid remote blob reference")
+	}
+	if payload.ContentHash != "" && payload.ContentHash != payload.Blob.SHA256 {
+		return fmt.Errorf("remote blob hash does not match file content hash")
+	}
+	cachePath := syncsvc.BlobCachePath(a.vaultPath(), payload.Blob.SHA256)
+	if err := client.DownloadBlobVerified(payload.Blob.SHA256, payload.Blob.Size, cachePath); err != nil {
+		return fmt.Errorf("download blob: %w", err)
+	}
+	if err := a.files.WriteVaultFileFromPath(path, cachePath, options); err != nil {
+		return err
+	}
+	return nil
+}
+
 func (a *App) remoteFileMatches(path string, payload syncFilePayload) (matches, exists bool, err error) {
 	normalized, err := corefiles.NormalizeRelativeFile(path)
 	if err != nil {
@@ -3844,6 +3922,9 @@ func (a *App) remoteFileMatches(path string, payload syncFilePayload) (matches, 
 func remotePayloadHash(payload syncFilePayload) (string, error) {
 	if payload.ContentHash != "" {
 		return payload.ContentHash, nil
+	}
+	if payload.Blob != nil {
+		return payload.Blob.SHA256, nil
 	}
 	data := []byte(payload.Content)
 	if payload.DataBase64 != nil {

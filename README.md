@@ -233,14 +233,23 @@ deletes, and incompatible files become visible conflicts rather than silent
 overwrites. Pairing can optionally use an existing remote vault ID to restore
 that scope on a new device.
 
-The current operation transport supports ordinary files and folders plus
-workspace (Deal) create/rename/trash/restore with a durable workspace UUID.
-`.verstak`, trash, temporary files, and symlinks are excluded from ordinary
-file sync. Text remains bounded to 2 MB and binary payloads to 8 MB; a larger
-or unsupported file is left as a visible unresolved sync warning instead of
-being treated as synchronized. Blob transfer, quotas, pagination, retention,
-and Secrets, plugin settings, Todo, Journal, Activity, and Browser Inbox sync
-are future milestones.
+The current transport supports ordinary files and folders plus workspace (Deal)
+create/rename/trash/restore with a durable workspace UUID. `.verstak`, trash,
+temporary files, and symlinks are excluded from ordinary file sync. UTF-8 text
+remains inline only within the existing 2 MB bound; binary and larger content
+is staged privately under `.verstak/sync/blobs`, uploaded through the scoped
+Blob API, and represented in the operation log only by SHA-256 and size. The
+download is streamed, hash/size-verified, and atomically applied. A file over
+the configured server blob limit or otherwise unsupported remains a visible
+unresolved warning instead of being treated as synchronized.
+
+Pull is paginated. Desktop applies operations in increasing server sequence,
+persists its cursor only after each successful operation, stops before later
+pages at the first failure, and retries after restart. Blob references are
+authorized per user/vault; a missing or corrupt blob likewise leaves the cursor
+unchanged. The server is optional and file bytes are not end-to-end encrypted.
+Operation-log retention/checkpoints and synchronization of Secrets, plugin
+settings, Todo, Journal, Activity, and Browser Inbox remain future milestones.
 
 ## Build from source
 

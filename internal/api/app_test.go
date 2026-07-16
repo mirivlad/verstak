@@ -1794,7 +1794,7 @@ func TestFileBridgeRecordsSyncOps(t *testing.T) {
 		{syncsvc.EntityFolder, "Docs", syncsvc.OpCreate, `"path":"Docs"`},
 		{syncsvc.EntityFile, "Docs/one.txt", syncsvc.OpCreate, `"content":"hello"`},
 		{syncsvc.EntityFile, "Docs/one.txt", syncsvc.OpUpdate, `"content":"updated"`},
-		{syncsvc.EntityFile, "Docs/image.bin", syncsvc.OpCreate, `"dataBase64":"AQID"`},
+		{syncsvc.EntityFile, "Docs/image.bin", syncsvc.OpCreate, `"blob":{"sha256":`},
 		// Snapshot reconciliation represents external and API renames uniformly
 		// as a create at the destination followed by a delete at the source.
 		{syncsvc.EntityFile, "Docs/two.txt", syncsvc.OpCreate, `"content":"updated"`},
@@ -1946,6 +1946,52 @@ func TestSyncNowPushesLocalOpsAndAppliesPulledFileOps(t *testing.T) {
 	if lastPullSeq != 2 {
 		t.Fatalf("last pull seq = %d, want 2", lastPullSeq)
 	}
+}
+
+func TestSyncNowAppliesEveryPullPageInOrder(t *testing.T) {
+	app, root := newSyncFilesTestApp(t, []string{"files.read", "files.write", "files.delete"}, "local-device")
+	server := newLocalHTTPTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "Bearer device-token" {
+			http.Error(w, "missing auth", http.StatusUnauthorized)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/api/v1/sync/pull":
+			var request syncsvc.PullRequest
+			if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+				t.Fatal(err)
+			}
+			pages := map[int]map[string]interface{}{
+				0: {"server_sequence": 3, "page_last_sequence": 1, "has_more": true, "ops": []map[string]interface{}{{"op_id": "folder", "server_sequence": 1, "device_id": "remote", "entity_type": syncsvc.EntityFolder, "entity_id": "Remote", "op_type": syncsvc.OpCreate, "payload_json": `{"path":"Remote"}`}}},
+				1: {"server_sequence": 3, "page_last_sequence": 2, "has_more": true, "ops": []map[string]interface{}{{"op_id": "one", "server_sequence": 2, "device_id": "remote", "entity_type": syncsvc.EntityFile, "entity_id": "Remote/one.txt", "op_type": syncsvc.OpCreate, "payload_json": `{"path":"Remote/one.txt","content":"one"}`}}},
+				2: {"server_sequence": 3, "page_last_sequence": 3, "has_more": false, "ops": []map[string]interface{}{{"op_id": "two", "server_sequence": 3, "device_id": "remote", "entity_type": syncsvc.EntityFile, "entity_id": "Remote/two.txt", "op_type": syncsvc.OpCreate, "payload_json": `{"path":"Remote/two.txt","content":"two"}`}}},
+				3: {"server_sequence": 3, "page_last_sequence": 3, "has_more": false, "ops": []map[string]interface{}{}},
+			}
+			_ = json.NewEncoder(w).Encode(pages[request.SinceSequence])
+		case "/api/v1/sync/push":
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{"accepted": []string{}, "count": 0, "conflicts": []map[string]interface{}{}})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+	if err := app.syncSvc.SetState(server.URL, ""); err != nil {
+		t.Fatal(err)
+	}
+	if err := syncsvc.SaveDeviceToken(root, "device-token"); err != nil {
+		t.Fatal(err)
+	}
+	result, err := app.syncNow()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result["pulled"] != 3 {
+		t.Fatalf("pull result = %#v, want three operations", result)
+	}
+	expectText(t, app, "Remote/one.txt", "one")
+	expectText(t, app, "Remote/two.txt", "two")
+	assertLastPullSequence(t, app.syncSvc, 3)
 }
 
 func TestSyncNowStopsAtFailedRemoteOperationAndRetriesAfterRestart(t *testing.T) {

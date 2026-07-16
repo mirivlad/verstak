@@ -2,6 +2,8 @@ package sync
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -216,68 +218,147 @@ func (c *Client) Push(ops []Op) (*PushResponse, error) {
 // PullRequest is the payload for POST /sync/pull.
 type PullRequest struct {
 	SinceSequence int `json:"since_sequence"`
+	PageLimit     int `json:"page_limit,omitempty"`
 }
 
 // PullResponse is the response from POST /sync/pull.
 type PullResponse struct {
-	ServerSequence int  `json:"server_sequence"`
-	Ops            []Op `json:"ops"`
+	ServerSequence   int  `json:"server_sequence"`
+	PageLastSequence int  `json:"page_last_sequence"`
+	HasMore          bool `json:"has_more"`
+	Ops              []Op `json:"ops"`
+}
+
+// BlobReference is the only binary content representation permitted inside a
+// sync operation. The bytes travel via the Blob API, never payload_json.
+type BlobReference struct {
+	SHA256 string `json:"sha256"`
+	Size   int64  `json:"size"`
+}
+
+// ServerError carries a public stable error code. UI layers map Code to their
+// own localized wording and must not rely on a server diagnostic string.
+type ServerError struct {
+	Status int
+	Code   string
+}
+
+func (e *ServerError) Error() string {
+	if e.Code == "" {
+		return fmt.Sprintf("sync-server:request_failed (HTTP %d)", e.Status)
+	}
+	return fmt.Sprintf("sync-server:%s (HTTP %d)", e.Code, e.Status)
 }
 
 // Pull fetches remote operations since a given sequence.
 func (c *Client) Pull(sinceSequence int) (*PullResponse, error) {
-	req := PullRequest{SinceSequence: sinceSequence}
+	return c.PullPage(sinceSequence, 0)
+}
+
+// PullPage fetches one bounded ordered page. The caller advances its durable
+// cursor only after every returned operation has applied successfully.
+func (c *Client) PullPage(sinceSequence, pageLimit int) (*PullResponse, error) {
+	req := PullRequest{SinceSequence: sinceSequence, PageLimit: pageLimit}
 	var resp PullResponse
 	if err := c.post("/api/v1/sync/pull", req, &resp); err != nil {
 		return nil, err
 	}
+	// Servers before pull pagination did not include page_last_sequence. Keep
+	// the desktop compatible during rolling upgrades without ever advancing
+	// beyond an operation actually present in the response.
+	if resp.PageLastSequence == 0 && len(resp.Ops) > 0 {
+		resp.PageLastSequence = resp.Ops[len(resp.Ops)-1].ServerSequence
+	}
 	return &resp, nil
 }
 
-// UploadBlob uploads a file to the server and returns its SHA-256.
-func (c *Client) UploadBlob(localPath string) (sha256 string, err error) {
-	var b bytes.Buffer
-	w := multipart.NewWriter(&b)
-	fw, err := w.CreateFormFile("file", filepath.Base(localPath))
+// UploadBlob streams a local file through a multipart pipe. It keeps the
+// process memory bounded even when the file is many times larger than an
+// inline sync payload.
+func (c *Client) UploadBlob(localPath string) (BlobReference, error) {
+	info, err := os.Stat(localPath)
 	if err != nil {
-		return "", err
+		return BlobReference{}, err
 	}
-	f, err := os.Open(localPath)
-	if err != nil {
-		return "", err
+	if !info.Mode().IsRegular() {
+		return BlobReference{}, fmt.Errorf("blob source is not a regular file")
 	}
-	defer f.Close()
-	if _, err := io.Copy(fw, f); err != nil {
-		return "", err
-	}
-	w.Close()
+	reader, writer := io.Pipe()
+	multipartWriter := multipart.NewWriter(writer)
+	writeDone := make(chan error, 1)
+	go func() {
+		defer func() {
+			_ = writer.Close()
+		}()
+		part, err := multipartWriter.CreateFormFile("file", filepath.Base(localPath))
+		if err == nil {
+			file, openErr := os.Open(localPath)
+			if openErr != nil {
+				err = openErr
+			} else {
+				_, err = io.Copy(part, file)
+				closeErr := file.Close()
+				if err == nil {
+					err = closeErr
+				}
+			}
+		}
+		if closeErr := multipartWriter.Close(); err == nil {
+			err = closeErr
+		}
+		if err != nil {
+			_ = writer.CloseWithError(err)
+		}
+		writeDone <- err
+	}()
 
-	req, err := http.NewRequest("POST", c.ServerURL+"/api/v1/blobs/", &b)
+	req, err := http.NewRequest("POST", c.ServerURL+"/api/v1/blobs/", reader)
 	if err != nil {
-		return "", err
+		_ = reader.Close()
+		return BlobReference{}, err
 	}
-	req.Header.Set("Content-Type", w.FormDataContentType())
+	req.Header.Set("Content-Type", multipartWriter.FormDataContentType())
 	req.Header.Set("Authorization", "Bearer "+c.bearerToken())
 
 	resp, err := c.HTTP.Do(req)
 	if err != nil {
-		return "", err
+		_ = reader.Close()
+		<-writeDone
+		return BlobReference{}, err
 	}
 	defer resp.Body.Close()
-
-	var result struct {
-		SHA256 string `json:"sha256"`
-		Size   int    `json:"size"`
+	if resp.StatusCode >= http.StatusBadRequest {
+		writeErr := <-writeDone
+		if writeErr != nil {
+			return BlobReference{}, writeErr
+		}
+		return BlobReference{}, c.readErrorBody(resp, resp.StatusCode)
 	}
+	var result BlobReference
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return "", err
+		return BlobReference{}, err
 	}
-	return result.SHA256, nil
+	if err := <-writeDone; err != nil {
+		return BlobReference{}, err
+	}
+	if result.Size != info.Size() || !validBlobSHA256(result.SHA256) {
+		return BlobReference{}, fmt.Errorf("invalid blob upload response")
+	}
+	return result, nil
 }
 
 // DownloadBlob downloads a blob by SHA-256 hash.
-func (c *Client) DownloadBlob(sha256, destPath string) error {
-	req, err := http.NewRequest("GET", c.ServerURL+"/api/v1/blobs/"+sha256, nil)
+func (c *Client) DownloadBlob(shaHex, destPath string) error {
+	return c.DownloadBlobVerified(shaHex, -1, destPath)
+}
+
+// DownloadBlobVerified streams to a temporary file, verifies the announced
+// hash and size, and only then atomically makes the file visible to the vault.
+func (c *Client) DownloadBlobVerified(shaHex string, expectedSize int64, destPath string) error {
+	if !validBlobSHA256(shaHex) || expectedSize < -1 {
+		return fmt.Errorf("invalid blob reference")
+	}
+	req, err := http.NewRequest("GET", c.ServerURL+"/api/v1/blobs/"+shaHex, nil)
 	if err != nil {
 		return err
 	}
@@ -289,17 +370,65 @@ func (c *Client) DownloadBlob(sha256, destPath string) error {
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != 200 {
-		return fmt.Errorf("download blob: HTTP %d", resp.StatusCode)
+	if resp.StatusCode != http.StatusOK {
+		return c.readErrorBody(resp, resp.StatusCode)
 	}
 
-	out, err := os.Create(destPath)
+	if expectedSize >= 0 && resp.ContentLength >= 0 && resp.ContentLength != expectedSize {
+		return fmt.Errorf("download blob: size mismatch")
+	}
+	if err := os.MkdirAll(filepath.Dir(destPath), 0o750); err != nil {
+		return err
+	}
+	out, err := os.CreateTemp(filepath.Dir(destPath), ".verstak-blob-*")
 	if err != nil {
 		return err
 	}
-	defer out.Close()
-	_, err = io.Copy(out, resp.Body)
-	return err
+	tmpPath := out.Name()
+	cleanup := true
+	defer func() {
+		if cleanup {
+			_ = os.Remove(tmpPath)
+		}
+	}()
+	hash := sha256.New()
+	limit := int64(1<<63 - 1)
+	if expectedSize >= 0 {
+		limit = expectedSize + 1
+	}
+	written, err := io.Copy(io.MultiWriter(out, hash), io.LimitReader(resp.Body, limit))
+	if err != nil {
+		_ = out.Close()
+		return err
+	}
+	if expectedSize >= 0 && written != expectedSize {
+		_ = out.Close()
+		return fmt.Errorf("download blob: size mismatch")
+	}
+	if actual := hex.EncodeToString(hash.Sum(nil)); actual != shaHex {
+		_ = out.Close()
+		return fmt.Errorf("download blob: SHA-256 mismatch")
+	}
+	if err := out.Sync(); err != nil {
+		_ = out.Close()
+		return err
+	}
+	if err := out.Close(); err != nil {
+		return err
+	}
+	if err := os.Rename(tmpPath, destPath); err != nil {
+		return err
+	}
+	cleanup = false
+	return nil
+}
+
+func validBlobSHA256(value string) bool {
+	if len(value) != sha256.Size*2 {
+		return false
+	}
+	_, err := hex.DecodeString(value)
+	return err == nil
 }
 
 func minInt(a, b int) int {
@@ -430,5 +559,11 @@ func (c *Client) readErrorBody(resp *http.Response, statusCode int) error {
 	if strings.Contains(lower, "<html") || strings.Contains(lower, "<!doctype") {
 		return fmt.Errorf("not a Verstak Sync server (HTTP %d)", statusCode)
 	}
-	return fmt.Errorf("server error (HTTP %d)", statusCode)
+	var payload struct {
+		Code string `json:"code"`
+	}
+	if err := json.Unmarshal([]byte(body), &payload); err == nil && payload.Code != "" {
+		return &ServerError{Status: statusCode, Code: payload.Code}
+	}
+	return &ServerError{Status: statusCode, Code: "request_failed"}
 }

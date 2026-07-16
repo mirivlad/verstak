@@ -2,7 +2,6 @@ package sync
 
 import (
 	"crypto/sha256"
-	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -21,7 +20,17 @@ import (
 )
 
 const snapshotVersion = 1
-const maxOperationFileBytes = corefiles.MaxBinaryReadBytes
+
+// maxOperationFileBytes is an explicit desktop-side safety ceiling. Binary
+// content is streamed through the Blob API rather than embedded in operations,
+// so it is intentionally higher than the plugin Files API read limit.
+const maxOperationFileBytes int64 = 256 * 1024 * 1024
+
+// BlobCachePath is core-private durable staging for a local operation's
+// immutable binary content. It remains excluded from ordinary file sync.
+func BlobCachePath(vaultRoot, hash string) string {
+	return filepath.Join(vaultRoot, ".verstak", "sync", "blobs", hash)
+}
 
 // Snapshot is the durable local view of the synchronizable part of a vault.
 // Its entries are only files and folders whose latest state was successfully
@@ -721,24 +730,93 @@ func entriesEqual(left, right SnapshotEntry) bool {
 	return left.Type == right.Type && left.Size == right.Size && left.Hash == right.Hash
 }
 
-func payloadForEntry(vaultRoot string, entry SnapshotEntry) (map[string]string, error) {
-	payload := map[string]string{"path": entry.Path, "contentHash": entry.Hash}
+func payloadForEntry(vaultRoot string, entry SnapshotEntry) (map[string]interface{}, error) {
+	payload := map[string]interface{}{"path": entry.Path, "contentHash": entry.Hash}
 	if entry.Type == EntityFolder {
 		return payload, nil
 	}
-	data, err := os.ReadFile(filepath.Join(vaultRoot, filepath.FromSlash(entry.Path)))
-	if err != nil {
-		return nil, err
-	}
-	if int64(len(data)) > maxOperationFileBytes {
-		return nil, fmt.Errorf("file-too-large: %s", entry.Path)
-	}
-	if hash, err := sha256File(filepath.Join(vaultRoot, filepath.FromSlash(entry.Path))); err != nil {
+	path := filepath.Join(vaultRoot, filepath.FromSlash(entry.Path))
+	if hash, err := sha256File(path); err != nil {
 		return nil, err
 	} else if hash != entry.Hash {
 		return nil, fmt.Errorf("file changed during scan: %s", entry.Path)
 	}
-	return filePayload(entry.Path, data, entry.Hash), nil
+	if entry.Size > corefiles.MaxTextFileBytes {
+		if err := cacheBlob(path, BlobCachePath(vaultRoot, entry.Hash), entry.Hash); err != nil {
+			return nil, err
+		}
+		payload["blob"] = map[string]interface{}{"sha256": entry.Hash, "size": entry.Size}
+		return payload, nil
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	if isSyncText(data) {
+		payload["content"] = string(data)
+		return payload, nil
+	}
+	if err := cacheBlob(path, BlobCachePath(vaultRoot, entry.Hash), entry.Hash); err != nil {
+		return nil, err
+	}
+	payload["blob"] = map[string]interface{}{"sha256": entry.Hash, "size": entry.Size}
+	return payload, nil
+}
+
+func cacheBlob(source, destination, wantHash string) error {
+	if info, err := os.Lstat(destination); err == nil {
+		if !info.Mode().IsRegular() {
+			return fmt.Errorf("blob cache target is not a regular file")
+		}
+		if hash, err := sha256File(destination); err == nil && hash == wantHash {
+			return nil
+		}
+		if err := os.Remove(destination); err != nil {
+			return err
+		}
+	} else if !os.IsNotExist(err) {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(destination), 0o750); err != nil {
+		return err
+	}
+	in, err := os.Open(source)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+	tmp, err := os.CreateTemp(filepath.Dir(destination), ".blob-*")
+	if err != nil {
+		return err
+	}
+	tmpPath := tmp.Name()
+	cleanup := true
+	defer func() {
+		if cleanup {
+			_ = os.Remove(tmpPath)
+		}
+	}()
+	hash := sha256.New()
+	if _, err := io.Copy(io.MultiWriter(tmp, hash), in); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if actual := hex.EncodeToString(hash.Sum(nil)); actual != wantHash {
+		_ = tmp.Close()
+		return fmt.Errorf("file changed during blob staging")
+	}
+	if err := tmp.Sync(); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	if err := os.Rename(tmpPath, destination); err != nil {
+		return err
+	}
+	cleanup = false
+	return nil
 }
 
 func newSnapshotOp(deviceID, entityType, entityID, opType string, payload interface{}) Op {
@@ -761,19 +839,6 @@ func pathDepth(path string) int {
 		return 0
 	}
 	return strings.Count(path, "/") + 1
-}
-
-// filePayload encodes an already bounded file without changing its content
-// representation. UTF-8 files use plain text up to the existing text limit;
-// other supported files use the current bounded base64 transport.
-func filePayload(path string, data []byte, hash string) map[string]string {
-	payload := map[string]string{"path": path, "contentHash": hash}
-	if int64(len(data)) <= corefiles.MaxTextFileBytes && isSyncText(data) {
-		payload["content"] = string(data)
-		return payload
-	}
-	payload["dataBase64"] = base64.StdEncoding.EncodeToString(data)
-	return payload
 }
 
 func isSyncText(data []byte) bool {

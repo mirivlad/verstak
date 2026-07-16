@@ -1,6 +1,7 @@
 package api
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"strings"
@@ -102,6 +103,26 @@ func TestSyncNowAgainstRealServerTwoVaults(t *testing.T) {
 	expectSyncCounts(t, appA, 1, 1)
 	expectSyncCounts(t, appB, 0, 1)
 	expectText(t, appB, "Shared/external.txt", "external while running")
+	assertNoUnpushedOps(t, appB)
+
+	// This exceeds the former 8 MiB inline/base64 ceiling. The operation must
+	// contain only a blob reference; the actual bytes travel through Blob API.
+	binary := make([]byte, corefiles.MaxBinaryReadBytes+1)
+	for i := range binary {
+		binary[i] = byte(i % 251)
+	}
+	if err := os.WriteFile(filepath.Join(rootA, "Shared", "large.bin"), binary, 0o644); err != nil {
+		t.Fatalf("write large binary: %v", err)
+	}
+	expectSyncCounts(t, appA, 1, 1)
+	expectSyncCounts(t, appB, 0, 1)
+	received, err := os.ReadFile(filepath.Join(rootB, "Shared", "large.bin"))
+	if err != nil {
+		t.Fatalf("read synced large binary: %v", err)
+	}
+	if !bytes.Equal(received, binary) {
+		t.Fatal("large binary content differs after blob sync")
+	}
 	assertNoUnpushedOps(t, appB)
 
 	if err := os.WriteFile(filepath.Join(rootB, "Shared", "external.txt"), []byte("external while closed"), 0o644); err != nil {

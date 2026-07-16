@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	corefiles "github.com/verstak/verstak-desktop/internal/core/files"
 )
 
 func TestScanAndRecordTracksExternalWorkspaceLifecycleByIdentity(t *testing.T) {
@@ -191,6 +192,41 @@ func TestScanAndRecordBaselinesThenRecordsExternalChanges(t *testing.T) {
 	}
 }
 
+func TestSnapshotUsesBlobReferenceForBinaryFileBeyondInlineLimit(t *testing.T) {
+	root := t.TempDir()
+	service := NewService(root, "device-a")
+	if _, err := service.ScanAndRecord(); err != nil {
+		t.Fatalf("baseline: %v", err)
+	}
+	data := make([]byte, corefiles.MaxBinaryReadBytes+1)
+	for i := range data {
+		data[i] = byte(i % 251)
+	}
+	if err := os.WriteFile(filepath.Join(root, "large.bin"), data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.ScanAndRecord(); err != nil {
+		t.Fatalf("scan binary: %v", err)
+	}
+	ops := unpushedOps(t, service)
+	if len(ops) != 1 {
+		t.Fatalf("operations = %#v, want one file create", ops)
+	}
+	var payload struct {
+		DataBase64 *string `json:"dataBase64"`
+		Blob       *struct {
+			SHA256 string `json:"sha256"`
+			Size   int64  `json:"size"`
+		} `json:"blob"`
+	}
+	if err := json.Unmarshal([]byte(ops[0].PayloadJSON), &payload); err != nil {
+		t.Fatal(err)
+	}
+	if payload.DataBase64 != nil || payload.Blob == nil || payload.Blob.Size != int64(len(data)) || payload.Blob.SHA256 == "" {
+		t.Fatalf("binary sync payload = %s, want blob reference without base64", ops[0].PayloadJSON)
+	}
+}
+
 func TestScanAndRecordNeverTreatsInitialFilesAsDeletes(t *testing.T) {
 	root := t.TempDir()
 	if err := os.Mkdir(filepath.Join(root, "Existing"), 0o755); err != nil {
@@ -362,7 +398,10 @@ func TestScanAndRecordSkipsReservedTemporaryAndSymlinkPaths(t *testing.T) {
 func TestScanAndRecordKeepsUnsupportedFileUnresolved(t *testing.T) {
 	root := t.TempDir()
 	path := filepath.Join(root, "too-large.bin")
-	if err := os.WriteFile(path, make([]byte, maxOperationFileBytes+1), 0o600); err != nil {
+	if err := os.WriteFile(path, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Truncate(path, maxOperationFileBytes+1); err != nil {
 		t.Fatal(err)
 	}
 	service := NewService(root, "device-a")

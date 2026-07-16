@@ -50,10 +50,10 @@ NOW="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 sqlite3 "$DATA_DIR/server.db" "
 INSERT INTO server_users (id, username, email, password_hash, confirmed, created_at)
 VALUES ('smoke-user', 'smoke-user', 'smoke@example.test', 'unused', 1, '$NOW');
-INSERT INTO server_devices (id, name, api_key, user_id, vault_id, last_seen, created_at)
-VALUES ('smoke-device-a', 'Smoke Device A', 'smoke-key-a', 'smoke-user', 'smoke-vault', '$NOW', '$NOW');
-INSERT INTO server_devices (id, name, api_key, user_id, vault_id, last_seen, created_at)
-VALUES ('smoke-device-b', 'Smoke Device B', 'smoke-key-b', 'smoke-user', 'smoke-vault', '$NOW', '$NOW');
+INSERT INTO server_devices (id, name, api_key, legacy_api_key, user_id, vault_id, last_seen, created_at)
+VALUES ('smoke-device-a', 'Smoke Device A', 'smoke-key-a', 1, 'smoke-user', 'smoke-vault', '$NOW', '$NOW');
+INSERT INTO server_devices (id, name, api_key, legacy_api_key, user_id, vault_id, last_seen, created_at)
+VALUES ('smoke-device-b', 'Smoke Device B', 'smoke-key-b', 1, 'smoke-user', 'smoke-vault', '$NOW', '$NOW');
 "
 
 (

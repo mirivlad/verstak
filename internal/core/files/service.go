@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/fs"
 	"mime"
 	"os"
@@ -199,6 +200,85 @@ func (s *Service) WriteVaultFileBytes(relativePath string, dataBase64 string, op
 		return fmt.Errorf("file-too-large: %s", relativePath)
 	}
 	return s.writeVaultFileData(relativePath, data, options)
+}
+
+// WriteVaultFileFromPath streams a verified temporary file into the vault and
+// replaces the destination atomically. It is used by core sync so a Blob never
+// needs to be base64-decoded or held in memory.
+func (s *Service) WriteVaultFileFromPath(relativePath, sourcePath string, options WriteOptions) error {
+	source, err := os.Open(sourcePath)
+	if err != nil {
+		return err
+	}
+	defer source.Close()
+	info, err := source.Stat()
+	if err != nil {
+		return err
+	}
+	if !info.Mode().IsRegular() {
+		return fmt.Errorf("blob source is not a regular file")
+	}
+	root, rel, full, err := s.resolveFile(relativePath)
+	if err != nil {
+		return err
+	}
+	if err := rejectSymlinkPath(root, rel, true); err != nil {
+		return err
+	}
+	parent := filepath.Dir(full)
+	if info, err := os.Stat(parent); err != nil {
+		if os.IsNotExist(err) {
+			return fmt.Errorf("parent-not-found: %s", pathDir(rel))
+		}
+		return err
+	} else if !info.IsDir() {
+		return fmt.Errorf("parent-not-directory: %s", pathDir(rel))
+	}
+	existing, err := os.Lstat(full)
+	if err == nil {
+		if existing.Mode()&os.ModeSymlink != 0 {
+			return fmt.Errorf("symlink-not-allowed: %s", rel)
+		}
+		if !existing.Mode().IsRegular() {
+			return fmt.Errorf("not-regular-file: %s", rel)
+		}
+		if !options.Overwrite {
+			return fmt.Errorf("conflict: %s", rel)
+		}
+	} else if os.IsNotExist(err) {
+		if !options.CreateIfMissing {
+			return fmt.Errorf("not-found: %s", rel)
+		}
+	} else {
+		return err
+	}
+	tmp, err := os.CreateTemp(parent, ".verstak-write-*")
+	if err != nil {
+		return err
+	}
+	tmpPath := tmp.Name()
+	cleanup := true
+	defer func() {
+		if cleanup {
+			_ = os.Remove(tmpPath)
+		}
+	}()
+	if _, err := io.Copy(tmp, source); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Sync(); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	if err := os.Rename(tmpPath, full); err != nil {
+		return err
+	}
+	cleanup = false
+	return nil
 }
 
 func (s *Service) writeVaultFileData(relativePath string, data []byte, options WriteOptions) error {
