@@ -74,6 +74,8 @@ export function GetWorkspaceMetadata(arg1:string):Promise<workspace.Metadata|str
 
 export function GetWorkspaceTree():Promise<Record<string, any>>;
 
+export function ListFolderPaths():Promise<Array<string>|string>;
+
 export function ListPluginCapabilities(arg1:string):Promise<Array<capability.Entry>|string>;
 
 export function ListVaultFiles(arg1:string,arg2:string):Promise<Array<files.FileEntry>|string>;

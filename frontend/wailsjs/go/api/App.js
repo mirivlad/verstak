@@ -130,6 +130,10 @@ export function GetWorkspaceTree() {
   return window['go']['api']['App']['GetWorkspaceTree']();
 }
 
+export function ListFolderPaths() {
+  return window['go']['api']['App']['ListFolderPaths']();
+}
+
 export function ListPluginCapabilities(arg1) {
   return window['go']['api']['App']['ListPluginCapabilities'](arg1);
 }
