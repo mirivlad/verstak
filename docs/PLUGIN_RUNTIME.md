@@ -729,6 +729,17 @@ not-created ──CreateVault──▶ open ──CloseVault──▶ closed
 | `internal/core/permissions/registry.go` | PermissionsRegistry |
 | `internal/core/events/bus.go` | EventBus |
 | `internal/api/app.go` | Wails API, ReloadPlugins |
+| `internal/core/files/` | Files Core API: safe path policy, text/binary read/write, move, trash |
+| `internal/core/filewatcher/` | Live filesystem watcher for external changes |
+| `internal/core/workbench/` | Workbench open/edit provider routing |
+| `internal/core/workspace/` | Workspace manager: create, rename, trash, templates, identity |
+| `internal/core/notes/` | Notes file utilities (title↔filename, conflict detection) |
+| `internal/core/sync/` | Sync scanner, snapshot, reconciliation, operation recording |
+| `internal/core/secrets/` | AES-GCM secret store |
+| `internal/core/browserreceiver/` | Local HTTP receiver for browser extension |
+| `internal/core/notifications/` | Native desktop notifications |
+| `internal/core/hostname/` | Hostname normalization for browser domain activity |
+| `internal/core/externalopen/` | Platform-specific external file/folder opening |
 | `internal/core/vault/vault.go` | Vault service: CreateVault, OpenVault, CloseVault, ResolveSafePath, plugin namespace paths |
 || `internal/core/vault/vault_test.go` | Vault tests: layout creation, open/close, path traversal, events |
 || `internal/core/storage/api.go` | Plugin storage API: settings/data/cache JSON with namespace isolation |

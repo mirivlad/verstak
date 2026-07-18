@@ -1,39 +1,30 @@
 # Notes/Files Plugin Architecture Plan
 
-This document locks the Notes/Files/Open architecture for the next milestones.
-Files Core Service was implemented in Milestone 6a; this document still does not
-start Notes UI, Notes plugin, Files UI plugin, editor plugin, watcher, sync, or
-binary streaming.
+This document captures the architectural decisions for Notes, Files, and
+Workbench routing. Most items described below are now implemented; this
+document remains as a reference for the canonical data model and rules.
 
 ## Current Readiness
 
-The platform is ready for bundled plugin UI experiments. Files Core is available
-as a safe vault-scoped text file API. Notes, Files UI, and editor/viewer UI still
-need plugin-level implementations and host surfaces before real product use.
+All key components are implemented:
 
-Already available:
-
-- Plugin discovery, lifecycle, settings, capabilities, bundled commands, and
-  bundled frontend events.
-- Workspace lifecycle APIs for top-level physical folders under the vault root.
-- Plugin-owned internal storage directories:
-  `.verstak/plugin-data/<pluginId>`, `.verstak/plugin-settings/<pluginId>`, and
-  `.verstak/plugin-cache/<pluginId>`.
-- Contribution registry entries for `fileActions`, `noteActions`,
-  `contextMenuEntries`, `searchProviders`, `activityProviders`, and
-  `statusBarItems`.
-
-Not available yet:
-
-- Notes plugin/API as a semantic view over Markdown files.
-- Files UI plugin.
-- Editor/viewer plugin.
-- Open/edit resource routing and provider selection.
+- Files Core API with safe vault-scoped text and binary file operations.
+- Notes plugin as a semantic view over canonical `Notes/` Markdown files.
+- Files UI plugin with folder navigation and Workbench-based file opening.
+- Default Editor plugin providing text/markdown openProviders.
+- File Preview plugin for images.
+- Workbench open/edit routing with provider selection.
 - UI hosts for file actions, note actions, context menus, search providers,
-  activity providers, or status bar items.
-- Watcher/indexer for external filesystem changes.
-- Real plugin isolation. Current permission checks are contract/policy checks,
-  not a security boundary for bundled frontend JavaScript.
+  activity providers, and status bar items.
+- File watcher for external filesystem changes.
+- Trash plugin for restore and permanent delete.
+
+Not yet available:
+
+- Real plugin isolation (bundled plugins run in shared JS context;
+  sidecar/sandbox is a future milestone).
+- Chunked streaming/large-file import (bounded to 2 MB text / 8 MB bytes).
+- Production-grade auto-update and release channel.
 
 ## Canonical Notes Model
 
