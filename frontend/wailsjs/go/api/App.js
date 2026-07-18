@@ -74,6 +74,10 @@ export function GetCurrentWorkspaceNode() {
   return window['go']['api']['App']['GetCurrentWorkspaceNode']();
 }
 
+export function GetFolderMetadata(arg1) {
+  return window['go']['api']['App']['GetFolderMetadata'](arg1);
+}
+
 export function GetPermissions() {
   return window['go']['api']['App']['GetPermissions']();
 }
@@ -152,6 +156,10 @@ export function ListWorkspaces() {
 
 export function MoveVaultPath(arg1, arg2, arg3, arg4) {
   return window['go']['api']['App']['MoveVaultPath'](arg1, arg2, arg3, arg4);
+}
+
+export function MoveWorkspace(arg1, arg2) {
+  return window['go']['api']['App']['MoveWorkspace'](arg1, arg2);
 }
 
 export function MoveWorkspaceNode(arg1, arg2) {
@@ -326,8 +334,16 @@ export function SetCurrentWorkspaceNode(arg1) {
   return window['go']['api']['App']['SetCurrentWorkspaceNode'](arg1);
 }
 
+export function SetFolderMetadata(arg1, arg2) {
+  return window['go']['api']['App']['SetFolderMetadata'](arg1, arg2);
+}
+
 export function SetNotificationService(arg1) {
   return window['go']['api']['App']['SetNotificationService'](arg1);
+}
+
+export function SetTrayReady(arg1) {
+  return window['go']['api']['App']['SetTrayReady'](arg1);
 }
 
 export function ShowVaultPathInFolder(arg1, arg2) {

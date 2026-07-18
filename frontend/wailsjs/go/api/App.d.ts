@@ -46,6 +46,8 @@ export function GetCurrentWorkspace():Promise<Record<string, any>>;
 
 export function GetCurrentWorkspaceNode():Promise<Record<string, any>>;
 
+export function GetFolderMetadata(arg1:string):Promise<workspace.FolderMetadata|string>;
+
 export function GetPermissions():Promise<Array<permissions.Entry>>;
 
 export function GetPluginAssetContent(arg1:string,arg2:string):Promise<string|string>;
@@ -85,6 +87,8 @@ export function ListWorkspaceTemplates():Promise<Array<workspace.WorkspaceTempla
 export function ListWorkspaces():Promise<Array<workspace.Workspace>|string>;
 
 export function MoveVaultPath(arg1:string,arg2:string,arg3:string,arg4:files.MoveOptions):Promise<string>;
+
+export function MoveWorkspace(arg1:string,arg2:string):Promise<string>;
 
 export function MoveWorkspaceNode(arg1:string,arg2:string):Promise<string>;
 
@@ -172,7 +176,11 @@ export function SetCurrentWorkspace(arg1:string):Promise<string>;
 
 export function SetCurrentWorkspaceNode(arg1:string):Promise<string>;
 
+export function SetFolderMetadata(arg1:string,arg2:workspace.FolderMetadata):Promise<string>;
+
 export function SetNotificationService(arg1:api.notificationService):Promise<void>;
+
+export function SetTrayReady(arg1:boolean):Promise<void>;
 
 export function ShowVaultPathInFolder(arg1:string,arg2:string):Promise<string>;
 
