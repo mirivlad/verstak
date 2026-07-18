@@ -2,6 +2,7 @@
   import { onDestroy, onMount } from 'svelte';
   import * as App from '../../../wailsjs/go/api/App';
   import WorkspaceTree from './WorkspaceTree.svelte';
+  import PluginBundleHost from '../plugin-host/PluginBundleHost.svelte';
   import GlobalSearch from './GlobalSearch.svelte';
   import Icon from '../ui/Icon.svelte';
   import { debug } from '../log/debug.js';
@@ -18,6 +19,7 @@
   let plugins = [];
   let vaultStatus = { status: 'unknown', path: '', vaultId: '' };
   let sidebarItems = [];
+  let workspaceTreeProvider = null;
   let errorMessage = '';
   let locale = i18n.getLocale();
   let unsubscribeLocale = null;
@@ -59,6 +61,19 @@
         return plugin.status !== 'disabled' && plugin.status !== 'failed' && plugin.status !== 'incompatible' && plugin.status !== 'missing-required-capability';
       });
       sidebarItems.sort((a, b) => (a.position || 100) - (b.position || 100));
+
+      // Check for workspaceTree contribution
+      const wtContrib = (localizedContributions.workspaceTree || null);
+      if (wtContrib && wtContrib.pluginId && wtContrib.component) {
+        const wtPlugin = plugins.find(p => p.manifest?.id === wtContrib.pluginId);
+        if (wtPlugin && wtPlugin.status !== 'disabled' && wtPlugin.status !== 'failed' && wtPlugin.status !== 'incompatible' && wtPlugin.status !== 'missing-required-capability') {
+          workspaceTreeProvider = { pluginId: wtContrib.pluginId, component: wtContrib.component };
+        } else {
+          workspaceTreeProvider = null;
+        }
+      } else {
+        workspaceTreeProvider = null;
+      }
       debug.log('[Sidebar] onMount: sidebarItems=' + sidebarItems.length);
       flog('onMount: sidebarItems=' + sidebarItems.length);
     } catch (e) {
@@ -123,7 +138,11 @@
   {/if}
 
   {#if vaultOpen}
-    <WorkspaceTree />
+    {#if workspaceTreeProvider}
+      <PluginBundleHost pluginId={workspaceTreeProvider.pluginId} componentId={workspaceTreeProvider.component} />
+    {:else}
+      <WorkspaceTree />
+    {/if}
   {/if}
 
   <div class="sidebar-footer">

@@ -14,7 +14,9 @@ import (
 func TestListWorkspacesReadsTopLevelPhysicalFolders(t *testing.T) {
 	vaultDir := newVaultDir(t)
 	mustMkdir(t, filepath.Join(vaultDir, "Project"))
+	mustWriteWorkspaceMarker(t, filepath.Join(vaultDir, "Project"))
 	mustMkdir(t, filepath.Join(vaultDir, "Test"))
+	mustWriteWorkspaceMarker(t, filepath.Join(vaultDir, "Test"))
 	mustMkdir(t, filepath.Join(vaultDir, ".verstak"))
 	mustMkdir(t, filepath.Join(vaultDir, ".git"))
 	mustWrite(t, filepath.Join(vaultDir, "readme.md"), "not a workspace")
@@ -33,6 +35,61 @@ func TestListWorkspacesReadsTopLevelPhysicalFolders(t *testing.T) {
 	want := []string{"Project", "Test"}
 	if strings.Join(got, ",") != strings.Join(want, ",") {
 		t.Fatalf("workspaces = %v, want %v", got, want)
+	}
+}
+
+func TestListWorkspacesIncludesNestedWorkspaces(t *testing.T) {
+	vaultDir := newVaultDir(t)
+	mustMkdir(t, filepath.Join(vaultDir, "Clients"))
+	mustMkdir(t, filepath.Join(vaultDir, "Clients", "Romashka"))
+	mustWriteWorkspaceMarker(t, filepath.Join(vaultDir, "Clients", "Romashka"))
+	mustMkdir(t, filepath.Join(vaultDir, "Clients", "Alpha"))
+	mustWriteWorkspaceMarker(t, filepath.Join(vaultDir, "Clients", "Alpha"))
+	mustMkdir(t, filepath.Join(vaultDir, "Personal"))
+	mustWriteWorkspaceMarker(t, filepath.Join(vaultDir, "Personal"))
+
+	m := NewManager(vaultDir)
+	if err := m.Load(); err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+
+	workspaces, err := m.ListWorkspaces()
+	if err != nil {
+		t.Fatalf("ListWorkspaces: %v", err)
+	}
+
+	if len(workspaces) != 3 {
+		t.Fatalf("workspaces = %d, want 3", len(workspaces))
+	}
+	paths := make([]string, len(workspaces))
+	for i, ws := range workspaces {
+		paths[i] = ws.Path
+	}
+	wantPaths := []string{"Clients/Alpha", "Clients/Romashka", "Personal"}
+	if strings.Join(paths, ",") != strings.Join(wantPaths, ",") {
+		t.Fatalf("paths = %v, want %v", paths, wantPaths)
+	}
+}
+
+func TestCreateWorkspaceNested(t *testing.T) {
+	vaultDir := newVaultDir(t)
+	m := NewManager(vaultDir)
+
+	// Create parent folder first
+	mustMkdir(t, filepath.Join(vaultDir, "Clients"))
+	ws, err := m.CreateWorkspace("Clients/Project", "")
+	if err != nil {
+		t.Fatalf("CreateWorkspace nested: %v", err)
+	}
+	if ws.Path != "Clients/Project" {
+		t.Fatalf("workspace path = %q, want Clients/Project", ws.Path)
+	}
+	if _, err := os.Stat(filepath.Join(vaultDir, "Clients", "Project")); err != nil {
+		t.Fatalf("workspace folder missing: %v", err)
+	}
+	// Verify marker
+	if _, err := os.Stat(filepath.Join(vaultDir, "Clients", "Project", ".verstak", "workspace.json")); err != nil {
+		t.Fatalf("marker missing: %v", err)
 	}
 }
 
@@ -556,23 +613,24 @@ func TestCreateAndRenameConflictsAreExplicit(t *testing.T) {
 	}
 }
 
-func TestInvalidWorkspaceNamesRejected(t *testing.T) {
+func TestInvalidWorkspacePathsRejected(t *testing.T) {
 	vaultDir := newVaultDir(t)
 	m := NewManager(vaultDir)
 
-	names := []string{"", "   ", "A/B", `A\B`, "/abs", `C:\abs`, "..", "a..b", "bad\x00name", ".verstak", ".Verstak", ".git"}
-	for _, name := range names {
-		if _, err := m.CreateWorkspace(name, ""); err == nil {
-			t.Fatalf("CreateWorkspace(%q) succeeded, want invalid name error", name)
+	paths := []string{"", "   ", `A\B`, "/abs", `C:\abs`, "..", "a/../b", "bad\x00name", ".verstak", ".Verstak", ".git"}
+	for _, path := range paths {
+		if _, err := m.CreateWorkspace(path, ""); err == nil {
+			t.Fatalf("CreateWorkspace(%q) succeeded, want invalid path error", path)
 		}
 	}
 }
 
-func TestCompatibilityTreeIsDerivedFromTopLevelFolders(t *testing.T) {
+func TestCompatibilityTreeIncludesFoldersAndNestedWorkspaces(t *testing.T) {
 	vaultDir := newVaultDir(t)
 	mustMkdir(t, filepath.Join(vaultDir, "Project"))
-	mustMkdir(t, filepath.Join(vaultDir, "Project", "Nested"))
+	mustWriteWorkspaceMarker(t, filepath.Join(vaultDir, "Project"))
 	mustMkdir(t, filepath.Join(vaultDir, "Test"))
+	mustWriteWorkspaceMarker(t, filepath.Join(vaultDir, "Test"))
 
 	m := NewManager(vaultDir)
 	if err := m.Load(); err != nil {
@@ -582,34 +640,43 @@ func TestCompatibilityTreeIsDerivedFromTopLevelFolders(t *testing.T) {
 	if len(tree.Nodes) != 2 {
 		t.Fatalf("nodes = %+v, want 2 top-level workspaces", tree.Nodes)
 	}
-	if tree.Nodes[0].ID != "Project" || tree.Nodes[0].Title != "Project" || tree.Nodes[0].Path != "" {
-		t.Fatalf("first compatibility node = %+v, want derived workspace without persisted path mapping", tree.Nodes[0])
+	if tree.Nodes[0].ID != "Project" || tree.Nodes[0].Title != "Project" {
+		t.Fatalf("first compatibility node = %+v, want workspace node", tree.Nodes[0])
 	}
 	for _, node := range tree.Nodes {
-		if node.ParentID != "" {
-			t.Fatalf("compatibility tree should be flat, got child node %+v", node)
-		}
 		if node.ID == "Nested" || node.Title == "Nested" {
-			t.Fatalf("nested folders must not become workspace nodes: %+v", tree.Nodes)
+			t.Fatalf("nested folders without markers must not become workspace nodes: %+v", tree.Nodes)
+		}
+	}
+	// Workspace nodes should NOT have ParentID for root-level ones
+	for _, node := range tree.Nodes {
+		if node.Type == TypeSpace && node.ID == "Project" && node.ParentID != "" {
+			t.Fatalf("root workspace should have empty ParentID: %+v", node)
 		}
 	}
 }
 
-func TestMoveNodeCompatibilityDoesNotCreateNestedWorkspaceModel(t *testing.T) {
+func TestMoveNodeCreatesNestedWorkspaceModel(t *testing.T) {
 	vaultDir := newVaultDir(t)
 	mustMkdir(t, filepath.Join(vaultDir, "Project"))
+	mustWriteWorkspaceMarker(t, filepath.Join(vaultDir, "Project"))
 	mustMkdir(t, filepath.Join(vaultDir, "Test"))
 
 	m := NewManager(vaultDir)
 	if err := m.Load(); err != nil {
 		t.Fatalf("Load: %v", err)
 	}
+	// Move workspace into Test folder (which is a plain folder without marker)
 	err := m.MoveNode("Project", "Test")
-	if err == nil || !strings.Contains(err.Error(), "top-level only") {
-		t.Fatalf("MoveNode error = %v, want top-level only", err)
+	if err != nil {
+		t.Fatalf("MoveNode error = %v, want success", err)
 	}
-	if _, statErr := os.Stat(filepath.Join(vaultDir, "Test", "Project")); !os.IsNotExist(statErr) {
-		t.Fatalf("MoveNode created nested mapped workspace, stat err=%v", statErr)
+	if _, statErr := os.Stat(filepath.Join(vaultDir, "Test", "Project")); statErr != nil {
+		t.Fatalf("MoveNode did not create nested folder, stat err=%v", statErr)
+	}
+	// Verify marker moved
+	if _, statErr := os.Stat(filepath.Join(vaultDir, "Test", "Project", ".verstak", "workspace.json")); statErr != nil {
+		t.Fatalf("marker not in new location: %v", statErr)
 	}
 }
 
@@ -633,6 +700,22 @@ func TestMetadataFileShape(t *testing.T) {
 	}
 	if _, ok := raw["createdFromTemplate"].(map[string]interface{}); !ok {
 		t.Fatalf("createdFromTemplate missing in raw metadata: %s", data)
+	}
+}
+
+func mustWriteWorkspaceMarker(t *testing.T, dir string) {
+	t.Helper()
+	markerPath := filepath.Join(dir, ".verstak", "workspace.json")
+	if err := os.MkdirAll(filepath.Dir(markerPath), 0o755); err != nil {
+		t.Fatalf("MkdirAll(%s): %v", filepath.Dir(markerPath), err)
+	}
+	marker := workspaceIdentityMarker{WorkspaceID: uuid.NewString()}
+	data, err := json.Marshal(marker)
+	if err != nil {
+		t.Fatalf("marshal marker: %v", err)
+	}
+	if err := os.WriteFile(markerPath, data, 0o644); err != nil {
+		t.Fatalf("WriteFile(%s): %v", markerPath, err)
 	}
 }
 

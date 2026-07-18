@@ -584,6 +584,48 @@ export function createPluginAPI(pluginId) {
       }
     },
 
+    workspaces: {
+      list: async function() {
+        assertActive('workspaces.list');
+        return callBackend(pluginId, 'workspaces.list', () => App.ListWorkspaces());
+      },
+      getCurrent: async function() {
+        assertActive('workspaces.getCurrent');
+        return callBackend(pluginId, 'workspaces.getCurrent', () => App.GetCurrentWorkspace());
+      },
+      getTree: async function() {
+        assertActive('workspaces.getTree');
+        return callBackend(pluginId, 'workspaces.getTree', () => App.GetWorkspaceTree());
+      },
+      select: async function(path) {
+        assertActive('workspaces.select');
+        return callBackendErrorString(pluginId, 'workspaces.select', () => App.SetCurrentWorkspace(path));
+      },
+      create: async function(path, templateId) {
+        assertActive('workspaces.create');
+        return callBackend(pluginId, 'workspaces.create', () => App.CreateWorkspace(path, templateId || 'default'));
+      },
+      trash: async function(path) {
+        assertActive('workspaces.trash');
+        return callBackend(pluginId, 'workspaces.trash', () => App.TrashWorkspace(path));
+      },
+      move: async function(id, newParentId) {
+        assertActive('workspaces.move');
+        return callBackendErrorString(pluginId, 'workspaces.move', () => App.MoveWorkspace(id, newParentId));
+      }
+    },
+
+    folders: {
+      getMetadata: async function(path) {
+        assertActive('folders.getMetadata');
+        return callBackend(pluginId, 'folders.getMetadata', () => App.GetFolderMetadata(path));
+      },
+      setMetadata: async function(path, meta) {
+        assertActive('folders.setMetadata');
+        return callBackendErrorString(pluginId, 'folders.setMetadata', () => App.SetFolderMetadata(path, meta));
+      }
+    },
+
     dispose: function() {
       if (disposed) return;
       disposed = true;

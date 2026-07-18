@@ -24,6 +24,13 @@ type Registry struct {
 	statusBarItems    []ContributionStatusBarItem
 	openProviders     []ContributionOpenProvider
 	workspaceItems    []ContributionWorkspaceItem
+	workspaceTree     *ContributionWorkspaceTree
+}
+
+// ContributionWorkspaceTree is a singleton contribution for replacing the Deal tree.
+type ContributionWorkspaceTree struct {
+	PluginID  string `json:"pluginId"`
+	Component string `json:"component"`
 }
 
 // ContributionPointType defines the type of contribution point.
@@ -42,6 +49,7 @@ const (
 	PointStatusBar       ContributionPointType = "statusBarItems"
 	PointOpenProviders   ContributionPointType = "openProviders"
 	PointWorkspaceItems  ContributionPointType = "workspaceItems"
+	PointWorkspaceTree   ContributionPointType = "workspaceTree"
 )
 
 // ListByPoint returns all contributions for a given point type.
@@ -184,6 +192,7 @@ func (r *Registry) Register(pluginID string, c *plugin.Contributions) {
 	r.statusBarItems = removeStatusBarItems(r.statusBarItems, pluginID)
 	r.openProviders = removeOpenProviders(r.openProviders, pluginID)
 	r.workspaceItems = removeWorkspaceItems(r.workspaceItems, pluginID)
+	r.workspaceTree = nil
 
 	for _, item := range c.Views {
 		r.views = append(r.views, ContributionView{PluginID: pluginID, Item: item})
@@ -221,6 +230,9 @@ func (r *Registry) Register(pluginID string, c *plugin.Contributions) {
 	for _, item := range c.WorkspaceItems {
 		r.workspaceItems = append(r.workspaceItems, ContributionWorkspaceItem{PluginID: pluginID, Item: item})
 	}
+	if c.WorkspaceTree != nil && r.workspaceTree == nil {
+		r.workspaceTree = &ContributionWorkspaceTree{PluginID: pluginID, Component: c.WorkspaceTree.Component}
+	}
 }
 
 // Unregister removes all contributions from a plugin.
@@ -240,6 +252,9 @@ func (r *Registry) Unregister(pluginID string) {
 	r.statusBarItems = removeStatusBarItems(r.statusBarItems, pluginID)
 	r.openProviders = removeOpenProviders(r.openProviders, pluginID)
 	r.workspaceItems = removeWorkspaceItems(r.workspaceItems, pluginID)
+	if r.workspaceTree != nil && r.workspaceTree.PluginID == pluginID {
+		r.workspaceTree = nil
+	}
 }
 
 // Getters — sorted for deterministic display.
@@ -365,6 +380,13 @@ func (r *Registry) WorkspaceItems() []ContributionWorkspaceItem {
 		return result[i].Item.ID < result[j].Item.ID
 	})
 	return result
+}
+
+// WorkspaceTree returns the singleton workspaceTree contribution, or nil.
+func (r *Registry) WorkspaceTree() *ContributionWorkspaceTree {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.workspaceTree
 }
 
 // ─── Remove helpers ─────────────────────────────────────────

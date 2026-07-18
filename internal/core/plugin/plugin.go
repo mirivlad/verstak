@@ -77,6 +77,12 @@ type Contributions struct {
 	StatusBarItems     []ContributionStatusBarItem    `json:"statusBarItems,omitempty"`
 	OpenProviders      []ContributionOpenProvider     `json:"openProviders,omitempty"`
 	WorkspaceItems     []ContributionWorkspaceItem    `json:"workspaceItems,omitempty"`
+	WorkspaceTree      *ContributionWorkspaceTree     `json:"workspaceTree,omitempty"`
+}
+
+// ContributionWorkspaceTree represents a singleton workspaceTree contribution.
+type ContributionWorkspaceTree struct {
+	Component string `json:"component"`
 }
 
 // ContributionView represents a view contribution.

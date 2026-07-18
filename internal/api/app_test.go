@@ -2624,9 +2624,6 @@ func TestSetCurrentVaultInitializesWorkspaceWhenMissingAtStartup(t *testing.T) {
 	if len(nodes) == 0 {
 		t.Fatal("workspace nodes should not be empty")
 	}
-	if nodes[0].Path != "" {
-		t.Fatalf("compatibility node should not expose workspace path mapping: %+v", nodes[0])
-	}
 	if !app.capRegistry.Has("verstak/core/workspace/v1") {
 		t.Fatal("workspace capability should be registered after SetCurrentVault")
 	}
@@ -2905,11 +2902,11 @@ func TestMoveWorkspaceNodeCompatibilityIsUnsupported(t *testing.T) {
 	}
 
 	errStr := app.MoveWorkspaceNode("Project", "Test")
-	if errStr == "" || !strings.Contains(errStr, "top-level only") {
-		t.Fatalf("MoveWorkspaceNode error = %q, want top-level only", errStr)
+	if errStr == "" || !strings.Contains(errStr, "parent-is-workspace") {
+		t.Fatalf("MoveWorkspaceNode error = %q, want parent-is-workspace", errStr)
 	}
 	if _, err := os.Stat(filepath.Join(vaultDir, "Test", "Project")); !os.IsNotExist(err) {
-		t.Fatalf("MoveWorkspaceNode created nested mapped workspace, stat err=%v", err)
+		t.Fatalf("MoveWorkspaceNode created nested workspace inside another workspace, stat err=%v", err)
 	}
 }
 

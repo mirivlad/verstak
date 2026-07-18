@@ -979,6 +979,13 @@ type ContributionSummary struct {
 	FileActions        []FlatAction           `json:"fileActions"`
 	NoteActions        []FlatAction           `json:"noteActions"`
 	ContextMenuEntries []FlatContextMenuEntry `json:"contextMenuEntries"`
+	WorkspaceTree      *FlatWorkspaceTree     `json:"workspaceTree,omitempty"`
+}
+
+// FlatWorkspaceTree is the summary for the workspaceTree singleton contribution.
+type FlatWorkspaceTree struct {
+	PluginID  string `json:"pluginId"`
+	Component string `json:"component"`
 }
 
 // buildContributionSummary creates a ContributionSummary from the registry.
@@ -1053,7 +1060,12 @@ func buildContributionSummary(r *contribution.Registry) ContributionSummary {
 	for i, v := range regContextMenus {
 		contextMenus[i] = FlatContextMenuEntry{PluginID: v.PluginID, ID: v.Item.ID, Label: v.Item.Label, Context: v.Item.Context, Group: v.Item.Group, Capability: v.Item.Capability, Handler: v.Item.Handler}
 	}
-	return ContributionSummary{Views: views, Commands: cmds, SearchProviders: searchProviders, SettingsPanels: panels, SidebarItems: sidebar, StatusBarItems: statusBarItems, OpenProviders: openProviders, WorkspaceItems: workspaceItems, FileActions: fileActions, NoteActions: noteActions, ContextMenuEntries: contextMenus}
+	var wsTree *FlatWorkspaceTree
+	regWSTree := r.WorkspaceTree()
+	if regWSTree != nil {
+		wsTree = &FlatWorkspaceTree{PluginID: regWSTree.PluginID, Component: regWSTree.Component}
+	}
+	return ContributionSummary{Views: views, Commands: cmds, SearchProviders: searchProviders, SettingsPanels: panels, SidebarItems: sidebar, StatusBarItems: statusBarItems, OpenProviders: openProviders, WorkspaceItems: workspaceItems, FileActions: fileActions, NoteActions: noteActions, ContextMenuEntries: contextMenus, WorkspaceTree: wsTree}
 }
 
 // GetContributions returns all registered contributions flattened for the frontend.
@@ -2591,7 +2603,7 @@ func (a *App) UpdateWorkspaceMetadata(name string, patch workspace.MetadataPatch
 	return meta, ""
 }
 
-// GetCurrentWorkspace returns the currently selected top-level workspace.
+// GetCurrentWorkspace returns the currently selected workspace.
 func (a *App) GetCurrentWorkspace() map[string]interface{} {
 	if a.workspace == nil {
 		return map[string]interface{}{"status": "not initialized"}
@@ -2600,7 +2612,7 @@ func (a *App) GetCurrentWorkspace() map[string]interface{} {
 	if err != nil {
 		return map[string]interface{}{"error": err.Error()}
 	}
-	identity, err := a.workspace.GetWorkspaceIdentity(node.Name)
+	identity, err := a.workspace.GetWorkspaceIdentity(node.Path)
 	if err != nil {
 		return map[string]interface{}{"error": err.Error()}
 	}
@@ -2609,22 +2621,62 @@ func (a *App) GetCurrentWorkspace() map[string]interface{} {
 		"workspaceId": identity.WorkspaceID,
 		"name":        node.Name,
 		"rootPath":    node.RootPath,
+		"path":        node.Path,
 	}
 }
 
-// SetCurrentWorkspace stores the selected top-level workspace name as UI state.
-func (a *App) SetCurrentWorkspace(name string) string {
+// SetCurrentWorkspace stores the selected workspace path as UI state.
+func (a *App) SetCurrentWorkspace(path string) string {
 	if a.workspace == nil {
 		return "workspace not initialized"
 	}
-	if err := a.workspace.SetCurrentNode(name); err != nil {
+	if err := a.workspace.SetCurrentNode(path); err != nil {
+		return err.Error()
+	}
+	node, err := a.workspace.GetCurrentNode()
+	if err != nil {
 		return err.Error()
 	}
 	a.publishWorkspaceLifecycleEvent(workspaceSelectedEventName, map[string]interface{}{
 		"operation":         "select",
-		"workspaceRootPath": name,
-		"workspaceName":     name,
+		"workspaceRootPath": node.RootPath,
+		"workspaceName":     node.Name,
+		"workspacePath":     node.Path,
 	})
+	return ""
+}
+
+// GetFolderMetadata returns stored metadata for a plain vault folder.
+func (a *App) GetFolderMetadata(path string) (workspace.FolderMetadata, string) {
+	if a.workspace == nil {
+		return workspace.FolderMetadata{}, "workspace not initialized"
+	}
+	meta, err := a.workspace.GetFolderMetadata(path)
+	if err != nil {
+		return workspace.FolderMetadata{}, err.Error()
+	}
+	return meta, ""
+}
+
+// SetFolderMetadata updates metadata for a plain vault folder.
+func (a *App) SetFolderMetadata(path string, meta workspace.FolderMetadata) string {
+	if a.workspace == nil {
+		return "workspace not initialized"
+	}
+	if err := a.workspace.SetFolderMetadata(path, meta); err != nil {
+		return err.Error()
+	}
+	return ""
+}
+
+// MoveWorkspace moves a workspace to another parent folder.
+func (a *App) MoveWorkspace(id, newParentID string) string {
+	if a.workspace == nil {
+		return "workspace not initialized"
+	}
+	if err := a.workspace.MoveNode(id, newParentID); err != nil {
+		return err.Error()
+	}
 	return ""
 }
 
