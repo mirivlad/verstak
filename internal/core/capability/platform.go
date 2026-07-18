@@ -11,6 +11,7 @@ var platformCapabilities = []string{
 	"verstak/core/files/v1",
 	"verstak/core/workbench/v1",
 	"verstak/core/notifications/v1",
+	"verstak/core/workspace/v1",
 }
 
 // CorePlatformCapabilities returns a copy of the capabilities registered by
