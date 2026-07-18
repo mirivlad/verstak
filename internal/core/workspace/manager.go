@@ -1095,6 +1095,36 @@ func (m *Manager) SetFolderMetadata(path string, meta FolderMetadata) error {
 	return os.Rename(tmp, metaPath)
 }
 
+// ListFolderPaths returns paths of all folders that have metadata entries.
+func (m *Manager) ListFolderPaths() ([]string, error) {
+	metaDir := filepath.Join(m.vaultDir, ".verstak", "folder-metadata")
+	entries, err := os.ReadDir(metaDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	paths := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".json") {
+			continue
+		}
+		encoded := strings.TrimSuffix(entry.Name(), ".json")
+		decoded, err := base64.RawURLEncoding.DecodeString(encoded)
+		if err != nil {
+			continue
+		}
+		folderPath := string(decoded)
+		if folderPath == "" || folderPath == "." {
+			continue
+		}
+		paths = append(paths, folderPath)
+	}
+	sort.Strings(paths)
+	return paths, nil
+}
+
 // ─── Tree API ───────────────────────────────────────────────
 
 // GetTree returns a flat tree with nested path-derived ParentID.

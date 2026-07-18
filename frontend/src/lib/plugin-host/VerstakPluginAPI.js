@@ -623,6 +623,10 @@ export function createPluginAPI(pluginId) {
       setMetadata: async function(path, meta) {
         assertActive('folders.setMetadata');
         return callBackendErrorString(pluginId, 'folders.setMetadata', () => App.SetFolderMetadata(path, meta));
+      },
+      listPaths: async function() {
+        assertActive('folders.listPaths');
+        return callBackend(pluginId, 'folders.listPaths', () => App.ListFolderPaths());
       }
     },
 

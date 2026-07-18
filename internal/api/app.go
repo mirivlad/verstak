@@ -2662,6 +2662,18 @@ func (a *App) SetFolderMetadata(path string, meta workspace.FolderMetadata) stri
 	return ""
 }
 
+// ListFolderPaths returns paths of all folders that have metadata.
+func (a *App) ListFolderPaths() ([]string, string) {
+	if a.workspace == nil {
+		return nil, "workspace not initialized"
+	}
+	paths, err := a.workspace.ListFolderPaths()
+	if err != nil {
+		return nil, err.Error()
+	}
+	return paths, ""
+}
+
 // MoveWorkspace moves a workspace to another parent folder.
 func (a *App) MoveWorkspace(id, newParentID string) string {
 	if a.workspace == nil {
