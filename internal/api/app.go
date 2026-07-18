@@ -1113,12 +1113,8 @@ func (a *App) ReloadPlugins() (int, string) {
 		}
 	}
 
-	// Re-register workspace capability if workspace is initialized
-	if a.workspace != nil && a.workspace.IsInitialized() {
-		if err := a.capRegistry.Register(capability.CorePluginID, []string{"verstak/core/workspace/v1"}); err != nil {
-			log.Printf("[api] ReloadPlugins: failed to re-register workspace capability: %v", err)
-		}
-	}
+	// Workspace capability is now a platform-level capability; re-registration is a silent no-op.
+	_ = a.capRegistry.Register(capability.CorePluginID, []string{"verstak/core/workspace/v1"})
 
 	plugins, errs := plugin.DiscoverPlugins(discoveryDirs)
 
@@ -2323,12 +2319,9 @@ func (a *App) SetCurrentVault(path string) string {
 	if err := a.capRegistry.Register("verstak-desktop", []string{"verstak/core/vault/v1"}); err != nil {
 		log.Printf("[api] SetCurrentVault: failed to register vault capability: %v", err)
 	}
-	// Register workspace capability
-	if a.workspace != nil && a.workspace.IsInitialized() {
-		if err := a.capRegistry.Register("verstak-desktop", []string{"verstak/core/workspace/v1"}); err != nil {
-			log.Printf("[api] SetCurrentVault: failed to register workspace capability: %v", err)
-		}
-	}
+	// Workspace capability is registered as a platform capability at startup;
+	// vault-time registration here is a no-op guard for late initialisation.
+	_ = a.capRegistry.Register("verstak-desktop", []string{"verstak/core/workspace/v1"})
 	a.startFileWatcherForOpenVault()
 	return ""
 }
