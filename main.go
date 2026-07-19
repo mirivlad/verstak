@@ -99,14 +99,6 @@ func main() {
 	}
 	log.Printf("[main] registered vault capability")
 
-	// Register workspace capability (only when vault is open and workspace initialized)
-	if workspaceMgr != nil && workspaceMgr.IsInitialized() {
-		if err := capRegistry.Register(corePluginID, []string{"verstak/core/workspace/v1"}); err != nil {
-			log.Fatalf("[main] failed to register workspace capability: %v", err)
-		}
-		log.Printf("[main] registered workspace capability")
-	}
-
 	// ─── Plugin Discovery ───────────────────────────────────
 	discoveryDirs := plugin.DefaultDiscoveryDirs()
 	log.Printf("[main] plugin dirs: %v", discoveryDirs)
