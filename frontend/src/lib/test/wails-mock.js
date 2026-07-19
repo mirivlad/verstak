@@ -3832,7 +3832,7 @@ import journalSource from '../../../../../verstak-official-plugins/plugins/journ
       return Promise.resolve(listWorkspacesFromTree());
     },
     ListWorkspaceTemplates: function () {
-      return Promise.resolve([builtInWorkspaceTemplates().map(function (template) {
+      return Promise.resolve(builtInWorkspaceTemplates().map(function (template) {
         return {
           id: template.id,
           name: template.name,
@@ -3840,7 +3840,7 @@ import journalSource from '../../../../../verstak-official-plugins/plugins/journ
           version: template.version,
           workspaceTools: template.workspaceTools.slice()
         };
-      }), '']);
+      }));
     },
     CreateWorkspace: function (name, templateID) {
       var norm = normalizeVaultPath(name, false);

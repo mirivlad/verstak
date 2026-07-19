@@ -62,7 +62,7 @@
 
   async function loadTemplates() {
     try {
-      const [tlist] = (await App.ListWorkspaceTemplates()) || [[]];
+      const tlist = await App.ListWorkspaceTemplates();
       templates = Array.isArray(tlist) ? tlist : [];
     } catch { templates = []; }
   }

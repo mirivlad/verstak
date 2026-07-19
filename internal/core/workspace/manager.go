@@ -317,7 +317,13 @@ func (m *Manager) ListWorkspaces() ([]Workspace, error) {
 		if !entry.IsDir() {
 			continue
 		}
-		workspaceID, err := ensureWorkspaceIdentity(filepath.Join(m.vaultDir, name))
+		// Skip organizational folders (identified by .verstak/folder.json).
+		// ensureWorkspaceIdentity would otherwise write a workspace.json into them.
+		fullPath := filepath.Join(m.vaultDir, name)
+		if _, err := os.Stat(filepath.Join(fullPath, ".verstak", "folder.json")); err == nil {
+			continue
+		}
+		workspaceID, err := ensureWorkspaceIdentity(fullPath)
 		if err != nil {
 			return nil, err
 		}
