@@ -2309,6 +2309,10 @@ func (a *App) SetCurrentVault(path string) string {
 	if err := a.workspace.Load(); err != nil {
 		log.Printf("[api] SetCurrentVault: warning loading workspace: %v", err)
 	}
+	// Stop old treeV2 before creating a new one (vault switch).
+	if a.treeV2 != nil {
+		a.treeV2.Stop()
+	}
 	// Initialize V2 workspace tree.
 	a.treeV2 = workspacetree.NewService(vaultPath, a.eventBus)
 	if err := a.treeV2.Initialize(); err != nil {
@@ -2348,6 +2352,16 @@ func (a *App) startFileWatcherForOpenVault() {
 	}
 	if a.fileWatcher == nil {
 		a.fileWatcher = filewatcher.NewService(a.eventBus, 0)
+	}
+
+	// Initialize treeV2 if not already set (covers auto-open on startup).
+	if a.treeV2 == nil {
+		vaultPath := a.vault.GetVaultPath()
+		a.treeV2 = workspacetree.NewService(vaultPath, a.eventBus)
+		if err := a.treeV2.Initialize(); err != nil {
+			log.Printf("[api] startFileWatcher: warning initializing tree v2: %v", err)
+		}
+		a.treeV2.StartRescanLoop()
 	}
 
 	// Wire structural change callback → tree reconciliation.
