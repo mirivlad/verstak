@@ -81,6 +81,8 @@ export function GetWorkspaceByID(arg1:string):Promise<Record<string, any>>;
 
 export function GetWorkspaceMetadata(arg1:string):Promise<workspace.Metadata|string>;
 
+export function GetWorkspaceMetadataByUUID(arg1:string):Promise<workspace.Metadata|string>;
+
 export function GetWorkspaceTree():Promise<Record<string, any>>;
 
 export function GetWorkspaceTreeDiagnostics():Promise<Array<workspacetree.TreeDiagnostic>>;

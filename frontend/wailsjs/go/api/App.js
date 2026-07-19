@@ -142,6 +142,10 @@ export function GetWorkspaceMetadata(arg1) {
   return window['go']['api']['App']['GetWorkspaceMetadata'](arg1);
 }
 
+export function GetWorkspaceMetadataByUUID(arg1) {
+  return window['go']['api']['App']['GetWorkspaceMetadataByUUID'](arg1);
+}
+
 export function GetWorkspaceTree() {
   return window['go']['api']['App']['GetWorkspaceTree']();
 }
