@@ -198,6 +198,20 @@
   function findNodeParentID(id) { return parentIDFor(tree.roots, id); }
   function parentIDFor(nodes, id) { for (const n of nodes) { if (n.children) for (const c of n.children) { if (c.id === id) return n.id; } const f = parentIDFor(n.children, id); if (f) return f; } return ''; }
 
+  // ── Template plugin display ─────────────────────────────────────────────────
+  const PLUGIN_NAMES = {
+    'verstak.notes': 'Заметки', 'verstak.files': 'Файлы', 'verstak.journal': 'Журнал',
+    'verstak.activity': 'Активность', 'verstak.browser-inbox': 'Браузер',
+    'verstak.todo': 'Задачи', 'verstak.secrets': 'Секреты',
+  };
+  function pluginDisplayName(pluginId) {
+    const key = pluginId.replace('verstak.', '');
+    return tr(`plugin.${key}`, undefined, PLUGIN_NAMES[pluginId] || pluginId);
+  }
+  function pluginAvailable(pluginId) {
+    return true; // plugins are loaded by core; availability checked at contribution filtering time
+  }
+
   function onKeyDown(e) { if (e.key === "Escape") { closeCtx(); closeModal(); resetDragState(); } }
 </script>
 
@@ -280,6 +294,19 @@
   <label class="vt-field"><span>{tr('workspaceTree.location')}</span><Select options={flatFolders(tree.roots).map(f => ({ value: f.id, label: f.path }))} placeholder={tr('workspaceTree.root')} bind:value={formParentId} labelKey="label" valueKey="value" /></label>
   <label class="vt-field"><span>{tr('workspaceTree.name')}</span><input class="vt-input" type="text" bind:value={formName} placeholder={tr('workspaceTree.namePlaceholder')} disabled={formBusy} on:keydown={(e) => e.key === 'Enter' && doCreateWorkspace()} /></label>
   <label class="vt-field"><span>{tr('workspaceTree.template')}</span><Select options={templates} bind:value={formTemplateId} labelKey="name" valueKey="id" /></label>
+  {@const st = templates.find(t => t.id === formTemplateId)}
+  {#if st}
+    <div class="vt-template-info">
+      {#if st.description}<p class="vt-template-desc">{st.description}</p>{/if}
+      {#if st.workspaceTools?.length}
+        <div class="vt-template-badges">
+          {#each st.workspaceTools as pt}
+            <span class="vt-badge vt-tool-badge" class:vt-tool-unavailable={!pluginAvailable(pt)} title={pt}>{pluginDisplayName(pt)}</span>
+          {/each}
+        </div>
+      {/if}
+    </div>
+  {/if}
   {#if formError}<p class="vt-ferr">{formError}</p>{/if}
   <svelte:fragment slot="actions"><button class="vt-btn" on:click={closeModal} disabled={formBusy}>{tr('common.cancel')}</button><button class="vt-btn-p" on:click={doCreateWorkspace} disabled={formBusy}>{tr('common.create')}</button></svelte:fragment>
 </Modal>
@@ -346,4 +373,9 @@
   .vt-ctx-s { height: 1px; background: var(--vt-color-border); margin: 0.2rem 0.3rem; }
   .vt-ctx-d { color: var(--vt-color-danger); }
   .vt-ctx-d:hover { background: var(--vt-color-danger-muted); }
+  .vt-template-info { margin: var(--vt-space-2) 0; }
+  .vt-template-desc { color: var(--vt-color-text-secondary); font-size: 0.8rem; line-height: 1.4; margin-bottom: var(--vt-space-2); }
+  .vt-template-badges { display: flex; flex-wrap: wrap; gap: 0.35rem; }
+  .vt-tool-badge { font-size: 0.72rem; padding: 0.15rem 0.5rem; }
+  .vt-tool-unavailable { opacity: 0.45; border-color: var(--vt-color-warning); color: var(--vt-color-warning); }
 </style>

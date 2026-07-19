@@ -42,6 +42,7 @@
 
   let workspaceNodes = [];
   let selectedWorkspaceName = '';
+  let selectedWorkspaceId = '';
   let activeWorkspaceToolKey = '';
   let navigationStack = [];
   let navigationIndex = -1;
@@ -83,6 +84,7 @@
 
   function clearWorkspaceSelection() {
     selectedWorkspaceName = '';
+    selectedWorkspaceId = '';
     emitWorkspaceActive('');
   }
 
@@ -310,6 +312,7 @@
     const id = e.detail?.workspaceId || '';
     debug.log('[App] onWorkspaceSelected:', name, id);
     selectedWorkspaceName = name;
+    selectedWorkspaceId = id;
     workspaceNodes = e.detail?.nodes || workspaceNodes;
     if (selectedWorkspaceName || id) {
       activeView = null;
@@ -445,6 +448,7 @@
         {:else if currentView === 'workspace' || currentView === 'workspace-empty'}
           <WorkspaceHost
             selectedWorkspaceName={selectedWorkspaceName}
+            selectedWorkspaceId={selectedWorkspaceId}
             nodes={workspaceNodes}
             bind:activeToolKey={activeWorkspaceToolKey}
           />

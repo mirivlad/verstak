@@ -7,6 +7,7 @@
 
   export let selectedWorkspaceName = '';
   export let nodes = [];
+  export let selectedWorkspaceId = '';
   export let activeToolKey = '';
 
   let contributions = {};
@@ -40,10 +41,16 @@
     ['search', 90],
   ]);
 
+  // Resolve workspace: try flat nodes first, then UUID-based lookup.
   $: selectedWorkspace = nodes.find(n => n.id === selectedWorkspaceName || n.name === selectedWorkspaceName || n.rootPath === selectedWorkspaceName) || null;
-  $: workspaceRootPath = selectedWorkspace?.rootPath || selectedWorkspace?.name || selectedWorkspace?.id || '';
-  $: workspaceId = selectedWorkspace?.workspaceId || '';
+  $: workspaceRootPath = selectedWorkspace?.rootPath || selectedWorkspace?.name || selectedWorkspace?.id || selectedWorkspaceName || '';
+  $: workspaceId = selectedWorkspace?.workspaceId || selectedWorkspaceId || '';
   $: workspaceTitle = selectedWorkspace?.title || selectedWorkspace?.name || selectedWorkspace?.id || selectedWorkspaceName;
+
+  // If flat nodes lookup failed but we have a UUID, resolve via backend.
+  $: if (!selectedWorkspace && selectedWorkspaceId && workspaceRootPath) {
+    resolveWorkspaceByUUID(selectedWorkspaceId);
+  }
   $: if (workspaceRootPath !== metadataWorkspaceRoot) {
     metadataWorkspaceRoot = workspaceRootPath;
     workspaceMetadata = null;
@@ -133,6 +140,26 @@
       workspaceMetadata = err ? null : metadata;
     } catch (_) {
       if (rootPath === workspaceRootPath) workspaceMetadata = null;
+    }
+  }
+
+  let resolvingUUID = '';
+  async function resolveWorkspaceByUUID(uuid) {
+    if (!uuid || uuid === resolvingUUID) return;
+    resolvingUUID = uuid;
+    try {
+      const ws = await App.GetWorkspaceByID(uuid);
+      if (ws && ws.rootPath && uuid === selectedWorkspaceId) {
+        // Create a synthetic node for the flat nodes array
+        const synth = { id: ws.rootPath, workspaceId: uuid, name: ws.name, rootPath: ws.rootPath, title: ws.name || ws.rootPath };
+        nodes = [...nodes.filter(n => n.workspaceId !== uuid), synth];
+        if (ws.rootPath !== workspaceRootPath) {
+          // Force re-evaluation of reactive bindings
+          selectedWorkspaceName = ws.rootPath;
+        }
+      }
+    } catch {} finally {
+      resolvingUUID = '';
     }
   }
 
