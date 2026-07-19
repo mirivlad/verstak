@@ -54,6 +54,7 @@
     requestedWorkspaceRoot = workspaceRootPath;
     requestedToolRequest = null;
     activeToolRequest = null;
+    activeToolKey = ''; // Clear tool selection for new workspace
   }
   $: displayedTools = selectedWorkspace ? [overviewTool, ...workspaceTools] : [];
   $: activeTool = displayedTools.find(tool => toolKey(tool) === activeToolKey) || displayedTools[0] || null;
