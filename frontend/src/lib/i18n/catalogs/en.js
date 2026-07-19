@@ -305,4 +305,18 @@ export default {
   'overview.time.hours': '{count}h ago',
   'overview.time.yesterday': 'Yesterday',
   'overview.time.days': '{count} days ago',
+  'workspaceTree.editFolder': 'Edit folder',
+  'workspaceTree.appearance': 'Appearance',
+  'workspaceTree.icon': 'Icon',
+  'workspaceTree.color': 'Color',
+  'workspaceTree.iconPicker': 'Choose icon',
+
+  'workspaceTree.iconSearch': 'Search icons',
+
+  'workspaceTree.defaultIcon': 'Default folder icon',
+
+  'workspaceTree.resetColor': 'Default',
+
+  'common.back': 'Back',
+
 };

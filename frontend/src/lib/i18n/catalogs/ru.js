@@ -331,4 +331,18 @@ export default {
   'overview.time.hours': '{count} ч. назад',
   'overview.time.yesterday': 'Вчера',
   'overview.time.days': '{count} дн. назад',
+  'workspaceTree.editFolder': 'Редактировать папку',
+  'workspaceTree.appearance': 'Оформление',
+  'workspaceTree.icon': 'Значок',
+  'workspaceTree.color': 'Цвет',
+  'workspaceTree.iconPicker': 'Выбор значка',
+
+  'workspaceTree.iconSearch': 'Поиск значка',
+
+  'workspaceTree.defaultIcon': 'Стандартный значок папки',
+
+  'workspaceTree.resetColor': 'По умолчанию',
+
+  'common.back': 'Назад',
+
 };

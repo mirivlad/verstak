@@ -16,7 +16,7 @@
   $: tr = ((al) => (k, p, f) => { void al; return i18n.t(k, p, f); })(locale);
 
   // Modal state
-  let modal = null; let formName = ''; let formParentId = ''; let formTemplateId = 'default';
+  let modal = null; let formName = ''; let formParentId = ''; let formTemplateId = 'default'; let folderIconId = ''; let folderColor = ''; let folderEditorView = 'form'; let iconSearch = ''; $: filteredIcons = LUCIDE_ICONS.filter(i => !iconSearch || i.toLowerCase().includes(iconSearch.toLowerCase())).slice(0, 80);
   let formError = ''; let formBusy = false;
   let templates = [];
   let ctxMenu = null;
@@ -136,15 +136,66 @@
   function handleTrash(e) { openTrash(e.detail.kind, e.detail.id, e.detail.name); }
 
   // ── Create/Rename/Move/Trash modals ────────────────────────────────────────
-  function openCreateFolder(pid) { modal = { type: 'create-folder', parentId: pid }; formName = ''; formParentId = pid || ''; formError = ''; formBusy = false; }
+  function openCreateFolder(pid) { modal = { type: 'create-folder', parentId: pid }; formName = ''; formParentId = pid || ''; formError = ''; formBusy = false; folderIconId = ''; folderColor = ''; folderEditorView = 'form'; }
   function openCreateWorkspace(pid) { modal = { type: 'create-workspace', parentId: pid }; formName = ''; formParentId = pid || ''; formTemplateId = templates[0]?.id || 'default'; formError = ''; formBusy = false; }
   function openRename(kind, id, name) { modal = { type: 'rename', kind, id }; formName = name; formError = ''; formBusy = false; }
   function openTrash(kind, id, name) { modal = { type: 'trash', kind, id, name }; formBusy = false; }
+  function openEditFolder(id, name) {
+    modal = { type: 'edit-folder', id };
+    formName = name;
+    folderIconId = ''; folderColor = '';
+    folderEditorView = 'form';
+    formError = ''; formBusy = false;
+    loadFolderAppearance(id);
+  }
+  async function loadFolderAppearance(folderId) {
+    try {
+      const reg = window.__VERSTAK_PLUGIN_REGISTRY__;
+      const comp = reg && reg['verstak.folder-appearance'];
+      if (!comp) return;
+      const api = window.createPluginAPI('verstak.folder-appearance');
+      if (api && api.folders && api.folders.getAppearance) {
+        const a = await api.folders.getAppearance(folderId);
+        folderIconId = a.iconId || '';
+        folderColor = a.colorId || '';
+      }
+    } catch {}
+  }
   function closeModal() { if (!formBusy) modal = null; }
 
-  async function doCreateFolder() { const n = formName.trim(); if (!n) { formError = tr('workspaceTree.nameRequired'); return; } formBusy = true; const r = await App.CreateFolderV2(formParentId || '', n); if (r?.error) { formError = r.error; formBusy = false; return; } if (formParentId) { expandedIds['folder:' + formParentId] = true; saveExpanded(); } modal = null; await loadTree(); }
+  async function doCreateFolder() { const n = formName.trim(); if (!n) { formError = tr('workspaceTree.nameRequired'); return; } formBusy = true; const r = await App.CreateFolderV2(formParentId || '', n); if (r?.error) { formError = r.error; formBusy = false; return; } if (formParentId) { expandedIds['folder:' + formParentId] = true; saveExpanded(); }
+  const fid = r?.id;
+  if (fid && (folderIconId || folderColor)) {
+    try {
+      const api = window.createPluginAPI('verstak.folder-appearance');
+      if (api && api.folders && api.folders.setAppearance) {
+        await api.folders.setAppearance(fid, { iconId: folderIconId, colorId: folderColor });
+      }
+    } catch {}
+  }
+  modal = null; await loadTree(); }
   async function doCreateWorkspace() { const n = formName.trim(); if (!n) { formError = tr('workspaceTree.nameRequired'); return; } formBusy = true; const r = await App.CreateWorkspaceV2(formParentId || '', n, formTemplateId); if (r?.error) { formError = r.error; formBusy = false; return; } if (formParentId) { expandedIds['folder:' + formParentId] = true; saveExpanded(); } const wid = r?.id; modal = null; await loadTree(); if (wid) await selectWorkspace(wid); }
   async function doRename() { const n = formName.trim(); if (!n) { formError = tr('workspaceTree.nameRequired'); return; } formBusy = true; let err = modal.kind === 'folder' ? await App.RenameFolderV2(modal.id, n) : await App.RenameWorkspaceV2(modal.id, n); if (err) { formError = err; formBusy = false; return; } modal = null; await loadTree(); }
+  function openIconPicker() { folderEditorView = 'icon-picker'; iconSearch = ''; }
+  function selectFolderIcon(id) { folderIconId = id; folderEditorView = 'form'; }
+  function resetFolderColor() { folderColor = ''; }
+
+  async function doEditFolder() {
+    const n = formName.trim();
+    if (!n) { formError = tr('workspaceTree.nameRequired'); return; }
+    formBusy = true;
+    const err = await App.RenameFolderV2(modal.id, n);
+    if (err) { formError = err; formBusy = false; return; }
+    // Save appearance if plugin available
+    try {
+      const api = window.createPluginAPI('verstak.folder-appearance');
+      if (api && api.folders && api.folders.setAppearance) {
+        await api.folders.setAppearance(modal.id, { iconId: folderIconId, colorId: folderColor });
+      }
+    } catch {}
+    modal = null;
+    await loadTree();
+  }
   async function doMove() { formBusy = true; let err = modal.kind === 'folder' ? await App.MoveFolderV2(modal.id, formParentId || '') : await App.MoveWorkspaceV2(modal.id, formParentId || ''); if (err) { formError = err; formBusy = false; return; } modal = null; await loadTree(); }
   async function doTrash() { formBusy = true; if (modal.kind === 'folder') await App.TrashFolderV2(modal.id); else { await App.TrashWorkspaceV2(modal.id); if (activeWid === modal.id) activeWid = ''; } modal = null; await loadTree(); }
 
@@ -218,6 +269,9 @@
   }
 
   function onKeyDown(e) { if (e.key === "Escape") { closeCtx(); closeModal(); resetDragState(); } }
+
+  const LUCIDE_ICONS = ['activity','airplay','alert-circle','alert-triangle','archive','award','banknote','bar-chart','bell','book','book-open','bookmark','box','briefcase','brush','bug','building','calculator','calendar','camera','car','chart-bar','chart-line','check-circle','circle','clipboard','clock','cloud','code','coffee','cog','command','compass','copy','credit-card','database','delete','dollar-sign','download','droplet','edit','external-link','eye','file','file-text','film','filter','flag','flame','folder','gift','git-branch','git-merge','globe','grid','grip','group','hard-drive','hash','heart','help-circle','hexagon','home','image','inbox','info','key','keyboard','laptop','layers','layout','life-buoy','lightbulb','link','list','lock','log-in','log-out','mail','map','map-pin','menu','message-circle','mic','minimize','minus','monitor','moon','more-horizontal','more-vertical','mouse-pointer','move','music','navigation','network','package','palette','paperclip','pause','pen-tool','percent','phone','pie-chart','pin','play','plus','plus-circle','power','printer','radio','refresh','repeat','rocket','rss','save','scissors','search','send','server','settings','share','shield','shopping-bag','shopping-cart','shuffle','sidebar','sliders','smartphone','smile','speaker','square','star','stop-circle','sun','table','tag','target','terminal','thumbs-down','thumbs-up','toggle-left','toggle-right','trash','trello','trending-down','trending-up','triangle','truck','tv','type','umbrella','underline','unlock','upload','user','users','video','volume','wallet','watch','wifi','wind','wrench','zap','zoom-in','zoom-out'];
+
 </script>
 
 <svelte:window on:keydown={onKeyDown} on:mousedown={(e) => { if (e.button === 0 && ctxMenu) closeCtx(); }} />
@@ -273,7 +327,7 @@
       <button class="vt-ctx-i" on:click={() => { const i = ctxMenu.id; closeCtx(); openCreateWorkspace(i); }}>{tr('workspaceTree.newDeal')}</button>
       <button class="vt-ctx-i" on:click={() => { const i = ctxMenu.id; closeCtx(); openCreateFolder(i); }}>{tr('workspaceTree.newFolder')}</button>
       <div class="vt-ctx-s" />
-      <button class="vt-ctx-i" on:click={() => { const {id: i, name: n} = ctxMenu; closeCtx(); openRename('folder', i, n); }}>{tr('workspaceTree.renameFolder')}</button>
+      <button class="vt-ctx-i" on:click={() => { const {id: i, name: n} = ctxMenu; closeCtx(); openEditFolder(i, n); }}>{tr('workspaceTree.editFolder')}</button>
       <button class="vt-ctx-i vt-ctx-d" on:click={() => { const {id: i, name: n} = ctxMenu; closeCtx(); openTrash('folder', i, n); }}>{tr('workspaceTree.trashFolder')}</button>
     {:else}
       <button class="vt-ctx-i" on:click={() => { const i = ctxMenu.id; closeCtx(); selectWorkspace(i); }}>{tr('workspaceTree.open')}</button>
@@ -284,11 +338,78 @@
 {/if}
 
 <!-- Modals -->
-<Modal title={tr('workspaceTree.newFolder')} show={modal?.type === 'create-folder'} on:close={closeModal}>
-  <label class="vt-field"><span>{tr('workspaceTree.location')}</span><Select options={flatFolders(tree.roots).map(f => ({ value: f.id, label: f.path }))} placeholder={tr('workspaceTree.root')} bind:value={formParentId} labelKey="label" valueKey="value" /></label>
-  <label class="vt-field"><span>{tr('workspaceTree.folderName')}</span><input class="vt-input" type="text" bind:value={formName} placeholder={tr('workspaceTree.folderNamePlaceholder')} disabled={formBusy} on:keydown={(e) => e.key === 'Enter' && doCreateFolder()} /></label>
-  {#if formError}<p class="vt-ferr">{formError}</p>{/if}
-  <svelte:fragment slot="actions"><button class="vt-btn" on:click={closeModal} disabled={formBusy}>{tr('common.cancel')}</button><button class="vt-btn-p" on:click={doCreateFolder} disabled={formBusy}>{tr('common.create')}</button></svelte:fragment>
+<Modal title={folderEditorView === 'icon-picker' ? tr('workspaceTree.iconPicker') : tr('workspaceTree.newFolder')} show={modal?.type === 'create-folder'} on:close={folderEditorView === 'icon-picker' ? () => { folderEditorView = 'form'; } : closeModal}>
+  {#if folderEditorView === 'icon-picker'}
+    <label class="vt-field"><span>{tr('workspaceTree.iconSearch')}</span><input class="vt-input" type="text" bind:value={iconSearch} placeholder={tr('workspaceTree.iconSearch') + '...'} /></label>
+    <div class="vt-icon-grid">
+      <button type="button" class="vt-icon-item" class:vt-icon-selected={!folderIconId} on:click={() => selectFolderIcon('')}><Icon name="folder" size={20} /><span>{tr('workspaceTree.defaultIcon')}</span></button>
+      {#each filteredIcons as icon}
+        <button type="button" class="vt-icon-item" class:vt-icon-selected={folderIconId === icon} on:click={() => selectFolderIcon(icon)}><Icon name={icon} size={20} /><span>{icon}</span></button>
+      {/each}
+    </div>
+  {:else}
+    <label class="vt-field"><span>{tr('workspaceTree.location')}</span><Select options={flatFolders(tree.roots).map(f => ({ value: f.id, label: f.path }))} placeholder={tr('workspaceTree.root')} bind:value={formParentId} labelKey="label" valueKey="value" /></label>
+    <label class="vt-field"><span>{tr('workspaceTree.folderName')}</span><input class="vt-input" type="text" bind:value={formName} placeholder={tr('workspaceTree.folderNamePlaceholder')} disabled={formBusy} on:keydown={(e) => e.key === 'Enter' && doCreateFolder()} /></label>
+    <label class="vt-field"><span>{tr('workspaceTree.appearance')}</span>
+      <div class="vt-appearance-row">
+        <button type="button" class="vt-appearance-btn" on:click={openIconPicker} disabled={formBusy}>
+          <Icon name={folderIconId || 'folder'} size={18} style="color:{folderColor || ''}" />
+          <span>{folderIconId || tr('workspaceTree.defaultIcon')}</span>
+        </button>
+        <div class="vt-color-row">
+          <input type="color" bind:value={folderColor} disabled={formBusy} class="vt-color-native" />
+          <input class="vt-input vt-color-hex" type="text" bind:value={folderColor} placeholder="#RRGGBB" disabled={formBusy} />
+          <button type="button" class="vt-btn" on:click={resetFolderColor} disabled={formBusy}>{tr('workspaceTree.resetColor')}</button>
+        </div>
+      </div>
+    </label>
+    {#if formError}<p class="vt-ferr">{formError}</p>{/if}
+  {/if}
+  <svelte:fragment slot="actions">
+    {#if folderEditorView === 'icon-picker'}
+      <button type="button" class="vt-btn" on:click={() => { folderEditorView = 'form'; }}>{tr('common.back')}</button>
+    {:else}
+      <button type="button" class="vt-btn" on:click={closeModal} disabled={formBusy}>{tr('common.cancel')}</button>
+      <button class="vt-btn-p" on:click={doCreateFolder} disabled={formBusy}>{tr('common.create')}</button>
+    {/if}
+  </svelte:fragment>
+</Modal>
+
+
+<Modal title={folderEditorView === 'icon-picker' ? tr('workspaceTree.iconPicker') : tr('workspaceTree.editFolder')} show={modal?.type === 'edit-folder'} on:close={folderEditorView === 'icon-picker' ? () => { folderEditorView = 'form'; } : closeModal}>
+  {#if folderEditorView === 'icon-picker'}
+    <label class="vt-field"><span>{tr('workspaceTree.iconSearch')}</span><input class="vt-input" type="text" bind:value={iconSearch} placeholder={tr('workspaceTree.iconSearch') + '...'} /></label>
+    <div class="vt-icon-grid">
+      <button type="button" class="vt-icon-item" class:vt-icon-selected={!folderIconId} on:click={() => selectFolderIcon('')}><Icon name="folder" size={20} /><span>{tr('workspaceTree.defaultIcon')}</span></button>
+      {#each filteredIcons as icon}
+        <button type="button" class="vt-icon-item" class:vt-icon-selected={folderIconId === icon} on:click={() => selectFolderIcon(icon)}><Icon name={icon} size={20} /><span>{icon}</span></button>
+      {/each}
+    </div>
+  {:else}
+    <label class="vt-field"><span>{tr('workspaceTree.folderName')}</span><input class="vt-input" type="text" bind:value={formName} placeholder={tr('workspaceTree.folderNamePlaceholder')} disabled={formBusy} on:keydown={(e) => e.key === 'Enter' && doEditFolder()} /></label>
+    <label class="vt-field"><span>{tr('workspaceTree.appearance')}</span>
+      <div class="vt-appearance-row">
+        <button type="button" class="vt-appearance-btn" on:click={openIconPicker} disabled={formBusy}>
+          <Icon name={folderIconId || 'folder'} size={18} style="color:{folderColor || ''}" />
+          <span>{folderIconId || tr('workspaceTree.defaultIcon')}</span>
+        </button>
+        <div class="vt-color-row">
+          <input type="color" bind:value={folderColor} disabled={formBusy} class="vt-color-native" />
+          <input class="vt-input vt-color-hex" type="text" bind:value={folderColor} placeholder="#RRGGBB" disabled={formBusy} />
+          <button type="button" class="vt-btn" on:click={resetFolderColor} disabled={formBusy}>{tr('workspaceTree.resetColor')}</button>
+        </div>
+      </div>
+    </label>
+    {#if formError}<p class="vt-ferr">{formError}</p>{/if}
+  {/if}
+  <svelte:fragment slot="actions">
+    {#if folderEditorView === 'icon-picker'}
+      <button type="button" class="vt-btn" on:click={() => { folderEditorView = 'form'; }}>{tr('common.back')}</button>
+    {:else}
+      <button type="button" class="vt-btn" on:click={closeModal} disabled={formBusy}>{tr('common.cancel')}</button>
+      <button class="vt-btn-p" on:click={doEditFolder} disabled={formBusy}>{tr('common.save')}</button>
+    {/if}
+  </svelte:fragment>
 </Modal>
 
 <Modal title={tr('workspaceTree.newDeal')} show={modal?.type === 'create-workspace'} on:close={closeModal} wide>
@@ -373,4 +494,21 @@
   .vt-template-badges { display: flex; flex-wrap: wrap; gap: 0.35rem; }
   .vt-tool-badge { font-size: 0.72rem; padding: 0.15rem 0.5rem; }
   .vt-tool-unavailable { opacity: 0.45; border-color: var(--vt-color-warning); color: var(--vt-color-warning); }
+
+  .vt-appearance-row { display: flex; gap: 8px; }
+  .vt-appearance-btn { display: inline-flex; align-items: center; gap: 6px; min-height: 2rem; padding: 4px 10px; border: 1px solid var(--vt-color-border); border-radius: var(--vt-radius-sm); background: var(--vt-color-surface); color: var(--vt-color-text-secondary); cursor: pointer; font-size: .78rem; }
+  .vt-appearance-btn:hover { border-color: var(--vt-color-accent); }
+  .vt-color-swatch { width: 16px; height: 16px; border-radius: 50%; border: 1px solid var(--vt-color-border); }
+
+
+  .vt-appearance-row { display: flex; flex-direction: column; gap: 8px; }
+  .vt-appearance-btn { display: inline-flex; align-items: center; gap: 6px; min-height: 2rem; padding: 4px 10px; border: 1px solid var(--vt-color-border); border-radius: var(--vt-radius-sm); background: var(--vt-color-surface); color: var(--vt-color-text-secondary); cursor: pointer; font-size: .78rem; }
+  .vt-appearance-btn:hover { border-color: var(--vt-color-accent); }
+  .vt-color-row { display: flex; align-items: center; gap: 6px; }
+  .vt-color-native { width: 2rem; height: 2rem; cursor: pointer; border: 1px solid var(--vt-color-border); border-radius: var(--vt-radius-sm); background: none; padding: 2px; }
+  .vt-color-hex { width: 7rem; }
+  .vt-icon-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(5rem, 1fr)); gap: 4px; margin-top: 8px; }
+  .vt-icon-item { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 6px 4px; border: 1px solid transparent; border-radius: var(--vt-radius-sm); background: transparent; color: var(--vt-color-text-secondary); cursor: pointer; font-size: .65rem; }
+  .vt-icon-item:hover { border-color: var(--vt-color-accent); background: var(--vt-color-accent-muted); }
+  .vt-icon-selected { border-color: var(--vt-color-accent); background: var(--vt-color-accent-muted); color: var(--vt-color-accent); }
 </style>

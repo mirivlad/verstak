@@ -368,6 +368,32 @@ export function createPluginAPI(pluginId) {
       }
     },
 
+    folders: {
+      getAppearance: async function(folderId) {
+        const data = await callBackend(pluginId, 'folders.getAppearance(' + folderId + ')', function() {
+          return App.ReadPluginDataJSON(pluginId, 'appearance');
+        });
+        return (data && data.folders && data.folders[folderId]) || { iconId: '', colorId: '' };
+      },
+      setAppearance: function(folderId, appearance) {
+        assertActive('folders.setAppearance(' + folderId + ')');
+        return callBackend(pluginId, 'folders.setAppearance(' + folderId + ')', function() {
+          return App.ReadPluginDataJSON(pluginId, 'appearance');
+        }).then(function(data) {
+          data = data || {};
+          data.folders = data.folders || {};
+          if (appearance && (appearance.iconId || appearance.colorId)) {
+            data.folders[folderId] = { iconId: appearance.iconId || '', colorId: appearance.colorId || '' };
+          } else {
+            delete data.folders[folderId];
+          }
+          return callBackendErrorString(pluginId, 'folders.setAppearance.save', function() {
+            return App.WritePluginDataJSON(pluginId, 'appearance', data);
+          });
+        });
+      }
+    },
+
     files: {
       list: function(relativeDir) {
         assertActive('files.list');
