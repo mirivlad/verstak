@@ -38,6 +38,7 @@ import (
 	"github.com/verstak/verstak-desktop/internal/core/vault"
 	coreworkbench "github.com/verstak/verstak-desktop/internal/core/workbench"
 	"github.com/verstak/verstak-desktop/internal/core/workspace"
+	"github.com/verstak/verstak-desktop/internal/core/workspacetree"
 	"github.com/verstak/verstak-desktop/internal/shell/debug"
 )
 
@@ -94,6 +95,7 @@ type App struct {
 	pluginState         *pluginstate.Manager
 	workbench           *coreworkbench.Router
 	workspace           *workspace.Manager
+	treeV2              *workspacetree.Service
 	syncSvc             *syncsvc.Service
 	browserReceiver     *browserreceiver.Receiver
 	secretsSession      *coresecrets.VaultSession
@@ -2307,6 +2309,12 @@ func (a *App) SetCurrentVault(path string) string {
 	if err := a.workspace.Load(); err != nil {
 		log.Printf("[api] SetCurrentVault: warning loading workspace: %v", err)
 	}
+	// Initialize V2 workspace tree.
+	a.treeV2 = workspacetree.NewService(vaultPath, a.eventBus)
+	if err := a.treeV2.Initialize(); err != nil {
+		log.Printf("[api] SetCurrentVault: warning initializing workspace tree v2: %v", err)
+	}
+	a.treeV2.StartRescanLoop()
 	// Register vault capability
 	if err := a.capRegistry.Register("verstak-desktop", []string{"verstak/core/vault/v1"}); err != nil {
 		log.Printf("[api] SetCurrentVault: failed to register vault capability: %v", err)
@@ -2363,6 +2371,10 @@ func (a *App) scheduleSnapshotScan() {
 	a.syncScanTimer = time.AfterFunc(snapshotScanDebounce, func() {
 		if _, err := a.scanLocalChanges(); err != nil {
 			log.Printf("[api] watcher sync snapshot scan failed: %v", err)
+		}
+		// Notify the v2 workspace tree of filesystem changes.
+		if a.treeV2 != nil {
+			a.treeV2.OnFileChanged()
 		}
 	})
 	a.syncTimerMu.Unlock()
@@ -2733,6 +2745,74 @@ func (a *App) SetCurrentWorkspaceNode(id string) string {
 		return err.Error()
 	}
 	return ""
+}
+
+// ─── Workspace Tree V2 API ──────────────────────────────────
+
+// GetWorkspaceTreeV2 returns the UUID-based tree for the sidebar.
+func (a *App) GetWorkspaceTreeV2() map[string]interface{} {
+	if a.treeV2 == nil {
+		return map[string]interface{}{"status": "not initialized"}
+	}
+	tree := a.treeV2.GetTree()
+	return map[string]interface{}{
+		"roots":              tree.Roots,
+		"currentWorkspaceId": tree.CurrentWorkspaceID,
+		"revision":           tree.Revision,
+		"warnings":           tree.Warnings,
+	}
+}
+
+// GetWorkspaceByID returns a single workspace by its durable UUID.
+func (a *App) GetWorkspaceByID(id string) map[string]interface{} {
+	if a.treeV2 == nil {
+		return map[string]interface{}{"error": "not initialized"}
+	}
+	ws, ok := a.treeV2.GetWorkspaceByID(id)
+	if !ok {
+		return map[string]interface{}{"error": "not found"}
+	}
+	return map[string]interface{}{
+		"id":       ws.ID,
+		"name":     ws.Name,
+		"rootPath": ws.RootPath,
+	}
+}
+
+// GetFolderByID returns a single folder by its durable UUID.
+func (a *App) GetFolderByID(id string) map[string]interface{} {
+	if a.treeV2 == nil {
+		return map[string]interface{}{"error": "not initialized"}
+	}
+	f, ok := a.treeV2.GetFolderByID(id)
+	if !ok {
+		return map[string]interface{}{"error": "not found"}
+	}
+	return map[string]interface{}{
+		"id":       f.ID,
+		"name":     f.Name,
+		"path":     f.Path,
+		"parentId": f.ParentID,
+	}
+}
+
+// RescanWorkspaceTree triggers an immediate full tree rebuild.
+func (a *App) RescanWorkspaceTree() string {
+	if a.treeV2 == nil {
+		return "not initialized"
+	}
+	if err := a.treeV2.RescanWorkspaceTree(); err != nil {
+		return err.Error()
+	}
+	return ""
+}
+
+// GetWorkspaceTreeDiagnostics returns current tree warnings.
+func (a *App) GetWorkspaceTreeDiagnostics() []workspacetree.TreeDiagnostic {
+	if a.treeV2 == nil {
+		return nil
+	}
+	return a.treeV2.GetWorkspaceTreeDiagnostics()
 }
 
 // ─── Vault Plugin State API ────────────────────────────────
