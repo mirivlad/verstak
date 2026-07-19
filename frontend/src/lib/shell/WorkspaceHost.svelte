@@ -1,6 +1,5 @@
 <script>
   import PluginBundleHost from '../plugin-host/PluginBundleHost.svelte';
-  import GlobalSearch from './GlobalSearch.svelte';
   import TodaySurface from './TodaySurface.svelte';
   import * as App from '../../../wailsjs/go/api/App';
   import { onDestroy, onMount } from 'svelte';
@@ -207,9 +206,6 @@
       <div class="workspace-title-group">
         <span class="workspace-title vt-page-title">{workspaceTitle}</span>
       </div>
-      <div class="workspace-search" aria-label={tr('workspace.search')}>
-        <GlobalSearch />
-      </div>
     </div>
 
     {#if displayedTools.length > 0}
@@ -292,37 +288,10 @@
     font-weight: 600;
   }
 
-  .workspace-search {
-    width: min(27rem, 46vw);
-    min-width: 16rem;
-    flex-shrink: 1;
-  }
-
-  .workspace-search :global(.global-search) {
-    padding: 0;
-    border-bottom: 0;
-  }
-
-  .workspace-search :global(.global-search-box) {
-    background: #0f1424;
-    border-color: var(--vt-color-border-strong);
-  }
-
-  .workspace-search :global(.global-search-results) {
-    left: 0;
-    right: 0;
-    top: calc(100% + 0.35rem);
-  }
-
   @media (max-width: 720px) {
     .workspace-header {
       align-items: stretch;
       flex-direction: column;
-    }
-
-    .workspace-search {
-      width: 100%;
-      min-width: 0;
     }
   }
 
