@@ -68,7 +68,7 @@ test.describe('F: Default Editor Plugin', () => {
     await expect(secrets.locator('.secrets-item.active .secrets-item-title')).toHaveText('Target secret');
     await expect(secrets.locator('.secrets-card h2')).toHaveText('Target secret');
 
-    await page.locator('.workbench-host .close-btn').click();
+    await page.locator('.main-content-header .close-btn').click();
     await expect(note).toBeVisible({ timeout: 10000 });
     await expect(note.locator('[data-preview]')).toContainText('Target secret');
     await expect(note.locator('[data-editor-textarea]')).toHaveCount(0);
@@ -174,8 +174,7 @@ test.describe('F: Default Editor Plugin', () => {
 
     const workbench = page.locator('.workbench-host');
     await expect(workbench).toBeVisible({ timeout: 10000 });
-    const title = workbench.locator('.workbench-title');
-    await expect(title).toHaveText('readme.md');
+    await expect(page.locator('.main-content-title-text')).toHaveText('readme.md');
   });
 
   test('opening a note uses its title rather than its technical path', async ({ page }) => {
@@ -192,8 +191,7 @@ test.describe('F: Default Editor Plugin', () => {
 
     const workbench = page.locator('.workbench-host');
     await expect(workbench).toBeVisible({ timeout: 10000 });
-    const title = workbench.locator('.workbench-title');
-    await expect(title).toHaveText('Overview');
+    await expect(page.locator('.main-content-title-text')).toHaveText('Overview');
   });
 
   test('default-editor plugin is listed as loaded in plugin manager', async ({ page }) => {

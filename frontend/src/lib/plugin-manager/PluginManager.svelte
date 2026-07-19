@@ -178,10 +178,18 @@
   }
 
   onMount(() => {
+    window.dispatchEvent(new CustomEvent('verstak:content-title-changed', {
+      detail: { title: tr('settings.pluginManager') }
+    }));
     unsubscribeLocale = i18n.subscribe((nextLocale) => {
       const changed = locale !== nextLocale;
       locale = nextLocale;
-      if (changed) loadAll();
+      if (changed) {
+        window.dispatchEvent(new CustomEvent('verstak:content-title-changed', {
+          detail: { title: tr('settings.pluginManager') }
+        }));
+        loadAll();
+      }
     });
     loadAll();
   });
@@ -372,7 +380,6 @@
 
   <header>
     <div class="header-left">
-      <h2>{tr('settings.pluginManager')}</h2>
       {#if vaultStatus.status !== 'unknown'}
         <span class="vault-badge" class:vault-open={vaultStatus.status === 'open'} class:vault-not-created={vaultStatus.status === 'not-created'} class:vault-closed={vaultStatus.status === 'closed'} class:vault-error={vaultStatus.status === 'error'}>
           {tr('vault.label', { status: tr(`vault.status.${vaultStatus.status}`, undefined, vaultStatus.status) })}{#if vaultStatus.path} ({vaultStatus.path}){/if}
@@ -622,7 +629,6 @@
     min-width: 0;
     flex-wrap: wrap;
   }
-  h2 { color: #e0e0e0; font-size: 1.3rem; margin: 0; }
   .vault-badge {
     max-width: 100%;
     font-size: 0.75rem;

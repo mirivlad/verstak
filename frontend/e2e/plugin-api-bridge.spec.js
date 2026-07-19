@@ -58,7 +58,7 @@ test.describe('D: Plugin API bridge', () => {
 
     const workbench = page.locator('.workbench-host');
     await expect(workbench).toBeVisible({ timeout: 10000 });
-    await expect(workbench.locator('.workbench-title')).toHaveText('Overview');
+    await expect(page.locator('.main-content-title-text')).toHaveText('Overview');
   });
 
   test('workbench routes markdown files to default-editor provider', async ({ page }) => {
@@ -75,8 +75,7 @@ test.describe('D: Plugin API bridge', () => {
 
     const workbench = page.locator('.workbench-host');
     await expect(workbench).toBeVisible({ timeout: 10000 });
-    const title = workbench.locator('.workbench-title');
-    await expect(title).toHaveText('readme.md');
+    await expect(page.locator('.main-content-title-text')).toHaveText('readme.md');
   });
 
   test('workbench shows no-provider fallback when no provider matches', async ({ page }) => {

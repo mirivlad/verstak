@@ -60,6 +60,11 @@
   $: if (displayedTools.length > 0 && (!activeToolKey || (toolsLoaded && !displayedTools.some(tool => toolKey(tool) === activeToolKey)))) {
     activeToolKey = toolKey(overviewTool);
   }
+  $: if (selectedWorkspace) {
+    window.dispatchEvent(new CustomEvent('verstak:content-title-changed', {
+      detail: { title: workspaceTitle }
+    }));
+  }
   $: if (requestedToolKind && workspaceTools.length > 0) {
     const match = findWorkspaceTool(requestedToolKind);
     if (match) {
@@ -202,12 +207,6 @@
 
 <div class="workspace-host vt-page">
   {#if selectedWorkspace}
-    <div class="workspace-header vt-page-header">
-      <div class="workspace-title-group">
-        <span class="workspace-title vt-page-title">{workspaceTitle}</span>
-      </div>
-    </div>
-
     {#if displayedTools.length > 0}
       <div class="workspace-tabs vt-tabbar" role="tablist" aria-label={tr('workspace.tools')}>
         {#each displayedTools as tool (tool.id + tool.pluginId)}
@@ -263,36 +262,6 @@
     flex-direction: column;
     height: 100%;
     background: var(--vt-color-background);
-  }
-
-  .workspace-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 1rem;
-    padding: var(--vt-space-2) var(--vt-space-4);
-    border-bottom: 1px solid var(--vt-color-border);
-    flex-shrink: 0;
-  }
-
-  .workspace-title-group {
-    min-width: 0;
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-  }
-
-  .workspace-title {
-    color: var(--vt-color-text-primary);
-    font-size: 0.95rem;
-    font-weight: 600;
-  }
-
-  @media (max-width: 720px) {
-    .workspace-header {
-      align-items: stretch;
-      flex-direction: column;
-    }
   }
 
   .workspace-tabs {

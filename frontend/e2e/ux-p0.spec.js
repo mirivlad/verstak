@@ -19,13 +19,13 @@ test.describe('UX P0 shell flow', () => {
     await expect(page.locator('.workspace-host')).toBeVisible({ timeout: 10000 });
     await expect(page.locator('.plugin-manager')).toHaveCount(0);
     await expect(page.locator('.wt-node.selected .wt-label')).toHaveText('Project');
-    await expect(page.locator('.workspace-title')).toHaveText('Project');
+    await expect(page.locator('.main-content-title-text')).toHaveText('Project');
   });
 
   test('workspace selection and main content stay in sync across plugin manager round trip', async ({ page }) => {
     await page.locator('.wt-label').filter({ hasText: 'Test' }).click();
 
-    await expect(page.locator('.workspace-title')).toHaveText('Test', { timeout: 10000 });
+    await expect(page.locator('.main-content-title-text')).toHaveText('Test', { timeout: 10000 });
     await expect(page.locator('.wt-node.selected .wt-label')).toHaveText('Test');
     await expect(page.locator('.plugin-manager')).toHaveCount(0);
 
@@ -34,7 +34,7 @@ test.describe('UX P0 shell flow', () => {
     await expect(page.locator('.wt-node.selected .wt-label')).toHaveCount(0);
 
     await page.locator('.wt-label').filter({ hasText: 'Project' }).click();
-    await expect(page.locator('.workspace-title')).toHaveText('Project', { timeout: 10000 });
+    await expect(page.locator('.main-content-title-text')).toHaveText('Project', { timeout: 10000 });
     await expect(page.locator('.plugin-manager')).toHaveCount(0);
   });
 

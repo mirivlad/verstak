@@ -349,8 +349,6 @@
 <style>
   .global-search {
     position: relative;
-    padding: 0.55rem 0.75rem;
-    border-bottom: 1px solid var(--vt-color-border);
     flex-shrink: 0;
   }
 

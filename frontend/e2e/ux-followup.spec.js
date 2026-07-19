@@ -11,12 +11,12 @@ test.describe('UX follow-up fixes', () => {
   test('global search stays available after opening tool sidebar views', async ({ page }) => {
     const search = page.locator('[data-global-search-input]');
     await expect(search).toBeVisible();
-    await expect(page.locator('.workspace-header [data-global-search-input]')).toBeVisible();
+    await expect(page.locator('.main-content-header [data-global-search-input]')).toBeVisible();
 
     await page.locator('.sidebar .nav-item').filter({ hasText: 'Activity' }).click();
     await expect(page.locator('.activity-root')).toBeVisible({ timeout: 10000 });
     await expect(search).toBeVisible();
-    await expect(page.locator('.sidebar [data-global-search-input]')).toBeVisible();
+    await expect(page.locator('.main-content-header [data-global-search-input]')).toBeVisible();
 
     await page.locator('.sidebar .nav-item').filter({ hasText: 'Browser' }).click();
     await expect(page.locator('.browser-inbox-root')).toBeVisible({ timeout: 10000 });
@@ -41,7 +41,7 @@ test.describe('UX follow-up fixes', () => {
     await expect(folderResult).toBeVisible({ timeout: 10000 });
     await folderResult.click();
 
-    await expect(page.locator('.workspace-title')).toHaveText('Project', { timeout: 10000 });
+    await expect(page.locator('.main-content-title-text')).toHaveText('Project', { timeout: 10000 });
     await expect(page.getByRole('tab', { name: 'Files' })).toHaveAttribute('aria-selected', 'true');
     await expect(page.locator('.files-root')).toBeVisible();
     await expect(page.locator('.files-breadcrumb')).toContainText('Notes');
@@ -98,7 +98,7 @@ test.describe('UX follow-up fixes', () => {
     const sidebarBox = await page.locator('.sidebar').boundingBox();
     expect(workspaceBox.width).toBeGreaterThan(340);
     expect(workspaceBox.y).toBeGreaterThan(sidebarBox.y + sidebarBox.height - 1);
-    await expect(page.locator('.workspace-header [data-global-search-input]')).toBeVisible();
+    await expect(page.locator('.main-content-header [data-global-search-input]')).toBeVisible();
     await expect(page.getByRole('tab', { name: 'Overview' })).toBeVisible();
 
     const hasHorizontalOverflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);

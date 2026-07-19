@@ -472,7 +472,7 @@ test.describe('G: Files Plugin', () => {
     await page.locator('[data-file-name="Overview.md"]').dblclick();
     await expect(page.locator('[data-editor-mode="notes-markdown"]')).toBeVisible({ timeout: 10000 });
 
-    await page.locator('.workbench-header .close-btn[aria-label="Close"]').click();
+    await page.locator('.main-content-header .close-btn[aria-label="Close"]').click();
     await expect(page.locator('.workspace-host')).toBeVisible({ timeout: 10000 });
     await expect(page.locator('.files-breadcrumb')).toContainText('Notes');
   });
@@ -513,7 +513,7 @@ test.describe('G: Files Plugin', () => {
 
     const workbench = page.locator('.workbench-host');
     await expect(workbench).toBeVisible({ timeout: 10000 });
-    await expect(workbench.locator('.workbench-title')).toHaveText('readme.md');
+    await expect(page.locator('.main-content-title-text')).toHaveText('readme.md');
 
     const preview = page.locator('.de-preview');
     await expect(preview).toBeVisible({ timeout: 10000 });
@@ -535,7 +535,7 @@ test.describe('G: Files Plugin', () => {
 
     const workbench = page.locator('.workbench-host');
     await expect(workbench).toBeVisible({ timeout: 10000 });
-    await expect(workbench.locator('.workbench-title')).toHaveText('Overview');
+    await expect(page.locator('.main-content-title-text')).toHaveText('Overview');
   });
 
   test('files plugin card shows openProviders in contributions', async ({ page }) => {

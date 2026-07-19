@@ -56,6 +56,12 @@
   $: hostPluginId = currentView?.pluginId || activeViewPluginId;
   $: hostComponentId = currentView?.component || null;
 
+  $: if (currentView) {
+    window.dispatchEvent(new CustomEvent('verstak:content-title-changed', {
+      detail: { title: currentView.title }
+    }));
+  }
+
   // Reset render error when view changes
   $: if (activeView) {
     renderError = null;
@@ -85,7 +91,6 @@
       <div class="view" class:degraded={pluginStatus === 'degraded'}>
         <div class="view-header">
           <Icon name={currentView.icon || 'logo'} size={20} class="view-icon" />
-          <h2>{currentView.title}</h2>
         </div>
         <div class="view-content">
           {#if hasFrontend}
@@ -145,12 +150,6 @@
     margin-bottom: 1rem;
     padding-bottom: 0.75rem;
     border-bottom: 1px solid var(--vt-color-border);
-  }
-  .view-header h2 {
-    margin: 0;
-    font-size: 1.2rem;
-    color: var(--vt-color-text-primary);
-    flex: 1;
   }
   :global(.view-icon) {
     width: 1.3rem;

@@ -8,6 +8,7 @@
   import VaultSelection from './lib/shell/VaultSelection.svelte';
   import WorkbenchHost from './lib/shell/WorkbenchHost.svelte';
   import WorkspaceHost from './lib/shell/WorkspaceHost.svelte';
+  import Icon from './lib/ui/Icon.svelte';
   import * as App from '../wailsjs/go/api/App';
   import { debug } from './lib/log/debug.js';
   import { onDestroy, onMount, tick } from 'svelte';
@@ -24,11 +25,20 @@
     return i18n.t(key, params, fallback);
   })(locale);
 
+  $: defaultContentTitle = currentView === 'plugin-manager' ? tr('settings.pluginManager')
+    : currentView === 'workbench' ? (openedResource?.request?.path?.split('/').filter(Boolean).pop() || '')
+    : currentView === 'workspace' && selectedWorkspaceName ? selectedWorkspaceName
+    : '';
+
   let activeView = null;
   let activeViewPluginId = '';
   let activeSettingsPluginId = '';
   let activeSettingsPanelId = '';
   let openedResource = null;
+
+  // Common header title emitted by child views
+  let contentTitle = '';
+  let contentTitleSub = '';
 
   let workspaceNodes = [];
   let selectedWorkspaceName = '';
@@ -362,6 +372,11 @@
     handleHistoryRequest(mouseHistoryDirection(e), e);
   }
 
+  function onContentTitleChanged(e) {
+    contentTitle = e.detail?.title || '';
+    contentTitleSub = e.detail?.subtitle || '';
+  }
+
   // Listen for events
   if (typeof window !== 'undefined') {
     window.addEventListener('verstak:vault-opened', onVaultOpened);
@@ -375,6 +390,7 @@
     window.addEventListener('verstak:navigate-back', onNavigateBack);
     window.addEventListener('verstak:navigate-forward', onNavigateForward);
     window.addEventListener('verstak:close-workbench', onCloseWorkbench);
+    window.addEventListener('verstak:content-title-changed', onContentTitleChanged);
     window.addEventListener('keydown', onGlobalKeydown);
     window.addEventListener('pointerdown', onGlobalMouse, true);
     window.addEventListener('mousedown', onGlobalMouse, true);
@@ -405,9 +421,22 @@
     <CommandPalette />
 
     <section class="content-shell">
-      <div class="content-header">
-        <GlobalSearch />
-      </div>
+      <header class="main-content-header" data-main-content-header>
+        <div class="main-content-title">
+          <span class="main-content-title-text">{contentTitle || defaultContentTitle || tr('workspace.select')}</span>
+          {#if contentTitleSub}
+            <span class="main-content-title-sub">{contentTitleSub}</span>
+          {/if}
+        </div>
+        <div class="main-content-actions">
+          {#if currentView === 'workbench'}
+            <button class="close-btn btn-ghost btn-icon" type="button" title={tr('common.close')} aria-label={tr('common.close')} on:click={() => window.dispatchEvent(new CustomEvent('verstak:close-workbench', { cancelable: true }))}>
+              <Icon name="x" size={18} />
+            </button>
+          {/if}
+          <GlobalSearch />
+        </div>
+      </header>
       <section class="content scroll-surface">
         {#if currentView === 'plugin-manager'}
           <PluginManager {activeSettingsPluginId} {activeSettingsPanelId} />
@@ -852,12 +881,57 @@
     flex-direction: column;
   }
 
-  .content-header {
+  .main-content-header {
     display: flex;
     align-items: center;
-    justify-content: flex-end;
-    padding: 0.5rem 1rem;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: var(--vt-space-2) var(--vt-space-4);
+    border-bottom: 1px solid var(--vt-color-border);
+    background: var(--vt-color-surface-muted);
     flex-shrink: 0;
+    min-height: 2.75rem;
+  }
+
+  .main-content-title {
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+  }
+
+  .main-content-title-text {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--vt-color-text-primary);
+    font-size: var(--vt-font-lg);
+    font-weight: 650;
+  }
+
+  .main-content-title-sub {
+    color: var(--vt-color-text-muted);
+    font-size: var(--vt-font-sm);
+    flex-shrink: 0;
+  }
+
+  .main-content-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-shrink: 0;
+  }
+
+  .close-btn {
+    width: 2rem;
+    height: 2rem;
+    min-height: 0;
+    padding: 0;
+    border-radius: var(--vt-radius-md);
+    color: var(--vt-color-text-secondary);
+    flex-shrink: 0;
+    cursor: pointer;
   }
 
   .content {

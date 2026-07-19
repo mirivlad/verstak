@@ -1,7 +1,6 @@
 <script>
   import { onDestroy } from 'svelte';
   import PluginBundleHost from '../plugin-host/PluginBundleHost.svelte';
-  import Icon from '../ui/Icon.svelte';
   import { i18n } from '../i18n/index.js';
   import { debug } from '../log/debug.js';
 
@@ -32,13 +31,19 @@
     requestContext,
   ].join(':');
 
+  $: if (openedResource?.status === 'no-provider') {
+    window.dispatchEvent(new CustomEvent('verstak:content-title-changed', {
+      detail: { title: resourceTitle, subtitle: tr('workbench.noProvider') }
+    }));
+  } else if (openedResource) {
+    window.dispatchEvent(new CustomEvent('verstak:content-title-changed', {
+      detail: { title: resourceTitle }
+    }));
+  }
+
   function resourceDisplayTitle(path, context) {
     const fileName = String(path || '').split('/').filter(Boolean).pop() || String(path || '');
     return context === 'notes-markdown' ? fileName.replace(/\.(md|markdown)$/i, '') : fileName;
-  }
-
-  function closeWorkbench() {
-    window.dispatchEvent(new CustomEvent('verstak:close-workbench', { cancelable: true }));
   }
 
   onDestroy(unsubscribeLocale);
@@ -46,13 +51,6 @@
 
 <div class="workbench-host vt-page">
   {#if openedResource?.status === 'no-provider'}
-    <div class="workbench-header vt-page-header">
-      <span class="workbench-title vt-page-title">{resourceTitle}</span>
-      <span class="workbench-provider vt-badge">{tr('workbench.noProvider')}</span>
-      <button class="close-btn btn-ghost btn-icon" type="button" title={tr('common.close')} aria-label={tr('common.close')} on:click={closeWorkbench}>
-        <Icon name="x" size={18} />
-      </button>
-    </div>
     <div class="workbench-empty no-provider vt-empty-state" data-workbench-status="no-provider">
       <p class="vt-empty-title">{tr('workbench.noViewer')}</p>
       {#if debug.isEnabled()}
@@ -60,15 +58,6 @@
       {/if}
     </div>
   {:else if openedResource}
-    <div class="workbench-header vt-page-header">
-      <span class="workbench-title vt-page-title">{resourceTitle}</span>
-      {#if debug.isEnabled() && providerId}
-        <span class="workbench-provider vt-badge accent" data-debug-provider>{providerId}</span>
-      {/if}
-      <button class="close-btn btn-ghost btn-icon" type="button" title={tr('common.close')} aria-label={tr('common.close')} on:click={closeWorkbench}>
-        <Icon name="x" size={18} />
-      </button>
-    </div>
     <div class="workbench-content">
       {#key mountKey}
         <PluginBundleHost
@@ -94,47 +83,6 @@
     display: flex;
     flex-direction: column;
     background: var(--vt-color-background);
-  }
-
-  .workbench-header {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-    padding: var(--vt-space-2) var(--vt-space-4);
-    border-bottom: 1px solid var(--vt-color-border);
-    flex-shrink: 0;
-  }
-
-  .workbench-title {
-    color: var(--vt-color-text-primary);
-    font-size: 0.95rem;
-    font-weight: 600;
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .close-btn {
-    width: 2rem;
-    height: 2rem;
-    min-height: 0;
-    padding: 0;
-    border-radius: var(--vt-radius-md);
-    color: var(--vt-color-text-secondary);
-    flex-shrink: 0;
-    cursor: pointer;
-  }
-
-  .close-btn:hover {
-    color: var(--vt-color-text-primary);
-    background: var(--vt-color-surface-hover);
-  }
-
-  .workbench-provider {
-    color: var(--vt-color-accent);
-    font-size: 0.75rem;
-    margin-left: auto;
   }
 
   .workbench-content {
