@@ -3,6 +3,8 @@ package workspacetree
 import (
 	"os"
 	"path/filepath"
+	"sort"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -129,8 +131,59 @@ func (r *Reconciler) run() {
 }
 
 // handleUnmanaged creates folder.json markers for directories without markers.
+// Directories that were previously workspaces (per snapshot) are NOT converted
+// to folders — they contain Notes/Files and should get a diagnostic instead.
 func (r *Reconciler) handleUnmanaged() {
+	// Build a set of paths that were workspaces in the previous snapshot.
+	prevWorkspacePaths := make(map[string]bool)
+	if r.prev != nil {
+		for _, entry := range r.prev.Workspaces {
+			prevWorkspacePaths[entry.Path] = true
+		}
+	}
+
+	// Pre-compute which paths already have .verstak directories before
+	// we start creating markers. This prevents newly-created .verstak
+	// from affecting the ancestor check for sibling directories.
+	existingVerstak := make(map[string]bool)
 	for _, u := range r.scan.Unmanaged {
+		d := filepath.Join(r.vaultDir, filepath.FromSlash(u.Path), ".verstak")
+		if info, err := os.Lstat(d); err == nil && info.IsDir() {
+			existingVerstak[u.Path] = true
+		}
+	}
+
+	// Sort unmanaged directories by depth (shallow first) so parent folders
+	// get markers before their children are processed.
+	sortUnmanagedByDepth(r.scan.Unmanaged)
+
+	for _, u := range r.scan.Unmanaged {
+		// Check if .verstak directory exists — indicates intermediate state.
+		verstakDir := filepath.Join(r.vaultDir, filepath.FromSlash(u.Path), ".verstak")
+		hasVerstakDir := false
+		if info, err := os.Lstat(verstakDir); err == nil && info.IsDir() {
+			hasVerstakDir = true
+		}
+
+		// If this path was previously a workspace, emit diagnostic and skip.
+		// Never auto-convert a former workspace to a folder.
+		if prevWorkspacePaths[u.Path] {
+			r.warnings = append(r.warnings, TreeDiagnostic{
+				Level:   "error",
+				Code:    "workspace-marker-missing",
+				Message: "directory was previously a workspace but marker is now missing: " + u.Path,
+				Path:    u.Path,
+			})
+			continue
+		}
+
+		// If .verstak exists but no valid markers → intermediate state.
+		// Do NOT create folder.json. Wait for next reconciliation cycle.
+		// This handles both copy-in-progress and marker-deletion scenarios.
+		if hasVerstakDir {
+			continue
+		}
+
 		// Skip if already inside a workspace.
 		if r.wsPaths[u.Path] {
 			continue
@@ -146,11 +199,17 @@ func (r *Reconciler) handleUnmanaged() {
 		if insideWS {
 			continue
 		}
+		// Skip if any ancestor had a .verstak directory BEFORE this reconciliation.
+		// This prevents Notes/Files inside a workspace whose marker was deleted
+		// from being converted to organizational folders.
+		if hasVerstakAncestorInSet(u.Path, existingVerstak) {
+			continue
+		}
 
 		absDir := filepath.Join(r.vaultDir, filepath.FromSlash(u.Path))
 
 		// Check .verstak is not corrupted.
-		verstakDir := filepath.Join(absDir, ".verstak")
+		verstakDir = filepath.Join(absDir, ".verstak")
 		if info, err := os.Lstat(verstakDir); err == nil {
 			if !info.IsDir() {
 				r.warnings = append(r.warnings, TreeDiagnostic{
@@ -297,4 +356,23 @@ func isPathPrefix(prefix, target string) bool {
 		return true
 	}
 	return len(target) > len(prefix) && target[:len(prefix)] == prefix && target[len(prefix)] == '/'
+}
+
+// sortUnmanagedByDepth sorts unmanaged directories by path depth (shallow first).
+func sortUnmanagedByDepth(dirs []UnmanagedDirectory) {
+	sort.SliceStable(dirs, func(i, j int) bool {
+		return strings.Count(dirs[i].Path, "/") < strings.Count(dirs[j].Path, "/")
+	})
+}
+
+// hasVerstakAncestorInSet checks if any ancestor of relPath has a .verstak in the given set.
+func hasVerstakAncestorInSet(relPath string, existingVerstak map[string]bool) bool {
+	p := parentPath(relPath)
+	for p != "" {
+		if existingVerstak[p] {
+			return true
+		}
+		p = parentPath(p)
+	}
+	return false
 }

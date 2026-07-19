@@ -200,12 +200,13 @@ func (s *Service) RefreshBaseline() error {
 		return err
 	}
 	s.mu.Lock()
+	defer s.mu.Unlock()
+	// Only replace current if root hasn't changed (e.g. watcher was stopped).
 	if s.root == root {
 		s.current = fresh
 		s.scanErrors = 0
 		s.dirty = false
 	}
-	s.mu.Unlock()
 	return nil
 }
 
@@ -312,7 +313,10 @@ func (s *Service) poll(root string) {
 
 	// If we had errors and this scan succeeded, trigger reconciliation
 	// to catch up on any missed structural changes.
-	if s.dirty && structuralCB != nil {
+	s.mu.Lock()
+	wasDirty := s.dirty
+	s.mu.Unlock()
+	if wasDirty && structuralCB != nil {
 		structuralCB()
 	}
 }

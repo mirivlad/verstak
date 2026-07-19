@@ -2366,12 +2366,8 @@ func (a *App) startFileWatcherForOpenVault() {
 	// Keep sync scan callback for content changes.
 	a.fileWatcher.SetOnChange(a.scheduleSnapshotScan)
 
-	// Refresh watcher baseline from the current filesystem state
-	// AFTER tree initialization, so startup marker adoption is already visible.
-	if err := a.fileWatcher.RefreshBaseline(); err != nil {
-		log.Printf("[api] file watcher baseline refresh failed: %v", err)
-	}
-
+	// Start performs its own initial scan to establish baseline.
+	// Tree initialization (including marker adoption) is already complete.
 	if err := a.fileWatcher.Start(a.vault.GetVaultPath()); err != nil {
 		log.Printf("[api] file watcher start failed: %v", err)
 	}

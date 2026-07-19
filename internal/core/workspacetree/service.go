@@ -150,24 +150,35 @@ func (s *Service) OnFileChanged() {
 }
 
 // BeginInternalMutation marks the start of a core-initiated filesystem mutation.
+// Nested calls are safe — each Begin must be paired with an End.
 func (s *Service) BeginInternalMutation() {
 	atomic.AddInt32(&s.internalMutations, 1)
 }
 
-// EndInternalMutationAndRefreshBaseline marks the end of a core-initiated mutation
-// and triggers an immediate rescan + baseline update without publishing duplicate events.
-// If refreshBaseline is non-nil, it is called after reconciliation to update
-// the low-level file watcher snapshot.
-func (s *Service) EndInternalMutationAndRefreshBaseline(refreshBaseline func() error) error {
-	atomic.AddInt32(&s.internalMutations, -1)
+// IsInternalMutation returns true if suppression is currently active.
+func (s *Service) IsInternalMutation() bool {
+	return atomic.LoadInt32(&s.internalMutations) > 0
+}
+
+// EndInternalMutationAndRefreshBaseline marks the end of a core-initiated mutation.
+// Suppression remains active through reconciliation AND watcher baseline refresh.
+// Only after both are complete is suppression released, preventing any race window
+// where the watcher could see internal changes as external.
+// If refreshBaseline is non-nil, it is called after reconciliation.
+func (s *Service) EndInternalMutationAndRefreshBaseline(refreshBaseline func() error) (err error) {
+	// Guarantee suppression is released exactly once, even on error.
+	defer func() {
+		atomic.AddInt32(&s.internalMutations, -1)
+	}()
+
 	// Perform a silent rescan to update the semantic baseline.
-	if err := s.fullReconcile(); err != nil {
+	if err = s.fullReconcile(); err != nil {
 		return err
 	}
 	// Refresh the file watcher baseline so the next poll doesn't see
 	// the internal mutation as an external change.
 	if refreshBaseline != nil {
-		if err := refreshBaseline(); err != nil {
+		if err = refreshBaseline(); err != nil {
 			return err
 		}
 	}
@@ -244,6 +255,9 @@ func (s *Service) fullReconcile() error {
 
 	// Reconcile.
 	result := Reconcile(s.vaultDir, prev, scan)
+
+	// Merge reconciler warnings into scan for tree building.
+	scan.Warnings = append(scan.Warnings, result.Warnings...)
 
 	// Build tree.
 	s.revision++
