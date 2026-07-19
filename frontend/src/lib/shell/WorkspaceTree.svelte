@@ -1,506 +1,479 @@
-<script context="module">
-  import { writable } from 'svelte/store';
-
-  const activeWorkspaceId = writable('');
-</script>
-
 <script>
   import { onDestroy, onMount } from 'svelte';
   import * as App from '../../../wailsjs/go/api/App';
   import Icon from '../ui/Icon.svelte';
+  import Modal from '../ui/Modal.svelte';
+  import Select from '../ui/Select.svelte';
   import { i18n } from '../i18n/index.js';
 
+  // ── State ──────────────────────────────────────────────────────────────────
+  let tree = { roots: [], currentWorkspaceId: '', revision: 0 };
   let loading = true;
-  let localError = '';
-  let workspaces = [];
-  let currentWorkspaceId = '';
-  let showCreate = false;
-  let newWorkspaceName = '';
-  let workspaceTemplates = [];
-  let templatePluginNames = {};
-  let templatePlugins = {};
-  let templateCapabilities = new Set();
-  let selectedTemplateId = 'default';
-  let createError = '';
-  let templateWarning = null;
-  let templatesLoading = false;
-  let creating = false;
-  let renamingId = '';
-  let renameValue = '';
-  let busyId = '';
+  let error = '';
+  let expandedIds = {};
+  let activeWid = '';
   let locale = i18n.getLocale();
   let unsubscribeLocale = null;
-  $: tr = ((activeLocale) => (key, params, fallback) => {
-    void activeLocale;
-    return i18n.t(key, params, fallback);
-  })(locale);
+  $: tr = ((al) => (k, p, f) => { void al; return i18n.t(k, p, f); })(locale);
 
-  function reportError(key, fallback, details) {
-    console.warn('[WorkspaceTree] operation failed:', details);
-    return tr(key, undefined, fallback);
-  }
+  // ── Modal state ────────────────────────────────────────────────────────────
+  let modal = null; // { type, folderId?, workspaceId?, parentId?, name?, templateId? }
+  let formName = '';
+  let formParentId = '';
+  let formTemplateId = 'default';
+  let formError = '';
+  let formBusy = false;
+  let templates = [];
+  let templateNames = {};
 
-  onMount(() => {
-    unsubscribeLocale = i18n.subscribe((nextLocale) => {
-      const changed = locale !== nextLocale;
-      locale = nextLocale;
-      if (changed) loadWorkspaceTemplates();
-    });
-    loadWorkspaces();
-    loadWorkspaceTemplates();
-    window.addEventListener('verstak:workspace-active-changed', onActiveWorkspaceChanged);
+  // ── Context menu ───────────────────────────────────────────────────────────
+  let ctxMenu = null; // { x, y, kind, id, name, parentId }
+
+  // ── Keyboard ───────────────────────────────────────────────────────────────
+  let focusedKey = '';
+
+  // ── Load ───────────────────────────────────────────────────────────────────
+  onMount(async () => {
+    unsubscribeLocale = i18n.subscribe((l) => { locale = l; });
+    await loadTree();
+    await loadTemplates();
+    window.addEventListener('verstak:workspace-tree-changed', onTreeChanged);
   });
-
   onDestroy(() => {
     if (unsubscribeLocale) unsubscribeLocale();
-    window.removeEventListener('verstak:workspace-active-changed', onActiveWorkspaceChanged);
+    window.removeEventListener('verstak:workspace-tree-changed', onTreeChanged);
   });
 
-  function onActiveWorkspaceChanged(event) {
-    currentWorkspaceId = event.detail?.workspaceName || '';
-    activeWorkspaceId.set(currentWorkspaceId);
-  }
-
-  function resultOrError(response, fallbackValue) {
-    if (Array.isArray(response) && typeof response[1] === 'string') {
-      return [response[0] || fallbackValue, response[1] || ''];
-    }
-    return typeof response === 'string' ? [fallbackValue, response] : [response, ''];
-  }
-
-  $: selectedTemplate = workspaceTemplates.find(template => template.id === selectedTemplateId) || workspaceTemplates[0] || null;
-  $: selectedTemplateTools = (selectedTemplate?.workspaceTools || []).map((pluginId) => (
-    templateToolState(pluginId, templatePlugins, templateCapabilities, templatePluginNames, tr)
-  ));
-  $: selectedTemplateIssues = selectedTemplateTools.filter(tool => tool.status !== 'available');
-
-  function toolLabel(pluginId, names = templatePluginNames) {
-    return names[pluginId] || String(pluginId || '').replace(/^verstak\./, '');
-  }
-
-  function templateToolState(pluginId, plugins, capabilities, names, translate) {
-    const plugin = plugins[pluginId];
-    if (!plugin) {
-      return {
-        pluginId,
-        name: toolLabel(pluginId, names),
-        tabs: [],
-        status: 'unavailable',
-        reason: translate('workspaceTree.templateMissingPlugin'),
-      };
-    }
-
-    const manifest = plugin.manifest || {};
-    const tabs = Array.isArray(manifest.contributes?.workspaceItems)
-      ? manifest.contributes.workspaceItems.map(item => item?.title || item?.id).filter(Boolean)
-      : [];
-    const pluginStatus = String(plugin.status || '').toLowerCase();
-    const missingCapability = Array.isArray(manifest.requires)
-      && manifest.requires.some(capabilityId => !capabilities.has(capabilityId));
-    let status = 'available';
-    let reason = translate('workspaceTree.templateAvailable');
-
-    if (!plugin.enabled || pluginStatus === 'disabled') {
-      status = 'unavailable';
-      reason = translate('workspaceTree.templatePluginDisabled');
-    } else if (pluginStatus === 'missing-required-capability' || missingCapability) {
-      status = 'unavailable';
-      reason = translate('workspaceTree.templateCapabilityUnavailable');
-    } else if (pluginStatus === 'incompatible') {
-      status = 'unavailable';
-      reason = translate('workspaceTree.templateIncompatible');
-    } else if (pluginStatus === 'failed') {
-      status = 'unavailable';
-      reason = translate('workspaceTree.templateLoadFailed');
-    } else if (pluginStatus === 'degraded') {
-      status = 'limited';
-      reason = translate('workspaceTree.templateLimited');
-    } else if (pluginStatus !== 'loaded') {
-      status = 'unavailable';
-      reason = translate('workspaceTree.templateNotReady');
-    }
-
-    return { pluginId, name: manifest.name || toolLabel(pluginId, names), tabs, status, reason };
-  }
-
-  async function loadWorkspaceTemplates() {
-    templatesLoading = true;
-    try {
-      const [templates, plugins, capabilities] = await Promise.all([
-        App.ListWorkspaceTemplates ? App.ListWorkspaceTemplates() : [],
-        App.GetPlugins ? App.GetPlugins() : [],
-        App.GetCapabilities ? App.GetCapabilities() : [],
-      ]);
-      const [list, err] = resultOrError(templates, []);
-      if (err) {
-        createError = reportError('workspaceTree.templatesError', 'Could not load Deal templates. Please try again.', err);
-        workspaceTemplates = [];
-        return;
-      }
-      workspaceTemplates = Array.isArray(list) ? list : [];
-      await Promise.all((Array.isArray(plugins) ? plugins : []).map((plugin) => (
-        i18n.loadPlugin(plugin.manifest?.id, plugin.manifest?.localization).catch(() => {})
-      )));
-      const localizedPlugins = (Array.isArray(plugins) ? plugins : []).map((plugin) => i18n.localizePlugin(plugin));
-      templatePluginNames = localizedPlugins.reduce((names, plugin) => {
-        const id = plugin?.manifest?.id;
-        const name = plugin?.manifest?.name;
-        if (id && name) names[id] = name;
-        return names;
-      }, {});
-      templatePlugins = localizedPlugins.reduce((result, plugin) => {
-        const id = plugin?.manifest?.id;
-        if (id) result[id] = plugin;
-        return result;
-      }, {});
-      const [capabilityList] = resultOrError(capabilities, []);
-      templateCapabilities = new Set((Array.isArray(capabilityList) ? capabilityList : []).map(capability => capability?.name).filter(Boolean));
-      if (!workspaceTemplates.some(template => template.id === selectedTemplateId)) {
-        selectedTemplateId = workspaceTemplates[0]?.id || '';
-      }
-    } catch (error) {
-      createError = reportError('workspaceTree.templatesError', 'Could not load Deal templates. Please try again.', error);
-      workspaceTemplates = [];
-    } finally {
-      templatesLoading = false;
-    }
-  }
-
-  function wsName(workspace) {
-    return String(workspace?.name || workspace?.rootPath || '');
-  }
-
-  function asNode(workspace, order) {
-    const name = wsName(workspace);
-    return {
-      id: name,
-      type: 'space',
-      title: name,
-      name,
-      rootPath: workspace.rootPath || name,
-      status: 'active',
-      order,
-    };
-  }
-
-  function nodesForEvent() {
-    return workspaces.map(asNode);
-  }
-
-  async function loadWorkspaces() {
+  async function loadTree() {
     loading = true;
-    localError = '';
     try {
-      const [list, err] = resultOrError(await App.ListWorkspaces(), []);
-      if (err) {
-        localError = reportError('workspaceTree.loadError', 'Could not load Deals. Please try again.', err);
-        workspaces = [];
-      } else {
-        workspaces = list || [];
-        if (!currentWorkspaceId) {
-          let currentWorkspace = null;
-          try {
-            currentWorkspace = await App.GetCurrentWorkspace();
-          } catch {
-            currentWorkspace = null;
-          }
-          const currentName = wsName(currentWorkspace);
-          if (workspaces.some((ws) => wsName(ws) === currentName)) {
-            currentWorkspaceId = currentName;
-          }
-        } else if (!workspaces.some((ws) => wsName(ws) === currentWorkspaceId)) {
-          currentWorkspaceId = '';
-        }
-        activeWorkspaceId.set(currentWorkspaceId);
-      }
-    } catch (e) {
-      localError = reportError('workspaceTree.loadError', 'Could not load Deals. Please try again.', e);
-    }
+      const raw = await App.GetWorkspaceTreeV2();
+      if (raw?.error) { error = raw.error; return; }
+      tree = raw || { roots: [], currentWorkspaceId: '', revision: 0 };
+      activeWid = tree.currentWorkspaceId || '';
+      if (activeWid) ensureExpandedToWorkspace(activeWid);
+    } catch (e) { error = tr('workspaceTree.loadError'); }
     loading = false;
   }
 
-  async function selectWorkspace(workspace) {
-    const id = wsName(workspace);
-    const err = await App.SetCurrentWorkspace(id);
-    if (err) {
-      localError = reportError('workspaceTree.selectError', 'Could not select this Deal. Please try again.', err);
-      return;
+  async function loadTemplates() {
+    try {
+      const [tlist] = (await App.ListWorkspaceTemplates()) || [[]];
+      templates = Array.isArray(tlist) ? tlist : [];
+      const plugins = (await App.GetPlugins()) || [];
+      templateNames = {};
+      for (const p of plugins) {
+        if (p?.manifest?.id && p?.manifest?.name) templateNames[p.manifest.id] = p.manifest.name;
+      }
+    } catch { templates = []; }
+  }
+
+  function onTreeChanged() { loadTree(); }
+
+  function ensureExpandedToWorkspace(wid) {
+    for (const root of tree.roots || []) {
+      if (expandToChild(root, wid)) break;
     }
-    currentWorkspaceId = id;
-    activeWorkspaceId.set(id);
+  }
+  function expandToChild(node, targetWid) {
+    if (node.kind === 'workspace' && node.id === targetWid) return true;
+    if (node.children) {
+      for (const child of node.children) {
+        if (expandToChild(child, targetWid)) {
+          expandedIds[node.key] = true;
+          expandedIds = expandedIds;
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  // ── Actions ────────────────────────────────────────────────────────────────
+  function toggleExpand(key) {
+    expandedIds[key] = !expandedIds[key];
+    expandedIds = expandedIds;
+  }
+
+  async function selectWorkspace(wid) {
+    const err = await App.SetCurrentWorkspaceV2(wid);
+    if (err) { error = err; return; }
+    activeWid = wid;
     window.dispatchEvent(new CustomEvent('verstak:workspace-selected', {
-      detail: { workspaceName: id, nodes: nodesForEvent() }
+      detail: { workspaceId: wid }
     }));
   }
 
-  async function doCreate() {
-    const name = newWorkspaceName.trim();
-    if (!name) {
-      createError = tr('workspaceTree.nameRequired');
-      return;
-    }
-    if (!selectedTemplate) {
-      createError = tr('workspaceTree.chooseTemplate');
-      return;
-    }
-    const creationIssues = selectedTemplateIssues.map(tool => ({
-      pluginId: tool.pluginId,
-      name: tool.name,
-      reason: tool.reason,
-    }));
-    creating = true;
-    createError = '';
-    const [, err] = resultOrError(await App.CreateWorkspace(name, selectedTemplate.id), null);
-    if (err) {
-      createError = reportError('workspaceTree.createError', 'Could not create the Deal. Please try again.', err);
-      creating = false;
-      return;
-    }
-    showCreate = false;
-    newWorkspaceName = '';
-    creating = false;
-    await loadWorkspaces();
-    const created = workspaces.find((ws) => wsName(ws) === name);
-    if (created) await selectWorkspace(created);
-    templateWarning = creationIssues.length > 0 ? { workspaceName: name, issues: creationIssues } : null;
+  function openCreateFolder(parentId) {
+    modal = { type: 'create-folder', parentId };
+    formName = '';
+    formParentId = parentId || '';
+    formError = '';
+    formBusy = false;
+  }
+  function openCreateWorkspace(parentId) {
+    modal = { type: 'create-workspace', parentId };
+    formName = '';
+    formParentId = parentId || '';
+    formTemplateId = templates[0]?.id || 'default';
+    formError = '';
+    formBusy = false;
+  }
+  function openRename(kind, id, name) {
+    modal = { type: 'rename', kind, id };
+    formName = name;
+    formError = '';
+    formBusy = false;
+  }
+  function openMove(kind, id, name) {
+    modal = { type: 'move', kind, id, name };
+    formParentId = '';
+    formError = '';
+    formBusy = false;
+  }
+  function openTrash(kind, id, name) {
+    modal = { type: 'trash', kind, id, name };
+    formBusy = false;
+  }
+  function closeModal() { if (!formBusy) modal = null; }
+
+  async function doCreateFolder() {
+    const name = formName.trim();
+    if (!name) { formError = tr('workspaceTree.nameRequired'); return; }
+    formBusy = true;
+    const result = await App.CreateFolderV2(formParentId || '', name);
+    if (result?.error) { formError = result.error; formBusy = false; return; }
+    if (formParentId) expandedIds['folder:' + formParentId] = true;
+    modal = null;
+    await loadTree();
   }
 
-  async function openCreateDialog() {
-    showCreate = true;
-    newWorkspaceName = '';
-    createError = '';
-    await loadWorkspaceTemplates();
+  async function doCreateWorkspace() {
+    const name = formName.trim();
+    if (!name) { formError = tr('workspaceTree.nameRequired'); return; }
+    formBusy = true;
+    const result = await App.CreateWorkspaceV2(formParentId || '', name, formTemplateId);
+    if (result?.error) { formError = result.error; formBusy = false; return; }
+    if (formParentId) expandedIds['folder:' + formParentId] = true;
+    const wid = result?.id;
+    modal = null;
+    await loadTree();
+    if (wid) await selectWorkspace(wid);
   }
 
-  function closeCreateDialog() {
-    if (creating) return;
-    showCreate = false;
-    newWorkspaceName = '';
-    createError = '';
+  async function doRename() {
+    const name = formName.trim();
+    if (!name) { formError = tr('workspaceTree.nameRequired'); return; }
+    formBusy = true;
+    let err = '';
+    if (modal.kind === 'folder') err = await App.RenameFolderV2(modal.id, name);
+    else err = await App.RenameWorkspaceV2(modal.id, name);
+    if (err) { formError = err; formBusy = false; return; }
+    modal = null;
+    await loadTree();
   }
 
-  function dismissTemplateWarning() {
-    templateWarning = null;
+  async function doMove() {
+    formBusy = true;
+    let err = '';
+    if (modal.kind === 'folder') err = await App.MoveFolderV2(modal.id, formParentId || '');
+    else err = await App.MoveWorkspaceV2(modal.id, formParentId || '');
+    if (err) { formError = err; formBusy = false; return; }
+    modal = null;
+    await loadTree();
   }
 
-  function startRename(workspace) {
-    renamingId = wsName(workspace);
-    renameValue = renamingId;
-    localError = '';
-  }
-
-  function cancelRename() {
-    renamingId = '';
-    renameValue = '';
-  }
-
-  async function commitRename(workspace) {
-    const oldName = wsName(workspace);
-    const newName = renameValue.trim();
-    if (!newName || newName === oldName) {
-      cancelRename();
-      return;
+  async function doTrash() {
+    formBusy = true;
+    if (modal.kind === 'folder') await App.TrashFolderV2(modal.id);
+    else {
+      await App.TrashWorkspaceV2(modal.id);
+      if (activeWid === modal.id) activeWid = '';
     }
-    busyId = oldName;
-    const err = await App.RenameWorkspace(oldName, newName);
-    if (err) {
-      localError = reportError('workspaceTree.renameError', 'Could not rename the Deal. Please try again.', err);
-      busyId = '';
-      return;
-    }
-    renamingId = '';
-    renameValue = '';
-    busyId = '';
-    currentWorkspaceId = newName;
-    await loadWorkspaces();
-    const renamed = workspaces.find((ws) => wsName(ws) === newName);
-    if (renamed) await selectWorkspace(renamed);
+    modal = null;
+    await loadTree();
   }
 
-  async function trashWorkspace(workspace) {
-    const name = wsName(workspace);
-    busyId = name;
-    const [, err] = resultOrError(await App.TrashWorkspace(name), null);
-    if (err) {
-      localError = reportError('workspaceTree.trashError', 'Could not move the Deal to trash. Please try again.', err);
-      busyId = '';
-      return;
+  // ── Context menu ───────────────────────────────────────────────────────────
+  function onContextMenu(e, kind, id, name, parentId) {
+    e.preventDefault();
+    ctxMenu = { x: e.clientX, y: e.clientY, kind, id, name, parentId };
+  }
+  function closeCtxMenu() { ctxMenu = null; }
+
+  function flatFolders(roots, out = []) {
+    for (const r of roots || []) {
+      if (r.kind === 'folder') { out.push(r); flatFolders(r.children, out); }
     }
-    if (currentWorkspaceId === name) currentWorkspaceId = '';
-    busyId = '';
-    await loadWorkspaces();
-    if (currentWorkspaceId) {
-      const selected = workspaces.find((ws) => wsName(ws) === currentWorkspaceId);
-      if (selected) await selectWorkspace(selected);
+    return out;
+  }
+
+  function subtreeCounts(id) {
+    let folders = 0, workspaces = 0;
+    const node = findNode(tree.roots || [], id);
+    if (!node) return { folders: 0, workspaces: 0 };
+    countChildren(node);
+    return { folders, workspaces };
+    function countChildren(n) {
+      for (const c of n.children || []) {
+        if (c.kind === 'folder') { folders++; countChildren(c); }
+        else workspaces++;
+      }
     }
+  }
+  function findNode(nodes, id) {
+    for (const n of nodes) {
+      if (n.id === id) return n;
+      const found = findNode(n.children || [], id);
+      if (found) return found;
+    }
+    return null;
+  }
+
+  function onKeyDown(e) {
+    if (e.key === 'Escape') { closeCtxMenu(); closeModal(); }
+  }
+
+  function folderPathForId(id) {
+    const f = flatFolders(tree.roots || []).find(x => x.id === id);
+    return f ? f.path : id;
   }
 </script>
 
-<div class="wt">
+<svelte:window on:keydown={onKeyDown} on:click={closeCtxMenu} />
+
+<div class="wt" data-workspace-tree>
   <div class="wt-header">
     <span class="wt-title">{tr('workspaceTree.title')}</span>
-    <button class="wt-btn" on:click={openCreateDialog} title={tr('workspaceTree.new')} type="button">+</button>
+    <div class="wt-header-actions">
+      <button class="vt-icon-btn" on:click={() => openCreateWorkspace('')} title={tr('workspaceTree.newDeal')} aria-label={tr('workspaceTree.newDeal')} type="button">
+        <Icon name="space" size={14} />
+      </button>
+      <button class="vt-icon-btn" on:click={() => openCreateFolder('')} title={tr('workspaceTree.newFolder')} aria-label={tr('workspaceTree.newFolder')} type="button">
+        <Icon name="folder" size={14} />
+      </button>
+    </div>
   </div>
 
-  {#if loading}
-    <div class="wt-loading">{tr('common.loading')}</div>
-  {:else if localError}
-    <div class="wt-error">{localError}</div>
-  {/if}
-
-  <div class="wt-list">
-    {#each workspaces as workspace (wsName(workspace))}
-      {@const id = wsName(workspace)}
-      <div class="wt-node vt-list-row" class:selected={id === $activeWorkspaceId}>
-        <div class="wt-row">
-          <span class="wt-icon"><Icon name="space" size={13} class="wt-node-icon" /></span>
-          {#if renamingId === id}
-            <input
-              class="wt-rename"
-              bind:value={renameValue}
-              disabled={busyId === id}
-              on:keydown={(e) => {
-                if (e.key === 'Enter') commitRename(workspace);
-                if (e.key === 'Escape') cancelRename();
-              }}
-            />
-            <button class="wt-btn wt-btn-small wt-always" on:click={() => commitRename(workspace)} title={tr('workspaceTree.saveRename')} type="button" disabled={busyId === id}>{tr('common.save')}</button>
-            <button class="wt-btn wt-btn-small wt-always" on:click={cancelRename} title={tr('common.cancel')} type="button" disabled={busyId === id}>{tr('common.cancel')}</button>
-          {:else}
-            <button class="wt-label" on:click={() => selectWorkspace(workspace)} type="button">{id}</button>
-            <button class="wt-icon-btn" on:click={() => startRename(workspace)} title={tr('workspaceTree.rename')} type="button" disabled={busyId === id}>
-              <Icon name="edit" size={12} />
-            </button>
-            <button class="wt-icon-btn danger" on:click={() => trashWorkspace(workspace)} title={tr('workspaceTree.trash')} type="button" disabled={busyId === id}>
-              <Icon name="trash" size={12} />
-            </button>
+  <div class="wt-list" role="tree" aria-label={tr('workspaceTree.title')}>
+    {#if loading}
+      <div class="wt-status">{tr('common.loading')}</div>
+    {:else if error}
+      <div class="wt-status wt-error">{error}</div>
+    {:else if !tree.roots || tree.roots.length === 0}
+      <div class="wt-empty">
+        <p>{tr('workspaceTree.emptyTitle')}</p>
+        <p class="wt-empty-hint">{tr('workspaceTree.emptyHint')}</p>
+      </div>
+    {:else}
+      {#each tree.roots as node (node.key)}
+        {@const isExpanded = expandedIds[node.key] || false}
+        {@const isActive = node.kind === 'workspace' && node.id === activeWid}
+        {@const isFolder = node.kind === 'folder'}
+        {@const hasChildren = isFolder && node.children && node.children.length > 0}
+        <div class="wt-node" style="padding-left:0">
+          <div class="wt-row" class:selected={isActive} class:focus={focusedKey === node.key}
+            on:click={() => isFolder ? toggleExpand(node.key) : selectWorkspace(node.id)}
+            on:contextmenu={(e) => onContextMenu(e, node.kind, node.id, node.name, node.parentFolderId)}
+            role="treeitem" aria-expanded={isFolder ? isExpanded : undefined} aria-selected={isActive || undefined}
+            tabindex="0"
+          >
+            {#if isFolder}
+              <span class="wt-chevron" class:open={isExpanded}><Icon name="chevron-right" size={12} /></span>
+            {:else}
+              <span class="wt-chevron wt-chevron-empty" />
+            {/if}
+            <span class="wt-node-icon"><Icon name={isFolder ? 'folder' : 'space'} size={14} /></span>
+            <span class="wt-node-name" title={node.name}>{node.name}</span>
+            <span class="wt-node-actions">
+              {#if isFolder}
+                <button class="vt-icon-btn vt-icon-btn-sm" on:click|stopPropagation={() => openCreateWorkspace(node.id)} title={tr('workspaceTree.newDeal')}><Icon name="plus" size={11} /></button>
+                <button class="vt-icon-btn vt-icon-btn-sm" on:click|stopPropagation={() => openCreateFolder(node.id)} title={tr('workspaceTree.newFolder')}><Icon name="folder-plus" size={11} /></button>
+              {/if}
+            </span>
+          </div>
+          {#if isFolder && isExpanded && hasChildren}
+            {#each node.children as child (child.key)}
+              {@const childExpanded = expandedIds[child.key] || false}
+              <div class="wt-node" style="padding-left:1.2rem">
+                <div class="wt-row" class:selected={child.kind === 'workspace' && child.id === activeWid}
+                  on:click={() => child.kind === 'folder' ? toggleExpand(child.key) : selectWorkspace(child.id)}
+                  on:contextmenu={(e) => onContextMenu(e, child.kind, child.id, child.name, node.id)}
+                  role="treeitem" aria-expanded={child.kind === 'folder' ? childExpanded : undefined}
+                  tabindex="0"
+                >
+                  {#if child.kind === 'folder'}
+                    <span class="wt-chevron" class:open={childExpanded}><Icon name="chevron-right" size={12} /></span>
+                  {:else}
+                    <span class="wt-chevron wt-chevron-empty" />
+                  {/if}
+                  <span class="wt-node-icon"><Icon name={child.kind === 'folder' ? 'folder' : 'space'} size={14} /></span>
+                  <span class="wt-node-name" title={child.name}>{child.name}</span>
+                  <span class="wt-node-actions">
+                    {#if child.kind === 'folder'}
+                      <button class="vt-icon-btn vt-icon-btn-sm" on:click|stopPropagation={() => openCreateWorkspace(child.id)} title={tr('workspaceTree.newDeal')}><Icon name="plus" size={11} /></button>
+                      <button class="vt-icon-btn vt-icon-btn-sm" on:click|stopPropagation={() => openCreateFolder(child.id)} title={tr('workspaceTree.newFolder')}><Icon name="folder-plus" size={11} /></button>
+                    {/if}
+                  </span>
+                </div>
+              </div>
+            {/each}
           {/if}
         </div>
-      </div>
-    {/each}
+      {/each}
+    {/if}
   </div>
-
-  {#if templateWarning}
-    <section class="workspace-template-warning" data-workspace-template-warning role="alert">
-      <div>
-        <strong>{tr('workspaceTree.templateIncompleteCreated', { name: templateWarning.workspaceName })}</strong>
-        {#each templateWarning.issues as issue (issue.pluginId)}
-          <div class="workspace-template-warning-item">{issue.name}: {issue.reason}</div>
-        {/each}
-      </div>
-      <button class="wt-btn" type="button" on:click={dismissTemplateWarning} title={tr('common.close')}>{tr('common.close')}</button>
-    </section>
-  {/if}
-
-  {#if showCreate}
-    <div class="workspace-create-overlay" data-workspace-create-modal role="dialog" aria-modal="true" aria-label={tr('workspaceTree.create')}>
-      <div class="workspace-create-modal">
-        <div class="workspace-create-header">
-          <div>
-            <h2>{tr('workspaceTree.new')}</h2>
-          </div>
-          <button class="wt-btn" on:click={closeCreateDialog} type="button" disabled={creating}>{tr('common.close')}</button>
-        </div>
-        <label class="workspace-create-field">
-          <span>{tr('pluginCard.name')}</span>
-          <input data-workspace-name type="text" bind:value={newWorkspaceName} placeholder={tr('workspaceTree.namePlaceholder')} disabled={creating} on:keydown={(event) => event.key === 'Enter' && doCreate()} />
-        </label>
-        <label class="workspace-create-field">
-          <span>{tr('workspaceTree.template')}</span>
-          <select data-workspace-template bind:value={selectedTemplateId} disabled={creating || templatesLoading || !workspaceTemplates.length}>
-            {#each workspaceTemplates as template (template.id)}
-              <option value={template.id}>{template.name}</option>
-            {/each}
-          </select>
-        </label>
-        {#if selectedTemplate}
-          <div class="workspace-template-summary">
-            <p data-workspace-template-description>{selectedTemplate.description}</p>
-            <div class="workspace-template-tools" data-workspace-template-tools>
-              {#each selectedTemplateTools as tool (tool.pluginId)}
-                <div
-                  class="workspace-template-tool"
-                  class:limited={tool.status === 'limited'}
-                  class:unavailable={tool.status === 'unavailable'}
-                  data-workspace-template-tool={tool.pluginId}
-                  data-template-tool-status={tool.status}
-                >
-                  <span class="workspace-template-tool-name">{tool.name}</span>
-                  <span class="workspace-template-tool-tabs">{tool.tabs.length ? tr('workspaceTree.templateToolTabs', { tabs: tool.tabs.join(', ') }) : tr('workspaceTree.templateToolNoTabs')}</span>
-                  <span class="workspace-template-tool-reason">{tool.reason}</span>
-                </div>
-              {/each}
-            </div>
-            {#if selectedTemplateIssues.length > 0}
-              <p class="workspace-template-incomplete" data-workspace-template-incomplete>{tr('workspaceTree.templateWillBeIncomplete')}</p>
-            {/if}
-          </div>
-        {/if}
-        {#if createError}
-          <p class="workspace-create-error" data-workspace-create-error role="alert">{createError}</p>
-        {/if}
-        <div class="workspace-create-actions">
-          <button class="wt-btn-primary" on:click={doCreate} type="button" disabled={creating || templatesLoading || !selectedTemplate}>{creating ? tr('workspaceTree.creating') : tr('workspaceTree.create')}</button>
-          <button class="wt-btn" on:click={closeCreateDialog} type="button" disabled={creating}>{tr('common.cancel')}</button>
-        </div>
-      </div>
-    </div>
-  {/if}
 </div>
 
+<!-- Context Menu -->
+{#if ctxMenu}
+  <div class="vt-ctx-menu" style="left:{ctxMenu.x}px;top:{ctxMenu.y}px" on:click|stopPropagation>
+    {#if ctxMenu.kind === 'folder'}
+      <button class="vt-ctx-item" on:click={() => { closeCtxMenu(); openCreateWorkspace(ctxMenu.id); }}>{tr('workspaceTree.newDeal')}</button>
+      <button class="vt-ctx-item" on:click={() => { closeCtxMenu(); openCreateFolder(ctxMenu.id); }}>{tr('workspaceTree.newFolder')}</button>
+      <div class="vt-ctx-sep" />
+      <button class="vt-ctx-item" on:click={() => { closeCtxMenu(); openRename('folder', ctxMenu.id, ctxMenu.name); }}>{tr('workspaceTree.rename')}</button>
+      <button class="vt-ctx-item" on:click={() => { closeCtxMenu(); openMove('folder', ctxMenu.id, ctxMenu.name); }}>{tr('workspaceTree.move')}</button>
+      <div class="vt-ctx-sep" />
+      <button class="vt-ctx-item vt-ctx-danger" on:click={() => { closeCtxMenu(); openTrash('folder', ctxMenu.id, ctxMenu.name); }}>{tr('workspaceTree.trash')}</button>
+    {:else}
+      <button class="vt-ctx-item" on:click={() => { closeCtxMenu(); selectWorkspace(ctxMenu.id); }}>{tr('workspaceTree.open')}</button>
+      <button class="vt-ctx-item" on:click={() => { closeCtxMenu(); openRename('workspace', ctxMenu.id, ctxMenu.name); }}>{tr('workspaceTree.rename')}</button>
+      <button class="vt-ctx-item" on:click={() => { closeCtxMenu(); openMove('workspace', ctxMenu.id, ctxMenu.name); }}>{tr('workspaceTree.move')}</button>
+      <div class="vt-ctx-sep" />
+      <button class="vt-ctx-item vt-ctx-danger" on:click={() => { closeCtxMenu(); openTrash('workspace', ctxMenu.id, ctxMenu.name); }}>{tr('workspaceTree.trash')}</button>
+    {/if}
+  </div>
+{/if}
+
+<!-- Modals -->
+<Modal title={tr('workspaceTree.newFolder')} show={modal?.type === 'create-folder'} on:close={closeModal}>
+  <label class="vt-field">
+    <span>{tr('workspaceTree.location')}</span>
+    <Select options={flatFolders(tree.roots || []).map(f => ({ value: f.id, label: f.path }))} placeholder={tr('workspaceTree.root')} bind:value={formParentId} labelKey="label" valueKey="value" />
+  </label>
+  <label class="vt-field">
+    <span>{tr('workspaceTree.name')}</span>
+    <input class="vt-input" type="text" bind:value={formName} placeholder={tr('workspaceTree.namePlaceholder')} disabled={formBusy} on:keydown={(e) => e.key === 'Enter' && doCreateFolder()} />
+  </label>
+  {#if formError}<p class="vt-form-error">{formError}</p>{/if}
+  <svelte:fragment slot="actions">
+    <button class="vt-btn" on:click={closeModal} disabled={formBusy}>{tr('common.cancel')}</button>
+    <button class="vt-btn-primary" on:click={doCreateFolder} disabled={formBusy}>{tr('common.create')}</button>
+  </svelte:fragment>
+</Modal>
+
+<Modal title={tr('workspaceTree.newDeal')} show={modal?.type === 'create-workspace'} on:close={closeModal} wide>
+  <label class="vt-field">
+    <span>{tr('workspaceTree.location')}</span>
+    <Select options={flatFolders(tree.roots || []).map(f => ({ value: f.id, label: f.path }))} placeholder={tr('workspaceTree.root')} bind:value={formParentId} labelKey="label" valueKey="value" />
+  </label>
+  <label class="vt-field">
+    <span>{tr('workspaceTree.name')}</span>
+    <input class="vt-input" type="text" bind:value={formName} placeholder={tr('workspaceTree.namePlaceholder')} disabled={formBusy} on:keydown={(e) => e.key === 'Enter' && doCreateWorkspace()} />
+  </label>
+  <label class="vt-field">
+    <span>{tr('workspaceTree.template')}</span>
+    <Select options={templates} bind:value={formTemplateId} labelKey="name" valueKey="id" />
+  </label>
+  {#if formError}<p class="vt-form-error">{formError}</p>{/if}
+  <svelte:fragment slot="actions">
+    <button class="vt-btn" on:click={closeModal} disabled={formBusy}>{tr('common.cancel')}</button>
+    <button class="vt-btn-primary" on:click={doCreateWorkspace} disabled={formBusy}>{tr('common.create')}</button>
+  </svelte:fragment>
+</Modal>
+
+<Modal title={tr('workspaceTree.rename')} show={modal?.type === 'rename'} on:close={closeModal}>
+  <label class="vt-field">
+    <span>{tr('workspaceTree.newName')}</span>
+    <input class="vt-input" type="text" bind:value={formName} disabled={formBusy} on:keydown={(e) => e.key === 'Enter' && doRename()} />
+  </label>
+  {#if formError}<p class="vt-form-error">{formError}</p>{/if}
+  <svelte:fragment slot="actions">
+    <button class="vt-btn" on:click={closeModal} disabled={formBusy}>{tr('common.cancel')}</button>
+    <button class="vt-btn-primary" on:click={doRename} disabled={formBusy}>{tr('common.save')}</button>
+  </svelte:fragment>
+</Modal>
+
+<Modal title={tr('workspaceTree.move') + (modal?.name ? ' «' + modal.name + '»' : '')} show={modal?.type === 'move'} on:close={closeModal}>
+  <label class="vt-field">
+    <span>{tr('workspaceTree.newLocation')}</span>
+    <Select options={flatFolders(tree.roots || []).filter(f => f.id !== modal?.id).map(f => ({ value: f.id, label: f.path }))} placeholder={tr('workspaceTree.root')} bind:value={formParentId} labelKey="label" valueKey="value" />
+  </label>
+  {#if formError}<p class="vt-form-error">{formError}</p>{/if}
+  <svelte:fragment slot="actions">
+    <button class="vt-btn" on:click={closeModal} disabled={formBusy}>{tr('common.cancel')}</button>
+    <button class="vt-btn-primary" on:click={doMove} disabled={formBusy}>{tr('workspaceTree.move')}</button>
+  </svelte:fragment>
+</Modal>
+
+<Modal title={(modal?.kind === 'folder' ? tr('workspaceTree.trashFolder') : tr('workspaceTree.trashDeal')) + (modal?.name ? ' «' + modal.name + '»?' : '?')} show={modal?.type === 'trash'} on:close={closeModal}>
+  <p style="color:var(--vt-color-text-secondary);font-size:0.84rem;margin:0;">
+    {#if modal?.kind === 'folder'}
+      {@const c = subtreeCounts(modal.id)}
+      {tr('workspaceTree.trashFolderDesc')}
+      <br />{tr('workspaceTree.contains')}: {c.folders} {tr('workspaceTree.nestedFolders')}, {c.workspaces} {tr('workspaceTree.title')}
+    {:else}
+      {tr('workspaceTree.trashDealDesc')}
+    {/if}
+  </p>
+  <svelte:fragment slot="actions">
+    <button class="vt-btn" on:click={closeModal} disabled={formBusy}>{tr('common.cancel')}</button>
+    <button class="vt-btn-danger" on:click={doTrash} disabled={formBusy}>{tr('workspaceTree.toTrash')}</button>
+  </svelte:fragment>
+</Modal>
+
 <style>
-  .wt { display: flex; flex-direction: column; flex: 1; overflow: hidden; position: relative; }
+  .wt { display: flex; flex-direction: column; flex: 1; overflow: hidden; }
   .wt-header { display: flex; align-items: center; justify-content: space-between; padding: 0.7rem 0.6rem 0.35rem; border-bottom: 1px solid var(--vt-color-border); flex-shrink: 0; }
   .wt-title { color: var(--vt-color-text-muted); font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600; }
-  .wt-list { min-height: 0; overflow-y: auto; padding: 0.2rem 0.6rem; }
-  .wt-btn { min-height: 1.55rem; background: transparent; border: 1px solid transparent; color: var(--vt-color-text-muted); cursor: pointer; font-size: 0.78rem; padding: 0.12rem 0.38rem; border-radius: var(--vt-radius-sm); }
-  .wt-btn:hover:not(:disabled) { color: var(--vt-color-accent); background: var(--vt-color-accent-muted); border-color: rgba(78,204,163,0.25); }
-  .wt-btn-small { font-size: 0.7rem; opacity: 0; }
-  .wt-always { opacity: 1; }
-  .wt-row:hover .wt-btn-small { opacity: 1; }
-  .wt-loading, .wt-error { padding: 0.5rem; font-size: 0.75rem; color: var(--vt-color-text-muted); }
+  .wt-header-actions { display: flex; gap: 0.2rem; }
+  .wt-list { min-height: 0; overflow-y: auto; padding: 0.2rem 0.4rem; flex: 1; }
+  .wt-status { padding: 0.5rem; font-size: 0.78rem; color: var(--vt-color-text-muted); }
   .wt-error { color: var(--vt-color-danger); }
-  .wt-row { display: flex; align-items: center; gap: 0.45rem; padding: 0.18rem 0.45rem; min-height: 1.85rem; border-radius: var(--vt-radius-sm); }
+  .wt-empty { padding: 1rem 0.5rem; text-align: center; color: var(--vt-color-text-muted); font-size: 0.8rem; }
+  .wt-empty-hint { font-size: 0.72rem; opacity: 0.7; }
+
+  /* Icon buttons */
+  .vt-icon-btn { width: 1.6rem; height: 1.6rem; min-height: 0; padding: 0; border: 1px solid transparent; background: transparent; color: var(--vt-color-text-muted); cursor: pointer; border-radius: var(--vt-radius-sm); display: inline-flex; align-items: center; justify-content: center; }
+  .vt-icon-btn:hover { color: var(--vt-color-accent); background: var(--vt-color-accent-muted); border-color: rgba(78,204,163,0.25); }
+
+  /* Buttons */
+  .vt-btn { min-height: 1.8rem; background: transparent; border: 1px solid var(--vt-color-border-strong); color: var(--vt-color-text-secondary); cursor: pointer; font-size: 0.78rem; padding: 0.3rem 0.6rem; border-radius: var(--vt-radius-sm); }
+  .vt-btn:hover:not(:disabled) { color: var(--vt-color-text-primary); border-color: var(--vt-color-text-muted); }
+  .vt-btn-primary { min-height: 1.8rem; background: var(--vt-color-accent); color: #101827; border: none; padding: 0.3rem 0.7rem; border-radius: var(--vt-radius-sm); cursor: pointer; font-size: 0.78rem; font-weight: 600; }
+  .vt-btn-primary:hover:not(:disabled) { background: #3dbb92; }
+  .vt-btn-danger { min-height: 1.8rem; background: var(--vt-color-danger); color: #fff; border: none; padding: 0.3rem 0.7rem; border-radius: var(--vt-radius-sm); cursor: pointer; font-size: 0.78rem; font-weight: 600; }
+  .vt-btn-danger:hover:not(:disabled) { background: #d63851; }
+  .vt-btn:disabled, .vt-btn-primary:disabled, .vt-btn-danger:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  /* Form */
+  .vt-field { display: grid; gap: 0.35rem; color: var(--vt-color-text-muted); font-size: 0.75rem; }
+  .vt-input { width: 100%; min-height: 2rem; box-sizing: border-box; border: 1px solid var(--vt-color-border-strong); border-radius: var(--vt-radius-sm); background: #0f1424; color: var(--vt-color-text-primary); padding: 0.35rem 0.5rem; font: inherit; font-size: 0.84rem; }
+  .vt-input:focus { outline: none; border-color: var(--vt-color-accent); box-shadow: var(--vt-focus-ring); }
+  .vt-form-error { margin: 0; color: var(--vt-color-danger); font-size: 0.78rem; line-height: 1.4; }
+
+  /* Context menu */
+  .vt-ctx-menu { position: fixed; z-index: 10001; min-width: 10rem; background: var(--vt-color-surface); border: 1px solid var(--vt-color-border-strong); border-radius: var(--vt-radius-md); box-shadow: 0 8px 24px rgba(0,0,0,0.3); padding: 0.25rem; }
+  .vt-ctx-item { display: block; width: 100%; text-align: left; padding: 0.3rem 0.6rem; background: none; border: none; color: var(--vt-color-text-secondary); font-size: 0.78rem; cursor: pointer; border-radius: var(--vt-radius-sm); }
+  .vt-ctx-item:hover { background: var(--vt-color-surface-hover); color: var(--vt-color-text-primary); }
+  .vt-ctx-sep { height: 1px; background: var(--vt-color-border); margin: 0.2rem 0.3rem; }
+  .vt-ctx-danger { color: var(--vt-color-danger); }
+  .vt-ctx-danger:hover { background: var(--vt-color-danger-muted); }
+
+  /* Tree nodes */
+  .wt-node { user-select: none; }
+  .wt-row { display: flex; align-items: center; gap: 0.3rem; padding: 0.18rem 0.45rem; min-height: 1.85rem; border-radius: var(--vt-radius-sm); cursor: pointer; transition: background 0.1s; }
   .wt-row:hover { background: var(--vt-color-surface-hover); }
-  .wt-node.selected > .wt-row { background: var(--vt-color-surface-selected); box-shadow: inset 2px 0 0 var(--vt-color-accent); }
-  .wt-icon { width: 0.95rem; height: 0.95rem; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; color: var(--vt-color-text-muted); }
-  :global(.wt-node-icon) { display: block; }
-  .wt-label { flex: 1; min-width: 0; min-height: 0; justify-content: flex-start; background: none; border: none; color: var(--vt-color-text-secondary); font-size: 0.78rem; text-align: left; cursor: pointer; padding: 0.1rem 0; border-radius: var(--vt-radius-sm); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .wt-label:hover { color: var(--vt-color-accent); }
-  .wt-icon-btn { width: 1.45rem; height: 1.45rem; min-height: 0; padding: 0; border: 1px solid transparent; background: transparent; color: var(--vt-color-text-muted); opacity: 0.75; flex-shrink: 0; cursor: pointer; border-radius: var(--vt-radius-sm); }
-  .wt-row:hover .wt-icon-btn { opacity: 1; }
-  .wt-icon-btn:hover:not(:disabled) { color: var(--vt-color-accent); background: var(--vt-color-accent-muted); border-color: rgba(78,204,163,0.25); }
-  .wt-icon-btn.danger:hover:not(:disabled) { color: var(--vt-color-danger); background: var(--vt-color-danger-muted); border-color: rgba(233,69,96,0.35); }
-  .wt-rename { flex: 1; min-width: 0; background: #0f1424; border: 1px solid var(--vt-color-border-strong); color: var(--vt-color-text-primary); padding: 0.2rem 0.35rem; border-radius: var(--vt-radius-sm); font-size: 0.78rem; }
-  .wt-rename:focus { outline: none; border-color: var(--vt-color-accent); box-shadow: var(--vt-focus-ring); }
-  .workspace-create-overlay { position: fixed; inset: 0; z-index: 10000; display: flex; align-items: center; justify-content: center; padding: 1rem; background: rgba(4, 8, 18, 0.7); }
-  .workspace-create-modal { width: min(34rem, 100%); display: grid; gap: 0.85rem; padding: 1rem; border: 1px solid var(--vt-color-border-strong); border-radius: var(--vt-radius-lg); background: var(--vt-color-surface); box-shadow: 0 18px 44px rgba(0, 0, 0, 0.38); }
-  .workspace-create-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; }
-  .workspace-create-header h2 { margin: 0; font-size: 1rem; }
-  .workspace-create-field { display: grid; gap: 0.35rem; color: var(--vt-color-text-muted); font-size: 0.75rem; }
-  .workspace-create-field input, .workspace-create-field select { width: 100%; min-height: 2rem; box-sizing: border-box; border: 1px solid var(--vt-color-border-strong); border-radius: var(--vt-radius-sm); background: #0f1424; color: var(--vt-color-text-primary); padding: 0.35rem 0.5rem; font: inherit; font-size: 0.84rem; }
-  .workspace-create-field select { appearance: none; background-color: #0f1424; background-image: linear-gradient(45deg, transparent 50%, var(--vt-color-text-muted) 50%), linear-gradient(135deg, var(--vt-color-text-muted) 50%, transparent 50%); background-position: calc(100% - 14px) 50%, calc(100% - 9px) 50%; background-size: 5px 5px, 5px 5px; background-repeat: no-repeat; padding-right: 1.7rem; }
-  .workspace-create-field select option { background: #0f1424; color: var(--vt-color-text-primary); }
-  .workspace-create-field input:focus, .workspace-create-field select:focus { outline: none; border-color: var(--vt-color-accent); box-shadow: var(--vt-focus-ring); }
-  .workspace-template-summary { display: grid; gap: 0.55rem; padding: 0.75rem; border: 1px solid var(--vt-color-border); border-radius: var(--vt-radius-md); background: var(--vt-color-surface-muted); }
-  .workspace-template-summary p { margin: 0; color: var(--vt-color-text-secondary); font-size: 0.8rem; line-height: 1.45; }
-  .workspace-template-tools { display: grid; gap: 0.4rem; }
-  .workspace-template-tool { display: grid; grid-template-columns: minmax(7rem, 1fr) minmax(0, 1.4fr) minmax(0, 1.2fr); gap: 0.5rem; align-items: center; padding: 0.45rem 0.55rem; border: 1px solid var(--vt-color-border-strong); border-radius: var(--vt-radius-sm); color: var(--vt-color-text-secondary); font-size: 0.72rem; }
-  .workspace-template-tool-name { color: var(--vt-color-text-primary); font-weight: 600; }
-  .workspace-template-tool-tabs { color: var(--vt-color-text-muted); }
-  .workspace-template-tool-reason { color: var(--vt-color-accent); }
-  .workspace-template-tool.limited { border-color: rgba(220, 164, 57, 0.58); background: rgba(220, 164, 57, 0.08); }
-  .workspace-template-tool.limited .workspace-template-tool-reason { color: #e8bc63; }
-  .workspace-template-tool.unavailable { border-color: rgba(233, 69, 96, 0.58); background: var(--vt-color-danger-muted); }
-  .workspace-template-tool.unavailable .workspace-template-tool-reason { color: var(--vt-color-danger); }
-  .workspace-template-incomplete { color: var(--vt-color-danger) !important; }
-  .workspace-template-warning { display: flex; gap: 0.5rem; align-items: flex-start; justify-content: space-between; margin: 0.25rem 0.6rem 0.5rem; padding: 0.6rem; border: 1px solid rgba(233, 69, 96, 0.58); border-radius: var(--vt-radius-md); background: var(--vt-color-danger-muted); color: var(--vt-color-text-secondary); font-size: 0.73rem; line-height: 1.4; }
-  .workspace-template-warning strong { color: var(--vt-color-danger); }
-  .workspace-template-warning-item { margin-top: 0.2rem; }
-  @media (max-width: 700px) { .workspace-template-tool { grid-template-columns: 1fr; gap: 0.18rem; } }
-  .workspace-create-error { margin: 0; color: var(--vt-color-danger); font-size: 0.78rem; line-height: 1.4; }
-  .workspace-create-actions { display: flex; gap: 0.4rem; justify-content: flex-end; }
-  .wt-btn-primary { background: var(--vt-color-accent); color: #101827; border: none; padding: 0.3rem 0.6rem; border-radius: var(--vt-radius-sm); cursor: pointer; font-size: 0.75rem; font-weight: 600; }
-  .wt-btn-primary:hover:not(:disabled) { background: #3dbb92; }
-  .wt-btn-primary:disabled, .wt-btn:disabled, .wt-icon-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .wt-row.selected { background: var(--vt-color-surface-selected); box-shadow: inset 2px 0 0 var(--vt-color-accent); color: var(--vt-color-text-primary); }
+  .wt-row.focus { outline: 1px solid var(--vt-color-accent); outline-offset: -1px; }
+  .wt-chevron { width: 0.9rem; height: 0.9rem; display: flex; align-items: center; justify-content: center; flex-shrink: 0; color: var(--vt-color-text-muted); transition: transform 0.15s; }
+  .wt-chevron.open { transform: rotate(90deg); }
+  .wt-chevron-empty { visibility: hidden; }
+  .wt-node-icon { width: 1rem; height: 1rem; display: flex; align-items: center; justify-content: center; flex-shrink: 0; color: var(--vt-color-text-muted); }
+  .wt-node-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.78rem; color: var(--vt-color-text-secondary); }
+  .wt-row.selected .wt-node-name { color: var(--vt-color-text-primary); }
+  .wt-node-actions { display: flex; gap: 0.1rem; opacity: 0; transition: opacity 0.1s; }
+  .wt-row:hover .wt-node-actions, .wt-row:focus-within .wt-node-actions { opacity: 1; }
+  .vt-icon-btn-sm { width: 1.3rem; height: 1.3rem; }
 </style>
