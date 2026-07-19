@@ -266,15 +266,15 @@
 {#if ctxMenu}
   <div class="vt-ctx" style="left:{ctxMenu.x}px;top:{ctxMenu.y}px" on:click|stopPropagation on:mousedown|stopPropagation>
     {#if ctxMenu.kind === 'folder'}
-      <button class="vt-ctx-i" on:click={() => { closeCtx(); openCreateWorkspace(ctxMenu.id); }}>{tr('workspaceTree.newDeal')}</button>
-      <button class="vt-ctx-i" on:click={() => { closeCtx(); openCreateFolder(ctxMenu.id); }}>{tr('workspaceTree.newFolder')}</button>
+      <button class="vt-ctx-i" on:click={() => { const i = ctxMenu.id; closeCtx(); openCreateWorkspace(i); }}>{tr('workspaceTree.newDeal')}</button>
+      <button class="vt-ctx-i" on:click={() => { const i = ctxMenu.id; closeCtx(); openCreateFolder(i); }}>{tr('workspaceTree.newFolder')}</button>
       <div class="vt-ctx-s" />
-      <button class="vt-ctx-i" on:click={() => { closeCtx(); openRename('folder', ctxMenu.id, ctxMenu.name); }}>{tr('workspaceTree.renameFolder')}</button>
-      <button class="vt-ctx-i vt-ctx-d" on:click={() => { closeCtx(); openTrash('folder', ctxMenu.id, ctxMenu.name); }}>{tr('workspaceTree.trashFolder')}</button>
+      <button class="vt-ctx-i" on:click={() => { const {id: i, name: n} = ctxMenu; closeCtx(); openRename('folder', i, n); }}>{tr('workspaceTree.renameFolder')}</button>
+      <button class="vt-ctx-i vt-ctx-d" on:click={() => { const {id: i, name: n} = ctxMenu; closeCtx(); openTrash('folder', i, n); }}>{tr('workspaceTree.trashFolder')}</button>
     {:else}
-      <button class="vt-ctx-i" on:click={() => { closeCtx(); selectWorkspace(ctxMenu.id); }}>{tr('workspaceTree.open')}</button>
-      <button class="vt-ctx-i" on:click={() => { closeCtx(); openRename('workspace', ctxMenu.id, ctxMenu.name); }}>{tr('workspaceTree.renameDeal')}</button>
-      <button class="vt-ctx-i vt-ctx-d" on:click={() => { closeCtx(); openTrash('workspace', ctxMenu.id, ctxMenu.name); }}>{tr('workspaceTree.trashDeal')}</button>
+      <button class="vt-ctx-i" on:click={() => { const i = ctxMenu.id; closeCtx(); selectWorkspace(i); }}>{tr('workspaceTree.open')}</button>
+      <button class="vt-ctx-i" on:click={() => { const {id: i, name: n} = ctxMenu; closeCtx(); openRename('workspace', i, n); }}>{tr('workspaceTree.renameDeal')}</button>
+      <button class="vt-ctx-i vt-ctx-d" on:click={() => { const {id: i, name: n} = ctxMenu; closeCtx(); openTrash('workspace', i, n); }}>{tr('workspaceTree.trashDeal')}</button>
     {/if}
   </div>
 {/if}
