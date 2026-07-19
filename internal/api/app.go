@@ -2980,6 +2980,45 @@ func (a *App) TrashWorkspaceV2(workspaceID string) map[string]interface{} {
 	}
 }
 
+// ─── Folder Appearance API ───────────────────────────────────
+
+func (a *App) GetFolderAppearance(folderID string) map[string]interface{} {
+	if a.treeV2 == nil {
+		return map[string]interface{}{"error": "not initialized"}
+	}
+	appearance, err := a.treeV2.GetFolderAppearance(folderID)
+	if err != nil {
+		return map[string]interface{}{"error": err.Error()}
+	}
+	return map[string]interface{}{
+		"icon":  appearance.Icon,
+		"color": appearance.Color,
+	}
+}
+
+func (a *App) SetFolderAppearance(folderID string, patch map[string]interface{}) string {
+	if a.treeV2 == nil {
+		return "not initialized"
+	}
+	fa := &workspacetree.FolderAppearance{}
+	if v, ok := patch["icon"].(string); ok { fa.Icon = v }
+	if v, ok := patch["color"].(string); ok { fa.Color = v }
+	if err := a.treeV2.SetFolderAppearance(folderID, fa); err != nil {
+		return err.Error()
+	}
+	return ""
+}
+
+func (a *App) ResetFolderAppearance(folderID string) string {
+	if a.treeV2 == nil {
+		return "not initialized"
+	}
+	if err := a.treeV2.ResetFolderAppearance(folderID); err != nil {
+		return err.Error()
+	}
+	return ""
+}
+
 func (a *App) SetCurrentWorkspaceV2(workspaceID string) string {
 	if a.treeV2 == nil {
 		return "not initialized"
