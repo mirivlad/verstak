@@ -8,6 +8,7 @@ import {api} from '../models';
 import {permissions} from '../models';
 import {plugin} from '../models';
 import {files} from '../models';
+import {workspacetree} from '../models';
 import {notifications} from '../models';
 
 export function ArchiveWorkspaceNode(arg1:string):Promise<string>;
@@ -16,6 +17,8 @@ export function ClearPluginNotifications(arg1:string):Promise<string>;
 
 export function CloseVault():Promise<void>;
 
+export function CreateFolderV2(arg1:string,arg2:string):Promise<Record<string, any>>;
+
 export function CreateVault(arg1:string):Promise<void>;
 
 export function CreateVaultFolder(arg1:string,arg2:string):Promise<string>;
@@ -23,6 +26,8 @@ export function CreateVaultFolder(arg1:string,arg2:string):Promise<string>;
 export function CreateWorkspace(arg1:string,arg2:string):Promise<workspace.Workspace|string>;
 
 export function CreateWorkspaceNode(arg1:string,arg2:string,arg3:string):Promise<Record<string, any>>;
+
+export function CreateWorkspaceV2(arg1:string,arg2:string,arg3:string):Promise<Record<string, any>>;
 
 export function DeleteVaultTrash(arg1:string,arg2:string):Promise<string>;
 
@@ -46,6 +51,10 @@ export function GetCurrentWorkspace():Promise<Record<string, any>>;
 
 export function GetCurrentWorkspaceNode():Promise<Record<string, any>>;
 
+export function GetFolderAppearance(arg1:string):Promise<Record<string, any>>;
+
+export function GetFolderByID(arg1:string):Promise<Record<string, any>>;
+
 export function GetPermissions():Promise<Array<permissions.Entry>>;
 
 export function GetPluginAssetContent(arg1:string,arg2:string):Promise<string|string>;
@@ -68,9 +77,15 @@ export function GetWorkbenchOpenedResources():Promise<Array<workbench.OpenedReso
 
 export function GetWorkbenchPreferences():Promise<workbench.Preferences>;
 
+export function GetWorkspaceByID(arg1:string):Promise<Record<string, any>>;
+
 export function GetWorkspaceMetadata(arg1:string):Promise<workspace.Metadata|string>;
 
 export function GetWorkspaceTree():Promise<Record<string, any>>;
+
+export function GetWorkspaceTreeDiagnostics():Promise<Array<workspacetree.TreeDiagnostic>>;
+
+export function GetWorkspaceTreeV2():Promise<Record<string, any>>;
 
 export function ListPluginCapabilities(arg1:string):Promise<Array<capability.Entry>|string>;
 
@@ -84,9 +99,13 @@ export function ListWorkspaceTemplates():Promise<Array<workspace.WorkspaceTempla
 
 export function ListWorkspaces():Promise<Array<workspace.Workspace>|string>;
 
+export function MoveFolderV2(arg1:string,arg2:string):Promise<string>;
+
 export function MoveVaultPath(arg1:string,arg2:string,arg3:string,arg4:files.MoveOptions):Promise<string>;
 
 export function MoveWorkspaceNode(arg1:string,arg2:string):Promise<string>;
+
+export function MoveWorkspaceV2(arg1:string,arg2:string):Promise<string>;
 
 export function OpenExternalURL(arg1:string,arg2:string):Promise<string>;
 
@@ -150,13 +169,21 @@ export function RecordDesiredPlugin(arg1:string,arg2:string,arg3:string):Promise
 
 export function ReloadPlugins():Promise<number|string>;
 
+export function RenameFolderV2(arg1:string,arg2:string):Promise<string>;
+
 export function RenameWorkspace(arg1:string,arg2:string):Promise<string>;
 
 export function RenameWorkspaceNode(arg1:string,arg2:string):Promise<string>;
 
+export function RenameWorkspaceV2(arg1:string,arg2:string):Promise<string>;
+
 export function RepairWorkspaceIdentity(arg1:string,arg2:string):Promise<string>;
 
 export function ReplacePluginNotifications(arg1:string,arg2:Array<notifications.Request>):Promise<string>;
+
+export function RescanWorkspaceTree():Promise<string>;
+
+export function ResetFolderAppearance(arg1:string):Promise<string>;
 
 export function RestoreVaultTrash(arg1:string,arg2:string,arg3:files.RestoreOptions):Promise<string|string>;
 
@@ -172,7 +199,13 @@ export function SetCurrentWorkspace(arg1:string):Promise<string>;
 
 export function SetCurrentWorkspaceNode(arg1:string):Promise<string>;
 
+export function SetCurrentWorkspaceV2(arg1:string):Promise<string>;
+
+export function SetFolderAppearance(arg1:string,arg2:Record<string, any>):Promise<string>;
+
 export function SetNotificationService(arg1:api.notificationService):Promise<void>;
+
+export function SetTrayReady(arg1:boolean):Promise<void>;
 
 export function ShowVaultPathInFolder(arg1:string,arg2:string):Promise<string>;
 
@@ -182,9 +215,13 @@ export function Shutdown(arg1:context.Context):Promise<void>;
 
 export function SubscribePluginEvent(arg1:string,arg2:string):Promise<string>;
 
+export function TrashFolderV2(arg1:string):Promise<Record<string, any>>;
+
 export function TrashVaultPath(arg1:string,arg2:string):Promise<files.TrashResult|string>;
 
 export function TrashWorkspace(arg1:string):Promise<workspace.TrashResult|string>;
+
+export function TrashWorkspaceV2(arg1:string):Promise<Record<string, any>>;
 
 export function UpdateAppSettings(arg1:Record<string, any>):Promise<string>;
 

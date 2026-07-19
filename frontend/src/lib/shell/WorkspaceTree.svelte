@@ -162,6 +162,9 @@
 
   // ── Helpers ────────────────────────────────────────────────────────────────
   function flatFolders(roots, out = []) { for (const r of roots || []) { if (r.kind === 'folder') { out.push(r); flatFolders(r.children, out); } } return out; }
+  function descendantIds(node) { const ids = new Set(); function walk(n) { for (const c of n.children || []) { ids.add(c.id); walk(c); } } walk(node); return ids; }
+  function moveExcludedIds() { if (!modal?.id) return new Set(); const n = findNode(tree.roots, modal.id); return n ? descendantIds(n) : new Set(); }
+  $: moveExcluded = moveExcludedIds();
 
   function subtreeCounts(id) { let folders = 0, wss = 0; const n = findNode(tree.roots || [], id); if (n) count(n); return { folders, workspaces: wss };
     function count(nd) { for (const c of nd.children || []) { if (c.kind === 'folder') { folders++; count(c); } else wss++; } } }
@@ -258,7 +261,7 @@
 </Modal>
 
 <Modal title={(tr('workspaceTree.move') + (modal?.name ? ' «' + modal.name + '»' : ''))} show={modal?.type === 'move'} on:close={closeModal}>
-  <label class="vt-field"><span>{tr('workspaceTree.newLocation')}</span><Select options={flatFolders(tree.roots).filter(f => f.id !== modal?.id).map(f => ({ value: f.id, label: f.path }))} placeholder={tr('workspaceTree.root')} bind:value={formParentId} labelKey="label" valueKey="value" /></label>
+  <label class="vt-field"><span>{tr('workspaceTree.newLocation')}</span><Select options={flatFolders(tree.roots).filter(f => f.id !== modal?.id && !moveExcluded.has(f.id)).map(f => ({ value: f.id, label: f.path }))} placeholder={tr('workspaceTree.root')} bind:value={formParentId} labelKey="label" valueKey="value" /></label>
   {#if formError}<p class="vt-ferr">{formError}</p>{/if}
   <svelte:fragment slot="actions"><button class="vt-btn" on:click={closeModal} disabled={formBusy}>{tr('common.cancel')}</button><button class="vt-btn-p" on:click={doMove} disabled={formBusy}>{tr('workspaceTree.move')}</button></svelte:fragment>
 </Modal>

@@ -14,6 +14,10 @@ export function CloseVault() {
   return window['go']['api']['App']['CloseVault']();
 }
 
+export function CreateFolderV2(arg1, arg2) {
+  return window['go']['api']['App']['CreateFolderV2'](arg1, arg2);
+}
+
 export function CreateVault(arg1) {
   return window['go']['api']['App']['CreateVault'](arg1);
 }
@@ -28,6 +32,10 @@ export function CreateWorkspace(arg1, arg2) {
 
 export function CreateWorkspaceNode(arg1, arg2, arg3) {
   return window['go']['api']['App']['CreateWorkspaceNode'](arg1, arg2, arg3);
+}
+
+export function CreateWorkspaceV2(arg1, arg2, arg3) {
+  return window['go']['api']['App']['CreateWorkspaceV2'](arg1, arg2, arg3);
 }
 
 export function DeleteVaultTrash(arg1, arg2) {
@@ -74,6 +82,14 @@ export function GetCurrentWorkspaceNode() {
   return window['go']['api']['App']['GetCurrentWorkspaceNode']();
 }
 
+export function GetFolderAppearance(arg1) {
+  return window['go']['api']['App']['GetFolderAppearance'](arg1);
+}
+
+export function GetFolderByID(arg1) {
+  return window['go']['api']['App']['GetFolderByID'](arg1);
+}
+
 export function GetPermissions() {
   return window['go']['api']['App']['GetPermissions']();
 }
@@ -118,12 +134,24 @@ export function GetWorkbenchPreferences() {
   return window['go']['api']['App']['GetWorkbenchPreferences']();
 }
 
+export function GetWorkspaceByID(arg1) {
+  return window['go']['api']['App']['GetWorkspaceByID'](arg1);
+}
+
 export function GetWorkspaceMetadata(arg1) {
   return window['go']['api']['App']['GetWorkspaceMetadata'](arg1);
 }
 
 export function GetWorkspaceTree() {
   return window['go']['api']['App']['GetWorkspaceTree']();
+}
+
+export function GetWorkspaceTreeDiagnostics() {
+  return window['go']['api']['App']['GetWorkspaceTreeDiagnostics']();
+}
+
+export function GetWorkspaceTreeV2() {
+  return window['go']['api']['App']['GetWorkspaceTreeV2']();
 }
 
 export function ListPluginCapabilities(arg1) {
@@ -150,12 +178,20 @@ export function ListWorkspaces() {
   return window['go']['api']['App']['ListWorkspaces']();
 }
 
+export function MoveFolderV2(arg1, arg2) {
+  return window['go']['api']['App']['MoveFolderV2'](arg1, arg2);
+}
+
 export function MoveVaultPath(arg1, arg2, arg3, arg4) {
   return window['go']['api']['App']['MoveVaultPath'](arg1, arg2, arg3, arg4);
 }
 
 export function MoveWorkspaceNode(arg1, arg2) {
   return window['go']['api']['App']['MoveWorkspaceNode'](arg1, arg2);
+}
+
+export function MoveWorkspaceV2(arg1, arg2) {
+  return window['go']['api']['App']['MoveWorkspaceV2'](arg1, arg2);
 }
 
 export function OpenExternalURL(arg1, arg2) {
@@ -282,6 +318,10 @@ export function ReloadPlugins() {
   return window['go']['api']['App']['ReloadPlugins']();
 }
 
+export function RenameFolderV2(arg1, arg2) {
+  return window['go']['api']['App']['RenameFolderV2'](arg1, arg2);
+}
+
 export function RenameWorkspace(arg1, arg2) {
   return window['go']['api']['App']['RenameWorkspace'](arg1, arg2);
 }
@@ -290,12 +330,24 @@ export function RenameWorkspaceNode(arg1, arg2) {
   return window['go']['api']['App']['RenameWorkspaceNode'](arg1, arg2);
 }
 
+export function RenameWorkspaceV2(arg1, arg2) {
+  return window['go']['api']['App']['RenameWorkspaceV2'](arg1, arg2);
+}
+
 export function RepairWorkspaceIdentity(arg1, arg2) {
   return window['go']['api']['App']['RepairWorkspaceIdentity'](arg1, arg2);
 }
 
 export function ReplacePluginNotifications(arg1, arg2) {
   return window['go']['api']['App']['ReplacePluginNotifications'](arg1, arg2);
+}
+
+export function RescanWorkspaceTree() {
+  return window['go']['api']['App']['RescanWorkspaceTree']();
+}
+
+export function ResetFolderAppearance(arg1) {
+  return window['go']['api']['App']['ResetFolderAppearance'](arg1);
 }
 
 export function RestoreVaultTrash(arg1, arg2, arg3) {
@@ -326,8 +378,20 @@ export function SetCurrentWorkspaceNode(arg1) {
   return window['go']['api']['App']['SetCurrentWorkspaceNode'](arg1);
 }
 
+export function SetCurrentWorkspaceV2(arg1) {
+  return window['go']['api']['App']['SetCurrentWorkspaceV2'](arg1);
+}
+
+export function SetFolderAppearance(arg1, arg2) {
+  return window['go']['api']['App']['SetFolderAppearance'](arg1, arg2);
+}
+
 export function SetNotificationService(arg1) {
   return window['go']['api']['App']['SetNotificationService'](arg1);
+}
+
+export function SetTrayReady(arg1) {
+  return window['go']['api']['App']['SetTrayReady'](arg1);
 }
 
 export function ShowVaultPathInFolder(arg1, arg2) {
@@ -346,12 +410,20 @@ export function SubscribePluginEvent(arg1, arg2) {
   return window['go']['api']['App']['SubscribePluginEvent'](arg1, arg2);
 }
 
+export function TrashFolderV2(arg1) {
+  return window['go']['api']['App']['TrashFolderV2'](arg1);
+}
+
 export function TrashVaultPath(arg1, arg2) {
   return window['go']['api']['App']['TrashVaultPath'](arg1, arg2);
 }
 
 export function TrashWorkspace(arg1) {
   return window['go']['api']['App']['TrashWorkspace'](arg1);
+}
+
+export function TrashWorkspaceV2(arg1) {
+  return window['go']['api']['App']['TrashWorkspaceV2'](arg1);
 }
 
 export function UpdateAppSettings(arg1) {
