@@ -9,6 +9,8 @@ var platformCapabilities = []string{
 	"verstak/core/permissions/v1",
 	"verstak/core/events/v1",
 	"verstak/core/files/v1",
+	"verstak/core/workspace/v1",
+	"verstak/core/workspacetree/v1",
 	"verstak/core/workbench/v1",
 	"verstak/core/notifications/v1",
 }
