@@ -148,11 +148,13 @@
   function closeCtx() { ctxMenu = null; }
 
   // ── Drag-and-drop ──────────────────────────────────────────────────────────
-  function onRootDragOver(e) { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; dragOverRoot = true; }
-  function onRootDragLeave(e) { dragOverRoot = false; }
+  let dragCounter = 0;
+  function onRootDragOver(e) { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; dragCounter++; dragOverRoot = true; }
+  function onRootDragLeave(e) { dragCounter--; if (dragCounter <= 0) { dragOverRoot = false; dragCounter = 0; } }
   function resetDragState() {
     dragOverRoot = false;
     dragOverFolderId = '';
+    dragCounter = 0;
   }
 
   function onRootDrop(e) {
@@ -161,15 +163,15 @@
     resetDragState();
     try {
       const data = JSON.parse(e.dataTransfer.getData('application/x-verstak-node'));
-      if (data.kind === 'folder') App.MoveFolderV2(data.id, '').then(loadTree).finally(resetDragState);
-      else App.MoveWorkspaceV2(data.id, '').then(loadTree).finally(resetDragState);
+      if (data.kind === 'folder') App.MoveFolderV2(data.id, '').then(loadTree).catch(() => {}).finally(resetDragState);
+      else App.MoveWorkspaceV2(data.id, '').then(loadTree).catch(() => {}).finally(resetDragState);
     } catch { resetDragState(); }
   }
   function onNodeDrop(e) {
     resetDragState();
     const { source, targetId } = e.detail;
-    if (source.kind === 'folder') App.MoveFolderV2(source.id, targetId).then(loadTree).finally(resetDragState);
-    else App.MoveWorkspaceV2(source.id, targetId).then(loadTree).finally(resetDragState);
+    if (source.kind === 'folder') App.MoveFolderV2(source.id, targetId).then(loadTree).catch(() => {}).finally(resetDragState);
+    else App.MoveWorkspaceV2(source.id, targetId).then(loadTree).catch(() => {}).finally(resetDragState);
   }
 
   // ── Helpers ────────────────────────────────────────────────────────────────

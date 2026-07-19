@@ -408,6 +408,25 @@ import journalSource from '../../../../../verstak-official-plugins/plugins/journ
     return { id: name, parentId: '', type: 'space', title: name, name: name, rootPath: name, status: 'active', order: order };
   }
 
+  function makeWorkspaceNodeV2(name, order) {
+    var wsid = 'ws-' + Math.random().toString(36).slice(2, 10);
+    return { id: name, workspaceId: wsid, name: name, rootPath: name, order: order };
+  }
+
+  function workspaceTreeV2Snapshot() {
+    var roots = workspaceTree.nodes.map(function (n, i) {
+      return {
+        key: 'workspace:' + (n.workspaceId || n.id),
+        kind: 'workspace',
+        id: n.workspaceId || n.id,
+        name: n.name,
+        path: n.rootPath || n.name,
+        children: []
+      };
+    });
+    return { roots: roots, revision: 1, warnings: [] };
+  }
+
   function cloneJson(value) {
     return JSON.parse(JSON.stringify(value));
   }
@@ -3813,7 +3832,7 @@ import journalSource from '../../../../../verstak-official-plugins/plugins/journ
       return Promise.resolve(listWorkspacesFromTree());
     },
     ListWorkspaceTemplates: function () {
-      return Promise.resolve(builtInWorkspaceTemplates().map(function (template) {
+      return Promise.resolve([builtInWorkspaceTemplates().map(function (template) {
         return {
           id: template.id,
           name: template.name,
@@ -3821,7 +3840,7 @@ import journalSource from '../../../../../verstak-official-plugins/plugins/journ
           version: template.version,
           workspaceTools: template.workspaceTools.slice()
         };
-      }));
+      }), '']);
     },
     CreateWorkspace: function (name, templateID) {
       var norm = normalizeVaultPath(name, false);
@@ -3916,6 +3935,50 @@ import journalSource from '../../../../../verstak-official-plugins/plugins/journ
       return Promise.resolve('');
     },
     SetCurrentWorkspaceNode: function (id) { return this.SetCurrentWorkspace(id); },
+    // ── V2 Tree API ──────────────────────────────────────────────────────────
+    GetWorkspaceTreeV2: function () {
+      return Promise.resolve(workspaceTreeV2Snapshot());
+    },
+    GetWorkspaceByID: function (id) {
+      for (var i = 0; i < workspaceTree.nodes.length; i++) {
+        var n = workspaceTree.nodes[i];
+        if (n.workspaceId === id || n.id === id) {
+          return Promise.resolve({ id: n.workspaceId || n.id, name: n.name, rootPath: n.rootPath || n.name });
+        }
+      }
+      return Promise.resolve(null);
+    },
+    GetFolderByID: function (id) {
+      return Promise.resolve(null);
+    },
+    SetCurrentWorkspaceV2: function (id) {
+      return Promise.resolve('');
+    },
+    CreateWorkspaceV2: function (parentFolderID, name, templateID) {
+      var norm = normalizeVaultPath(name, false);
+      if (norm.error) return Promise.resolve({ error: norm.error });
+      if (vaultFiles[norm.path]) return Promise.resolve({ error: 'conflict: ' + norm.path });
+      var template = workspaceTemplateByID(templateID || 'default');
+      if (!template) return Promise.resolve({ error: 'template-not-found: ' + String(templateID || '') });
+      vaultFiles[norm.path] = { type: 'folder', modifiedAt: new Date().toISOString() };
+      template.folders.forEach(function (folder) {
+        vaultFiles[norm.path + '/' + folder] = { type: 'folder', modifiedAt: new Date().toISOString() };
+      });
+      workspaceMetadata[norm.path] = metadataForTemplate(norm.path, template);
+      var node = makeWorkspaceNodeV2(norm.path, workspaceTree.nodes.length + 1);
+      workspaceTree.nodes.push(node);
+      return Promise.resolve({ id: node.workspaceId || node.id, name: norm.path, rootPath: norm.path });
+    },
+    CreateFolderV2: function (parentFolderID, name) {
+      return Promise.resolve({ id: 'folder-' + Math.random().toString(36).slice(2, 10), name: name, path: name });
+    },
+    RenameWorkspaceV2: function (workspaceID, newName) { return Promise.resolve(''); },
+    RenameFolderV2: function (folderID, newName) { return Promise.resolve(''); },
+    MoveWorkspaceV2: function (workspaceID, targetParentFolderID) { return Promise.resolve(''); },
+    MoveFolderV2: function (folderID, targetParentFolderID) { return Promise.resolve(''); },
+    RescanWorkspaceTree: function () { return Promise.resolve(''); },
+    GetWorkspaceTreeDiagnostics: function () { return Promise.resolve([]); },
+    // ── End V2 Tree API ──────────────────────────────────────────────────────
     SelectDirectory: function () { return Promise.resolve(''); },
     SelectVaultForOpen: function () { return Promise.resolve(''); },
     CreateVault: function () { return Promise.resolve(null); },
