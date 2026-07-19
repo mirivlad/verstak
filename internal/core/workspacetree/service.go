@@ -187,7 +187,7 @@ func (s *Service) fullReconcile() error {
 	}
 
 	// Scan filesystem (read-only).
-	scan, err := Scan(s.vaultDir)
+	scan, err := Scan(s.vaultDir, prev)
 	if err != nil {
 		return err
 	}

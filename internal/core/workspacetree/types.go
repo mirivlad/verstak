@@ -6,7 +6,14 @@
 // reconciliation.
 package workspacetree
 
-import "encoding/json"
+import (
+	"encoding/json"
+	"fmt"
+	"os"
+	"path/filepath"
+
+	"github.com/google/uuid"
+)
 
 // ── Marker formats ───────────────────────────────────────────────────────────
 
@@ -83,12 +90,47 @@ type SnapshotEntry struct {
 	Path string `json:"path"`
 }
 
+// ── Unmanaged directories ────────────────────────────────────────────────────
+
+// UnmanagedDirectory is a directory without a marker, reported by the scanner.
+// The scanner never writes markers; the reconciler may create folder.json.
+type UnmanagedDirectory struct {
+	Path   string `json:"path"`
+	Name   string `json:"name"`
+	Parent string `json:"parent,omitempty"` // parent path or empty for root
+}
+
+// ── Move / rename info ───────────────────────────────────────────────────────
+
+// MoveInfo describes whether a path change is a rename, move, or both.
+type MoveInfo struct {
+	NameChanged   bool
+	ParentChanged bool
+	PreviousPath  string
+	NewPath       string
+}
+
+// DetectMoveInfo compares previous and new paths.
+func DetectMoveInfo(prevPath, newPath string) MoveInfo {
+	prevParent := parentPath(prevPath)
+	newParent := parentPath(newPath)
+	prevName := filepath.Base(filepath.FromSlash(prevPath))
+	newName := filepath.Base(filepath.FromSlash(newPath))
+	return MoveInfo{
+		NameChanged:   prevName != newName,
+		ParentChanged: prevParent != newParent,
+		PreviousPath:  prevPath,
+		NewPath:       newPath,
+	}
+}
+
 // ── Reconciliation types ─────────────────────────────────────────────────────
 
 // ScanResult is the output of a full read-only filesystem scan.
 type ScanResult struct {
 	Folders    map[string]ScannedFolder    // keyed by UUID
 	Workspaces map[string]ScannedWorkspace // keyed by UUID
+	Unmanaged  []UnmanagedDirectory
 	Warnings   []TreeDiagnostic
 }
 
@@ -100,10 +142,22 @@ type ReconEvent struct {
 
 // ReconResult is the output of reconciliation.
 type ReconResult struct {
-	Snapshot SemanticSnapshot
-	Events   []ReconEvent
-	Warnings []TreeDiagnostic
+	Snapshot      SemanticSnapshot
+	Events        []ReconEvent
+	Warnings      []TreeDiagnostic
+	NewFolders    []ScannedFolder // folders created (with new markers) during reconciliation
+	NewWorkspaces []ScannedWorkspace
 }
+
+// ── Change class for watcher ─────────────────────────────────────────────────
+
+// ChangeClass classifies a filesystem event as content or structural.
+type ChangeClass string
+
+const (
+	ChangeContent    ChangeClass = "content"
+	ChangeStructural ChangeClass = "structural"
+)
 
 // ── Marker helpers ───────────────────────────────────────────────────────────
 
@@ -123,4 +177,49 @@ func ParseFolderMarker(data []byte) (FolderMarker, error) {
 		return m, err
 	}
 	return m, nil
+}
+
+// ── Marker I/O ───────────────────────────────────────────────────────────────
+
+// WriteWorkspaceMarker atomically writes a workspace marker file.
+func WriteWorkspaceMarker(dir string, id string) error {
+	if _, err := uuid.Parse(id); err != nil {
+		return fmt.Errorf("invalid workspace identity: %w", err)
+	}
+	marker := WorkspaceMarker{SchemaVersion: 1, WorkspaceID: id}
+	data, err := json.Marshal(marker)
+	if err != nil {
+		return err
+	}
+	return atomicWrite(dir, "workspace.json", data)
+}
+
+// WriteFolderMarker atomically writes a folder marker file.
+func WriteFolderMarker(dir string, id string) error {
+	if _, err := uuid.Parse(id); err != nil {
+		return fmt.Errorf("invalid folder identity: %w", err)
+	}
+	marker := FolderMarker{SchemaVersion: 1, FolderID: id}
+	data, err := json.Marshal(marker)
+	if err != nil {
+		return err
+	}
+	return atomicWrite(dir, "folder.json", data)
+}
+
+func atomicWrite(parentDir, filename string, data []byte) error {
+	verstakDir := filepath.Join(parentDir, ".verstak")
+	if err := os.MkdirAll(verstakDir, 0o755); err != nil {
+		return err
+	}
+	target := filepath.Join(verstakDir, filename)
+	tmp := target + ".tmp"
+	if err := os.WriteFile(tmp, data, 0o644); err != nil {
+		return err
+	}
+	if err := os.Rename(tmp, target); err != nil {
+		_ = os.Remove(tmp)
+		return err
+	}
+	return nil
 }
