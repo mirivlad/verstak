@@ -1,6 +1,7 @@
 <script>
   import PluginManager from './lib/plugin-manager/PluginManager.svelte';
   import Sidebar from './lib/shell/Sidebar.svelte';
+  import GlobalSearch from './lib/shell/GlobalSearch.svelte';
   import CommandPalette from './lib/shell/CommandPalette.svelte';
   import StatusBar from './lib/shell/StatusBar.svelte';
   import ViewContainer from './lib/shell/ViewContainer.svelte';
@@ -295,10 +296,12 @@
   }
 
   function onWorkspaceSelected(e) {
-    debug.log('[App] onWorkspaceSelected:', e.detail?.workspaceName);
-    selectedWorkspaceName = e.detail?.workspaceName || '';
+    const name = e.detail?.workspaceName || e.detail?.workspaceRootPath || '';
+    const id = e.detail?.workspaceId || '';
+    debug.log('[App] onWorkspaceSelected:', name, id);
+    selectedWorkspaceName = name;
     workspaceNodes = e.detail?.nodes || workspaceNodes;
-    if (selectedWorkspaceName) {
+    if (selectedWorkspaceName || id) {
       activeView = null;
       activeViewPluginId = '';
       activeSettingsPluginId = '';
@@ -396,13 +399,15 @@
 {:else}
   <main>
     <Sidebar
-      showGlobalSearch={currentView !== 'workspace' && currentView !== 'workspace-empty'}
       {activeView}
       {activeViewPluginId}
     />
     <CommandPalette />
 
     <section class="content-shell">
+      <div class="content-header">
+        <GlobalSearch />
+      </div>
       <section class="content scroll-surface">
         {#if currentView === 'plugin-manager'}
           <PluginManager {activeSettingsPluginId} {activeSettingsPanelId} />
@@ -845,6 +850,14 @@
     min-height: 0;
     display: flex;
     flex-direction: column;
+  }
+
+  .content-header {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    padding: 0.5rem 1rem;
+    flex-shrink: 0;
   }
 
   .content {

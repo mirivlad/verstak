@@ -88,7 +88,11 @@
     const err = await App.SetCurrentWorkspaceV2(wid);
     if (err) { error = err; return; }
     activeWid = wid;
-    window.dispatchEvent(new CustomEvent('verstak:workspace-selected', { detail: { workspaceId: wid } }));
+    const ws = await App.GetWorkspaceByID(wid);
+    const rootPath = ws?.rootPath || '';
+    window.dispatchEvent(new CustomEvent('verstak:workspace-selected', {
+      detail: { workspaceId: wid, workspaceName: rootPath, workspaceRootPath: rootPath }
+    }));
   }
 
   // ── Flat visible node list for keyboard nav ────────────────────────────────
@@ -146,20 +150,26 @@
   // ── Drag-and-drop ──────────────────────────────────────────────────────────
   function onRootDragOver(e) { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; dragOverRoot = true; }
   function onRootDragLeave(e) { dragOverRoot = false; }
+  function resetDragState() {
+    dragOverRoot = false;
+    dragOverFolderId = '';
+  }
+
   function onRootDrop(e) {
     e.preventDefault();
     e.stopPropagation();
-    dragOverRoot = false;
+    resetDragState();
     try {
       const data = JSON.parse(e.dataTransfer.getData('application/x-verstak-node'));
-      if (data.kind === 'folder') App.MoveFolderV2(data.id, '').then(loadTree);
-      else App.MoveWorkspaceV2(data.id, '').then(loadTree);
-    } catch {}
+      if (data.kind === 'folder') App.MoveFolderV2(data.id, '').then(loadTree).finally(resetDragState);
+      else App.MoveWorkspaceV2(data.id, '').then(loadTree).finally(resetDragState);
+    } catch { resetDragState(); }
   }
   function onNodeDrop(e) {
+    resetDragState();
     const { source, targetId } = e.detail;
-    if (source.kind === 'folder') App.MoveFolderV2(source.id, targetId).then(loadTree);
-    else App.MoveWorkspaceV2(source.id, targetId).then(loadTree);
+    if (source.kind === 'folder') App.MoveFolderV2(source.id, targetId).then(loadTree).finally(resetDragState);
+    else App.MoveWorkspaceV2(source.id, targetId).then(loadTree).finally(resetDragState);
   }
 
   // ── Helpers ────────────────────────────────────────────────────────────────
@@ -172,7 +182,7 @@
     function count(nd) { for (const c of nd.children || []) { if (c.kind === 'folder') { folders++; count(c); } else wss++; } } }
   function findNode(nodes, id) { for (const n of nodes) { if (n.id === id) return n; const f = findNode(n.children || [], id); if (f) return f; } return null; }
 
-  function onKeyDown(e) { if (e.key === 'Escape') { closeCtx(); closeModal(); } }
+  function onKeyDown(e) { if (e.key === "Escape") { closeCtx(); closeModal(); resetDragState(); } }
 </script>
 
 <svelte:window on:keydown={onKeyDown} on:click={closeCtx} />
@@ -188,6 +198,7 @@
 
   <div class="wt-list" role="tree" aria-label={tr('workspaceTree.title')}
     on:dragover={onRootDragOver} on:dragleave={onRootDragLeave} on:drop={onRootDrop}
+    on:dragend={resetDragState}
   >
     {#if loading}
       <div class="wt-status">{tr('common.loading')}</div>

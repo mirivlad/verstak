@@ -2,12 +2,10 @@
   import { onDestroy, onMount } from 'svelte';
   import * as App from '../../../wailsjs/go/api/App';
   import WorkspaceTree from './WorkspaceTree.svelte';
-  import GlobalSearch from './GlobalSearch.svelte';
   import Icon from '../ui/Icon.svelte';
   import { debug } from '../log/debug.js';
   import { i18n } from '../i18n/index.js';
 
-  export let showGlobalSearch = true;
   export let activeView = null;
   export let activeViewPluginId = '';
 
@@ -99,10 +97,6 @@
     <Icon name="logo" size={20} class="sidebar-logo" />
     <span class="sidebar-title">Verstak</span>
   </div>
-
-  {#if vaultOpen && showGlobalSearch}
-    <GlobalSearch />
-  {/if}
 
   {#if sidebarItems.length > 0}
     <div class="sidebar-section">
