@@ -23,13 +23,14 @@ const (
 )
 
 const (
-	OpCreate  = "create"
-	OpUpdate  = "update"
-	OpDelete  = "delete"
-	OpMove    = "move"
-	OpRename  = "rename"
-	OpTrash   = "trash"
-	OpRestore = "restore"
+	OpCreate     = "create"
+	OpUpdate     = "update"
+	OpDelete     = "delete"
+	OpMove       = "move"
+	OpRename     = "rename"
+	OpTrash      = "trash"
+	OpRestore    = "restore"
+	OpHardDelete = "hard-delete"
 )
 
 // Op represents a sync operation.

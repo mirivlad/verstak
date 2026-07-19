@@ -62,15 +62,29 @@ type WorkspaceSnapshot struct {
 	Entries     map[string]SnapshotEntry `json:"entries,omitempty"`
 }
 
+// FolderIdentitySnapshot maps a nested folder UUID to its relative path.
+type FolderIdentitySnapshot struct {
+	FolderID string `json:"folderId"`
+	Path     string `json:"path"`
+}
+
+// WorkspaceIdentitySnapshot maps a nested workspace UUID to its relative path
+// and preserved metadata.
+type WorkspaceIdentitySnapshot struct {
+	WorkspaceID string          `json:"workspaceId"`
+	Path        string          `json:"path"`
+	Metadata    json.RawMessage `json:"metadata,omitempty"`
+}
+
 // FolderSnapshot records an organizational folder identity with enough
 // information to restore its full subtree on a clean device.
 type FolderSnapshot struct {
-	FolderID     string                   `json:"folderId"`
-	Path         string                   `json:"path"`
-	Name         string                   `json:"name,omitempty"`
-	Entries      map[string]SnapshotEntry `json:"entries,omitempty"`
-	FolderIDs    []string                 `json:"folderIds,omitempty"`
-	WorkspaceIDs []string                 `json:"workspaceIds,omitempty"`
+	FolderID   string                               `json:"folderId"`
+	Path       string                               `json:"path"`
+	Name       string                               `json:"name,omitempty"`
+	Entries    map[string]SnapshotEntry             `json:"entries,omitempty"`
+	Folders    map[string]FolderIdentitySnapshot    `json:"folders,omitempty"`
+	Workspaces map[string]WorkspaceIdentitySnapshot `json:"workspaces,omitempty"`
 }
 
 type scanJournal struct {
@@ -563,7 +577,31 @@ func snapshotFromScan(current scannedVault, previous Snapshot, previousExists bo
 		next.Workspaces[workspaceID] = workspace
 	}
 	for folderID, folder := range current.Folders {
+		folder.Folders = make(map[string]FolderIdentitySnapshot)
+		folder.Workspaces = make(map[string]WorkspaceIdentitySnapshot)
 		next.Folders[folderID] = folder
+	}
+	// Populate nested identity maps: each folder contains all folders/workspaces
+	// whose paths are prefixed by this folder's path.
+	for folderID, folder := range next.Folders {
+		for childFID, childF := range current.Folders {
+			if childFID != folderID && isPathPrefix(folder.Path, childF.Path) {
+				suffix := strings.TrimPrefix(childF.Path, folder.Path+"/")
+				folder.Folders[childFID] = FolderIdentitySnapshot{
+					FolderID: childFID,
+					Path:     suffix,
+				}
+			}
+		}
+		for childWSID, childWS := range current.Workspaces {
+			if isPathPrefix(folder.Path, childWS.Path) {
+				suffix := strings.TrimPrefix(childWS.Path, folder.Path+"/")
+				folder.Workspaces[childWSID] = WorkspaceIdentitySnapshot{
+					WorkspaceID: childWSID,
+					Path:        suffix,
+				}
+			}
+		}
 	}
 	for workspaceID, workspace := range previous.TrashedWorkspaces {
 		next.TrashedWorkspaces[workspaceID] = workspace
@@ -601,6 +639,14 @@ func diffSnapshots(previous, next Snapshot, deviceID, vaultRoot string) ([]Op, S
 		return nil, next, err
 	}
 	semanticOps := append(folderOps, workspaceOps...)
+
+	// Collect paths owned by trashed folders (subtree owners).
+	trashedPaths := make(map[string]bool)
+	for folderID, oldFolder := range previous.Folders {
+		if _, active := next.Folders[folderID]; !active {
+			trashedPaths[oldFolder.Path] = true
+		}
+	}
 	var createsOrUpdates []Op
 	var deletes []Op
 	for path, entry := range next.Entries {
@@ -626,6 +672,17 @@ func diffSnapshots(previous, next Snapshot, deviceID, vaultRoot string) ([]Op, S
 			continue
 		}
 		if unresolvedPath(previous.Unresolved, path) {
+			continue
+		}
+		// Skip entries under trashed folders (subtree owner handles them).
+		underTrashed := false
+		for tp := range trashedPaths {
+			if isPathPrefix(tp, path) {
+				underTrashed = true
+				break
+			}
+		}
+		if underTrashed {
 			continue
 		}
 		deletes = append(deletes, newSnapshotOp(deviceID, old.Type, path, OpDelete, map[string]string{"path": path}))
@@ -713,6 +770,13 @@ func diffWorkspaceSnapshots(previous, next *Snapshot, deviceID string) ([]Op, er
 	if !previous.WorkspacesInitialized {
 		return ops, nil
 	}
+	// Collect trashed folder paths so we skip child workspaces.
+	trashedFolderPaths := make(map[string]bool)
+	for folderID, oldFolder := range previous.Folders {
+		if _, active := next.Folders[folderID]; !active {
+			trashedFolderPaths[oldFolder.Path] = true
+		}
+	}
 	for workspaceID, oldWorkspace := range previous.Workspaces {
 		currentWorkspace, active := next.Workspaces[workspaceID]
 		if active {
@@ -720,6 +784,17 @@ func diffWorkspaceSnapshots(previous, next *Snapshot, deviceID string) ([]Op, er
 				ops = append(ops, newWorkspaceSnapshotOp(deviceID, workspaceID, OpRename, currentWorkspace, oldWorkspace.Path))
 				remapEntriesPrefix(previous.Entries, oldWorkspace.Path, currentWorkspace.Path)
 			}
+			continue
+		}
+		// Skip workspace trash if it's inside a trashed folder (subtree owner).
+		insideTrashedFolder := false
+		for fp := range trashedFolderPaths {
+			if isPathPrefix(fp, oldWorkspace.Path) {
+				insideTrashedFolder = true
+				break
+			}
+		}
+		if insideTrashedFolder {
 			continue
 		}
 		ops = append(ops, newWorkspaceSnapshotOp(deviceID, workspaceID, OpTrash, oldWorkspace, ""))
@@ -970,6 +1045,13 @@ func newSnapshotOp(deviceID, entityType, entityID, opType string, payload interf
 		PayloadJSON: string(data),
 		CreatedAt:   time.Now().UTC().Format(time.RFC3339Nano),
 	}
+}
+
+func isPathPrefix(prefix, target string) bool {
+	if prefix == target {
+		return true
+	}
+	return len(target) > len(prefix) && target[:len(prefix)] == prefix && target[len(prefix)] == '/'
 }
 
 func pathDepth(path string) int {
