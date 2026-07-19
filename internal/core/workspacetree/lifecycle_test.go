@@ -436,3 +436,78 @@ func TestMovePreservesUUID(t *testing.T) {
 		t.Fatalf("UUID changed: %q → %q", oldID, moved.ID)
 	}
 }
+
+func TestMoveWorkspaceIntoFolderAndBackToRoot(t *testing.T) {
+	vault := t.TempDir()
+	svc := NewService(vault, nil)
+	svc.Initialize()
+
+	// 1. Create Deal in root
+	ws, err := svc.CreateWorkspace("", "Project", "default", noopRefresh)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// 2. Create folder
+	f, err := svc.CreateFolder("", "Clients", noopRefresh)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// 3. Move Deal into folder
+	moved, err := svc.MoveWorkspace(ws.ID, f.ID, noopRefresh)
+	if err != nil {
+		t.Fatal("move into folder:", err)
+	}
+	if moved.RootPath != "Clients/Project" {
+		t.Fatalf("expected Clients/Project, got %q", moved.RootPath)
+	}
+
+	// 4. Move Deal back to root
+	back, err := svc.MoveWorkspace(ws.ID, "", noopRefresh)
+	if err != nil {
+		t.Fatal("move back to root:", err)
+	}
+	if back.RootPath != "Project" {
+		t.Fatalf("expected Project, got %q", back.RootPath)
+	}
+
+	// 5. Verify folder still has folder marker
+	folderMarker := filepath.Join(vault, "Clients", ".verstak", "folder.json")
+	if _, err := os.Stat(folderMarker); err != nil {
+		t.Fatal("folder marker missing after workspace move back:", err)
+	}
+
+	// 6. Verify folder does NOT have workspace marker
+	wsMarkerInFolder := filepath.Join(vault, "Clients", ".verstak", "workspace.json")
+	if _, err := os.Stat(wsMarkerInFolder); err == nil {
+		t.Fatal("folder incorrectly has workspace marker after workspace move back")
+	} else if !os.IsNotExist(err) {
+		t.Fatal(err)
+	}
+
+	// 7. Verify workspace still has workspace marker
+	wsMarker := filepath.Join(vault, "Project", ".verstak", "workspace.json")
+	if _, err := os.Stat(wsMarker); err != nil {
+		t.Fatal("workspace marker missing:", err)
+	}
+
+	// 8. Simulate restart: recreate service, rescan
+	svc2 := NewService(vault, nil)
+	if err := svc2.Initialize(); err != nil {
+		t.Fatal("restart init:", err)
+	}
+
+	tree := svc2.GetTree()
+	for _, root := range tree.Roots {
+		if root.Kind != "folder" && root.Kind != "workspace" {
+			t.Errorf("unexpected kind %q for %s", root.Kind, root.Name)
+		}
+		if root.Name == "Clients" && root.Kind != "folder" {
+			t.Errorf("Clients expected folder, got %s", root.Kind)
+		}
+		if root.Name == "Project" && root.Kind != "workspace" {
+			t.Errorf("Project expected workspace, got %s", root.Kind)
+		}
+	}
+}

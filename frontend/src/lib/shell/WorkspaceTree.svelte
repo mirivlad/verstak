@@ -149,12 +149,24 @@
 
   // ── Drag-and-drop ──────────────────────────────────────────────────────────
   let dragCounter = 0;
-  function onRootDragOver(e) { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; dragCounter++; dragOverRoot = true; }
+  let draggedNodeParentId = ''; // Track whether dragged node has a parent
+  function onRootDragOver(e) {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    dragCounter++;
+    // Only show root drop zone if dragged node is nested (has a parent folder).
+    if (!draggedNodeParentId) return;
+    dragOverRoot = true;
+  }
   function onRootDragLeave(e) { dragCounter--; if (dragCounter <= 0) { dragOverRoot = false; dragCounter = 0; } }
   function resetDragState() {
     dragOverRoot = false;
     dragOverFolderId = '';
     dragCounter = 0;
+    draggedNodeParentId = '';
+  }
+  function onNodeDragStart(e) {
+    draggedNodeParentId = findNodeParentID(e.detail?.id) || '';
   }
 
   function onRootDrop(e) {
@@ -183,6 +195,8 @@
   function subtreeCounts(id) { let folders = 0, wss = 0; const n = findNode(tree.roots || [], id); if (n) count(n); return { folders, workspaces: wss };
     function count(nd) { for (const c of nd.children || []) { if (c.kind === 'folder') { folders++; count(c); } else wss++; } } }
   function findNode(nodes, id) { for (const n of nodes) { if (n.id === id) return n; const f = findNode(n.children || [], id); if (f) return f; } return null; }
+  function findNodeParentID(id) { return parentIDFor(tree.roots, id); }
+  function parentIDFor(nodes, id) { for (const n of nodes) { if (n.children) for (const c of n.children) { if (c.id === id) return n.id; } const f = parentIDFor(n.children, id); if (f) return f; } return ''; }
 
   function onKeyDown(e) { if (e.key === "Escape") { closeCtx(); closeModal(); resetDragState(); } }
 </script>
@@ -221,6 +235,7 @@
           on:trash={handleTrash}
           on:contextmenu={onCtx}
           on:drop={onNodeDrop}
+          on:dragstart={onNodeDragStart}
           on:createFolder={(e) => openCreateFolder(e.detail)}
           on:createWorkspace={(e) => openCreateWorkspace(e.detail)}
         />
