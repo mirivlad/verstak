@@ -2829,6 +2829,167 @@ func (a *App) GetWorkspaceTreeDiagnostics() []workspacetree.TreeDiagnostic {
 	return a.treeV2.GetWorkspaceTreeDiagnostics()
 }
 
+// ─── Workspace Tree V2 Lifecycle API ────────────────────────
+
+func (a *App) CreateFolderV2(parentFolderID, name string) map[string]interface{} {
+	if a.treeV2 == nil {
+		return map[string]interface{}{"error": "not initialized"}
+	}
+	f, err := a.treeV2.CreateFolder(parentFolderID, name, func() error {
+		if a.fileWatcher != nil {
+			return a.fileWatcher.RefreshBaseline()
+		}
+		return nil
+	})
+	if err != nil {
+		return map[string]interface{}{"error": err.Error()}
+	}
+	return map[string]interface{}{
+		"id":       f.ID,
+		"name":     f.Name,
+		"path":     f.Path,
+		"parentId": f.ParentID,
+	}
+}
+
+func (a *App) CreateWorkspaceV2(parentFolderID, name, templateID string) map[string]interface{} {
+	if a.treeV2 == nil {
+		return map[string]interface{}{"error": "not initialized"}
+	}
+	ws, err := a.treeV2.CreateWorkspace(parentFolderID, name, templateID, func() error {
+		if a.fileWatcher != nil {
+			return a.fileWatcher.RefreshBaseline()
+		}
+		return nil
+	})
+	if err != nil {
+		return map[string]interface{}{"error": err.Error()}
+	}
+	return map[string]interface{}{
+		"id":       ws.ID,
+		"name":     ws.Name,
+		"rootPath": ws.RootPath,
+	}
+}
+
+func (a *App) RenameFolderV2(folderID, newName string) string {
+	if a.treeV2 == nil {
+		return "not initialized"
+	}
+	_, err := a.treeV2.RenameFolder(folderID, newName, func() error {
+		if a.fileWatcher != nil {
+			return a.fileWatcher.RefreshBaseline()
+		}
+		return nil
+	})
+	if err != nil {
+		return err.Error()
+	}
+	return ""
+}
+
+func (a *App) RenameWorkspaceV2(workspaceID, newName string) string {
+	if a.treeV2 == nil {
+		return "not initialized"
+	}
+	_, err := a.treeV2.RenameWorkspace(workspaceID, newName, func() error {
+		if a.fileWatcher != nil {
+			return a.fileWatcher.RefreshBaseline()
+		}
+		return nil
+	})
+	if err != nil {
+		return err.Error()
+	}
+	return ""
+}
+
+func (a *App) MoveFolderV2(folderID, targetParentFolderID string) string {
+	if a.treeV2 == nil {
+		return "not initialized"
+	}
+	_, err := a.treeV2.MoveFolder(folderID, targetParentFolderID, func() error {
+		if a.fileWatcher != nil {
+			return a.fileWatcher.RefreshBaseline()
+		}
+		return nil
+	})
+	if err != nil {
+		return err.Error()
+	}
+	return ""
+}
+
+func (a *App) MoveWorkspaceV2(workspaceID, targetParentFolderID string) string {
+	if a.treeV2 == nil {
+		return "not initialized"
+	}
+	_, err := a.treeV2.MoveWorkspace(workspaceID, targetParentFolderID, func() error {
+		if a.fileWatcher != nil {
+			return a.fileWatcher.RefreshBaseline()
+		}
+		return nil
+	})
+	if err != nil {
+		return err.Error()
+	}
+	return ""
+}
+
+func (a *App) TrashFolderV2(folderID string) map[string]interface{} {
+	if a.treeV2 == nil {
+		return map[string]interface{}{"error": "not initialized"}
+	}
+	entry, err := a.treeV2.TrashFolder(folderID, func() error {
+		if a.fileWatcher != nil {
+			return a.fileWatcher.RefreshBaseline()
+		}
+		return nil
+	})
+	if err != nil {
+		return map[string]interface{}{"error": err.Error()}
+	}
+	return map[string]interface{}{
+		"trashId":      entry.TrashID,
+		"entityType":   entry.EntityType,
+		"entityId":     entry.EntityID,
+		"originalPath": entry.OriginalPath,
+		"deletedAt":    entry.DeletedAt,
+	}
+}
+
+func (a *App) TrashWorkspaceV2(workspaceID string) map[string]interface{} {
+	if a.treeV2 == nil {
+		return map[string]interface{}{"error": "not initialized"}
+	}
+	entry, err := a.treeV2.TrashWorkspace(workspaceID, func() error {
+		if a.fileWatcher != nil {
+			return a.fileWatcher.RefreshBaseline()
+		}
+		return nil
+	})
+	if err != nil {
+		return map[string]interface{}{"error": err.Error()}
+	}
+	return map[string]interface{}{
+		"trashId":      entry.TrashID,
+		"entityType":   entry.EntityType,
+		"entityId":     entry.EntityID,
+		"originalPath": entry.OriginalPath,
+		"deletedAt":    entry.DeletedAt,
+	}
+}
+
+func (a *App) SetCurrentWorkspaceV2(workspaceID string) string {
+	if a.treeV2 == nil {
+		return "not initialized"
+	}
+	if err := a.treeV2.SetCurrentWorkspaceID(workspaceID); err != nil {
+		return err.Error()
+	}
+	return ""
+}
+
 // ─── Vault Plugin State API ────────────────────────────────
 
 // GetVaultPluginState returns the current vault plugin state.
