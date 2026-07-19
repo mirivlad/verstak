@@ -1,10 +1,12 @@
 package workspacetree
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -130,6 +132,12 @@ func (s *Service) CreateWorkspace(parentFolderID, name, templateID string, refre
 		if err := applyWorkspaceTemplate(stagingAbs, templateID); err != nil {
 			return ScannedWorkspace{}, err
 		}
+	}
+
+	// Write metadata with template features for UUID-keyed lookup.
+	if err := writeWorkspaceMetadataV2(stagingAbs, wsID, name, templateID); err != nil {
+		// Non-fatal: workspace is created even if metadata write fails.
+		// The tree reconciliation will pick up the workspace marker.
 	}
 
 	// Atomic rename.
@@ -391,6 +399,76 @@ func applyWorkspaceTemplate(workspaceDir, templateID string) error {
 		}
 	}
 	return nil
+}
+
+// writeWorkspaceMetadataV2 writes workspace metadata to the vault's workspace registry
+// keyed by the workspace UUID. This enables metadata lookup after move/rename.
+func writeWorkspaceMetadataV2(workspaceDir, workspaceID, workspaceName, templateID string) error {
+	if workspaceID == "" {
+		return fmt.Errorf("workspace ID is required")
+	}
+	// Determine vault root: go up from workspaceDir until we find .verstak
+	vaultDir := workspaceDir
+	for {
+		if _, err := os.Stat(filepath.Join(vaultDir, ".verstak")); err == nil {
+			if _, err := os.Stat(filepath.Join(vaultDir, ".verstak", "vault.json")); err == nil {
+				break
+			}
+		}
+		parent := filepath.Dir(vaultDir)
+		if parent == vaultDir {
+			return fmt.Errorf("vault root not found")
+		}
+		vaultDir = parent
+	}
+
+	wsDir := filepath.Join(vaultDir, ".verstak", "workspaces")
+	if err := os.MkdirAll(wsDir, 0o755); err != nil {
+		return err
+	}
+
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	meta := map[string]interface{}{
+		"workspaceId":   workspaceID,
+		"workspaceName": workspaceName,
+		"features":      defaultFeaturesV2(),
+		"folders":       defaultFoldersV2(),
+		"updatedAt":     now,
+	}
+	if templateID != "" {
+		meta["createdFromTemplate"] = map[string]interface{}{
+			"templateId": templateID,
+			"appliedAt":  now,
+		}
+	}
+
+	data, err := json.MarshalIndent(meta, "", "  ")
+	if err != nil {
+		return err
+	}
+	path := filepath.Join(wsDir, "uuid-"+workspaceID+".json")
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, data, 0o600); err != nil {
+		return err
+	}
+	return os.Rename(tmp, path)
+}
+
+func defaultFeaturesV2() map[string]bool {
+	return map[string]bool{
+		"files":         true,
+		"notes":         true,
+		"journal":       true,
+		"activity":      true,
+		"browser-inbox": true,
+	}
+}
+
+func defaultFoldersV2() map[string]string {
+	return map[string]string{
+		"notes": "Notes",
+		"files": "Files",
+	}
 }
 
 // ── Set current workspace ────────────────────────────────────────────────────

@@ -977,41 +977,53 @@ func (m *Manager) PurgeWorkspaceTrash(trashID string) error {
 }
 
 // GetWorkspaceMetadata returns stored metadata or safe generic metadata.
+// name may be a top-level workspace name or a relative path (e.g. "Folder/WorkspaceName").
 func (m *Manager) GetWorkspaceMetadata(name string) (Metadata, error) {
 	name = strings.TrimSpace(name)
-	if err := validateWorkspaceName(name); err != nil {
+	if name == "" {
+		return Metadata{}, fmt.Errorf("invalid-workspace-name: empty")
+	}
+	if err := validateWorkspaceMetadataPath(name); err != nil {
 		return Metadata{}, err
 	}
-	full := filepath.Join(m.vaultDir, name)
+	full := filepath.Join(m.vaultDir, filepath.FromSlash(name))
 	if err := ensureExistingWorkspaceDir(full, name); err != nil {
 		return Metadata{}, err
 	}
 
+	// Try name-keyed metadata first.
 	data, err := os.ReadFile(m.metadataPath(name))
-	if err != nil {
-		if os.IsNotExist(err) {
-			return genericMetadata(name), nil
+	if err == nil {
+		var meta Metadata
+		if err := json.Unmarshal(data, &meta); err != nil {
+			return Metadata{}, err
 		}
+		meta.WorkspaceName = filepath.Base(filepath.FromSlash(name))
+		if meta.Features == nil {
+			meta.Features = map[string]bool{"files": true}
+		}
+		if !hasAnyTrueFeature(meta.Features) {
+			meta.Features["files"] = true
+		}
+		if meta.Folders == nil {
+			meta.Folders = defaultFolders()
+		}
+		return meta, nil
+	}
+	if !os.IsNotExist(err) {
 		return Metadata{}, err
 	}
-	var meta Metadata
-	if err := json.Unmarshal(data, &meta); err != nil {
-		return Metadata{}, err
+
+	// Name-keyed metadata not found — try UUID-keyed metadata via workspace marker.
+	workspaceID, readErr := readWorkspaceIdentity(full)
+	if readErr == nil && workspaceID != "" {
+		if uuidMeta, uuidErr := m.GetWorkspaceMetadataByUUID(workspaceID); uuidErr == nil {
+			uuidMeta.WorkspaceName = filepath.Base(filepath.FromSlash(name))
+			return uuidMeta, nil
+		}
 	}
-	// Workspace identity is the top-level folder name. Stored metadata may be
-	// stale after manual edits or old dev snapshots, so normalize the returned
-	// presentation name without writing back to disk.
-	meta.WorkspaceName = name
-	if meta.Features == nil {
-		meta.Features = map[string]bool{"files": true}
-	}
-	if !hasAnyTrueFeature(meta.Features) {
-		meta.Features["files"] = true
-	}
-	if meta.Folders == nil {
-		meta.Folders = defaultFolders()
-	}
-	return meta, nil
+
+	return genericMetadata(filepath.Base(filepath.FromSlash(name))), nil
 }
 
 // UpdateWorkspaceMetadata merges UI/semantic metadata fields for an existing workspace.
@@ -1192,6 +1204,40 @@ func applyTemplate(workspaceDir string, template templateDefinition) error {
 	return nil
 }
 
+func validateWorkspaceMetadataPath(name string) error {
+	if name == "" {
+		return fmt.Errorf("invalid-workspace-name: empty")
+	}
+	if strings.Contains(name, "\\x00") {
+		return fmt.Errorf("invalid-workspace-name: null-byte")
+	}
+	if strings.Contains(name, "\\") {
+		return fmt.Errorf("invalid-workspace-name: backslash not allowed")
+	}
+	if filepath.IsAbs(name) || strings.HasPrefix(name, "/") {
+		return fmt.Errorf("invalid-workspace-name: absolute path rejected")
+	}
+	if len(name) >= 2 && name[1] == ':' && unicode.IsLetter(rune(name[0])) {
+		return fmt.Errorf("invalid-workspace-name: absolute path rejected")
+	}
+	parts := strings.Split(name, "/")
+	for _, part := range parts {
+		if part == "" || part == "." || part == ".." {
+			return fmt.Errorf("invalid-workspace-name: path traversal")
+		}
+		for _, r := range part {
+			if unicode.IsControl(r) {
+				return fmt.Errorf("invalid-workspace-name: control character")
+			}
+		}
+		if isReservedWorkspaceName(part) {
+			return fmt.Errorf("reserved-workspace-name: %s", part)
+		}
+	}
+	return nil
+}
+
+// Deprecated: kept for top-level workspace name validation. Use validateWorkspaceMetadataPath.
 func validateWorkspaceName(name string) error {
 	if strings.TrimSpace(name) == "" {
 		return fmt.Errorf("invalid-workspace-name: empty")
@@ -1258,6 +1304,10 @@ func (m *Manager) metadataPath(name string) string {
 	return filepath.Join(m.vaultDir, ".verstak", "workspaces", encoded+".json")
 }
 
+func (m *Manager) metadataPathForUUID(workspaceID string) string {
+	return filepath.Join(m.vaultDir, ".verstak", "workspaces", "uuid-"+workspaceID+".json")
+}
+
 func (m *Manager) writeMetadata(name string, meta Metadata) error {
 	if err := os.MkdirAll(filepath.Join(m.vaultDir, ".verstak", "workspaces"), 0o755); err != nil {
 		return err
@@ -1275,7 +1325,64 @@ func (m *Manager) writeMetadata(name string, meta Metadata) error {
 		_ = os.Remove(tmp)
 		return err
 	}
+	// Also write/update UUID-keyed metadata for tree-move resilience.
+	if meta.WorkspaceID != "" {
+		_ = m.writeMetadataForUUID(meta.WorkspaceID, meta)
+	}
 	return nil
+}
+
+func (m *Manager) writeMetadataForUUID(workspaceID string, meta Metadata) error {
+	if _, err := uuid.Parse(workspaceID); err != nil {
+		return fmt.Errorf("invalid workspace identity: %w", err)
+	}
+	if err := os.MkdirAll(filepath.Join(m.vaultDir, ".verstak", "workspaces"), 0o755); err != nil {
+		return err
+	}
+	meta.WorkspaceID = workspaceID
+	data, err := json.MarshalIndent(meta, "", "  ")
+	if err != nil {
+		return err
+	}
+	path := m.metadataPathForUUID(workspaceID)
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, data, 0o600); err != nil {
+		return err
+	}
+	if err := os.Rename(tmp, path); err != nil {
+		_ = os.Remove(tmp)
+		return err
+	}
+	return nil
+}
+
+// GetWorkspaceMetadataByUUID returns metadata for a workspace keyed by its durable UUID.
+// Falls back to generic metadata if no UUID-keyed file exists.
+func (m *Manager) GetWorkspaceMetadataByUUID(workspaceID string) (Metadata, error) {
+	if _, err := uuid.Parse(workspaceID); err != nil {
+		return Metadata{}, fmt.Errorf("invalid workspace identity: %w", err)
+	}
+	data, err := os.ReadFile(m.metadataPathForUUID(workspaceID))
+	if err != nil {
+		if os.IsNotExist(err) {
+			return Metadata{}, fmt.Errorf("not-found: workspace metadata for %s", workspaceID)
+		}
+		return Metadata{}, err
+	}
+	var meta Metadata
+	if err := json.Unmarshal(data, &meta); err != nil {
+		return Metadata{}, err
+	}
+	if meta.Features == nil {
+		meta.Features = map[string]bool{"files": true}
+	}
+	if !hasAnyTrueFeature(meta.Features) {
+		meta.Features["files"] = true
+	}
+	if meta.Folders == nil {
+		meta.Folders = defaultFolders()
+	}
+	return meta, nil
 }
 
 func (m *Manager) uiStatePath() string {

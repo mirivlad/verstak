@@ -2608,11 +2608,24 @@ func (a *App) PurgeWorkspaceTrash(trashID string) string {
 }
 
 // GetWorkspaceMetadata returns metadata or a generic fallback for a workspace.
+// name may be a workspace name or relative path.
 func (a *App) GetWorkspaceMetadata(name string) (workspace.Metadata, string) {
 	if a.workspace == nil {
 		return workspace.Metadata{}, "workspace not initialized"
 	}
 	meta, err := a.workspace.GetWorkspaceMetadata(name)
+	if err != nil {
+		return workspace.Metadata{}, err.Error()
+	}
+	return meta, ""
+}
+
+// GetWorkspaceMetadataByUUID returns metadata for a workspace by its durable UUID.
+func (a *App) GetWorkspaceMetadataByUUID(workspaceID string) (workspace.Metadata, string) {
+	if a.workspace == nil {
+		return workspace.Metadata{}, "workspace not initialized"
+	}
+	meta, err := a.workspace.GetWorkspaceMetadataByUUID(workspaceID)
 	if err != nil {
 		return workspace.Metadata{}, err.Error()
 	}
