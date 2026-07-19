@@ -1626,6 +1626,22 @@ func (a *App) ListVaultTrash(pluginID string) ([]corefiles.TrashEntry, string) {
 	if err != nil {
 		return nil, err.Error()
 	}
+
+	// Merge tree trash workspaces and folders.
+	if a.treeV2 != nil {
+		treeEntries, _ := a.treeV2.ListTreeTrash()
+		for _, te := range treeEntries {
+			basename := filepath.Base(filepath.FromSlash(te.OriginalPath))
+			entries = append(entries, corefiles.TrashEntry{
+				TrashID:      te.TrashID,
+				OriginalPath: te.OriginalPath,
+				OriginalType: corefiles.FileType(te.EntityType),
+				Basename:     basename,
+				DeletedAt:    te.DeletedAt,
+			})
+		}
+	}
+
 	return entries, ""
 }
 
@@ -1651,6 +1667,21 @@ func (a *App) RestoreVaultTrash(pluginID, trashID string, options corefiles.Rest
 			break
 		}
 	}
+
+	// Not found in file trash — try tree trash.
+	if entry.TrashID == "" && a.treeV2 != nil {
+		treeEntries, _ := a.treeV2.ListTreeTrash()
+		for _, te := range treeEntries {
+			if te.TrashID == trashID {
+				_, err := a.treeV2.RestoreTreeTrash(trashID, "", func() error { return nil })
+				if err != nil {
+					return "", err.Error()
+				}
+				return te.OriginalPath, ""
+			}
+		}
+	}
+
 	if entry.TrashID == "" {
 		return "", "not-found: trash entry " + trashID
 	}
@@ -1680,6 +1711,21 @@ func (a *App) DeleteVaultTrash(pluginID, trashID string) string {
 	if a.files == nil {
 		return "files service not initialized"
 	}
+
+	// Try tree trash first (workspaces/folders).
+	if a.treeV2 != nil {
+		treeEntries, _ := a.treeV2.ListTreeTrash()
+		for _, te := range treeEntries {
+			if te.TrashID == trashID {
+				if err := a.treeV2.PurgeTreeTrash(trashID); err != nil {
+					return err.Error()
+				}
+				return ""
+			}
+		}
+	}
+
+	// Fall through to file trash.
 	if err := a.files.DeleteTrashEntry(trashID); err != nil {
 		return err.Error()
 	}
