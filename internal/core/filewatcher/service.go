@@ -1,9 +1,14 @@
 // Package filewatcher provides a lightweight live vault change watcher.
+//
+// It classifies filesystem events as content (inside a workspace) or
+// structural (marker files, directory creation outside workspaces) and
+// notifies core services accordingly.
 package filewatcher
 
 import (
 	"fmt"
 	"io/fs"
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -15,22 +20,47 @@ import (
 
 const defaultInterval = 750 * time.Millisecond
 
-type entryKind string
+// ── Types ────────────────────────────────────────────────────────────────────
+
+// EntryKind classifies a filesystem entry.
+type EntryKind string
 
 const (
-	entryFile    entryKind = "file"
-	entryFolder  entryKind = "folder"
-	entrySymlink entryKind = "symlink"
-	entryUnknown entryKind = "unknown"
+	EntryFile    EntryKind = "file"
+	EntryFolder  EntryKind = "folder"
+	EntrySymlink EntryKind = "symlink"
+	EntryUnknown EntryKind = "unknown"
 )
 
+// ChangeClass separates content from structural changes.
+type ChangeClass string
+
+const (
+	ChangeContent    ChangeClass = "content"
+	ChangeStructural ChangeClass = "structural"
+)
+
+// Change describes a single filesystem change.
+type Change struct {
+	Path      string
+	Operation string // "external.create" | "external.update" | "external.delete"
+	Kind      EntryKind
+	Class     ChangeClass
+}
+
+// ResolveWorkspaceFunc resolves a relative vault path to its workspace.
+// Returns workspaceID, workspaceRootPath, found.
+type ResolveWorkspaceFunc func(relPath string) (workspaceID, workspaceRootPath string, found bool)
+
 type snapshotEntry struct {
-	kind    entryKind
+	kind    EntryKind
 	size    int64
 	modTime time.Time
 }
 
-// Service polls an open vault and publishes file.changed events for external changes.
+// ── Service ──────────────────────────────────────────────────────────────────
+
+// Service polls an open vault and publishes events for external changes.
 type Service struct {
 	bus      *events.Bus
 	interval time.Duration
@@ -40,26 +70,54 @@ type Service struct {
 	cancel   chan struct{}
 	done     chan struct{}
 	current  map[string]snapshotEntry
-	onChange func()
+
+	// Callbacks.
+	onChange           func()              // content changes (sync scan, etc.)
+	onStructuralChange func()              // triggers tree reconciliation
+	resolveWorkspace   ResolveWorkspaceFunc // resolves path → workspace
+
+	// scan error tracking.
+	scanErrors  int
+	lastErr     error
+	dirty       bool // structural dirty flag after scan error
 }
 
-// SetOnChange installs a lightweight notification used by core services that
-// need a debounced reconciliation after the watcher has observed a change.
-func (s *Service) SetOnChange(callback func()) {
-	if s == nil {
-		return
-	}
-	s.mu.Lock()
-	s.onChange = callback
-	s.mu.Unlock()
-}
-
-// NewService creates a watcher. The interval parameter is mainly for tests.
+// NewService creates a watcher. interval=0 uses default.
 func NewService(bus *events.Bus, interval time.Duration) *Service {
 	if interval <= 0 {
 		interval = defaultInterval
 	}
 	return &Service{bus: bus, interval: interval}
+}
+
+// SetOnStructuralChange sets the callback for structural changes.
+func (s *Service) SetOnStructuralChange(callback func()) {
+	if s == nil {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.onStructuralChange = callback
+}
+
+// SetOnChange sets the content change callback.
+func (s *Service) SetOnChange(callback func()) {
+	if s == nil {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.onChange = callback
+}
+
+// SetWorkspaceResolver sets the function used to resolve a path to its workspace.
+func (s *Service) SetWorkspaceResolver(fn ResolveWorkspaceFunc) {
+	if s == nil {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.resolveWorkspace = fn
 }
 
 // Start begins watching root. Any previous watch is stopped first.
@@ -94,6 +152,8 @@ func (s *Service) Start(root string) error {
 	s.current = initial
 	s.cancel = make(chan struct{})
 	s.done = make(chan struct{})
+	s.scanErrors = 0
+	s.dirty = false
 	cancel := s.cancel
 	done := s.done
 	s.mu.Unlock()
@@ -123,6 +183,44 @@ func (s *Service) Stop() {
 	<-done
 }
 
+// RefreshBaseline rescans the current root and replaces the low-level
+// snapshot without publishing any events. Safe when watcher is not running.
+func (s *Service) RefreshBaseline() error {
+	if s == nil {
+		return nil
+	}
+	s.mu.Lock()
+	root := s.root
+	s.mu.Unlock()
+	if root == "" {
+		return nil
+	}
+	fresh, err := scan(root)
+	if err != nil {
+		return err
+	}
+	s.mu.Lock()
+	if s.root == root {
+		s.current = fresh
+		s.scanErrors = 0
+		s.dirty = false
+	}
+	s.mu.Unlock()
+	return nil
+}
+
+// Root returns the current watch root.
+func (s *Service) Root() string {
+	if s == nil {
+		return ""
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.root
+}
+
+// ── Poll loop ────────────────────────────────────────────────────────────────
+
 func (s *Service) loop(root string, cancel <-chan struct{}, done chan<- struct{}) {
 	defer close(done)
 	ticker := time.NewTicker(s.interval)
@@ -140,54 +238,163 @@ func (s *Service) loop(root string, cancel <-chan struct{}, done chan<- struct{}
 func (s *Service) poll(root string) {
 	next, err := scan(root)
 	if err != nil {
+		s.mu.Lock()
+		s.scanErrors++
+		s.lastErr = err
+		s.dirty = true
+		log.Printf("[filewatcher] scan error: %v (count=%d)", err, s.scanErrors)
+		s.mu.Unlock()
 		return
 	}
+
 	s.mu.Lock()
 	prev := s.current
 	s.current = next
-	callback := s.onChange
+	resolve := s.resolveWorkspace
+	structuralCB := s.onStructuralChange
+	contentCB := s.onChange
+	// Clear error state on successful scan.
+	if s.dirty {
+		s.dirty = false
+		s.scanErrors = 0
+	}
 	s.mu.Unlock()
-	changed := false
+
+	structural := false
+	content := false
+
+	// Detect created and updated entries.
 	for path, entry := range next {
-		old, ok := prev[path]
-		if !ok {
-			s.publish(path, "external.create", entry.kind)
-			changed = true
+		old, existed := prev[path]
+		if !existed {
+			cls := s.classify(path, entry.kind, resolve)
+			if cls == ChangeStructural {
+				structural = true
+				s.publishStructuralMarker(path, "external.create")
+			} else {
+				content = true
+				s.publishFileChange(path, "external.create", entry.kind, resolve)
+			}
 			continue
 		}
-		if entry.kind == entryFile && (entry.size != old.size || !entry.modTime.Equal(old.modTime)) {
-			s.publish(path, "external.update", entry.kind)
-			changed = true
+		if entry.kind == EntryFile && (entry.size != old.size || !entry.modTime.Equal(old.modTime)) {
+			cls := s.classify(path, entry.kind, resolve)
+			if cls == ChangeStructural {
+				structural = true
+				s.publishStructuralMarker(path, "external.update")
+			} else {
+				content = true
+				s.publishFileChange(path, "external.update", entry.kind, resolve)
+			}
 		}
 	}
+
+	// Detect deleted entries.
 	for path, entry := range prev {
-		if _, ok := next[path]; !ok {
-			s.publish(path, "external.delete", entry.kind)
-			changed = true
+		if _, exists := next[path]; !exists {
+			cls := s.classify(path, entry.kind, resolve)
+			if cls == ChangeStructural {
+				structural = true
+				s.publishStructuralMarker(path, "external.delete")
+			} else {
+				content = true
+				s.publishFileChange(path, "external.delete", entry.kind, resolve)
+			}
 		}
 	}
-	if changed && callback != nil {
-		callback()
+
+	if structural && structuralCB != nil {
+		structuralCB()
+	}
+	if content && contentCB != nil {
+		contentCB()
+	}
+
+	// If we had errors and this scan succeeded, trigger reconciliation
+	// to catch up on any missed structural changes.
+	if s.dirty && structuralCB != nil {
+		structuralCB()
 	}
 }
 
-func (s *Service) publish(path, operation string, kind entryKind) {
+// ── Classification ───────────────────────────────────────────────────────────
+
+func (s *Service) classify(relPath string, kind EntryKind, resolve ResolveWorkspaceFunc) ChangeClass {
+	relPath = filepath.ToSlash(relPath)
+	// Marker files are always structural.
+	if isMarkerPath(relPath) {
+		return ChangeStructural
+	}
+	// Directory creation/deletion at vault level or inside folders (not workspaces)
+	// is structural.
+	if kind == EntryFolder {
+		if resolve != nil {
+			_, _, inWS := resolve(relPath)
+			if inWS {
+				return ChangeContent
+			}
+		}
+		// If no resolver or outside workspace — structural.
+		if resolve == nil {
+			// Without resolver, check if this is a top-level directory.
+			// Top-level dirs are structural, nested content can't be determined.
+			if !strings.Contains(relPath, "/") {
+				return ChangeStructural
+			}
+			return ChangeContent
+		}
+		return ChangeStructural
+	}
+	// Files inside workspaces are content.
+	if resolve != nil {
+		_, _, inWS := resolve(relPath)
+		if inWS {
+			return ChangeContent
+		}
+	}
+	// Files at vault level or in organizational folders.
+	return ChangeContent
+}
+
+// ── Publishing ───────────────────────────────────────────────────────────────
+
+func (s *Service) publishFileChange(path, operation string, kind EntryKind, resolve ResolveWorkspaceFunc) {
 	if s.bus == nil {
 		return
+	}
+	payload := map[string]interface{}{
+		"path":      path,
+		"title":     path,
+		"operation": operation,
+		"type":      string(kind),
+		"external":  true,
+	}
+	// Resolve workspace context.
+	if resolve != nil {
+		wsID, wsRootPath, found := resolve(path)
+		if found {
+			payload["workspaceId"] = wsID
+			payload["workspaceRootPath"] = wsRootPath
+		}
+	} else {
+		payload["workspaceRootPath"] = legacyWorkspaceRoot(path)
 	}
 	s.bus.Publish(events.Event{
 		Name:      "file.changed",
 		Timestamp: time.Now().UTC().Format(time.RFC3339Nano),
-		Payload: map[string]interface{}{
-			"path":              path,
-			"title":             path,
-			"operation":         operation,
-			"type":              string(kind),
-			"workspaceRootPath": workspaceRoot(path),
-			"external":          true,
-		},
+		Payload:   payload,
 	})
 }
+
+func (s *Service) publishStructuralMarker(path, operation string) {
+	// Marker file changes are handled by the tree reconciler,
+	// not published as user-facing file.changed events.
+	// The OnStructuralChange callback triggers reconciliation.
+	_ = path
+	_ = operation
+}
+
+// ── Scan ─────────────────────────────────────────────────────────────────────
 
 func scan(root string) (map[string]snapshotEntry, error) {
 	out := make(map[string]snapshotEntry)
@@ -203,7 +410,8 @@ func scan(root string) (map[string]snapshotEntry, error) {
 			return nil
 		}
 		rel = filepath.ToSlash(rel)
-		if isReserved(rel) {
+		// New policy: observe marker files, skip internal .verstak paths.
+		if isIgnoredInternal(rel) {
 			if dirEntry.IsDir() {
 				return filepath.SkipDir
 			}
@@ -223,29 +431,81 @@ func scan(root string) (map[string]snapshotEntry, error) {
 	return out, err
 }
 
-func kindFromInfo(info fs.FileInfo) entryKind {
+func kindFromInfo(info fs.FileInfo) EntryKind {
 	if info.Mode()&os.ModeSymlink != 0 {
-		return entrySymlink
+		return EntrySymlink
 	}
 	if info.IsDir() {
-		return entryFolder
+		return EntryFolder
 	}
 	if info.Mode().IsRegular() {
-		return entryFile
+		return EntryFile
 	}
-	return entryUnknown
+	return EntryUnknown
 }
 
-func isReserved(rel string) bool {
-	for _, segment := range strings.Split(filepath.ToSlash(rel), "/") {
-		if strings.EqualFold(segment, ".verstak") {
-			return true
+// ── .verstak policy ──────────────────────────────────────────────────────────
+
+// isMarkerPath returns true for structural marker files.
+func isMarkerPath(rel string) bool {
+	rel = filepath.ToSlash(rel)
+	return strings.HasSuffix(rel, "/.verstak/folder.json") ||
+		strings.HasSuffix(rel, "/.verstak/workspace.json")
+}
+
+// isIgnoredInternal returns true for vault-internal paths that should
+// never appear in the scan.
+func isIgnoredInternal(rel string) bool {
+	rel = filepath.ToSlash(rel)
+	segments := strings.Split(rel, "/")
+
+	// Find .verstak segment position.
+	vi := -1
+	for i, seg := range segments {
+		if strings.EqualFold(seg, ".verstak") {
+			vi = i
+			break
 		}
 	}
-	return false
+	if vi < 0 {
+		return false // not in .verstak
+	}
+	// Exactly a marker file → NOT ignored (we want to observe it).
+	if isMarkerPath(rel) {
+		return false
+	}
+	// If this is the .verstak directory entry itself, keep it (to detect
+	// creation/deletion) but we need to scan inside for markers.
+	// The directory entry is the path up to .verstak, e.g. "Project/.verstak".
+	// Check if there's a segment after .verstak.
+	if vi == len(segments)-1 {
+		// This is the .verstak directory entry — don't skip, we need to scan inside.
+		return false
+	}
+	// Segment after .verstak.
+	next := segments[vi+1]
+	// Ignore internal directories.
+	switch next {
+	case "cache", "trash", "sync", "workspaces":
+		return true
+	}
+	// Ignore temp/backup files.
+	if strings.HasSuffix(next, ".tmp") || strings.HasSuffix(next, "~") || strings.HasPrefix(next, ".") && strings.HasSuffix(next, ".swp") {
+		return true
+	}
+	// Allow other files inside .verstak (e.g. folder.json, workspace.json)
+	// — they are already handled by isMarkerPath above, so any other
+	// .verstak content is ignored.
+	if vi == len(segments)-2 {
+		// This is a file directly inside .verstak that isn't a marker.
+		return true
+	}
+	return true
 }
 
-func workspaceRoot(path string) string {
+// ── Legacy helpers ───────────────────────────────────────────────────────────
+
+func legacyWorkspaceRoot(path string) string {
 	path = strings.Trim(strings.TrimSpace(filepath.ToSlash(path)), "/")
 	if path == "" {
 		return ""

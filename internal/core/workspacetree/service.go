@@ -1,6 +1,8 @@
 package workspacetree
 
 import (
+	"path/filepath"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -36,6 +38,9 @@ type Service struct {
 	// Internal mutation suppression.
 	internalMutations int32 // atomic counter
 	refreshRequested  int32 // atomic flag
+
+	// Watcher baseline refresh callback.
+	watcherRefresh func() error
 }
 
 // NewService creates a new workspace tree service.
@@ -95,6 +100,31 @@ func (s *Service) GetWorkspaceTreeDiagnostics() []TreeDiagnostic {
 	return s.tree.Warnings
 }
 
+// ResolveWorkspaceForPath finds the nearest workspace ancestor for a relative path.
+func (s *Service) ResolveWorkspaceForPath(relPath string) (workspaceID, workspaceRootPath string, found bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.scan == nil {
+		return "", "", false
+	}
+	// Walk up the path until we find a registered workspace.
+	p := filepath.ToSlash(relPath)
+	for p != "" {
+		for id, ws := range s.scan.Workspaces {
+			if ws.RootPath == p {
+				return id, ws.RootPath, true
+			}
+		}
+		// Check if parent of p is a workspace.
+		idx := strings.LastIndex(p, "/")
+		if idx < 0 {
+			break
+		}
+		p = p[:idx]
+	}
+	return "", "", false
+}
+
 // RescanWorkspaceTree triggers an immediate full reconciliation.
 func (s *Service) RescanWorkspaceTree() error {
 	return s.fullReconcile()
@@ -126,10 +156,30 @@ func (s *Service) BeginInternalMutation() {
 
 // EndInternalMutationAndRefreshBaseline marks the end of a core-initiated mutation
 // and triggers an immediate rescan + baseline update without publishing duplicate events.
-func (s *Service) EndInternalMutationAndRefreshBaseline() {
+// If refreshBaseline is non-nil, it is called after reconciliation to update
+// the low-level file watcher snapshot.
+func (s *Service) EndInternalMutationAndRefreshBaseline(refreshBaseline func() error) error {
 	atomic.AddInt32(&s.internalMutations, -1)
-	// Perform a silent rescan to update the baseline.
-	_ = s.fullReconcile()
+	// Perform a silent rescan to update the semantic baseline.
+	if err := s.fullReconcile(); err != nil {
+		return err
+	}
+	// Refresh the file watcher baseline so the next poll doesn't see
+	// the internal mutation as an external change.
+	if refreshBaseline != nil {
+		if err := refreshBaseline(); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// SetWatcherBaselineRefresh sets the callback used to refresh the file watcher
+// baseline after internal mutations.
+func (s *Service) SetWatcherBaselineRefresh(fn func() error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.watcherRefresh = fn
 }
 
 // StartRescanLoop starts periodic background rescan.

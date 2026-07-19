@@ -2349,7 +2349,29 @@ func (a *App) startFileWatcherForOpenVault() {
 	if a.fileWatcher == nil {
 		a.fileWatcher = filewatcher.NewService(a.eventBus, 0)
 	}
+
+	// Wire structural change callback → tree reconciliation.
+	if a.treeV2 != nil {
+		a.fileWatcher.SetOnStructuralChange(func() {
+			a.treeV2.OnFileChanged()
+		})
+		a.fileWatcher.SetWorkspaceResolver(func(relPath string) (string, string, bool) {
+			return a.treeV2.ResolveWorkspaceForPath(relPath)
+		})
+		a.treeV2.SetWatcherBaselineRefresh(func() error {
+			return a.fileWatcher.RefreshBaseline()
+		})
+	}
+
+	// Keep sync scan callback for content changes.
 	a.fileWatcher.SetOnChange(a.scheduleSnapshotScan)
+
+	// Refresh watcher baseline from the current filesystem state
+	// AFTER tree initialization, so startup marker adoption is already visible.
+	if err := a.fileWatcher.RefreshBaseline(); err != nil {
+		log.Printf("[api] file watcher baseline refresh failed: %v", err)
+	}
+
 	if err := a.fileWatcher.Start(a.vault.GetVaultPath()); err != nil {
 		log.Printf("[api] file watcher start failed: %v", err)
 	}
@@ -2371,10 +2393,6 @@ func (a *App) scheduleSnapshotScan() {
 	a.syncScanTimer = time.AfterFunc(snapshotScanDebounce, func() {
 		if _, err := a.scanLocalChanges(); err != nil {
 			log.Printf("[api] watcher sync snapshot scan failed: %v", err)
-		}
-		// Notify the v2 workspace tree of filesystem changes.
-		if a.treeV2 != nil {
-			a.treeV2.OnFileChanged()
 		}
 	})
 	a.syncTimerMu.Unlock()

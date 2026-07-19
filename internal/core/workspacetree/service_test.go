@@ -41,7 +41,7 @@ func TestServiceInternalMutationBaseline(t *testing.T) {
 	svc.Initialize()
 	svc.BeginInternalMutation()
 	createWS(t, vault, "NewOne", ws2ID)
-	svc.EndInternalMutationAndRefreshBaseline()
+	svc.EndInternalMutationAndRefreshBaseline(nil)
 	tree := svc.GetTree()
 	found := false
 	for _, r := range tree.Roots {
@@ -88,7 +88,7 @@ func TestWatcherDebounceDoesNotFireDuringInternalMutation(t *testing.T) {
 	svc.Initialize()
 	svc.BeginInternalMutation()
 	svc.OnFileChanged()
-	svc.EndInternalMutationAndRefreshBaseline()
+	svc.EndInternalMutationAndRefreshBaseline(nil)
 	if len(svc.GetTree().Roots) != 1 {
 		t.Fatalf("expected 1 root")
 	}
