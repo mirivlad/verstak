@@ -506,6 +506,10 @@ func writeWorkspaceIdentityValue(workspacePath, workspaceID string) error {
 }
 
 func ensureWorkspaceIdentity(workspacePath string) (string, error) {
+	// Guard: refuse to write workspace identity into an organizational folder.
+	if _, err := os.Stat(filepath.Join(workspacePath, ".verstak", "folder.json")); err == nil {
+		return "", fmt.Errorf("directory is an organizational folder, not a workspace: %s", workspacePath)
+	}
 	workspaceID, err := readWorkspaceIdentity(workspacePath)
 	if os.IsNotExist(err) {
 		return writeWorkspaceIdentity(workspacePath)
