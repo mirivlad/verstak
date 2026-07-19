@@ -394,13 +394,6 @@
     window.addEventListener('verstak:navigate-forward', onNavigateForward);
     window.addEventListener('verstak:close-workbench', onCloseWorkbench);
     window.addEventListener('verstak:content-title-changed', onContentTitleChanged);
-
-    // Bridge Wails runtime events to window CustomEvents for workspace tree.
-    if (window.runtime && window.runtime.EventsOn) {
-      window.runtime.EventsOn('verstak:workspace-tree-changed', function() {
-        window.dispatchEvent(new CustomEvent('verstak:workspace-tree-changed'));
-      });
-    }
     window.addEventListener('keydown', onGlobalKeydown);
     window.addEventListener('pointerdown', onGlobalMouse, true);
     window.addEventListener('mousedown', onGlobalMouse, true);

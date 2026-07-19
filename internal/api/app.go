@@ -2365,13 +2365,6 @@ func (a *App) SetCurrentVault(path string) string {
 		log.Printf("[api] SetCurrentVault: warning initializing workspace tree v2: %v", err)
 	}
 	a.treeV2.StartRescanLoop()
-
-	// Forward workspace-tree.changed events to frontend.
-	const treeChangedGoEvent = "workspace-tree.changed"
-	const treeChangedFEEvent = "verstak:workspace-tree-changed"
-	a.eventBus.Subscribe(treeChangedGoEvent, func(event events.Event) {
-		emitFrontendEvent(a.ctx, treeChangedFEEvent)
-	})
 	// Register vault capability
 	if err := a.capRegistry.Register("verstak-desktop", []string{"verstak/core/vault/v1"}); err != nil {
 		log.Printf("[api] SetCurrentVault: failed to register vault capability: %v", err)
