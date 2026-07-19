@@ -62,10 +62,15 @@ type WorkspaceSnapshot struct {
 	Entries     map[string]SnapshotEntry `json:"entries,omitempty"`
 }
 
-// FolderSnapshot records an organizational folder identity.
+// FolderSnapshot records an organizational folder identity with enough
+// information to restore its full subtree on a clean device.
 type FolderSnapshot struct {
-	FolderID string `json:"folderId"`
-	Path     string `json:"path"`
+	FolderID     string                   `json:"folderId"`
+	Path         string                   `json:"path"`
+	Name         string                   `json:"name,omitempty"`
+	Entries      map[string]SnapshotEntry `json:"entries,omitempty"`
+	FolderIDs    []string                 `json:"folderIds,omitempty"`
+	WorkspaceIDs []string                 `json:"workspaceIds,omitempty"`
 }
 
 type scanJournal struct {
@@ -317,6 +322,7 @@ func scanVault(root string, previous Snapshot) (scannedVault, []string, error) {
 	result := scannedVault{
 		Entries:    make(map[string]SnapshotEntry),
 		Workspaces: make(map[string]WorkspaceSnapshot),
+		Folders:    make(map[string]FolderSnapshot),
 		Unresolved: make(map[string]string),
 	}
 	var warnings []string
@@ -450,6 +456,7 @@ func scanTreeSnapshots(root string, preferredWS map[string]WorkspaceSnapshot, pr
 			fCandidates[marker.FolderID] = append(fCandidates[marker.FolderID], FolderSnapshot{
 				FolderID: marker.FolderID,
 				Path:     rel,
+				Name:     filepath.Base(filepath.FromSlash(rel)),
 			})
 		}
 		return nil
@@ -698,7 +705,7 @@ func newFolderSnapshotOp(deviceID, folderID, opType string, folder FolderSnapsho
 		"path":         folder.Path,
 		"previousPath": previousPath,
 	})
-	return newSnapshotOp(deviceID, EntityFolder, folderID, opType, json.RawMessage(payload))
+	return newSnapshotOp(deviceID, EntityWorkspaceFolder, folderID, opType, json.RawMessage(payload))
 }
 
 func diffWorkspaceSnapshots(previous, next *Snapshot, deviceID string) ([]Op, error) {

@@ -293,6 +293,136 @@ func TestRenamePreservesUUID(t *testing.T) {
 	}
 }
 
+func TestCreateFolderInRootViaAPI(t *testing.T) {
+	// Same as TestCreateFolderInRoot but verifies tree integration.
+	vault := t.TempDir()
+	svc := NewService(vault, nil)
+	svc.Initialize()
+	f, _ := svc.CreateFolder("", "Root", noopRefresh)
+	if f.Path != "Root" || f.ParentID != "" {
+		t.Fatalf("folder = %+v", f)
+	}
+	tree := svc.GetTree()
+	if len(tree.Roots) != 1 || tree.Roots[0].Name != "Root" {
+		t.Fatal("folder not in tree")
+	}
+}
+
+func TestCreateFolderCollisionViaAPI(t *testing.T) {
+	vault := t.TempDir()
+	svc := NewService(vault, nil)
+	svc.Initialize()
+	svc.CreateFolder("", "X", noopRefresh)
+	if _, err := svc.CreateFolder("", "X", noopRefresh); err == nil {
+		t.Fatal("expected collision")
+	}
+}
+
+func TestFolderMoveToItselfRejected(t *testing.T) {
+	vault := t.TempDir()
+	svc := NewService(vault, nil)
+	svc.Initialize()
+	f, _ := svc.CreateFolder("", "F", noopRefresh)
+	if _, err := svc.MoveFolder(f.ID, f.ID, noopRefresh); err == nil {
+		t.Fatal("move to itself should be rejected")
+	}
+}
+
+func TestWorkspaceMoveCollisionRejected(t *testing.T) {
+	vault := t.TempDir()
+	svc := NewService(vault, nil)
+	svc.Initialize()
+	f, _ := svc.CreateFolder("", "F", noopRefresh)
+	ws1, _ := svc.CreateWorkspace(f.ID, "Same", "", noopRefresh)
+	ws2, _ := svc.CreateWorkspace("", "Same", "", noopRefresh)
+	if _, err := svc.MoveWorkspace(ws2.ID, f.ID, noopRefresh); err == nil {
+		t.Fatal("expected collision")
+	}
+	_ = ws1
+}
+
+func TestRestoreCollisionRejected(t *testing.T) {
+	vault := t.TempDir()
+	svc := NewService(vault, nil)
+	svc.Initialize()
+	f, _ := svc.CreateFolder("", "X", noopRefresh)
+	entry, _ := svc.TrashFolder(f.ID, noopRefresh)
+	svc.CreateFolder("", "X", noopRefresh) // occupy the name
+	if _, err := svc.RestoreTreeTrash(entry.TrashID, "", noopRefresh); err == nil {
+		t.Fatal("expected collision on restore")
+	}
+}
+
+func TestRestoreToAlternateParent(t *testing.T) {
+	vault := t.TempDir()
+	svc := NewService(vault, nil)
+	svc.Initialize()
+	f, _ := svc.CreateFolder("", "ToTrash", noopRefresh)
+	dst, _ := svc.CreateFolder("", "Dest", noopRefresh)
+	entry, _ := svc.TrashFolder(f.ID, noopRefresh)
+	restored, err := svc.RestoreTreeTrash(entry.TrashID, dst.ID, noopRefresh)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rf := restored.(ScannedFolder)
+	if rf.Path != "Dest/ToTrash" {
+		t.Fatalf("path = %q", rf.Path)
+	}
+}
+
+func TestSelectedWorkspacePreservedAfterRename(t *testing.T) {
+	vault := t.TempDir()
+	svc := NewService(vault, nil)
+	svc.Initialize()
+	ws, _ := svc.CreateWorkspace("", "Project", "", noopRefresh)
+	svc.SetCurrentWorkspaceID(ws.ID)
+	svc.RenameWorkspace(ws.ID, "Renamed", noopRefresh)
+	if svc.GetCurrentWorkspaceID() != ws.ID {
+		t.Fatal("selected workspace should survive rename")
+	}
+}
+
+func TestSelectedWorkspacePreservedAfterMove(t *testing.T) {
+	vault := t.TempDir()
+	svc := NewService(vault, nil)
+	svc.Initialize()
+	ws, _ := svc.CreateWorkspace("", "Project", "", noopRefresh)
+	f, _ := svc.CreateFolder("", "Folder", noopRefresh)
+	svc.SetCurrentWorkspaceID(ws.ID)
+	svc.MoveWorkspace(ws.ID, f.ID, noopRefresh)
+	if svc.GetCurrentWorkspaceID() != ws.ID {
+		t.Fatal("selected workspace should survive move")
+	}
+}
+
+func TestCaseOnlyFolderRename(t *testing.T) {
+	vault := t.TempDir()
+	svc := NewService(vault, nil)
+	svc.Initialize()
+	f, _ := svc.CreateFolder("", "client", noopRefresh)
+	updated, err := svc.RenameFolder(f.ID, "Client", noopRefresh)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.Name != "Client" || updated.ID != f.ID {
+		t.Fatalf("case-only rename: %+v", updated)
+	}
+}
+
+func TestCaseOnlyWorkspaceRename(t *testing.T) {
+	vault := t.TempDir()
+	svc := NewService(vault, nil)
+	svc.Initialize()
+	ws, _ := svc.CreateWorkspace("", "project", "", noopRefresh)
+	updated, err := svc.RenameWorkspace(ws.ID, "Project", noopRefresh)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.Name != "Project" || updated.ID != ws.ID {
+		t.Fatalf("case-only rename: %+v", updated)
+	}
+}
+
 func TestMovePreservesUUID(t *testing.T) {
 	vault := t.TempDir()
 	svc := NewService(vault, nil)
