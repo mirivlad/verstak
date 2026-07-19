@@ -12,6 +12,7 @@
    *   - If name is not found, renders a default circle icon
    */
   import Activity from 'lucide-svelte/icons/activity';
+  import BookOpen from 'lucide-svelte/icons/book-open';
   import Briefcase from 'lucide-svelte/icons/briefcase';
   import ChevronDown from 'lucide-svelte/icons/chevron-down';
   import ChevronLeft from 'lucide-svelte/icons/chevron-left';
@@ -19,12 +20,16 @@
   import Circle from 'lucide-svelte/icons/circle';
   import FlaskConical from 'lucide-svelte/icons/flask-conical';
   import Folder from 'lucide-svelte/icons/folder';
+  import FolderPlus from 'lucide-svelte/icons/folder-plus';
   import Inbox from 'lucide-svelte/icons/inbox';
+  import KeyRound from 'lucide-svelte/icons/key-round';
   import LayoutGrid from 'lucide-svelte/icons/layout-grid';
   import ListTodo from 'lucide-svelte/icons/list-todo';
+  import Palette from 'lucide-svelte/icons/palette';
   import PanelsTopLeft from 'lucide-svelte/icons/panels-top-left';
   import Pencil from 'lucide-svelte/icons/pencil';
   import Plug from 'lucide-svelte/icons/plug';
+  import Plus from 'lucide-svelte/icons/plus';
   import Puzzle from 'lucide-svelte/icons/puzzle';
   import Settings from 'lucide-svelte/icons/settings';
   import Shield from 'lucide-svelte/icons/shield';
@@ -38,19 +43,24 @@
 
   const icons = {
     activity: Activity,
+    'book-open': BookOpen,
     case: Briefcase,
-    chevronDown: ChevronDown,
-    chevronLeft: ChevronLeft,
-    chevronRight: ChevronRight,
+    'chevron-down': ChevronDown,
+    'chevron-left': ChevronLeft,
+    'chevron-right': ChevronRight,
     dot: Circle,
     edit: Pencil,
     flask: FlaskConical,
     folder: Folder,
+    'folder-plus': FolderPlus,
     gear: Settings,
     inbox: Inbox,
+    'key-round': KeyRound,
     'list-todo': ListTodo,
     logo: PanelsTopLeft,
+    palette: Palette,
     plugin: Plug,
+    plus: Plus,
     puzzle: Puzzle,
     space: LayoutGrid,
     trash: Trash2,

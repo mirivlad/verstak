@@ -77,6 +77,7 @@
 
   function onDrop(e) {
     e.preventDefault();
+    e.stopPropagation();
     if (!isFolder) return;
     try {
       const data = JSON.parse(e.dataTransfer.getData('application/x-verstak-node'));

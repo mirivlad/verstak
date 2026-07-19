@@ -145,9 +145,11 @@
 
   // ── Drag-and-drop ──────────────────────────────────────────────────────────
   function onRootDragOver(e) { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; dragOverRoot = true; }
-  function onRootDragLeave() { dragOverRoot = false; }
+  function onRootDragLeave(e) { dragOverRoot = false; }
   function onRootDrop(e) {
-    e.preventDefault(); dragOverRoot = false;
+    e.preventDefault();
+    e.stopPropagation();
+    dragOverRoot = false;
     try {
       const data = JSON.parse(e.dataTransfer.getData('application/x-verstak-node'));
       if (data.kind === 'folder') App.MoveFolderV2(data.id, '').then(loadTree);
@@ -224,16 +226,16 @@
       <button class="vt-ctx-i" on:click={() => { closeCtx(); openCreateWorkspace(ctxMenu.id); }}>{tr('workspaceTree.newDeal')}</button>
       <button class="vt-ctx-i" on:click={() => { closeCtx(); openCreateFolder(ctxMenu.id); }}>{tr('workspaceTree.newFolder')}</button>
       <div class="vt-ctx-s" />
-      <button class="vt-ctx-i" on:click={() => { closeCtx(); openRename('folder', ctxMenu.id, ctxMenu.name); }}>{tr('workspaceTree.rename')}</button>
-      <button class="vt-ctx-i" on:click={() => { closeCtx(); openMove('folder', ctxMenu.id, ctxMenu.name); }}>{tr('workspaceTree.move')}</button>
+      <button class="vt-ctx-i" on:click={() => { closeCtx(); openRename('folder', ctxMenu.id, ctxMenu.name); }}>{tr('workspaceTree.renameFolder')}</button>
+      <button class="vt-ctx-i" on:click={() => { closeCtx(); openMove('folder', ctxMenu.id, ctxMenu.name); }}>{tr('workspaceTree.moveFolder')}</button>
       <div class="vt-ctx-s" />
-      <button class="vt-ctx-i vt-ctx-d" on:click={() => { closeCtx(); openTrash('folder', ctxMenu.id, ctxMenu.name); }}>{tr('workspaceTree.trash')}</button>
+      <button class="vt-ctx-i vt-ctx-d" on:click={() => { closeCtx(); openTrash('folder', ctxMenu.id, ctxMenu.name); }}>{tr('workspaceTree.trashFolder')}</button>
     {:else}
       <button class="vt-ctx-i" on:click={() => { closeCtx(); selectWorkspace(ctxMenu.id); }}>{tr('workspaceTree.open')}</button>
-      <button class="vt-ctx-i" on:click={() => { closeCtx(); openRename('workspace', ctxMenu.id, ctxMenu.name); }}>{tr('workspaceTree.rename')}</button>
-      <button class="vt-ctx-i" on:click={() => { closeCtx(); openMove('workspace', ctxMenu.id, ctxMenu.name); }}>{tr('workspaceTree.move')}</button>
+      <button class="vt-ctx-i" on:click={() => { closeCtx(); openRename('workspace', ctxMenu.id, ctxMenu.name); }}>{tr('workspaceTree.renameDeal')}</button>
+      <button class="vt-ctx-i" on:click={() => { closeCtx(); openMove('workspace', ctxMenu.id, ctxMenu.name); }}>{tr('workspaceTree.moveDeal')}</button>
       <div class="vt-ctx-s" />
-      <button class="vt-ctx-i vt-ctx-d" on:click={() => { closeCtx(); openTrash('workspace', ctxMenu.id, ctxMenu.name); }}>{tr('workspaceTree.trash')}</button>
+      <button class="vt-ctx-i vt-ctx-d" on:click={() => { closeCtx(); openTrash('workspace', ctxMenu.id, ctxMenu.name); }}>{tr('workspaceTree.trashDeal')}</button>
     {/if}
   </div>
 {/if}
