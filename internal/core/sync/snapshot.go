@@ -19,7 +19,7 @@ import (
 	corefiles "github.com/verstak/verstak-desktop/internal/core/files"
 )
 
-const snapshotVersion = 1
+const snapshotVersion = 2
 
 // maxOperationFileBytes is an explicit desktop-side safety ceiling. Binary
 // content is streamed through the Blob API rather than embedded in operations,
@@ -33,13 +33,13 @@ func BlobCachePath(vaultRoot, hash string) string {
 }
 
 // Snapshot is the durable local view of the synchronizable part of a vault.
-// Its entries are only files and folders whose latest state was successfully
-// represented by an operation or intentionally accepted as an initial baseline.
 type Snapshot struct {
 	Version               int                          `json:"version"`
 	Entries               map[string]SnapshotEntry     `json:"entries"`
 	Workspaces            map[string]WorkspaceSnapshot `json:"workspaces,omitempty"`
 	TrashedWorkspaces     map[string]WorkspaceSnapshot `json:"trashedWorkspaces,omitempty"`
+	Folders               map[string]FolderSnapshot    `json:"folders,omitempty"`
+	TrashedFolders        map[string]FolderSnapshot    `json:"trashedFolders,omitempty"`
 	WorkspacesInitialized bool                         `json:"workspacesInitialized,omitempty"`
 	Unresolved            map[string]string            `json:"unresolved,omitempty"`
 }
@@ -54,13 +54,18 @@ type SnapshotEntry struct {
 }
 
 // WorkspaceSnapshot keeps the core-owned identity and creation metadata of a
-// top-level workspace. The marker itself remains excluded from normal file
-// sync and is never exposed through the Files API.
+// workspace. The marker itself remains excluded from normal file sync.
 type WorkspaceSnapshot struct {
 	WorkspaceID string                   `json:"workspaceId"`
 	Path        string                   `json:"path"`
 	Metadata    json.RawMessage          `json:"metadata,omitempty"`
 	Entries     map[string]SnapshotEntry `json:"entries,omitempty"`
+}
+
+// FolderSnapshot records an organizational folder identity.
+type FolderSnapshot struct {
+	FolderID string `json:"folderId"`
+	Path     string `json:"path"`
 }
 
 type scanJournal struct {
@@ -71,6 +76,7 @@ type scanJournal struct {
 type scannedVault struct {
 	Entries    map[string]SnapshotEntry
 	Workspaces map[string]WorkspaceSnapshot
+	Folders    map[string]FolderSnapshot
 	Unresolved map[string]string
 }
 
@@ -199,6 +205,8 @@ func newSnapshot() Snapshot {
 		Entries:               make(map[string]SnapshotEntry),
 		Workspaces:            make(map[string]WorkspaceSnapshot),
 		TrashedWorkspaces:     make(map[string]WorkspaceSnapshot),
+		Folders:               make(map[string]FolderSnapshot),
+		TrashedFolders:        make(map[string]FolderSnapshot),
 		WorkspacesInitialized: true,
 		Unresolved:            make(map[string]string),
 	}
@@ -227,6 +235,12 @@ func (s *Service) loadSnapshot() (Snapshot, bool, error) {
 	}
 	if snapshot.TrashedWorkspaces == nil {
 		snapshot.TrashedWorkspaces = make(map[string]WorkspaceSnapshot)
+	}
+	if snapshot.Folders == nil {
+		snapshot.Folders = make(map[string]FolderSnapshot)
+	}
+	if snapshot.TrashedFolders == nil {
+		snapshot.TrashedFolders = make(map[string]FolderSnapshot)
 	}
 	if snapshot.Unresolved == nil {
 		snapshot.Unresolved = make(map[string]string)
@@ -367,12 +381,15 @@ func scanVault(root string, previous Snapshot) (scannedVault, []string, error) {
 	if err != nil {
 		return scannedVault{}, nil, err
 	}
-	workspaces, workspaceWarnings, err := scanWorkspaceSnapshots(root, previous.Workspaces)
+	workspaces, folders, workspaceWarnings, err := scanTreeSnapshots(root, previous.Workspaces, previous.Folders)
 	if err != nil {
 		return scannedVault{}, nil, err
 	}
 	for workspaceID, workspace := range workspaces {
 		result.Workspaces[workspaceID] = workspace
+	}
+	for folderID, folder := range folders {
+		result.Folders[folderID] = folder
 	}
 	for _, warning := range workspaceWarnings {
 		warnings = append(warnings, warning)
@@ -386,66 +403,109 @@ func scanVault(root string, previous Snapshot) (scannedVault, []string, error) {
 	return result, warnings, nil
 }
 
-func scanWorkspaceSnapshots(root string, preferred map[string]WorkspaceSnapshot) (map[string]WorkspaceSnapshot, []string, error) {
-	entries, err := os.ReadDir(root)
-	if err != nil {
-		return nil, nil, err
-	}
-	candidates := make(map[string][]WorkspaceSnapshot)
+func scanTreeSnapshots(root string, preferredWS map[string]WorkspaceSnapshot, preferredF map[string]FolderSnapshot) (map[string]WorkspaceSnapshot, map[string]FolderSnapshot, []string, error) {
+	wsCandidates := make(map[string][]WorkspaceSnapshot)
+	fCandidates := make(map[string][]FolderSnapshot)
 	var warnings []string
-	for _, entry := range entries {
-		if !entry.IsDir() || entry.Type()&os.ModeSymlink != 0 || strings.EqualFold(entry.Name(), ".verstak") {
-			continue
+
+	err := filepath.WalkDir(root, func(path string, entry fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return nil
 		}
-		path := filepath.Join(root, entry.Name(), ".verstak", "workspace.json")
-		data, err := os.ReadFile(path)
-		if err != nil {
-			if os.IsNotExist(err) {
-				continue
+		if path == root {
+			return nil
+		}
+		if !entry.IsDir() || entry.Type()&os.ModeSymlink != 0 {
+			return nil
+		}
+		rel, _ := filepath.Rel(root, path)
+		rel = filepath.ToSlash(rel)
+		if excludedFromSync(rel) {
+			return filepath.SkipDir
+		}
+
+		// Check for workspace marker.
+		wsMarkerPath := filepath.Join(path, ".verstak", "workspace.json")
+		if data, err := os.ReadFile(wsMarkerPath); err == nil {
+			var marker struct{ WorkspaceID string `json:"workspaceId"` }
+			if json.Unmarshal(data, &marker) != nil || !isValidUUID(marker.WorkspaceID) {
+				warnings = append(warnings, "invalid-workspace-id: "+rel)
+				return filepath.SkipDir
 			}
-			return nil, nil, fmt.Errorf("read workspace marker %s: %w", entry.Name(), err)
+			wsCandidates[marker.WorkspaceID] = append(wsCandidates[marker.WorkspaceID], WorkspaceSnapshot{
+				WorkspaceID: marker.WorkspaceID,
+				Path:        rel,
+			})
+			return filepath.SkipDir // Stop at workspace.
 		}
-		var marker struct {
-			WorkspaceID string `json:"workspaceId"`
+
+		// Check for folder marker.
+		fMarkerPath := filepath.Join(path, ".verstak", "folder.json")
+		if data, err := os.ReadFile(fMarkerPath); err == nil {
+			var marker struct{ FolderID string `json:"folderId"` }
+			if json.Unmarshal(data, &marker) != nil || !isValidUUID(marker.FolderID) {
+				warnings = append(warnings, "invalid-folder-id: "+rel)
+				return nil
+			}
+			fCandidates[marker.FolderID] = append(fCandidates[marker.FolderID], FolderSnapshot{
+				FolderID: marker.FolderID,
+				Path:     rel,
+			})
 		}
-		if err := json.Unmarshal(data, &marker); err != nil {
-			warnings = append(warnings, fmt.Sprintf("invalid-workspace-id: %s", entry.Name()))
-			continue
-		}
-		if _, err := uuid.Parse(marker.WorkspaceID); err != nil {
-			warnings = append(warnings, fmt.Sprintf("invalid-workspace-id: %s", entry.Name()))
-			continue
-		}
-		metadata, err := readWorkspaceMetadataSnapshot(root, entry.Name())
-		if err != nil {
-			return nil, nil, err
-		}
-		candidates[marker.WorkspaceID] = append(candidates[marker.WorkspaceID], WorkspaceSnapshot{
-			WorkspaceID: marker.WorkspaceID,
-			Path:        entry.Name(),
-			Metadata:    metadata,
-		})
+		return nil
+	})
+	if err != nil {
+		return nil, nil, nil, err
 	}
-	workspaces := make(map[string]WorkspaceSnapshot, len(candidates))
-	for workspaceID, choices := range candidates {
+
+	// Resolve workspaces.
+	workspaces := make(map[string]WorkspaceSnapshot, len(wsCandidates))
+	for wsID, choices := range wsCandidates {
 		sort.Slice(choices, func(i, j int) bool { return choices[i].Path < choices[j].Path })
 		selected := choices[0]
-		if old, ok := preferred[workspaceID]; ok {
-			for _, choice := range choices {
-				if choice.Path == old.Path {
-					selected = choice
+		if old, ok := preferredWS[wsID]; ok {
+			for _, c := range choices {
+				if c.Path == old.Path {
+					selected = c
 					break
 				}
 			}
 		}
-		workspaces[workspaceID] = selected
-		for _, choice := range choices {
-			if choice.Path != selected.Path {
-				warnings = append(warnings, "duplicate-workspace-id: "+choice.Path)
+		workspaces[wsID] = selected
+		for _, c := range choices {
+			if c.Path != selected.Path {
+				warnings = append(warnings, "duplicate-workspace-id: "+c.Path)
 			}
 		}
 	}
-	return workspaces, warnings, nil
+
+	// Resolve folders.
+	folders := make(map[string]FolderSnapshot, len(fCandidates))
+	for fID, choices := range fCandidates {
+		sort.Slice(choices, func(i, j int) bool { return choices[i].Path < choices[j].Path })
+		selected := choices[0]
+		if old, ok := preferredF[fID]; ok {
+			for _, c := range choices {
+				if c.Path == old.Path {
+					selected = c
+					break
+				}
+			}
+		}
+		folders[fID] = selected
+		for _, c := range choices {
+			if c.Path != selected.Path {
+				warnings = append(warnings, "duplicate-folder-id: "+c.Path)
+			}
+		}
+	}
+
+	return workspaces, folders, warnings, nil
+}
+
+func isValidUUID(s string) bool {
+	_, err := uuid.Parse(s)
+	return err == nil
 }
 
 func readWorkspaceMetadataSnapshot(root, name string) (json.RawMessage, error) {
@@ -495,8 +555,14 @@ func snapshotFromScan(current scannedVault, previous Snapshot, previousExists bo
 	for workspaceID, workspace := range current.Workspaces {
 		next.Workspaces[workspaceID] = workspace
 	}
+	for folderID, folder := range current.Folders {
+		next.Folders[folderID] = folder
+	}
 	for workspaceID, workspace := range previous.TrashedWorkspaces {
 		next.TrashedWorkspaces[workspaceID] = workspace
+	}
+	for folderID, folder := range previous.TrashedFolders {
+		next.TrashedFolders[folderID] = folder
 	}
 	for path, message := range current.Unresolved {
 		next.Unresolved[path] = message
@@ -519,10 +585,15 @@ func snapshotFromScan(current scannedVault, previous Snapshot, previousExists bo
 }
 
 func diffSnapshots(previous, next Snapshot, deviceID, vaultRoot string) ([]Op, Snapshot, error) {
+	folderOps, err := diffFolderSnapshots(&previous, &next, deviceID)
+	if err != nil {
+		return nil, next, err
+	}
 	workspaceOps, err := diffWorkspaceSnapshots(&previous, &next, deviceID)
 	if err != nil {
 		return nil, next, err
 	}
+	semanticOps := append(folderOps, workspaceOps...)
 	var createsOrUpdates []Op
 	var deletes []Op
 	for path, entry := range next.Entries {
@@ -574,7 +645,60 @@ func diffSnapshots(previous, next Snapshot, deviceID, vaultRoot string) ([]Op, S
 		}
 		return left.EntityID < right.EntityID
 	})
-	return append(workspaceOps, append(createsOrUpdates, deletes...)...), next, nil
+	return append(semanticOps, append(createsOrUpdates, deletes...)...), next, nil
+}
+
+func diffFolderSnapshots(previous, next *Snapshot, deviceID string) ([]Op, error) {
+	var ops []Op
+	if !previous.WorkspacesInitialized {
+		return ops, nil
+	}
+	// Detected deleted folders.
+	for folderID, oldFolder := range previous.Folders {
+		if _, active := next.Folders[folderID]; !active {
+			// Moved to trash.
+			next.TrashedFolders[folderID] = oldFolder
+			ops = append(ops, newFolderSnapshotOp(deviceID, folderID, OpTrash, oldFolder, ""))
+		}
+	}
+	// Detected new/restored folders.
+	for folderID, currentFolder := range next.Folders {
+		if oldFolder, wasActive := previous.Folders[folderID]; wasActive {
+			if currentFolder.Path != oldFolder.Path {
+				opType := OpMove
+				if filepath.Base(filepath.FromSlash(currentFolder.Path)) != filepath.Base(filepath.FromSlash(oldFolder.Path)) {
+					opType = OpRename
+				}
+				ops = append(ops, newFolderSnapshotOp(deviceID, folderID, opType, currentFolder, oldFolder.Path))
+			}
+			continue
+		}
+		if _, wasTrashed := previous.TrashedFolders[folderID]; wasTrashed {
+			ops = append(ops, newFolderSnapshotOp(deviceID, folderID, OpRestore, currentFolder, ""))
+			delete(next.TrashedFolders, folderID)
+			continue
+		}
+		ops = append(ops, newFolderSnapshotOp(deviceID, folderID, OpCreate, currentFolder, ""))
+	}
+	// Permanently purged.
+	for folderID := range previous.TrashedFolders {
+		if _, stillTrashed := next.TrashedFolders[folderID]; !stillTrashed {
+			ops = append(ops, newFolderSnapshotOp(deviceID, folderID, OpDelete, FolderSnapshot{FolderID: folderID}, ""))
+		}
+	}
+	sort.Slice(ops, func(i, j int) bool {
+		return pathDepth(ops[i].EntityID) < pathDepth(ops[j].EntityID)
+	})
+	return ops, nil
+}
+
+func newFolderSnapshotOp(deviceID, folderID, opType string, folder FolderSnapshot, previousPath string) Op {
+	payload, _ := json.Marshal(map[string]interface{}{
+		"folderId":     folderID,
+		"path":         folder.Path,
+		"previousPath": previousPath,
+	})
+	return newSnapshotOp(deviceID, EntityFolder, folderID, opType, json.RawMessage(payload))
 }
 
 func diffWorkspaceSnapshots(previous, next *Snapshot, deviceID string) ([]Op, error) {
@@ -661,6 +785,13 @@ func acceptWorkspaceLifecycle(previous Snapshot, next *Snapshot) {
 	}
 	for workspaceID := range next.Workspaces {
 		delete(next.TrashedWorkspaces, workspaceID)
+	}
+	// Permanently purged.
+	for workspaceID := range previous.TrashedWorkspaces {
+		if _, stillTrashed := next.TrashedWorkspaces[workspaceID]; !stillTrashed {
+			// Purge is not explicitly diffed here; handled by trashed list disappearing.
+			_ = workspaceID
+		}
 	}
 }
 
