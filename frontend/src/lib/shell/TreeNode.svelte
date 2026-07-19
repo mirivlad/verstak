@@ -144,6 +144,8 @@
     outline: none;
   }
   .trow:hover { background: var(--vt-color-surface-hover); }
+  .trow:focus { outline: none; }
+  .trow:focus-visible { outline: 1px solid var(--vt-color-accent); outline-offset: -1px; }
   .trow.selected { background: var(--vt-color-surface-selected); box-shadow: inset 2px 0 0 var(--vt-color-accent); }
   .trow.selected .tname { color: var(--vt-color-text-primary); }
   .trow.focused { outline: 1px solid var(--vt-color-accent); outline-offset: -1px; }

@@ -81,6 +81,7 @@
   function toggleExpand(key) {
     expandedIds[key] = !expandedIds[key];
     expandedIds = expandedIds;
+    focusedKey = key;
     saveExpanded();
   }
 
@@ -88,6 +89,7 @@
     const err = await App.SetCurrentWorkspaceV2(wid);
     if (err) { error = err; return; }
     activeWid = wid;
+    focusedKey = 'workspace:' + wid;
     const ws = await App.GetWorkspaceByID(wid);
     const rootPath = ws?.rootPath || '';
     window.dispatchEvent(new CustomEvent('verstak:workspace-selected', {
@@ -215,7 +217,7 @@
   function onKeyDown(e) { if (e.key === "Escape") { closeCtx(); closeModal(); resetDragState(); } }
 </script>
 
-<svelte:window on:keydown={onKeyDown} on:click={closeCtx} />
+<svelte:window on:keydown={onKeyDown} on:mousedown={(e) => { if (e.button === 0 && ctxMenu) closeCtx(); }} />
 
 <div class="wt" data-workspace-tree>
   <div class="wt-header">
@@ -269,14 +271,10 @@
       <button class="vt-ctx-i" on:click={() => { closeCtx(); openCreateFolder(ctxMenu.id); }}>{tr('workspaceTree.newFolder')}</button>
       <div class="vt-ctx-s" />
       <button class="vt-ctx-i" on:click={() => { closeCtx(); openRename('folder', ctxMenu.id, ctxMenu.name); }}>{tr('workspaceTree.renameFolder')}</button>
-      <button class="vt-ctx-i" on:click={() => { closeCtx(); openMove('folder', ctxMenu.id, ctxMenu.name); }}>{tr('workspaceTree.moveFolder')}</button>
-      <div class="vt-ctx-s" />
       <button class="vt-ctx-i vt-ctx-d" on:click={() => { closeCtx(); openTrash('folder', ctxMenu.id, ctxMenu.name); }}>{tr('workspaceTree.trashFolder')}</button>
     {:else}
       <button class="vt-ctx-i" on:click={() => { closeCtx(); selectWorkspace(ctxMenu.id); }}>{tr('workspaceTree.open')}</button>
       <button class="vt-ctx-i" on:click={() => { closeCtx(); openRename('workspace', ctxMenu.id, ctxMenu.name); }}>{tr('workspaceTree.renameDeal')}</button>
-      <button class="vt-ctx-i" on:click={() => { closeCtx(); openMove('workspace', ctxMenu.id, ctxMenu.name); }}>{tr('workspaceTree.moveDeal')}</button>
-      <div class="vt-ctx-s" />
       <button class="vt-ctx-i vt-ctx-d" on:click={() => { closeCtx(); openTrash('workspace', ctxMenu.id, ctxMenu.name); }}>{tr('workspaceTree.trashDeal')}</button>
     {/if}
   </div>
