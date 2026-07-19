@@ -135,7 +135,6 @@
   function openCreateFolder(pid) { modal = { type: 'create-folder', parentId: pid }; formName = ''; formParentId = pid || ''; formError = ''; formBusy = false; }
   function openCreateWorkspace(pid) { modal = { type: 'create-workspace', parentId: pid }; formName = ''; formParentId = pid || ''; formTemplateId = templates[0]?.id || 'default'; formError = ''; formBusy = false; }
   function openRename(kind, id, name) { modal = { type: 'rename', kind, id }; formName = name; formError = ''; formBusy = false; }
-  function openMove(kind, id, name) { modal = { type: 'move', kind, id, name }; formParentId = ''; formError = ''; formBusy = false; }
   function openTrash(kind, id, name) { modal = { type: 'trash', kind, id, name }; formBusy = false; }
   function closeModal() { if (!formBusy) modal = null; }
 
@@ -313,12 +312,6 @@
   <label class="vt-field"><span>{tr('workspaceTree.newName')}</span><input class="vt-input" type="text" bind:value={formName} disabled={formBusy} on:keydown={(e) => e.key === 'Enter' && doRename()} /></label>
   {#if formError}<p class="vt-ferr">{formError}</p>{/if}
   <svelte:fragment slot="actions"><button class="vt-btn" on:click={closeModal} disabled={formBusy}>{tr('common.cancel')}</button><button class="vt-btn-p" on:click={doRename} disabled={formBusy}>{tr('common.save')}</button></svelte:fragment>
-</Modal>
-
-<Modal title={(tr('workspaceTree.move') + (modal?.name ? ' «' + modal.name + '»' : ''))} show={modal?.type === 'move'} on:close={closeModal}>
-  <label class="vt-field"><span>{tr('workspaceTree.newLocation')}</span><Select options={flatFolders(tree.roots).filter(f => f.id !== modal?.id && !moveExcluded.has(f.id)).map(f => ({ value: f.id, label: f.path }))} placeholder={tr('workspaceTree.root')} bind:value={formParentId} labelKey="label" valueKey="value" /></label>
-  {#if formError}<p class="vt-ferr">{formError}</p>{/if}
-  <svelte:fragment slot="actions"><button class="vt-btn" on:click={closeModal} disabled={formBusy}>{tr('common.cancel')}</button><button class="vt-btn-p" on:click={doMove} disabled={formBusy}>{tr('workspaceTree.move')}</button></svelte:fragment>
 </Modal>
 
 <Modal title={(modal?.kind === 'folder' ? tr('workspaceTree.trashFolder') : tr('workspaceTree.trashDeal')) + (modal?.name ? ' «' + modal.name + '»?' : '?')} show={modal?.type === 'trash'} on:close={closeModal}>
