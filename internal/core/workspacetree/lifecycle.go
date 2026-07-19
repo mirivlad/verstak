@@ -342,8 +342,6 @@ func (s *Service) MoveWorkspace(workspaceID, targetParentFolderID string, refres
 
 	newRel := joinRelPath(targetParentPath, ws.Name)
 	newAbs := filepath.Join(vaultDir, filepath.FromSlash(newRel))
-	fmt.Fprintf(os.Stderr, "[MOVE-DIAG] MoveWorkspace wsID=%s wsName=%s oldPath=%q newPath=%q targetParent=%q\n",
-		workspaceID, ws.Name, ws.RootPath, newRel, targetParentPath)
 
 	if newRel == ws.RootPath {
 		return ws, nil

@@ -191,9 +191,6 @@ func WriteWorkspaceMarker(dir string, id string) error {
 	if err != nil {
 		return err
 	}
-	// Diagnostic: log every workspace marker write with caller context.
-	absDir, _ := filepath.Abs(dir)
-	fmt.Fprintf(os.Stderr, "[MARKER-DIAG] WriteWorkspaceMarker dir=%q id=%s\n", absDir, id)
 
 	// Invariant: refuse to write workspace marker into an organizational folder.
 	verstakDir := filepath.Join(dir, ".verstak")
