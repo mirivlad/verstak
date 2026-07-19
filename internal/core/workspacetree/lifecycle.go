@@ -111,6 +111,9 @@ func (s *Service) CreateWorkspace(parentFolderID, name, templateID string, refre
 
 	stagingName := "." + name + ".staging." + uuid.NewString()[:8]
 	stagingRel := joinRelPath(parentPath, stagingName)
+
+	// Resolve template tools before creating.
+	templateTools := resolveTemplateTools(templateID)
 	stagingAbs := filepath.Join(vaultDir, filepath.FromSlash(stagingRel))
 
 	s.BeginInternalMutation()
@@ -135,7 +138,7 @@ func (s *Service) CreateWorkspace(parentFolderID, name, templateID string, refre
 	}
 
 	// Write metadata with template features for UUID-keyed lookup.
-	if err := writeWorkspaceMetadataV2(stagingAbs, wsID, name, templateID); err != nil {
+	if err := writeWorkspaceMetadataV2(stagingAbs, wsID, name, templateID, templateTools); err != nil {
 		// Non-fatal: workspace is created even if metadata write fails.
 		// The tree reconciliation will pick up the workspace marker.
 	}
@@ -403,7 +406,8 @@ func applyWorkspaceTemplate(workspaceDir, templateID string) error {
 
 // writeWorkspaceMetadataV2 writes workspace metadata to the vault's workspace registry
 // keyed by the workspace UUID. This enables metadata lookup after move/rename.
-func writeWorkspaceMetadataV2(workspaceDir, workspaceID, workspaceName, templateID string) error {
+// workspaceTools is the definitive list of tool plugin IDs for this workspace.
+func writeWorkspaceMetadataV2(workspaceDir, workspaceID, workspaceName, templateID string, workspaceTools []string) error {
 	if workspaceID == "" {
 		return fmt.Errorf("workspace ID is required")
 	}
@@ -428,13 +432,12 @@ func writeWorkspaceMetadataV2(workspaceDir, workspaceID, workspaceName, template
 	}
 
 	now := time.Now().UTC().Format(time.RFC3339Nano)
-	features := defaultFeaturesV2()
 	meta := map[string]interface{}{
 		"workspaceId":    workspaceID,
 		"workspaceName":  workspaceName,
-		"features":       features,
+		"features":       toolsToFeatures(workspaceTools),
 		"folders":        defaultFoldersV2(),
-		"workspaceTools": defaultWorkspaceToolsV2(features),
+		"workspaceTools": workspaceTools,
 		"updatedAt":      now,
 	}
 	if templateID != "" {
@@ -456,14 +459,49 @@ func writeWorkspaceMetadataV2(workspaceDir, workspaceID, workspaceName, template
 	return os.Rename(tmp, path)
 }
 
-func defaultFeaturesV2() map[string]bool {
-	return map[string]bool{
-		"files":         true,
-		"notes":         true,
-		"journal":       true,
-		"activity":      true,
-		"browser-inbox": true,
+var templateRegistry = map[string]templateDef{
+	"default":  {ID: "default", Name: "General", Selectable: true, Order: 10, WorkspaceTools: []string{"verstak.notes", "verstak.files", "verstak.journal", "verstak.activity", "verstak.browser-inbox"}},
+	"project":  {ID: "project", Name: "Project", Selectable: true, Order: 20, WorkspaceTools: []string{"verstak.notes", "verstak.files", "verstak.todo", "verstak.journal", "verstak.activity", "verstak.browser-inbox"}},
+	"writing":  {ID: "writing", Name: "Writing", Selectable: true, Order: 30, WorkspaceTools: []string{"verstak.notes", "verstak.files", "verstak.journal"}},
+	"admin":    {ID: "admin", Name: "Admin", Selectable: true, Order: 40, WorkspaceTools: []string{"verstak.notes", "verstak.files", "verstak.secrets", "verstak.todo", "verstak.journal"}},
+	"minimal":  {ID: "minimal", Name: "Minimal", Selectable: true, Order: 50, WorkspaceTools: []string{"verstak.notes", "verstak.files"}},
+	"client-project": {ID: "client-project", Name: "Client Project", Selectable: false, WorkspaceTools: []string{"verstak.notes", "verstak.files", "verstak.secrets"}},
+}
+
+// templateDefinition mirrors the built-in template structure from workspace package.
+type templateDef struct {
+	ID             string
+	Name           string
+	WorkspaceTools []string
+	Selectable     bool
+	Order          int
+}
+
+// resolveTemplateTools returns the workspaceTools list for a template ID.
+func resolveTemplateTools(templateID string) []string {
+	if templateID == "" {
+		return []string{"verstak.notes", "verstak.files"}
 	}
+	tmpl, ok := templateRegistry[templateID]
+	if !ok || !tmpl.Selectable {
+		return []string{"verstak.notes", "verstak.files"}
+	}
+	return append([]string(nil), tmpl.WorkspaceTools...)
+}
+
+// toolsToFeatures derives a features map from a workspaceTools list.
+func toolsToFeatures(tools []string) map[string]bool {
+	f := map[string]bool{"files": true, "notes": true}
+	for _, t := range tools {
+		switch t {
+		case "verstak.journal": f["journal"] = true
+		case "verstak.activity": f["activity"] = true
+		case "verstak.browser-inbox": f["browser-inbox"] = true
+		case "verstak.todo": f["todo"] = true
+		case "verstak.secrets": f["secrets"] = true
+		}
+	}
+	return f
 }
 
 func defaultFoldersV2() map[string]string {
@@ -471,16 +509,6 @@ func defaultFoldersV2() map[string]string {
 		"notes": "Notes",
 		"files": "Files",
 	}
-}
-
-func defaultWorkspaceToolsV2(features map[string]bool) []string {
-	tools := []string{"verstak.notes", "verstak.files"}
-	if features["journal"] { tools = append(tools, "verstak.journal") }
-	if features["activity"] { tools = append(tools, "verstak.activity") }
-	if features["browser-inbox"] { tools = append(tools, "verstak.browser-inbox") }
-	if features["todo"] { tools = append(tools, "verstak.todo") }
-	if features["secrets"] { tools = append(tools, "verstak.secrets") }
-	return tools
 }
 
 // ── Set current workspace ────────────────────────────────────────────────────

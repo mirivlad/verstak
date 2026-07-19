@@ -264,7 +264,7 @@
 
 <!-- Context Menu -->
 {#if ctxMenu}
-  <div class="vt-ctx" style="left:{ctxMenu.x}px;top:{ctxMenu.y}px" on:click|stopPropagation>
+  <div class="vt-ctx" style="left:{ctxMenu.x}px;top:{ctxMenu.y}px" on:click|stopPropagation on:mousedown|stopPropagation>
     {#if ctxMenu.kind === 'folder'}
       <button class="vt-ctx-i" on:click={() => { closeCtx(); openCreateWorkspace(ctxMenu.id); }}>{tr('workspaceTree.newDeal')}</button>
       <button class="vt-ctx-i" on:click={() => { closeCtx(); openCreateFolder(ctxMenu.id); }}>{tr('workspaceTree.newFolder')}</button>
