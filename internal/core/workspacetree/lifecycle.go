@@ -428,12 +428,14 @@ func writeWorkspaceMetadataV2(workspaceDir, workspaceID, workspaceName, template
 	}
 
 	now := time.Now().UTC().Format(time.RFC3339Nano)
+	features := defaultFeaturesV2()
 	meta := map[string]interface{}{
-		"workspaceId":   workspaceID,
-		"workspaceName": workspaceName,
-		"features":      defaultFeaturesV2(),
-		"folders":       defaultFoldersV2(),
-		"updatedAt":     now,
+		"workspaceId":    workspaceID,
+		"workspaceName":  workspaceName,
+		"features":       features,
+		"folders":        defaultFoldersV2(),
+		"workspaceTools": defaultWorkspaceToolsV2(features),
+		"updatedAt":      now,
 	}
 	if templateID != "" {
 		meta["createdFromTemplate"] = map[string]interface{}{
@@ -469,6 +471,16 @@ func defaultFoldersV2() map[string]string {
 		"notes": "Notes",
 		"files": "Files",
 	}
+}
+
+func defaultWorkspaceToolsV2(features map[string]bool) []string {
+	tools := []string{"verstak.notes", "verstak.files"}
+	if features["journal"] { tools = append(tools, "verstak.journal") }
+	if features["activity"] { tools = append(tools, "verstak.activity") }
+	if features["browser-inbox"] { tools = append(tools, "verstak.browser-inbox") }
+	if features["todo"] { tools = append(tools, "verstak.todo") }
+	if features["secrets"] { tools = append(tools, "verstak.secrets") }
+	return tools
 }
 
 // ── Set current workspace ────────────────────────────────────────────────────

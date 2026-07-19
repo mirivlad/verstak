@@ -121,9 +121,20 @@
   }
 
   function filterWorkspaceTools(tools, metadata) {
-    if (!Array.isArray(metadata?.workspaceTools)) return tools;
-    const allowedPluginIds = new Set(metadata.workspaceTools);
-    return tools.filter(tool => allowedPluginIds.has(tool.pluginId));
+    if (!metadata) return tools;
+    let allowed = metadata.workspaceTools;
+    if (!Array.isArray(allowed)) {
+      // Derive from features if workspaceTools is missing (legacy metadata).
+      const f = metadata.features || {};
+      allowed = ['verstak.notes', 'verstak.files'];
+      if (f.journal) allowed.push('verstak.journal');
+      if (f.activity) allowed.push('verstak.activity');
+      if (f['browser-inbox']) allowed.push('verstak.browser-inbox');
+      if (f.todo) allowed.push('verstak.todo');
+      if (f.secrets) allowed.push('verstak.secrets');
+    }
+    const allowedSet = new Set(allowed);
+    return tools.filter(tool => allowedSet.has(tool.pluginId));
   }
 
   function resultOrError(response, fallbackValue) {
