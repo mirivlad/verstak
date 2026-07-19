@@ -29,6 +29,10 @@
     unsubscribeLocale = i18n.subscribe((l) => { locale = l; });
     await loadTree(); await loadTemplates();
     window.addEventListener('verstak:workspace-tree-changed', loadTree);
+    // Also listen via Wails runtime events (Go EventsEmit).
+    if (window.runtime?.EventsOn) {
+      window.runtime.EventsOn('verstak:workspace-tree-changed', loadTree);
+    }
   });
   onDestroy(() => {
     if (unsubscribeLocale) unsubscribeLocale();

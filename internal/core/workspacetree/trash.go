@@ -23,11 +23,12 @@ type TrashEntry struct {
 }
 
 type trashMetadata struct {
-	EntityType   string   `json:"entityType"`
-	EntityID     string   `json:"entityId"`
-	OriginalPath string   `json:"originalPath"`
-	DeletedAt    string   `json:"deletedAt"`
-	WorkspaceIDs []string `json:"workspaceIds,omitempty"`
+	EntityType         string   `json:"entityType"`
+	EntityID           string   `json:"entityId"`
+	OriginalPath       string   `json:"originalPath"`
+	OriginalParentUUID string   `json:"originalParentUuid,omitempty"`
+	DeletedAt          string   `json:"deletedAt"`
+	WorkspaceIDs       []string `json:"workspaceIds,omitempty"`
 }
 
 const treeTrashRelPath = ".verstak/trash/tree"
@@ -109,12 +110,27 @@ func (s *Service) trashEntity(vaultDir, entityType, entityID, relPath string, re
 		s.mu.Unlock()
 	}
 
+	// Resolve original parent UUID from the path.
+	parentPath := parentPath(relPath)
+	var originalParentUUID string
+	if parentPath != "" && s.scan != nil {
+		s.mu.Lock()
+		for _, f := range s.scan.Folders {
+			if f.Path == parentPath {
+				originalParentUUID = f.ID
+				break
+			}
+		}
+		s.mu.Unlock()
+	}
+
 	meta := trashMetadata{
-		EntityType:   entityType,
-		EntityID:     entityID,
-		OriginalPath: relPath,
-		DeletedAt:    now,
-		WorkspaceIDs: wsIDs,
+		EntityType:         entityType,
+		EntityID:           entityID,
+		OriginalPath:       relPath,
+		OriginalParentUUID: originalParentUUID,
+		DeletedAt:          now,
+		WorkspaceIDs:       wsIDs,
 	}
 	metaData, _ := json.MarshalIndent(meta, "", "  ")
 	if err := os.WriteFile(filepath.Join(trashDir, "metadata.json"), metaData, 0o644); err != nil {
@@ -206,6 +222,15 @@ func (s *Service) RestoreTreeTrash(trashID, targetParentFolderID string, refresh
 			return nil, fmt.Errorf("target parent folder not found: %s", targetParentFolderID)
 		}
 		targetParentPath = tf.Path
+	} else if meta.OriginalParentUUID != "" {
+		// Resolve by original parent UUID (handles rename after trash).
+		if pf, ok := s.GetFolderByID(meta.OriginalParentUUID); ok {
+			targetParentPath = pf.Path
+		}
+	}
+	// If still no parent resolved, derive from OriginalPath.
+	if targetParentPath == "" && meta.OriginalPath != "" {
+		targetParentPath = parentPath(meta.OriginalPath)
 	}
 
 	targetRel := joinRelPath(targetParentPath, entityName)

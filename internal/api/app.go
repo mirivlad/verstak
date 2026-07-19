@@ -1677,6 +1677,7 @@ func (a *App) RestoreVaultTrash(pluginID, trashID string, options corefiles.Rest
 				if err != nil {
 					return "", err.Error()
 				}
+				emitFrontendEvent(a.ctx, "verstak:workspace-tree-changed")
 				return te.OriginalPath, ""
 			}
 		}
@@ -1720,6 +1721,7 @@ func (a *App) DeleteVaultTrash(pluginID, trashID string) string {
 				if err := a.treeV2.PurgeTreeTrash(trashID); err != nil {
 					return err.Error()
 				}
+				emitFrontendEvent(a.ctx, "verstak:workspace-tree-changed")
 				return ""
 			}
 		}
