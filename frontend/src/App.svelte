@@ -3,12 +3,12 @@
   import Sidebar from './lib/shell/Sidebar.svelte';
   import GlobalSearch from './lib/shell/GlobalSearch.svelte';
   import CommandPalette from './lib/shell/CommandPalette.svelte';
+  import Icon from './lib/ui/Icon.svelte';
   import StatusBar from './lib/shell/StatusBar.svelte';
   import ViewContainer from './lib/shell/ViewContainer.svelte';
   import VaultSelection from './lib/shell/VaultSelection.svelte';
   import WorkbenchHost from './lib/shell/WorkbenchHost.svelte';
   import WorkspaceHost from './lib/shell/WorkspaceHost.svelte';
-  import Icon from './lib/ui/Icon.svelte';
   import * as App from '../wailsjs/go/api/App';
   import { debug } from './lib/log/debug.js';
   import { onDestroy, onMount, tick } from 'svelte';
@@ -39,6 +39,7 @@
   // Common header title emitted by child views
   let contentTitle = '';
   let contentTitleSub = '';
+  let contentTitleIcon = '';
 
   let workspaceNodes = [];
   let selectedWorkspaceName = '';
@@ -378,6 +379,7 @@
   function onContentTitleChanged(e) {
     contentTitle = e.detail?.title || '';
     contentTitleSub = e.detail?.subtitle || '';
+    contentTitleIcon = e.detail?.icon || '';
   }
 
   // Listen for events
@@ -426,6 +428,7 @@
     <section class="content-shell">
       <header class="main-content-header" data-main-content-header>
         <div class="main-content-title">
+          {#if contentTitleIcon}<Icon name={contentTitleIcon} size={16} class="main-content-title-icon" />{/if}
           <span class="main-content-title-text">{contentTitle || defaultContentTitle || tr('workspace.select')}</span>
           {#if contentTitleSub}
             <span class="main-content-title-sub">{contentTitleSub}</span>
@@ -904,6 +907,7 @@
     gap: 0.75rem;
   }
 
+  .main-content-title-icon { width: 1rem; height: 1rem; flex-shrink: 0; color: var(--vt-color-text-muted); }
   .main-content-title-text {
     min-width: 0;
     overflow: hidden;

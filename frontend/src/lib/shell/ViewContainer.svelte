@@ -58,7 +58,7 @@
 
   $: if (currentView) {
     window.dispatchEvent(new CustomEvent('verstak:content-title-changed', {
-      detail: { title: currentView.title }
+      detail: { title: currentView.title, icon: currentView.icon || '' }
     }));
   }
 
@@ -89,9 +89,6 @@
   {:else if currentView}
     <div class="view-container">
       <div class="view" class:degraded={pluginStatus === 'degraded'}>
-        <div class="view-header">
-          <Icon name={currentView.icon || 'logo'} size={20} class="view-icon" />
-        </div>
         <div class="view-content">
           {#if hasFrontend}
             <PluginBundleHost
@@ -142,20 +139,6 @@
   }
   .view.degraded {
     border-left: 3px solid var(--vt-color-warning);
-  }
-  .view-header {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    margin-bottom: 1rem;
-    padding-bottom: 0.75rem;
-    border-bottom: 1px solid var(--vt-color-border);
-  }
-  :global(.view-icon) {
-    width: 1.3rem;
-    height: 1.3rem;
-    color: var(--vt-color-text-muted);
-    flex-shrink: 0;
   }
   .view-content {
     flex: 1;

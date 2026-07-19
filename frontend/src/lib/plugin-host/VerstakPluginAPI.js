@@ -369,32 +369,30 @@ export function createPluginAPI(pluginId) {
     },
 
     folders: {
+      _readAll: async function() {
+        const data = await callBackend(pluginId, 'storage.data.read(appearance)', function() {
+          return App.ReadPluginDataJSON(pluginId, 'appearance');
+        });
+        return (data && data.folders) || {};
+      },
       getAppearance: async function(folderId) {
         try {
-          const raw = await callBackend(pluginId, 'files.readText(appearance.json)', function() {
-            return App.ReadVaultTextFile(pluginId, '.verstak/plugin-data/folder-appearance.json');
-          });
-          const data = raw ? JSON.parse(raw) : {};
-          return (data.folders && data.folders[folderId]) || { iconId: '', colorId: '' };
+          const all = await this._readAll();
+          return all[folderId] || { iconId: '', colorId: '' };
         } catch {
           return { iconId: '', colorId: '' };
         }
       },
       setAppearance: function(folderId, appearance) {
         assertActive('folders.setAppearance(' + folderId + ')');
-        return callBackend(pluginId, 'files.readText(appearance.json)', function() {
-          return App.ReadVaultTextFile(pluginId, '.verstak/plugin-data/folder-appearance.json');
-        }).then(function(raw) {
-          var data = {};
-          try { data = raw ? JSON.parse(raw) : {}; } catch {}
-          data.folders = data.folders || {};
+        return this._readAll().then(function(all) {
           if (appearance && (appearance.iconId || appearance.colorId)) {
-            data.folders[folderId] = { iconId: appearance.iconId || '', colorId: appearance.colorId || '' };
+            all[folderId] = { iconId: appearance.iconId || '', colorId: appearance.colorId || '' };
           } else {
-            delete data.folders[folderId];
+            delete all[folderId];
           }
-          return callBackendErrorString(pluginId, 'files.writeText(appearance.json)', function() {
-            return App.WriteVaultTextFile(pluginId, '.verstak/plugin-data/folder-appearance.json', JSON.stringify(data, null, 2), {});
+          return callBackendErrorString(pluginId, 'storage.data.write(appearance)', function() {
+            return App.WritePluginDataJSON(pluginId, 'appearance', { folders: all });
           });
         });
       }

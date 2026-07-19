@@ -16,7 +16,7 @@
   $: tr = ((al) => (k, p, f) => { void al; return i18n.t(k, p, f); })(locale);
 
   // Modal state
-  let modal = null; let formName = ''; let formParentId = ''; let formTemplateId = 'default'; let folderIconId = ''; let folderColor = ''; let folderEditorView = 'form'; let iconSearch = ''; $: filteredIcons = LUCIDE_ICONS.filter(i => !iconSearch || i.toLowerCase().includes(iconSearch.toLowerCase())).slice(0, 200);
+  let modal = null; let formName = ''; let formParentId = ''; let formTemplateId = 'default'; let folderIconId = ''; let folderColor = ''; let folderEditorView = 'form'; let iconSearch = ''; let appearanceCache = {}; $: filteredIcons = LUCIDE_ICONS.filter(i => !iconSearch || i.toLowerCase().includes(iconSearch.toLowerCase())).slice(0, 200);
   let formError = ''; let formBusy = false;
   let templates = [];
   let ctxMenu = null;
@@ -51,6 +51,7 @@
       if (!focusedKey && tree.roots?.length) focusedKey = tree.roots[0].key;
     } catch (e) { error = tr('workspaceTree.loadError'); }
     loading = false;
+    await loadAppearanceMap();
   }
 
   async function loadExpanded() {
@@ -141,7 +142,7 @@
   function openRename(kind, id, name) { modal = { type: 'rename', kind, id }; formName = name; formError = ''; formBusy = false; }
   function openTrash(kind, id, name) { modal = { type: 'trash', kind, id, name }; formBusy = false; }
   function openEditFolder(id, name) {
-    modal = { type: 'edit-folder', id };
+    modal = { type: 'edit-folder', id, origName: name };
     formName = name;
     folderIconId = ''; folderColor = '';
     folderEditorView = 'form';
@@ -150,18 +151,47 @@
   }
   async function loadFolderAppearance(folderId) {
     try {
-      const reg = window.__VERSTAK_PLUGIN_REGISTRY__;
-      const comp = reg && reg['verstak.folder-appearance'];
-      if (!comp) return;
+      // Check local cache first
+      if (appearanceCache[folderId]) {
+        folderIconId = appearanceCache[folderId].iconId || '';
+        folderColor = appearanceCache[folderId].colorId || '';
+        return;
+      }
       const api = window.createPluginAPI('verstak.folder-appearance');
       if (api && api.folders && api.folders.getAppearance) {
         const a = await api.folders.getAppearance(folderId);
         folderIconId = a.iconId || '';
         folderColor = a.colorId || '';
+        appearanceCache[folderId] = { iconId: folderIconId, colorId: folderColor };
+        appearanceCache = appearanceCache;
       }
     } catch {}
   }
   function closeModal() { if (!formBusy) modal = null; }
+  async function loadAppearanceMap() {
+    try {
+      const api = window.createPluginAPI('verstak.folder-appearance');
+      if (!api || !api.folders || !api.folders.getAppearance) return;
+      // Collect all folder UUIDs from tree
+      const uuids = [];
+      function walk(roots) {
+        for (const r of roots) {
+          if (r.kind === 'folder') { uuids.push(r.id); if (r.children) walk(r.children); }
+        }
+      }
+      walk(tree.roots);
+      // Load each appearance
+      const next = {};
+      for (const uuid of uuids) {
+        try {
+          const a = await api.folders.getAppearance(uuid);
+          if (a && (a.iconId || a.colorId)) { next[uuid] = a; }
+        } catch {}
+      }
+      appearanceCache = { ...appearanceCache, ...next };
+      appearanceCache = appearanceCache; // trigger reactivity
+    } catch {}
+  }
 
   async function doCreateFolder() { const n = formName.trim(); if (!n) { formError = tr('workspaceTree.nameRequired'); return; } formBusy = true; const r = await App.CreateFolderV2(formParentId || '', n); if (r?.error) { formError = r.error; formBusy = false; return; } if (formParentId) { expandedIds['folder:' + formParentId] = true; saveExpanded(); }
   const fid = r?.id;
@@ -173,8 +203,10 @@
       }
     } catch {}
   }
-  modal = null; await loadTree(); }
-  async function doCreateWorkspace() { const n = formName.trim(); if (!n) { formError = tr('workspaceTree.nameRequired'); return; } formBusy = true; const r = await App.CreateWorkspaceV2(formParentId || '', n, formTemplateId); if (r?.error) { formError = r.error; formBusy = false; return; } if (formParentId) { expandedIds['folder:' + formParentId] = true; saveExpanded(); } const wid = r?.id; modal = null; await loadTree(); if (wid) await selectWorkspace(wid); }
+    appearanceCache[fid] = { iconId: folderIconId, colorId: folderColor };
+  appearanceCache = appearanceCache;
+  appearanceCache = { ...appearanceCache, [fid]: { iconId: folderIconId, colorId: folderColor } }; appearanceCache = appearanceCache; modal = null; await loadTree(); }
+  async function doCreateWorkspace() { const n = formName.trim(); if (!n) { formError = tr('workspaceTree.nameRequired'); return; } formBusy = true; const r = await App.CreateWorkspaceV2(formParentId || '', n, formTemplateId); if (r?.error) { formError = r.error; formBusy = false; return; } if (formParentId) { expandedIds['folder:' + formParentId] = true; saveExpanded(); } const wid = r?.id; modal = null; await loadTree(); await loadAppearanceMap(); if (wid) await selectWorkspace(wid); }
   async function doRename() { const n = formName.trim(); if (!n) { formError = tr('workspaceTree.nameRequired'); return; } formBusy = true; let err = modal.kind === 'folder' ? await App.RenameFolderV2(modal.id, n) : await App.RenameWorkspaceV2(modal.id, n); if (err) { formError = err; formBusy = false; return; } modal = null; await loadTree(); }
   function openIconPicker() { folderEditorView = 'icon-picker'; iconSearch = ''; }
   function selectFolderIcon(id) { folderIconId = id; folderEditorView = 'form'; }
@@ -184,15 +216,21 @@
     const n = formName.trim();
     if (!n) { formError = tr('workspaceTree.nameRequired'); return; }
     formBusy = true;
-    const err = await App.RenameFolderV2(modal.id, n);
-    if (err) { formError = err; formBusy = false; return; }
-    // Save appearance if plugin available
+    const origName = modal.origName || '';
+    if (n !== origName) {
+      const err = await App.RenameFolderV2(modal.id, n);
+      if (err) { formError = err; formBusy = false; return; }
+    }
+    // Always save appearance (even if name unchanged)
     try {
       const api = window.createPluginAPI('verstak.folder-appearance');
       if (api && api.folders && api.folders.setAppearance) {
         await api.folders.setAppearance(modal.id, { iconId: folderIconId, colorId: folderColor });
       }
     } catch {}
+    // Update local appearance cache
+    appearanceCache = { ...appearanceCache, [modal.id]: { iconId: folderIconId, colorId: folderColor } };
+    appearanceCache = appearanceCache;
     modal = null;
     await loadTree();
   }
@@ -300,7 +338,7 @@
       </div>
     {:else}
       {#each tree.roots as node (node.key)}
-        <TreeNode {node} depth={0} {expandedIds} {activeWid} {focusedKey}
+        <TreeNode {node} depth={0} {expandedIds} {activeWid} {focusedKey} {appearanceCache}
           on:toggle={(e) => toggleExpand(e.detail.key)}
           on:select={(e) => selectWorkspace(e.detail.id)}
           on:nav={handleNav}
@@ -507,8 +545,9 @@
   .vt-color-row { display: flex; align-items: center; gap: 6px; }
   .vt-color-native { width: 2rem; height: 2rem; cursor: pointer; border: 1px solid var(--vt-color-border); border-radius: var(--vt-radius-sm); background: none; padding: 2px; }
   .vt-color-hex { width: 7rem; }
-  .vt-icon-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(4.5rem, 1fr)); gap: 4px; margin-top: 8px; max-height: 40vh; overflow-y: auto; }
-  .vt-icon-item { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 6px 4px; border: 1px solid transparent; border-radius: var(--vt-radius-sm); background: transparent; color: var(--vt-color-text-secondary); cursor: pointer; font-size: .65rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .vt-icon-grid { display: grid; grid-template-columns: repeat(auto-fill, 64px); grid-auto-rows: 72px; gap: 6px; margin-top: 8px; max-height: 55vh; overflow-y: auto; justify-content: center; }
+  .vt-icon-item { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; width: 64px; height: 72px; min-width: 64px; min-height: 72px; padding: 4px 2px; border: 1px solid transparent; border-radius: var(--vt-radius-sm); background: transparent; color: var(--vt-color-text-secondary); cursor: pointer; font-size: .6rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .vt-icon-item svg { width: 28px; height: 28px; min-width: 28px; min-height: 28px; flex-shrink: 0; }
   .vt-icon-item:hover { border-color: var(--vt-color-accent); background: var(--vt-color-accent-muted); }
   .vt-icon-selected { border-color: var(--vt-color-accent); background: var(--vt-color-accent-muted); color: var(--vt-color-accent); }
 </style>

@@ -7,6 +7,7 @@
   export let expandedIds = {};
   export let activeWid = '';
   export let focusedKey = '';
+  export let appearanceCache = {};
 
   const dispatch = createEventDispatcher();
   const INDENT = 1.15; // rem
@@ -16,6 +17,9 @@
   $: isExpanded = isFolder && !!expandedIds[node.key];
   $: isActive = isWorkspace && node.id === activeWid;
   $: hasChildren = isFolder && node.children && node.children.length > 0;
+  $: folderAppearance = isFolder ? (appearanceCache[node.id] || {}) : {};
+  $: folderIconName = folderAppearance.iconId || 'folder';
+  $: folderIconColor = folderAppearance.colorId || '';
 
   function handleClick() {
     if (isFolder) {
@@ -112,7 +116,7 @@
     {:else}
       <span class="tchev tempty" />
     {/if}
-    <span class="tico"><Icon name={isFolder ? 'folder' : 'space'} size={14} /></span>
+    <span class="tico"><Icon name={isFolder ? folderIconName : 'layout-grid'} size={14} style={isFolder && folderIconColor ? 'color:' + folderIconColor : ''} /></span>
     <span class="tname" title={node.name}>{node.name}</span>
     <span class="tact">
       {#if isFolder}
@@ -125,7 +129,7 @@
   {#if isFolder && isExpanded && hasChildren}
     {#each node.children as child (child.key)}
       <svelte:self
-        node={child} depth={depth + 1} {expandedIds} {activeWid} {focusedKey}
+        node={child} depth={depth + 1} {expandedIds} {activeWid} {focusedKey} {appearanceCache}
         on:toggle on:select on:nav on:rename on:trash on:contextmenu
         on:dragstart on:dragover on:dragleave on:drop
         on:createFolder on:createWorkspace
