@@ -2864,7 +2864,7 @@ type PluginWorkspaceDTO struct {
 	RootPath string `json:"rootPath"`
 }
 
-// PluginListWorkspaces returns semantic Deal nodes recursively, excluding folders.
+// PluginListWorkspaces returns semantic Deal nodes where the calling plugin is active.
 func (a *App) PluginListWorkspaces(pluginID string) ([]PluginWorkspaceDTO, string) {
 	if _, err := a.requirePluginAccess(pluginID, "files.read"); err != nil {
 		return nil, err.Error()
@@ -2876,7 +2876,7 @@ func (a *App) PluginListWorkspaces(pluginID string) ([]PluginWorkspaceDTO, strin
 	var collect func([]workspacetree.TreeNode)
 	collect = func(nodes []workspacetree.TreeNode) {
 		for _, node := range nodes {
-			if node.Kind == "workspace" {
+			if node.Kind == "workspace" && workspaceHasTool(a.vaultPath(), node.ID, pluginID) {
 				rows = append(rows, PluginWorkspaceDTO{ID: node.ID, Name: node.Name, RootPath: node.Path})
 			}
 			collect(node.Children)
@@ -2884,6 +2884,28 @@ func (a *App) PluginListWorkspaces(pluginID string) ([]PluginWorkspaceDTO, strin
 	}
 	collect(a.treeV2.GetTree().Roots)
 	return rows, ""
+}
+
+func workspaceHasTool(vaultPath, workspaceID, pluginID string) bool {
+	if vaultPath == "" || workspaceID == "" || pluginID == "" {
+		return false
+	}
+	data, err := os.ReadFile(filepath.Join(vaultPath, ".verstak", "workspaces", "uuid-"+workspaceID+".json"))
+	if err != nil {
+		return false
+	}
+	var metadata struct {
+		WorkspaceTools []string `json:"workspaceTools"`
+	}
+	if err := json.Unmarshal(data, &metadata); err != nil {
+		return false
+	}
+	for _, toolID := range metadata.WorkspaceTools {
+		if toolID == pluginID {
+			return true
+		}
+	}
+	return false
 }
 
 // GetWorkspaceByID returns a single workspace by its durable UUID.

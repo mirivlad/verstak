@@ -2301,9 +2301,23 @@ func TestPluginListWorkspacesReturnsNestedDealsOnly(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+	writeMetadata := func(workspaceID, body string) {
+		t.Helper()
+		dir := filepath.Join(root, ".verstak", "workspaces")
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "uuid-"+workspaceID+".json"), []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
 	writeMarker("Clients", "folder.json", `{"schemaVersion":1,"folderId":"11111111-1111-4111-8111-111111111111"}`)
 	writeMarker("Clients/Acme", "workspace.json", `{"schemaVersion":1,"workspaceId":"22222222-2222-4222-8222-222222222222"}`)
 	writeMarker("Project", "workspace.json", `{"schemaVersion":1,"workspaceId":"33333333-3333-4333-8333-333333333333"}`)
+	writeMarker("Broken", "workspace.json", `{"schemaVersion":1,"workspaceId":"44444444-4444-4444-8444-444444444444"}`)
+	writeMetadata("22222222-2222-4222-8222-222222222222", `{"workspaceTools":["files.plugin"]}`)
+	writeMetadata("33333333-3333-4333-8333-333333333333", `{"workspaceTools":["another.plugin"]}`)
+	writeMetadata("44444444-4444-4444-8444-444444444444", `{"workspaceTools":`)
 	app.treeV2 = workspacetree.NewService(root, nil)
 	if err := app.treeV2.Initialize(); err != nil {
 		t.Fatal(err)
@@ -2313,14 +2327,10 @@ func TestPluginListWorkspacesReturnsNestedDealsOnly(t *testing.T) {
 	if errText != "" {
 		t.Fatal(errText)
 	}
-	if len(rows) != 3 {
+	if len(rows) != 1 {
 		t.Fatalf("workspaces = %#v", rows)
 	}
-	paths := map[string]bool{}
-	for _, row := range rows {
-		paths[row.RootPath] = true
-	}
-	if !paths["Clients/Acme"] || !paths["Project"] || !paths["Workspace"] || paths["Clients"] {
+	if rows[0].RootPath != "Clients/Acme" {
 		t.Fatalf("workspaces = %#v", rows)
 	}
 	app.plugins[0].Manifest.Permissions = nil
