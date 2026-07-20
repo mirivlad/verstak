@@ -424,7 +424,8 @@ import journalSource from '../../../../../verstak-official-plugins/plugins/journ
         children: []
       };
     });
-    return { roots: roots, revision: 1, warnings: [] };
+    var current = roots.find(function (node) { return node.path === workspaceTree.currentNodeId || node.name === workspaceTree.currentNodeId; });
+    return { roots: roots, currentWorkspaceId: current ? current.id : '', revision: 1, warnings: [] };
   }
 
   function cloneJson(value) {
@@ -3952,11 +3953,16 @@ import journalSource from '../../../../../verstak-official-plugins/plugins/journ
       return Promise.resolve(null);
     },
     SetCurrentWorkspaceV2: function (id) {
+      var found = workspaceTree.nodes.find(function (node) { return (node.workspaceId || node.id) === id; });
+      if (!found) return Promise.resolve('workspace not found: ' + id);
+      workspaceTree.currentNodeId = found.id;
       return Promise.resolve('');
     },
     CreateWorkspaceV2: function (parentFolderID, name, templateID) {
       var norm = normalizeVaultPath(name, false);
-      if (norm.error) return Promise.resolve({ error: norm.error });
+      if (norm.error || norm.path !== String(name || '').trim() || norm.path.indexOf('/') !== -1) {
+        return Promise.resolve({ error: norm.error || 'invalid-workspace-name' });
+      }
       if (vaultFiles[norm.path]) return Promise.resolve({ error: 'conflict: ' + norm.path });
       var template = workspaceTemplateByID(templateID || 'default');
       if (!template) return Promise.resolve({ error: 'template-not-found: ' + String(templateID || '') });
@@ -3972,10 +3978,17 @@ import journalSource from '../../../../../verstak-official-plugins/plugins/journ
     CreateFolderV2: function (parentFolderID, name) {
       return Promise.resolve({ id: 'folder-' + Math.random().toString(36).slice(2, 10), name: name, path: name });
     },
-    RenameWorkspaceV2: function (workspaceID, newName) { return Promise.resolve(''); },
+    RenameWorkspaceV2: function (workspaceID, newName) {
+      var found = workspaceTree.nodes.find(function (node) { return (node.workspaceId || node.id) === workspaceID; });
+      return found ? this.RenameWorkspace(found.id, newName) : Promise.resolve('workspace not found: ' + workspaceID);
+    },
     RenameFolderV2: function (folderID, newName) { return Promise.resolve(''); },
     MoveWorkspaceV2: function (workspaceID, targetParentFolderID) { return Promise.resolve(''); },
     MoveFolderV2: function (folderID, targetParentFolderID) { return Promise.resolve(''); },
+    TrashWorkspaceV2: function (workspaceID) {
+      var found = workspaceTree.nodes.find(function (node) { return (node.workspaceId || node.id) === workspaceID; });
+      return found ? this.TrashWorkspace(found.id) : Promise.resolve('workspace not found: ' + workspaceID);
+    },
     RescanWorkspaceTree: function () { return Promise.resolve(''); },
     GetWorkspaceTreeDiagnostics: function () { return Promise.resolve([]); },
     // ── End V2 Tree API ──────────────────────────────────────────────────────

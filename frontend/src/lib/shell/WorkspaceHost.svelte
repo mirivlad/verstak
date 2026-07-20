@@ -61,7 +61,6 @@
     requestedWorkspaceRoot = workspaceRootPath;
     requestedToolRequest = null;
     activeToolRequest = null;
-    activeToolKey = ''; // Clear tool selection for new workspace
   }
   $: displayedTools = selectedWorkspace ? [overviewTool, ...workspaceTools] : [];
   $: activeTool = displayedTools.find(tool => toolKey(tool) === activeToolKey) || displayedTools[0] || null;
@@ -124,7 +123,10 @@
     if (!metadata) return tools;
     let allowed = metadata.workspaceTools;
     if (!Array.isArray(allowed)) {
-      // Derive from features if workspaceTools is missing (legacy metadata).
+      // Metadata created before workspace templates did not restrict tools.
+      // Preserve that behavior for manual and migrated workspaces.
+      if (!metadata.createdFromTemplate) return tools;
+      // Template metadata can derive the intended tool set from its features.
       const f = metadata.features || {};
       allowed = ['verstak.notes', 'verstak.files'];
       if (f.journal) allowed.push('verstak.journal');

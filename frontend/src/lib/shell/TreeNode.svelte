@@ -8,6 +8,8 @@
   export let activeWid = '';
   export let focusedKey = '';
   export let appearanceCache = {};
+  export let newDealLabel = 'New Deal';
+  export let newFolderLabel = 'New folder';
 
   const dispatch = createEventDispatcher();
   const INDENT = 1.15; // rem
@@ -93,14 +95,14 @@
   function createWorkspace() { dispatch('createWorkspace', node.id); }
 </script>
 
-<div class="tnode" style="padding-left:{depth * INDENT}rem" role="treeitem"
-  aria-expanded={isFolder ? isExpanded : undefined}
-  aria-selected={isActive || undefined}
-  aria-level={depth + 1}
->
+<div class="tnode" style="padding-left:{depth * INDENT}rem">
   <div
-    class="trow" class:selected={isActive} class:focused={focusedKey === node.key}
+    class="trow wt-node" class:selected={isActive} class:focused={focusedKey === node.key}
     class:drag-over={false}
+    role="treeitem"
+    aria-expanded={isFolder ? isExpanded : undefined}
+    aria-selected={isActive || undefined}
+    aria-level={depth + 1}
     on:click={handleClick}
     on:keydown={handleKeyDown}
     on:contextmenu={onCtxMenu}
@@ -116,12 +118,12 @@
     {:else}
       <span class="tchev tempty" />
     {/if}
-    <span class="tico"><Icon name={isFolder ? folderIconName : 'layout-grid'} size={14} style={isFolder && folderIconColor ? 'color:' + folderIconColor : ''} /></span>
-    <span class="tname" title={node.name}>{node.name}</span>
+    <span class="tico"><Icon class="wt-node-icon" name={isFolder ? folderIconName : 'layout-grid'} size={14} style={isFolder && folderIconColor ? 'color:' + folderIconColor : ''} /></span>
+    <span class="tname wt-label" title={node.name}>{node.name}</span>
     <span class="tact">
       {#if isFolder}
-        <button class="ti-btn" on:click|stopPropagation={createWorkspace} title="Новое Дело" aria-label="Новое Дело"><Icon name="plus" size={11} /></button>
-        <button class="ti-btn" on:click|stopPropagation={createFolder} title="Новая папка" aria-label="Новая папка"><Icon name="folder-plus" size={11} /></button>
+        <button class="ti-btn" on:click|stopPropagation={createWorkspace} title={newDealLabel} aria-label={newDealLabel}><Icon name="plus" size={11} /></button>
+        <button class="ti-btn" on:click|stopPropagation={createFolder} title={newFolderLabel} aria-label={newFolderLabel}><Icon name="folder-plus" size={11} /></button>
       {/if}
     </span>
   </div>
@@ -129,7 +131,7 @@
   {#if isFolder && isExpanded && hasChildren}
     {#each node.children as child (child.key)}
       <svelte:self
-        node={child} depth={depth + 1} {expandedIds} {activeWid} {focusedKey} {appearanceCache}
+        node={child} depth={depth + 1} {expandedIds} {activeWid} {focusedKey} {appearanceCache} {newDealLabel} {newFolderLabel}
         on:toggle on:select on:nav on:rename on:trash on:contextmenu
         on:dragstart on:dragover on:dragleave on:drop
         on:createFolder on:createWorkspace

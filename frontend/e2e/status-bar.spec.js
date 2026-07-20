@@ -29,7 +29,7 @@ test.describe('Status Bar host', () => {
     await expect(page.locator('[data-settings-panel-id="verstak.sync.settings"]')).toBeVisible();
 
     await page.locator('.sidebar .plugin-item').filter({ hasText: 'Platform Test' }).click();
-    await expect(page.locator('.view-container .view-header h2')).toHaveText('Platform Diagnostics');
+    await expect(page.locator('[data-main-content-header] .main-content-title-text')).toHaveText('Platform Diagnostics');
 
     await page.locator('[data-settings-menu-button]').click();
     await page.locator('[data-settings-action="plugin-manager"]').click();

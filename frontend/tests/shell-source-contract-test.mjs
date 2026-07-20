@@ -14,14 +14,15 @@ function assertIncludes(source, needle, message) {
 }
 
 const workspaceHost = read('frontend/src/lib/shell/WorkspaceHost.svelte');
+const app = read('frontend/src/App.svelte');
 const statusBar = read('frontend/src/lib/shell/StatusBar.svelte');
 const pluginManager = read('frontend/src/lib/plugin-manager/PluginManager.svelte');
 const syncManifest = JSON.parse(read('../verstak-official-plugins/plugins/sync/plugin.json'));
 
 assertIncludes(
-  workspaceHost,
-  'data-workspace-search',
-  'WorkspaceHost should expose a stable workspace header search slot'
+  app,
+  '<GlobalSearch />',
+  'App should expose global search in the main content header'
 );
 assertIncludes(
   workspaceHost,
@@ -36,13 +37,13 @@ assertIncludes(
 
 assertIncludes(
   statusBar,
-  "import PluginBundleHost from '../plugin-host/PluginBundleHost.svelte';",
-  'StatusBar should mount plugin-provided status bar components'
+  'data-status-item-id={item.id}',
+  'StatusBar should expose stable selectors for plugin-provided status items'
 );
 assertIncludes(
   statusBar,
-  'componentId={item.handler}',
-  'StatusBar should use statusBarItems.handler as the component id'
+  '{item.label || item.id}',
+  'StatusBar should render the compact status label without mounting plugin UI'
 );
 
 const syncStatus = syncManifest.contributes.statusBarItems.find((item) => item.id === 'verstak.sync.status');

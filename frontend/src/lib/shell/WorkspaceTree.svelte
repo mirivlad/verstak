@@ -19,6 +19,8 @@
   let modal = null; let formName = ''; let formParentId = ''; let formTemplateId = 'default'; let folderIconId = ''; let folderColor = ''; let folderEditorView = 'form'; let iconSearch = ''; let appearanceCache = {}; $: filteredIcons = LUCIDE_ICONS.filter(i => !iconSearch || i.toLowerCase().includes(iconSearch.toLowerCase())).slice(0, 200);
   let formError = ''; let formBusy = false;
   let templates = [];
+  let templatePlugins = [];
+  let templateWarning = null;
   let ctxMenu = null;
 
   // Drag state
@@ -27,8 +29,9 @@
 
   onMount(async () => {
     unsubscribeLocale = i18n.subscribe((l) => { locale = l; });
-    await loadTree(); await loadTemplates();
     window.addEventListener('verstak:workspace-tree-changed', loadTree);
+    window.addEventListener('verstak:workspace-active-changed', handleActiveWorkspace);
+    await loadTree(); await loadTemplates();
     // Also listen via Wails runtime events (Go EventsEmit).
     if (window.runtime?.EventsOn) {
       window.runtime.EventsOn('verstak:workspace-tree-changed', loadTree);
@@ -37,6 +40,7 @@
   onDestroy(() => {
     if (unsubscribeLocale) unsubscribeLocale();
     window.removeEventListener('verstak:workspace-tree-changed', loadTree);
+    window.removeEventListener('verstak:workspace-active-changed', handleActiveWorkspace);
   });
 
   async function loadTree() {
@@ -67,9 +71,16 @@
 
   async function loadTemplates() {
     try {
-      const tlist = await App.ListWorkspaceTemplates();
+      const [tlist, plugins] = await Promise.all([
+        App.ListWorkspaceTemplates(),
+        App.GetPlugins().catch(() => []),
+      ]);
+      await Promise.all((plugins || []).map((plugin) => (
+        i18n.loadPlugin(plugin.manifest?.id, plugin.manifest?.localization).catch(() => {})
+      )));
       templates = Array.isArray(tlist) ? tlist : [];
-    } catch { templates = []; }
+      templatePlugins = (plugins || []).map((plugin) => i18n.localizePlugin(plugin));
+    } catch { templates = []; templatePlugins = []; }
   }
 
   function ensureExpandedToWorkspace(wid) {
@@ -138,7 +149,7 @@
 
   // ── Create/Rename/Move/Trash modals ────────────────────────────────────────
   function openCreateFolder(pid) { modal = { type: 'create-folder', parentId: pid }; formName = ''; formParentId = pid || ''; formError = ''; formBusy = false; folderIconId = ''; folderColor = ''; folderEditorView = 'form'; }
-  function openCreateWorkspace(pid) { modal = { type: 'create-workspace', parentId: pid }; formName = ''; formParentId = pid || ''; formTemplateId = templates[0]?.id || 'default'; formError = ''; formBusy = false; }
+  async function openCreateWorkspace(pid) { await loadTemplates(); modal = { type: 'create-workspace', parentId: pid }; formName = ''; formParentId = pid || ''; formTemplateId = templates[0]?.id || 'default'; formError = ''; formBusy = false; }
   function openRename(kind, id, name) { modal = { type: 'rename', kind, id }; formName = name; formError = ''; formBusy = false; }
   function openTrash(kind, id, name) { modal = { type: 'trash', kind, id, name }; formBusy = false; }
   function openEditFolder(id, name) {
@@ -206,7 +217,22 @@
     appearanceCache[fid] = { iconId: folderIconId, colorId: folderColor };
   appearanceCache = appearanceCache;
   appearanceCache = { ...appearanceCache, [fid]: { iconId: folderIconId, colorId: folderColor } }; appearanceCache = appearanceCache; modal = null; await loadTree(); }
-  async function doCreateWorkspace() { const n = formName.trim(); if (!n) { formError = tr('workspaceTree.nameRequired'); return; } formBusy = true; const r = await App.CreateWorkspaceV2(formParentId || '', n, formTemplateId); if (r?.error) { formError = r.error; formBusy = false; return; } if (formParentId) { expandedIds['folder:' + formParentId] = true; saveExpanded(); } const wid = r?.id; modal = null; await loadTree(); await loadAppearanceMap(); if (wid) await selectWorkspace(wid); }
+  async function doCreateWorkspace() {
+    const n = formName.trim();
+    if (!n) { formError = tr('workspaceTree.nameRequired'); return; }
+    const template = templates.find((item) => item.id === formTemplateId);
+    const unavailable = (template?.workspaceTools || []).map(pluginIssue).filter((item) => item.reason);
+    formBusy = true;
+    const r = await App.CreateWorkspaceV2(formParentId || '', n, formTemplateId);
+    if (r?.error) { formError = tr('workspaceTree.createError'); formBusy = false; return; }
+    if (formParentId) { expandedIds['folder:' + formParentId] = true; saveExpanded(); }
+    const wid = r?.id;
+    templateWarning = unavailable.length ? { name: n, unavailable } : null;
+    modal = null;
+    await loadTree();
+    await loadAppearanceMap();
+    if (wid) await selectWorkspace(wid);
+  }
   async function doRename() { const n = formName.trim(); if (!n) { formError = tr('workspaceTree.nameRequired'); return; } formBusy = true; let err = modal.kind === 'folder' ? await App.RenameFolderV2(modal.id, n) : await App.RenameWorkspaceV2(modal.id, n); if (err) { formError = err; formBusy = false; return; } modal = null; await loadTree(); }
   function openIconPicker() { folderEditorView = 'icon-picker'; iconSearch = ''; }
   function selectFolderIcon(id) { folderIconId = id; folderEditorView = 'form'; }
@@ -240,6 +266,16 @@
   // ── Context menu ───────────────────────────────────────────────────────────
   function onCtx(e) { ctxMenu = { x: e.detail.e.clientX, y: e.detail.e.clientY, kind: e.detail.kind, id: e.detail.id, name: e.detail.name }; }
   function closeCtx() { ctxMenu = null; }
+
+  function handleActiveWorkspace(event) {
+    const workspaceName = event?.detail?.workspaceName || '';
+    if (!workspaceName) {
+      activeWid = '';
+      return;
+    }
+    const activeNode = findWorkspaceByName(tree.roots || [], workspaceName);
+    if (activeNode) activeWid = activeNode.id;
+  }
 
   // ── Drag-and-drop ──────────────────────────────────────────────────────────
   let dragCounter = 0;
@@ -289,6 +325,7 @@
   function subtreeCounts(id) { let folders = 0, wss = 0; const n = findNode(tree.roots || [], id); if (n) count(n); return { folders, workspaces: wss };
     function count(nd) { for (const c of nd.children || []) { if (c.kind === 'folder') { folders++; count(c); } else wss++; } } }
   function findNode(nodes, id) { for (const n of nodes) { if (n.id === id) return n; const f = findNode(n.children || [], id); if (f) return f; } return null; }
+  function findWorkspaceByName(nodes, name) { for (const n of nodes) { if (n.kind === 'workspace' && (n.path === name || n.name === name)) return n; const f = findWorkspaceByName(n.children || [], name); if (f) return f; } return null; }
   function findNodeParentID(id) { return parentIDFor(tree.roots, id); }
   function parentIDFor(nodes, id) { for (const n of nodes) { if (n.children) for (const c of n.children) { if (c.id === id) return n.id; } const f = parentIDFor(n.children, id); if (f) return f; } return ''; }
 
@@ -299,11 +336,22 @@
     'verstak.todo': 'Задачи', 'verstak.secrets': 'Секреты',
   };
   function pluginDisplayName(pluginId) {
-    const key = pluginId.replace('verstak.', '');
-    return tr(`plugin.${key}`, undefined, PLUGIN_NAMES[pluginId] || pluginId);
+    const plugin = templatePlugins.find((item) => item.manifest?.id === pluginId);
+    return plugin?.manifest?.name || PLUGIN_NAMES[pluginId] || pluginId;
+  }
+  function pluginIssue(pluginId) {
+    const plugin = templatePlugins.find((item) => item.manifest?.id === pluginId);
+    let reason = '';
+    if (!plugin) reason = tr('workspaceTree.templateMissingPlugin');
+    else if (plugin.enabled === false || plugin.status === 'disabled') reason = tr('workspaceTree.templatePluginDisabled');
+    else if (plugin.status === 'incompatible') reason = tr('workspaceTree.templateIncompatible');
+    else if (plugin.status === 'missing-required-capability') reason = tr('workspaceTree.templateCapabilityUnavailable');
+    else if (plugin.status === 'failed') reason = tr('workspaceTree.templateLoadFailed');
+    else if (plugin.status && plugin.status !== 'loaded') reason = tr('workspaceTree.templateNotReady');
+    return { id: pluginId, name: pluginDisplayName(pluginId), reason };
   }
   function pluginAvailable(pluginId) {
-    return true; // plugins are loaded by core; availability checked at contribution filtering time
+    return !pluginIssue(pluginId).reason;
   }
 
   function onKeyDown(e) { if (e.key === "Escape") { closeCtx(); closeModal(); resetDragState(); } }
@@ -323,7 +371,16 @@
     </div>
   </div>
 
-  <div class="wt-list" role="tree" aria-label={tr('workspaceTree.title')}
+  {#if templateWarning}
+    <div class="wt-template-warning" data-workspace-template-warning>
+      <strong>{tr('workspaceTree.templateIncompleteCreated', { name: templateWarning.name })}</strong>
+      {#each templateWarning.unavailable as item}
+        <span>{item.name}: {item.reason}</span>
+      {/each}
+    </div>
+  {/if}
+
+  <div class="wt-list" role="tree" aria-label={tr('workspaceTree.title')} tabindex="0"
     on:dragover={onRootDragOver} on:dragleave={onRootDragLeave} on:drop={onRootDrop}
     on:dragend={resetDragState}
   >
@@ -339,6 +396,8 @@
     {:else}
       {#each tree.roots as node (node.key)}
         <TreeNode {node} depth={0} {expandedIds} {activeWid} {focusedKey} {appearanceCache}
+          newDealLabel={tr('workspaceTree.newDeal')}
+          newFolderLabel={tr('workspaceTree.newFolder')}
           on:toggle={(e) => toggleExpand(e.detail.key)}
           on:select={(e) => selectWorkspace(e.detail.id)}
           on:nav={handleNav}
@@ -360,7 +419,7 @@
 
 <!-- Context Menu -->
 {#if ctxMenu}
-  <div class="vt-ctx" style="left:{ctxMenu.x}px;top:{ctxMenu.y}px" on:click|stopPropagation on:mousedown|stopPropagation>
+  <div class="vt-ctx" style="left:{ctxMenu.x}px;top:{ctxMenu.y}px" on:click|stopPropagation on:mousedown|stopPropagation on:keydown={(event) => event.key === 'Escape' && closeCtx()} role="menu" tabindex="-1">
     {#if ctxMenu.kind === 'folder'}
       <button class="vt-ctx-i" on:click={() => { const i = ctxMenu.id; closeCtx(); openCreateWorkspace(i); }}>{tr('workspaceTree.newDeal')}</button>
       <button class="vt-ctx-i" on:click={() => { const i = ctxMenu.id; closeCtx(); openCreateFolder(i); }}>{tr('workspaceTree.newFolder')}</button>
@@ -450,31 +509,32 @@
   </svelte:fragment>
 </Modal>
 
-<Modal title={tr('workspaceTree.newDeal')} show={modal?.type === 'create-workspace'} on:close={closeModal} wide>
+<Modal title={tr('workspaceTree.newDeal')} show={modal?.type === 'create-workspace'} on:close={closeModal} wide data-workspace-create-modal>
   <label class="vt-field"><span>{tr('workspaceTree.location')}</span><Select options={flatFolders(tree.roots).map(f => ({ value: f.id, label: f.path }))} placeholder={tr('workspaceTree.root')} bind:value={formParentId} labelKey="label" valueKey="value" /></label>
-  <label class="vt-field"><span>{tr('workspaceTree.name')}</span><input class="vt-input" type="text" bind:value={formName} placeholder={tr('workspaceTree.namePlaceholder')} disabled={formBusy} on:keydown={(e) => e.key === 'Enter' && doCreateWorkspace()} /></label>
-  <label class="vt-field"><span>{tr('workspaceTree.template')}</span><Select options={templates} bind:value={formTemplateId} labelKey="name" valueKey="id" /></label>
+  <label class="vt-field"><span>{tr('workspaceTree.name')}</span><input class="vt-input" data-workspace-name type="text" bind:value={formName} placeholder={tr('workspaceTree.namePlaceholder')} disabled={formBusy} on:keydown={(e) => e.key === 'Enter' && doCreateWorkspace()} /></label>
+  <label class="vt-field"><span>{tr('workspaceTree.template')}</span><Select data-workspace-template options={templates} bind:value={formTemplateId} labelKey="name" valueKey="id" /></label>
   {@const st = templates.find(t => t.id === formTemplateId)}
   {#if st}
     <div class="vt-template-info">
-      {#if st.description}<p class="vt-template-desc">{st.description}</p>{/if}
+      {#if st.description}<p class="vt-template-desc" data-workspace-template-description>{st.description}</p>{/if}
       {#if st.workspaceTools?.length}
-        <div class="vt-template-badges">
+        <div class="vt-template-badges" data-workspace-template-tools>
           {#each st.workspaceTools as pt}
-            <span class="vt-badge vt-tool-badge" class:vt-tool-unavailable={!pluginAvailable(pt)} title={pt}>{pluginDisplayName(pt)}</span>
+            {@const issue = pluginIssue(pt)}
+            <span class="vt-badge vt-tool-badge" class:vt-tool-unavailable={!pluginAvailable(pt)} title={pt} data-workspace-template-tool={pt} data-template-tool-status={issue.reason ? 'unavailable' : 'available'}>{issue.name}{issue.reason ? ` · ${issue.reason}` : ''}</span>
           {/each}
         </div>
       {/if}
     </div>
   {/if}
-  {#if formError}<p class="vt-ferr">{formError}</p>{/if}
-  <svelte:fragment slot="actions"><button class="vt-btn" on:click={closeModal} disabled={formBusy}>{tr('common.cancel')}</button><button class="vt-btn-p" on:click={doCreateWorkspace} disabled={formBusy}>{tr('common.create')}</button></svelte:fragment>
+  {#if formError}<p class="vt-ferr" data-workspace-create-error>{formError}</p>{/if}
+  <svelte:fragment slot="actions"><button class="vt-btn" on:click={closeModal} disabled={formBusy}>{tr('common.cancel')}</button><button class="vt-btn-p" on:click={doCreateWorkspace} disabled={formBusy}>{tr('workspaceTree.create')}</button></svelte:fragment>
 </Modal>
 
 <Modal title={tr('workspaceTree.rename')} show={modal?.type === 'rename'} on:close={closeModal}>
-  <label class="vt-field"><span>{tr('workspaceTree.newName')}</span><input class="vt-input" type="text" bind:value={formName} disabled={formBusy} on:keydown={(e) => e.key === 'Enter' && doRename()} /></label>
+  <label class="vt-field"><span>{tr('workspaceTree.newName')}</span><input class="vt-input wt-rename" type="text" bind:value={formName} disabled={formBusy} on:keydown={(e) => e.key === 'Enter' && doRename()} /></label>
   {#if formError}<p class="vt-ferr">{formError}</p>{/if}
-  <svelte:fragment slot="actions"><button class="vt-btn" on:click={closeModal} disabled={formBusy}>{tr('common.cancel')}</button><button class="vt-btn-p" on:click={doRename} disabled={formBusy}>{tr('common.save')}</button></svelte:fragment>
+  <svelte:fragment slot="actions"><button class="vt-btn" on:click={closeModal} disabled={formBusy}>{tr('common.cancel')}</button><button class="vt-btn-p" title={tr('workspaceTree.saveRename')} on:click={doRename} disabled={formBusy}>{tr('common.save')}</button></svelte:fragment>
 </Modal>
 
 <Modal title={(modal?.kind === 'folder' ? tr('workspaceTree.trashFolder') : tr('workspaceTree.trashDeal')) + (modal?.name ? ' «' + modal.name + '»?' : '?')} show={modal?.type === 'trash'} on:close={closeModal}>
@@ -493,6 +553,7 @@
 <style>
   .wt { display: flex; flex-direction: column; flex: 1; overflow: hidden; }
   .wt-header { display: flex; align-items: center; justify-content: space-between; padding: 0.7rem 0.6rem 0.35rem; border-bottom: 1px solid var(--vt-color-border); flex-shrink: 0; }
+  .wt-template-warning { display: grid; gap: 0.2rem; margin: 0.45rem 0.55rem 0; padding: 0.55rem; border: 1px solid var(--vt-color-warning); border-radius: var(--vt-radius-sm); color: var(--vt-color-warning); font-size: 0.72rem; }
   .wt-title { color: var(--vt-color-text-muted); font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600; }
   .wt-header-actions { display: flex; gap: 0.2rem; }
   .wt-list { min-height: 0; overflow-y: auto; padding: 0.2rem 0.4rem; flex: 1; position: relative; }

@@ -1,5 +1,5 @@
 <script>
-  import { createEventDispatcher, onMount } from 'svelte';
+  import { createEventDispatcher } from 'svelte';
   import { fade } from 'svelte/transition';
 
   export let title = '';
@@ -12,16 +12,19 @@
     dispatch('close');
   }
 
+  function closeFromOverlay(event) {
+    if (event.target === event.currentTarget) close();
+  }
+
   function onKeydown(e) {
     if (e.key === 'Escape') close();
   }
 </script>
 
 {#if show}
-  <div class="vt-modal-overlay" on:click={close} on:keydown={onKeydown} role="dialog" aria-modal="true" aria-label={title}>
+  <div {...$$restProps} class="vt-modal-overlay" on:click={closeFromOverlay} on:keydown={onKeydown} role="dialog" aria-modal="true" aria-label={title} tabindex="-1">
     <div
       class="vt-modal" class:vt-modal-wide={wide}
-      on:click|stopPropagation
       transition:fade={{ duration: 120 }}
     >
       {#if title}

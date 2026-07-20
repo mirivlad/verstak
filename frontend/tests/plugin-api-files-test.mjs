@@ -28,10 +28,16 @@ globalThis.window = {
   },
 };
 globalThis.__mockApp = window.go.api.App;
+globalThis.__mockI18n = {
+  getLocale: () => 'en',
+  translatePlugin: (_pluginId, key, _params, fallback) => fallback || key,
+  subscribe: () => () => {},
+};
 
 const sourcePath = path.resolve('frontend/src/lib/plugin-host/VerstakPluginAPI.js');
 const source = fs.readFileSync(sourcePath, 'utf8')
-  .replace("import * as App from '../../../wailsjs/go/api/App';", 'const App = globalThis.__mockApp;');
+  .replace("import * as App from '../../../wailsjs/go/api/App';", 'const App = globalThis.__mockApp;')
+  .replace("import { i18n } from '../i18n/index.js';", 'const i18n = globalThis.__mockI18n;');
 const tempPath = path.resolve('/tmp/verstak-plugin-api-files-test.mjs');
 fs.writeFileSync(tempPath, source);
 

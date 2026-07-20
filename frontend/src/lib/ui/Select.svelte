@@ -20,6 +20,7 @@
 
 <div class="vt-select-wrap" class:disabled>
   <select
+    {...$$restProps}
     {id}
     class="vt-select"
     bind:value

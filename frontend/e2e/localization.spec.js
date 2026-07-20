@@ -26,7 +26,8 @@ test.describe('Desktop localization', () => {
     await expect(page.locator('[data-status-item-id="verstak.platform-test.status"]')).toContainText('Все тесты пройдены');
 
     const project = page.locator('.wt-node').filter({ hasText: 'Project' });
-    await project.locator('button[title="Переименовать Дело"]').click();
+    await project.click({ button: 'right' });
+    await page.getByRole('button', { name: 'Переименовать Дело' }).click();
     await expect(page.locator('button[title="Сохранить новое название"]')).toHaveText('Сохранить');
     await page.locator('.wt-rename').press('Escape');
 

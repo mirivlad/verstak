@@ -38,10 +38,10 @@ test.describe('B: Sidebar opens plugin view by item.view', () => {
 
   test('Global Activity and Browser sidebar items open plugin views', async ({ page }) => {
     await page.locator('.sidebar .plugin-item').filter({ hasText: 'Activity' }).click();
-    await expect(page.locator('.view-container .view-header h2')).toHaveText('Activity', { timeout: 10000 });
+    await expect(page.locator('[data-main-content-header] .main-content-title-text')).toHaveText('Activity', { timeout: 10000 });
 
     await page.locator('.sidebar .plugin-item').filter({ hasText: 'Browser' }).click();
-    await expect(page.locator('.view-container .view-header h2')).toHaveText('Browser', { timeout: 10000 });
+    await expect(page.locator('[data-main-content-header] .main-content-title-text')).toHaveText('Browser', { timeout: 10000 });
   });
 
   test('selected global tool remains visibly active through navigation and sidebar reloads', async ({ page }) => {
@@ -62,7 +62,7 @@ test.describe('B: Sidebar opens plugin view by item.view', () => {
         detail: { viewId: 'verstak.browser-inbox.view', pluginId: 'verstak.browser-inbox' },
       }));
     });
-    await expect(page.locator('.view-container .view-header h2')).toHaveText('Browser', { timeout: 10000 });
+    await expect(page.locator('[data-main-content-header] .main-content-title-text')).toHaveText('Browser', { timeout: 10000 });
     await expect(browserInbox).toHaveAttribute('aria-current', 'page');
     await expect(browserInbox).toHaveClass(/is-active/);
     await expect(activity).not.toHaveAttribute('aria-current', 'page');
@@ -86,7 +86,7 @@ test.describe('B: Sidebar opens plugin view by item.view', () => {
     // The view header should show "Platform Diagnostics" (from view contribution title)
     // This proves the view was opened by item.view = "verstak.platform-test.diagnostics"
     // NOT by item.id = "verstak.platform-test.sidebar"
-    const viewHeader = viewContainer.locator('.view-header h2');
+    const viewHeader = page.locator('[data-main-content-header] .main-content-title-text');
     await expect(viewHeader).toHaveText('Platform Diagnostics', { timeout: 10000 });
 
     // The view should NOT show "View ... not found" error
@@ -105,7 +105,7 @@ test.describe('B: Sidebar opens plugin view by item.view', () => {
 
     // Verify the view title comes from the view contribution (item.view)
     // NOT from the sidebar item (item.id)
-    const viewHeader = page.locator('.view-container .view-header h2');
+    const viewHeader = page.locator('[data-main-content-header] .main-content-title-text');
     await expect(viewHeader).toHaveText('Platform Diagnostics', { timeout: 10000 });
 
     // Should NOT show sidebar item id as view title

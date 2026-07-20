@@ -176,7 +176,8 @@ test.describe('E: Plugin Manager layout', () => {
     await expect(page.locator('.wt-label').filter({ hasText: 'ClientA' })).toBeVisible();
 
     const client = page.locator('.wt-node').filter({ hasText: 'ClientA' });
-    await client.locator('button[title="Rename Deal"]').click();
+    await client.click({ button: 'right' });
+    await page.getByRole('button', { name: 'Rename Deal' }).click();
     await page.locator('.wt-rename').fill('ClientB');
     await page.locator('button[title="Save rename"]').click();
 
@@ -184,7 +185,9 @@ test.describe('E: Plugin Manager layout', () => {
     await expect(page.locator('.wt-label').filter({ hasText: 'ClientA' })).toHaveCount(0);
 
     const renamed = page.locator('.wt-node').filter({ hasText: 'ClientB' });
-    await renamed.locator('button[title="Move Deal to trash"]').click();
+    await renamed.click({ button: 'right' });
+    await page.getByRole('button', { name: 'Move Deal to Trash' }).click();
+    await page.getByRole('button', { name: 'Move to Trash' }).click();
 
     await expect(page.locator('.wt-label').filter({ hasText: 'ClientB' })).toHaveCount(0);
   });
