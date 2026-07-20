@@ -13,7 +13,7 @@ import (
 	"github.com/verstak/verstak-desktop/internal/core/plugin"
 	"github.com/verstak/verstak-desktop/internal/core/pluginstate"
 	"github.com/verstak/verstak-desktop/internal/core/vault"
-	"github.com/verstak/verstak-desktop/internal/core/workspace"
+	"github.com/verstak/verstak-desktop/internal/core/workspacetree"
 )
 
 func main() {
@@ -822,23 +822,28 @@ func runWorkspaceTest(root string) {
 	}
 	fmt.Printf("  ✅ vault opened at %s\n", openedPath)
 
-	fmt.Printf("\n[workspace init]\n")
-	ws := workspace.NewManager(openedPath)
-	if err := ws.Load(); err != nil {
-		fmt.Printf("  ❌ load workspace: %v\n", err)
+	fmt.Printf("\n[workspace tree init]\n")
+	ws := workspacetree.NewService(openedPath, nil)
+	if err := ws.Initialize(); err != nil {
+		fmt.Printf("  ❌ initialize workspace tree: %v\n", err)
 		exitCode = 1
 		return
 	}
-	fmt.Printf("  ✅ workspace loaded\n")
-
-	tree := ws.GetTree()
-	if len(tree.Nodes) != 1 {
-		fmt.Printf("  ❌ expected 1 root node, got %d\n", len(tree.Nodes))
-		exitCode = 1
-		return
+	fmt.Printf("  ✅ semantic workspace tree initialized\n")
+	countNodes := func(nodes []workspacetree.TreeNode) int {
+		count := 0
+		var walk func([]workspacetree.TreeNode)
+		walk = func(items []workspacetree.TreeNode) {
+			for _, item := range items {
+				count++
+				walk(item.Children)
+			}
+		}
+		walk(nodes)
+		return count
 	}
-	fmt.Printf("  ✅ root node exists (id=%s)\n", tree.Nodes[0].ID)
-	rootID := tree.Nodes[0].ID
+	initialCount := countNodes(ws.GetTree().Roots)
+	fmt.Printf("  ✅ initial tree nodes: %d\n", initialCount)
 
 	fmt.Printf("\n[workspace capability]\n")
 	reg := capability.NewRegistry()
@@ -865,125 +870,119 @@ func runWorkspaceTest(root string) {
 	}
 	fmt.Printf("  ✅ total capabilities >= 7 (%d)\n", totalCaps)
 
-	fmt.Printf("\n[create case]\n")
-	caseNode, err := ws.CreateNode(rootID, workspace.TypeCase, "Test Case")
-	if err != nil {
-		fmt.Printf("  ❌ create case: %v\n", err)
-		exitCode = 1
-		return
-	}
-	fmt.Printf("  ✅ case created: %s\n", caseNode.Title)
+	refreshBaseline := func() error { return nil }
 
-	fmt.Printf("\n[create folder]\n")
-	folderNode, err := ws.CreateNode(rootID, workspace.TypeFolder, "Test Folder")
+	fmt.Printf("\n[create top-level Deal]\n")
+	topDeal, err := ws.CreateWorkspace("", "Test Deal", "minimal", refreshBaseline)
 	if err != nil {
-		fmt.Printf("  ❌ create folder: %v\n", err)
+		fmt.Printf("  ❌ create top-level Deal: %v\n", err)
 		exitCode = 1
 		return
 	}
-	fmt.Printf("  ✅ folder created: %s\n", folderNode.Title)
+	fmt.Printf("  ✅ Deal created: %s\n", topDeal.RootPath)
 
-	fmt.Printf("\n[create nested case]\n")
-	nestedCase, err := ws.CreateNode(folderNode.ID, workspace.TypeCase, "Nested Case")
+	fmt.Printf("\n[create nested folders]\n")
+	folder1, err := ws.CreateFolder("", "Level 1 Folder", refreshBaseline)
 	if err != nil {
-		fmt.Printf("  ❌ create nested case: %v\n", err)
+		fmt.Printf("  ❌ create level 1 folder: %v\n", err)
 		exitCode = 1
 		return
 	}
-	fmt.Printf("  ✅ nested case created: %s\n", nestedCase.Title)
+	folder2, err := ws.CreateFolder(folder1.ID, "Level 2 Folder", refreshBaseline)
+	if err != nil {
+		fmt.Printf("  ❌ create level 2 folder: %v\n", err)
+		exitCode = 1
+		return
+	}
+	fmt.Printf("  ✅ folders created: %s / %s\n", folder1.Path, folder2.Path)
+
+	fmt.Printf("\n[create nested Deal]\n")
+	nestedDeal, err := ws.CreateWorkspace(folder2.ID, "Nested Deal", "minimal", refreshBaseline)
+	if err != nil {
+		fmt.Printf("  ❌ create nested Deal: %v\n", err)
+		exitCode = 1
+		return
+	}
+	wantNestedPath := "Level 1 Folder/Level 2 Folder/Nested Deal"
+	if nestedDeal.RootPath != wantNestedPath {
+		fmt.Printf("  ❌ nested Deal path = %q, want %q\n", nestedDeal.RootPath, wantNestedPath)
+		exitCode = 1
+		return
+	}
+	fmt.Printf("  ✅ nested Deal created: %s\n", nestedDeal.RootPath)
 
 	fmt.Printf("\n[tree structure]\n")
-	tree = ws.GetTree()
-	if len(tree.Nodes) != 4 {
-		fmt.Printf("  ❌ expected 4 nodes, got %d\n", len(tree.Nodes))
+	tree := ws.GetTree()
+	if got := countNodes(tree.Roots); got != initialCount+4 {
+		fmt.Printf("  ❌ expected %d nodes, got %d\n", initialCount+4, got)
 		exitCode = 1
 		return
 	}
-	fmt.Printf("  ✅ tree has 4 nodes\n")
-	children := ws.ListChildren(rootID)
-	if len(children) != 2 {
-		fmt.Printf("  ❌ expected 2 root children, got %d\n", len(children))
-		exitCode = 1
-		return
-	}
-	fmt.Printf("  ✅ root has 2 children\n")
+	fmt.Printf("  ✅ tree contains folders and Deals at four levels\n")
 
 	fmt.Printf("\n[rename]\n")
-	if err := ws.RenameNode(caseNode.ID, "Renamed Case"); err != nil {
+	renamed, err := ws.RenameWorkspace(topDeal.ID, "Renamed Deal", refreshBaseline)
+	if err != nil {
 		fmt.Printf("  ❌ rename: %v\n", err)
 		exitCode = 1
 		return
 	}
-	renamed, _ := ws.GetNode(caseNode.ID)
-	if renamed.Title != "Renamed Case" {
-		fmt.Printf("  ❌ rename failed: got %q\n", renamed.Title)
+	if renamed.Name != "Renamed Deal" || renamed.ID != topDeal.ID {
+		fmt.Printf("  ❌ rename failed: got %+v\n", renamed)
 		exitCode = 1
 		return
 	}
-	fmt.Printf("  ✅ renamed to %q\n", renamed.Title)
+	fmt.Printf("  ✅ renamed to %q without changing ID\n", renamed.Name)
 
-	fmt.Printf("\n[set current node]\n")
-	if err := ws.SetCurrentNode(caseNode.ID); err != nil {
+	fmt.Printf("\n[set current Deal]\n")
+	if err := ws.SetCurrentWorkspaceID(nestedDeal.ID); err != nil {
 		fmt.Printf("  ❌ set current: %v\n", err)
 		exitCode = 1
 		return
 	}
-	current, err := ws.GetCurrentNode()
+	if currentID := ws.GetCurrentWorkspaceID(); currentID != nestedDeal.ID {
+		fmt.Printf("  ❌ current Deal mismatch: %s\n", currentID)
+		exitCode = 1
+		return
+	}
+	fmt.Printf("  ✅ current Deal: %s\n", nestedDeal.Name)
+
+	fmt.Printf("\n[trash]\n")
+	trashEntry, err := ws.TrashWorkspace(topDeal.ID, refreshBaseline)
 	if err != nil {
-		fmt.Printf("  ❌ get current: %v\n", err)
+		fmt.Printf("  ❌ trash: %v\n", err)
 		exitCode = 1
 		return
 	}
-	if current.ID != caseNode.ID {
-		fmt.Printf("  ❌ current node mismatch\n")
+	if _, exists := ws.GetWorkspaceByID(topDeal.ID); exists {
+		fmt.Printf("  ❌ trashed Deal is still active\n")
 		exitCode = 1
 		return
 	}
-	fmt.Printf("  ✅ current node: %s\n", current.Title)
+	fmt.Printf("  ✅ trashed Deal: %s\n", trashEntry.OriginalPath)
 
-	fmt.Printf("\n[archive]\n")
-	if err := ws.ArchiveNode(folderNode.ID); err != nil {
-		fmt.Printf("  ❌ archive: %v\n", err)
-		exitCode = 1
-		return
-	}
-	archived, _ := ws.GetNode(folderNode.ID)
-	if archived.Status != workspace.StatusArchived {
-		fmt.Printf("  ❌ archive failed: status=%s\n", archived.Status)
-		exitCode = 1
-		return
-	}
-	fmt.Printf("  ✅ archived %s\n", archived.Title)
-
-	fmt.Printf("\n[reopen persistence]\n")
-	ws2 := workspace.NewManager(openedPath)
-	if err := ws2.Load(); err != nil {
+	fmt.Printf("\n[rescan persistence]\n")
+	ws2 := workspacetree.NewService(openedPath, nil)
+	if err := ws2.Initialize(); err != nil {
 		fmt.Printf("  ❌ reopen: %v\n", err)
 		exitCode = 1
 		return
 	}
-	tree2 := ws2.GetTree()
-	if len(tree2.Nodes) != 4 {
-		fmt.Printf("  ❌ expected 4 nodes after reopen, got %d\n", len(tree2.Nodes))
+	nestedAfterRescan, exists := ws2.GetWorkspaceByID(nestedDeal.ID)
+	if !exists || nestedAfterRescan.RootPath != wantNestedPath {
+		fmt.Printf("  ❌ nested Deal identity/path not persisted: %+v\n", nestedAfterRescan)
 		exitCode = 1
 		return
 	}
-	fmt.Printf("  ✅ tree persisted: %d nodes\n", len(tree2.Nodes))
-	current2, err := ws2.GetCurrentNode()
-	if err != nil {
-		fmt.Printf("  ❌ get current after reopen: %v\n", err)
+	if _, exists := ws2.GetWorkspaceByID(topDeal.ID); exists {
+		fmt.Printf("  ❌ trashed Deal returned after rescan\n")
 		exitCode = 1
 		return
 	}
-	if current2.ID != caseNode.ID {
-		fmt.Printf("  ❌ current node not persisted\n")
-		exitCode = 1
-		return
-	}
-	fmt.Printf("  ✅ current node persisted\n")
+	fmt.Printf("  ✅ nested Deal persisted and trashed Deal stayed hidden\n")
 
-	fmt.Printf("\n[workspace.json verification]\n")
-	wsPath := filepath.Join(openedPath, ".verstak", "workspace.json")
+	fmt.Printf("\n[workspace marker verification]\n")
+	wsPath := filepath.Join(openedPath, filepath.FromSlash(wantNestedPath), ".verstak", "workspace.json")
 	wsData, err := os.ReadFile(wsPath)
 	if err != nil {
 		fmt.Printf("  ❌ read workspace.json: %v\n", err)
@@ -992,48 +991,6 @@ func runWorkspaceTest(root string) {
 	}
 	fmt.Printf("  ✅ workspace.json exists on disk\n")
 	fmt.Printf("  content:\n%s\n", string(wsData))
-
-	// ── Test 4-level deep tree ──
-	fmt.Printf("\n[4-level deep tree]\n")
-	folder1, err := ws.CreateNode(rootID, workspace.TypeFolder, "Level 1 Folder")
-	if err != nil {
-		fmt.Printf("  ❌ create folder1: %v\n", err)
-		exitCode = 1
-		return
-	}
-	fmt.Printf("  ✅ created: %s\n", folder1.Title)
-
-	folder2, err := ws.CreateNode(folder1.ID, workspace.TypeFolder, "Level 2 Folder")
-	if err != nil {
-		fmt.Printf("  ❌ create folder2: %v\n", err)
-		exitCode = 1
-		return
-	}
-	fmt.Printf("  ✅ created: %s\n", folder2.Title)
-
-	deepCase, err := ws.CreateNode(folder2.ID, workspace.TypeCase, "Deep Case")
-	if err != nil {
-		fmt.Printf("  ❌ create deep case: %v\n", err)
-		exitCode = 1
-		return
-	}
-	fmt.Printf("  ✅ created: %s (depth 4)\n", deepCase.Title)
-
-	tree = ws.GetTree()
-	if len(tree.Nodes) != 7 {
-		fmt.Printf("  ❌ expected 7 nodes, got %d\n", len(tree.Nodes))
-		exitCode = 1
-		return
-	}
-	fmt.Printf("  ✅ tree has 7 nodes (4 levels deep)\n")
-
-	deepNode, _ := ws.GetNode(deepCase.ID)
-	if deepNode.ParentID != folder2.ID {
-		fmt.Printf("  ❌ deep case parent mismatch\n")
-		exitCode = 1
-		return
-	}
-	fmt.Printf("  ✅ deep case parent chain correct\n")
 
 	fmt.Printf("\n=== summary ===\n")
 	fmt.Printf("✅ workspace test passed\n")
