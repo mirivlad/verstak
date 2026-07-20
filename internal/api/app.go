@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -43,6 +44,9 @@ import (
 )
 
 var newSyncClient = syncsvc.NewClient
+
+const defaultSyncPushBatchSize = 100
+
 var emitFrontendEvent = runtime.EventsEmit
 var initializeNativeNotifications = runtime.InitializeNotifications
 var cleanupNativeNotifications = runtime.CleanupNotifications
@@ -3875,13 +3879,10 @@ func (a *App) syncNow() (map[string]interface{}, error) {
 			_ = a.syncSvc.SetLastWarning(message)
 			return nil, fmt.Errorf("blob upload: %w", err)
 		}
-		pushResult, err = client.Push(unpushed)
+		pushResult, err = a.pushPendingOps(client, unpushed)
 		if err != nil {
 			_ = a.updateSyncError(fmt.Sprintf("push: %v", err))
 			return nil, fmt.Errorf("push: %w", err)
-		}
-		if err := a.syncSvc.MarkPushed(pushResult.Accepted); err != nil {
-			return nil, fmt.Errorf("mark pushed: %w", err)
 		}
 	}
 
@@ -3919,6 +3920,42 @@ func (a *App) syncNow() (map[string]interface{}, error) {
 		result["conflicts"] = pushResult.Conflicts
 	}
 	return result, nil
+}
+
+func (a *App) pushPendingOps(client *syncsvc.Client, ops []syncsvc.Op) (*syncsvc.PushResponse, error) {
+	result := &syncsvc.PushResponse{}
+	if len(ops) == 0 {
+		return result, nil
+	}
+
+	batchSize := min(defaultSyncPushBatchSize, len(ops))
+	for offset := 0; offset < len(ops); {
+		end := min(offset+batchSize, len(ops))
+		batchResult, err := client.Push(ops[offset:end])
+		if isTooManyOperations(err) && end-offset > 1 {
+			batchSize = max(1, (end-offset)/2)
+			continue
+		}
+		if err != nil {
+			return result, err
+		}
+		if err := a.syncSvc.MarkPushed(batchResult.Accepted); err != nil {
+			return result, fmt.Errorf("mark pushed: %w", err)
+		}
+		result.Accepted = append(result.Accepted, batchResult.Accepted...)
+		result.Conflicts = append(result.Conflicts, batchResult.Conflicts...)
+		result.Count += batchResult.Count
+		offset = end
+		if remaining := len(ops) - offset; remaining < batchSize {
+			batchSize = remaining
+		}
+	}
+	return result, nil
+}
+
+func isTooManyOperations(err error) bool {
+	var serverErr *syncsvc.ServerError
+	return errors.As(err, &serverErr) && serverErr.Code == "too_many_operations"
 }
 
 // uploadPendingBlobs ensures every operation referring to binary content has

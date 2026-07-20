@@ -106,7 +106,7 @@ for offset := 0; offset < len(ops); {
     result.Conflicts = append(result.Conflicts, batchResult.Conflicts...)
     result.Count += batchResult.Count
     offset = end
-    batchSize = min(defaultSyncPushBatchSize, len(ops)-offset)
+    batchSize = min(batchSize, len(ops)-offset)
 }
 return result, nil
 ```

@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -1947,6 +1948,270 @@ func TestSyncNowPushesLocalOpsAndAppliesPulledFileOps(t *testing.T) {
 	}
 	if lastPullSeq != 2 {
 		t.Fatalf("last pull seq = %d, want 2", lastPullSeq)
+	}
+}
+
+func TestSyncNowBatchesMoreThanServerPushLimit(t *testing.T) {
+	app, root := newSyncFilesTestApp(t, []string{"files.read", "files.write", "files.delete"}, "local-device")
+	var pushSizes []int
+	server := newLocalHTTPTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/api/v1/sync/pull":
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{
+				"server_sequence": 0, "page_last_sequence": 0, "has_more": false, "ops": []interface{}{},
+			})
+		case "/api/v1/sync/push":
+			var request struct {
+				Ops []struct {
+					OpID string `json:"op_id"`
+				} `json:"ops"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+			pushSizes = append(pushSizes, len(request.Ops))
+			if len(request.Ops) > 100 {
+				w.WriteHeader(http.StatusRequestEntityTooLarge)
+				_ = json.NewEncoder(w).Encode(map[string]string{
+					"code": "too_many_operations", "error": "too many operations in one push",
+				})
+				return
+			}
+			accepted := make([]string, 0, len(request.Ops))
+			for _, op := range request.Ops {
+				accepted = append(accepted, op.OpID)
+			}
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{
+				"accepted": accepted, "count": len(accepted), "conflicts": []map[string]interface{}{},
+			})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	if err := app.syncSvc.SetState(server.URL, ""); err != nil {
+		t.Fatal(err)
+	}
+	if err := syncsvc.SaveDeviceToken(root, "device-token"); err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 103; i++ {
+		path := fmt.Sprintf("queued-%03d.txt", i)
+		if err := app.syncSvc.RecordOp(syncsvc.EntityFile, path, syncsvc.OpCreate, map[string]string{"path": path, "content": "queued"}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	result, err := app.syncNow()
+	if err != nil {
+		t.Fatalf("syncNow: %v", err)
+	}
+	if result["pushed"] != 103 {
+		t.Fatalf("pushed = %#v, want 103", result["pushed"])
+	}
+	if !reflect.DeepEqual(pushSizes, []int{100, 3}) {
+		t.Fatalf("push sizes = %v, want [100 3]", pushSizes)
+	}
+	pending, err := app.syncSvc.GetUnpushedOps()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(pending) != 0 {
+		t.Fatalf("pending operations = %d, want 0", len(pending))
+	}
+}
+
+func TestSyncNowReducesRejectedPushBatch(t *testing.T) {
+	app, root := newSyncFilesTestApp(t, []string{"files.read", "files.write", "files.delete"}, "local-device")
+	var pushSizes []int
+	var acceptedOrder []string
+	server := newLocalHTTPTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/api/v1/sync/pull":
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{
+				"server_sequence": 0, "page_last_sequence": 0, "has_more": false, "ops": []interface{}{},
+			})
+		case "/api/v1/sync/push":
+			var request struct {
+				Ops []struct {
+					OpID string `json:"op_id"`
+				} `json:"ops"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+			pushSizes = append(pushSizes, len(request.Ops))
+			if len(request.Ops) > 25 {
+				w.WriteHeader(http.StatusRequestEntityTooLarge)
+				_ = json.NewEncoder(w).Encode(map[string]string{
+					"code": "too_many_operations", "error": "too many operations in one push",
+				})
+				return
+			}
+			accepted := make([]string, 0, len(request.Ops))
+			for _, op := range request.Ops {
+				accepted = append(accepted, op.OpID)
+				acceptedOrder = append(acceptedOrder, op.OpID)
+			}
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{
+				"accepted": accepted, "count": len(accepted), "conflicts": []map[string]interface{}{},
+			})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	if err := app.syncSvc.SetState(server.URL, ""); err != nil {
+		t.Fatal(err)
+	}
+	if err := syncsvc.SaveDeviceToken(root, "device-token"); err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 103; i++ {
+		path := fmt.Sprintf("adaptive-%03d.txt", i)
+		if err := app.syncSvc.RecordOp(syncsvc.EntityFile, path, syncsvc.OpCreate, map[string]string{"path": path, "content": "queued"}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	pending, err := app.syncSvc.GetUnpushedOps()
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantOrder := make([]string, len(pending))
+	for i, op := range pending {
+		wantOrder[i] = op.OpID
+	}
+
+	result, err := app.syncNow()
+	if err != nil {
+		t.Fatalf("syncNow: %v", err)
+	}
+	if result["pushed"] != 103 {
+		t.Fatalf("pushed = %#v, want 103", result["pushed"])
+	}
+	if !reflect.DeepEqual(pushSizes, []int{100, 50, 25, 25, 25, 25, 3}) {
+		t.Fatalf("push sizes = %v, want [100 50 25 25 25 25 3]", pushSizes)
+	}
+	if !reflect.DeepEqual(acceptedOrder, wantOrder) {
+		t.Fatal("adaptive batches changed operation order")
+	}
+}
+
+func TestSyncNowPreservesAcceptedBatchWhenLaterBatchFails(t *testing.T) {
+	app, root := newSyncFilesTestApp(t, []string{"files.read", "files.write", "files.delete"}, "local-device")
+	server := newLocalHTTPTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/api/v1/sync/pull":
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{
+				"server_sequence": 0, "page_last_sequence": 0, "has_more": false, "ops": []interface{}{},
+			})
+		case "/api/v1/sync/push":
+			var request struct {
+				Ops []struct {
+					OpID string `json:"op_id"`
+				} `json:"ops"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+			if len(request.Ops) == 3 {
+				w.WriteHeader(http.StatusInternalServerError)
+				_ = json.NewEncoder(w).Encode(map[string]string{"code": "internal_error", "error": "temporary failure"})
+				return
+			}
+			accepted := make([]string, 0, len(request.Ops))
+			for _, op := range request.Ops {
+				accepted = append(accepted, op.OpID)
+			}
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{
+				"accepted": accepted, "count": len(accepted), "conflicts": []map[string]interface{}{},
+			})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	if err := app.syncSvc.SetState(server.URL, ""); err != nil {
+		t.Fatal(err)
+	}
+	if err := syncsvc.SaveDeviceToken(root, "device-token"); err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 103; i++ {
+		path := fmt.Sprintf("partial-%03d.txt", i)
+		if err := app.syncSvc.RecordOp(syncsvc.EntityFile, path, syncsvc.OpCreate, map[string]string{"path": path, "content": "queued"}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if _, err := app.syncNow(); err == nil || !strings.Contains(err.Error(), "internal_error") {
+		t.Fatalf("syncNow error = %v, want internal_error", err)
+	}
+	pending, err := app.syncSvc.GetUnpushedOps()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(pending) != 3 {
+		t.Fatalf("pending operations = %d, want 3", len(pending))
+	}
+	_, _, _, lastSyncAt, err := app.syncSvc.GetState()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if lastSyncAt != "" {
+		t.Fatalf("last sync = %q, want empty after partial failure", lastSyncAt)
+	}
+}
+
+func TestSyncNowDoesNotSplitPayloadError(t *testing.T) {
+	app, root := newSyncFilesTestApp(t, []string{"files.read", "files.write", "files.delete"}, "local-device")
+	pushCalls := 0
+	server := newLocalHTTPTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/api/v1/sync/pull":
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{
+				"server_sequence": 0, "page_last_sequence": 0, "has_more": false, "ops": []interface{}{},
+			})
+		case "/api/v1/sync/push":
+			pushCalls++
+			w.WriteHeader(http.StatusRequestEntityTooLarge)
+			_ = json.NewEncoder(w).Encode(map[string]string{
+				"code": "payload_too_large", "error": "operation payload is too large",
+			})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	if err := app.syncSvc.SetState(server.URL, ""); err != nil {
+		t.Fatal(err)
+	}
+	if err := syncsvc.SaveDeviceToken(root, "device-token"); err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 2; i++ {
+		path := fmt.Sprintf("large-%03d.txt", i)
+		if err := app.syncSvc.RecordOp(syncsvc.EntityFile, path, syncsvc.OpCreate, map[string]string{"path": path, "content": "queued"}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if _, err := app.syncNow(); err == nil || !strings.Contains(err.Error(), "payload_too_large") {
+		t.Fatalf("syncNow error = %v, want payload_too_large", err)
+	}
+	if pushCalls != 1 {
+		t.Fatalf("push calls = %d, want 1", pushCalls)
 	}
 }
 
