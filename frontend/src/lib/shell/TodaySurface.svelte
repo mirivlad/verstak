@@ -80,6 +80,7 @@
     hasJournal ? { key: 'journal', label: tr('overview.journal'), count: journalEntries.length, detail: countText('overview.count.journal', journalEntries.length), actionKind: 'journal', actionLabel: tr('overview.openJournal') } : null,
     hasAttentionTools ? { key: 'attention', label: tr('overview.attention'), count: needsAttention.length, detail: countText('overview.count.pending', needsAttention.length), actionKind: attentionActionKind, actionLabel: tr('overview.reviewPending') } : null,
   ].filter(Boolean);
+  $: hasOverviewSideContent = Boolean(keyResources.length || needsAttention.length || (loading && hasAttentionTools));
 
   onMount(() => {
     unsubscribeLocale = i18n.subscribe((nextLocale) => locale = nextLocale);
@@ -621,7 +622,7 @@
     {/each}
   </div>
 
-  <div class="overview-layout">
+  <div class="overview-layout" class:overview-layout-wide={!hasOverviewSideContent}>
     <main class="overview-main">
       <section class="today-resume overview-continue" data-overview-section="continue">
         <div class="today-resume-copy overview-continue-copy">
@@ -702,8 +703,9 @@
       </section>
     </main>
 
+    {#if hasOverviewSideContent}
     <aside class="overview-side">
-      {#if hasAttentionTools && (needsAttention.length || !loading)}
+      {#if hasAttentionTools && (needsAttention.length || loading)}
         <section class="today-panel overview-panel" data-overview-section="attention">
           <div class="today-panel-head overview-panel-head">
             <div>
@@ -746,6 +748,7 @@
         </section>
       {/if}
     </aside>
+    {/if}
   </div>
 </div>
 
@@ -783,7 +786,7 @@
 
   .today-summary {
     display: grid;
-    grid-template-columns: repeat(6, minmax(0, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
     gap: 0.5rem;
     padding: 0.75rem 0.75rem 0;
   }
@@ -852,6 +855,10 @@
     grid-template-columns: minmax(0, 1fr) minmax(17rem, 23rem);
     gap: 0.75rem;
     padding: 0.75rem;
+  }
+
+  .overview-layout.overview-layout-wide {
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .overview-main,

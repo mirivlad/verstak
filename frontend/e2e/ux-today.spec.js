@@ -28,7 +28,8 @@ test.describe('UX Overview workspace flow', () => {
     await expect(overview).toBeVisible();
     await expect(overview.locator('[data-overview-section="continue"]')).toContainText('Continue working');
     await expect(overview.locator('[data-overview-section="recent"]')).toContainText('Recent changes');
-    await expect(overview.locator('[data-overview-section="attention"]')).toContainText('Needs attention');
+    await expect(overview.locator('[data-overview-section="attention"]')).toHaveCount(0);
+    await expect(overview.locator('[data-overview-section="key-resources"]')).toBeVisible();
     await expect(overview.locator('[data-overview-section="quick-actions"]')).toHaveCount(0);
 
     const summaryCards = overview.locator('button[data-overview-summary]');
@@ -105,6 +106,10 @@ test.describe('UX Overview workspace flow', () => {
     await expect(overview.locator('[data-overview-summary="captures"]')).toHaveCount(0);
     await expect(overview.locator('[data-overview-action="browser-inbox"]')).toHaveCount(0);
     await expect(overview).not.toContainText('Inbox material must stay hidden');
+    await expect(overview.locator('.overview-side')).toHaveCount(0);
+    const layoutBox = await overview.locator('.overview-layout').boundingBox();
+    const mainBox = await overview.locator('.overview-main').boundingBox();
+    expect(mainBox.width / layoutBox.width).toBeGreaterThan(0.95);
   });
 
   test('Overview refreshes when Browser is disabled through plugin state changes', async ({ page }) => {

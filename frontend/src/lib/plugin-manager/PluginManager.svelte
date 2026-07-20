@@ -586,17 +586,19 @@
       <h3>{settingsPanel.title}</h3>
       <button class="modal-close" on:click={closeSettings} type="button">✕</button>
     </div>
-    <div class="modal-body">
-      <p class="settings-hint">{tr('common.plugin')}: <code>{settingsPluginId}</code></p>
-      {#if settingsPluginInfo && settingsPluginInfo.entry}
-        <PluginBundleHost
-          pluginId={settingsPluginId}
-          componentId={settingsPanel.component || settingsPanel.id}
-        />
-      {:else}
-        <p class="settings-hint">{tr('common.component')}: <code>{settingsPanel.component}</code></p>
-        <p class="placeholder">{tr('pluginManager.settingsBundleUnavailable')}</p>
-      {/if}
+    <div class="modal-body settings-modal-body">
+      <div class="plugin-settings-surface">
+        <p class="settings-hint">{tr('common.plugin')}: <code>{settingsPluginId}</code></p>
+        {#if settingsPluginInfo && settingsPluginInfo.entry}
+          <PluginBundleHost
+            pluginId={settingsPluginId}
+            componentId={settingsPanel.component || settingsPanel.id}
+          />
+        {:else}
+          <p class="settings-hint">{tr('common.component')}: <code>{settingsPanel.component}</code></p>
+          <p class="placeholder">{tr('pluginManager.settingsBundleUnavailable')}</p>
+        {/if}
+      </div>
     </div>
   </div>
   </div>
@@ -875,7 +877,9 @@
   .modal-close { background: none; border: none; color: #a0a0b8; font-size: 1.2rem; cursor: pointer; padding: 0.2rem 0.5rem; }
   .modal-close:hover { color: #e94560; }
   .modal-body { padding: 1rem; overflow: auto; min-height: 0; flex: 1; display: flex; flex-direction: column; }
-  .modal-body :global(.plugin-bundle-host) { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+  .settings-modal-body { padding: 0; }
+  .plugin-settings-surface { width: 90%; min-height: 100%; margin: 0 auto; box-sizing: border-box; display: flex; flex-direction: column; padding: clamp(0.75rem, 1.5vw, 1.25rem); }
+  .plugin-settings-surface :global(.plugin-bundle-host) { flex: 1; min-height: 0; display: flex; flex-direction: column; }
   .settings-hint { color: #666; font-size: 0.8rem; margin: 0.25rem 0; }
   .settings-hint code { color: #4ecca3; }
 

@@ -114,5 +114,10 @@ test.describe('UX follow-up fixes', () => {
     const box = await modal.boundingBox();
     expect(box.width).toBeGreaterThanOrEqual(760);
     expect(box.height).toBeGreaterThanOrEqual(560);
+    const bodyBox = await modal.locator('.modal-body').boundingBox();
+    const surfaceBox = await modal.locator('.plugin-settings-surface').boundingBox();
+    expect(surfaceBox.width / bodyBox.width).toBeGreaterThanOrEqual(0.88);
+    expect(surfaceBox.width / bodyBox.width).toBeLessThanOrEqual(0.92);
+    expect(Math.abs((surfaceBox.x - bodyBox.x) - (bodyBox.width - surfaceBox.width) / 2)).toBeLessThanOrEqual(2);
   });
 });
