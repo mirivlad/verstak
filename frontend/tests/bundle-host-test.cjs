@@ -51,6 +51,8 @@ function makeMockDocument() {
           this.children.push(child);
         }
       },
+      get firstChild() { return this.children[0] || null; },
+      get lastChild() { return this.children[this.children.length - 1] || null; },
       removeChild(child) {
         const idx = this.children.indexOf(child);
         if (idx >= 0) this.children.splice(idx, 1);
@@ -88,10 +90,30 @@ function makeMockWindow() {
     VerstakPluginAPI(pluginId) {
       return {
         pluginId,
-        capabilities: { has: () => false },
-        events: { publish: () => {}, subscribe: () => {} },
-        settings: { read: () => null, write: () => {} },
-        commands: { execute: () => {} },
+        capabilities: { has: async () => false, list: async () => [] },
+        events: { publish: async () => {}, subscribe: async () => () => {} },
+        settings: { read: async () => null, write: async () => {} },
+        commands: {
+          register: async () => () => {},
+          execute: async () => ({ status: 'executed', result: { version: '0.1.0', source: 'bundled-frontend' } }),
+        },
+        files: {
+          createFolder: async () => {},
+          writeText: async () => {},
+          readText: async (filePath) => {
+            if (filePath.startsWith('.verstak/')) throw new Error('reserved-path');
+            return 'hello files';
+          },
+          list: async () => [{ relativePath: 'PlatformTest/files-api.txt' }],
+          move: async () => {},
+          trash: async () => {},
+          readBytes: async () => new Uint8Array(),
+          writeBytes: async () => {},
+        },
+        workbench: {
+          openResource: async () => ({ status: 'opened', request: {} }),
+          editResource: async () => ({ status: 'opened', request: {} }),
+        },
       };
     },
     document: doc,
@@ -250,7 +272,7 @@ test('R3. real mount: PlatformTestSettings.mount() writes expected text to conta
   components.PlatformTestSettings.mount(container, { componentId: 'verstak.platform-test.settings' }, api);
 
   const text = findTextContent(container);
-  const required = ['Platform Test Settings', 'verstak.platform-test', 'Settings panel loaded from plugin frontend bundle', 'Interactive Counter'];
+  const required = ['Platform Test Settings', 'verstak.platform-test', 'Settings panel loaded from the plugin frontend bundle', 'Interactive Counter'];
   const missing = required.filter(chunk => !text.includes(chunk));
   if (missing.length > 0) throw new Error('missing: ' + missing.join(', '));
 });
