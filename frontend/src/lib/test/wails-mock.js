@@ -377,6 +377,7 @@ import journalSource from '../../../../../verstak-official-plugins/plugins/journ
   var workspaceMetadata = {};
   var reloadResponseMode = 'tuple';
   var syncState = makeDefaultSyncState();
+  var readTextDelay = 0;
 
   // ── Helpers ────────────────────────────────────────────────────────
   function makeDefaultWorkspaceTree() {
@@ -3674,7 +3675,9 @@ import journalSource from '../../../../../verstak-official-plugins/plugins/journ
       var node = vaultFiles[norm.path];
       if (!node) return Promise.resolve(['', 'not-found: ' + norm.path]);
       if (node.type !== 'file') return Promise.resolve(['', 'not-regular-file: ' + norm.path]);
-      return Promise.resolve([node.content || '', '']);
+      return new Promise(function(resolve) {
+        setTimeout(function() { resolve([node.content || '', '']); }, readTextDelay);
+      });
     },
     ReadVaultFileBytes: function (pluginId, relativePath) {
       var err = requirePluginPermission(pluginId, 'files.read');
@@ -4374,6 +4377,7 @@ import journalSource from '../../../../../verstak-official-plugins/plugins/journ
       workspaceMetadata = {};
       reloadResponseMode = 'tuple';
       syncState = makeDefaultSyncState();
+      readTextDelay = 0;
     },
     setPluginStatus: function (pluginId, status, enabled) {
       if (pluginStates[pluginId]) {
@@ -4430,7 +4434,17 @@ import journalSource from '../../../../../verstak-official-plugins/plugins/journ
         if (entry.trashId === trashId) entry.deletedAt = deletedAt;
       });
     },
-    setReloadResponseMode: function (mode) { reloadResponseMode = mode || 'tuple'; }
+    setReloadResponseMode: function (mode) { reloadResponseMode = mode || 'tuple'; },
+    setReadTextDelay: function (delay) { readTextDelay = Math.max(0, Number(delay || 0)); },
+    putVaultFile: function (relativePath, content) {
+      var path = String(relativePath || '').replace(/^\/+|\/+$/g, '');
+      var parts = path.split('/');
+      for (var i = 1; i < parts.length; i++) {
+        var dir = parts.slice(0, i).join('/');
+        if (!vaultFiles[dir]) vaultFiles[dir] = { type: 'folder', modifiedAt: new Date().toISOString() };
+      }
+      vaultFiles[path] = { type: 'file', content: String(content || ''), modifiedAt: new Date().toISOString() };
+    }
   };
 
   window.__wailsMockReady = true;

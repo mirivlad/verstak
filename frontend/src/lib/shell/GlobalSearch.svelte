@@ -5,7 +5,7 @@
   import { i18n } from '../i18n/index.js';
 
   const TEXT_EXTENSIONS = new Set(['txt', 'md', 'markdown', 'log', 'json', 'csv', 'yaml', 'yml', 'toml']);
-  const FILE_INDEX_LIMIT = 220;
+  const FILE_INDEX_LIMIT = 1000;
   const RESULT_LIMIT = 8;
   const RU = 'ёйцукенгшщзхъфывапролджэячсмитьбю';
   const EN = '`qwertyuiop[]asdfghjkl;\\zxcvbnm,.';
@@ -15,6 +15,9 @@
   let results = [];
   let focused = false;
   let loading = true;
+  let contentReady = false;
+  let partial = false;
+  let revision = 0;
   let searchTimer = null;
   let buildSeq = 0;
   let locale = i18n.getLocale();
@@ -32,10 +35,14 @@
       locale = nextLocale;
       if (changed) buildIndex();
     });
+    const refreshSignals = ['verstak:vault-opened', 'verstak:files-changed', 'verstak:workspace-tree-changed', 'verstak:workspace-created', 'verstak:workspace-renamed', 'verstak:workspace-trashed', 'verstak:workspace-restored'];
+    const refresh = () => buildIndex();
+    refreshSignals.forEach(name => window.addEventListener(name, refresh));
     buildIndex();
     return () => {
       unsubscribeLocale();
       clearTimeout(searchTimer);
+      refreshSignals.forEach(name => window.removeEventListener(name, refresh));
     };
   });
 
@@ -110,17 +117,35 @@
     }
   }
 
-  async function listFilesRecursive(dir = '', depth = 0, acc = []) {
-    if (acc.length >= FILE_INDEX_LIMIT || depth > 5) return acc;
-    const entries = await resultOrEmpty(App.ListVaultFiles('verstak.search', dir), []);
-    for (const entry of entries || []) {
-      if (acc.length >= FILE_INDEX_LIMIT) break;
-      const path = entry.relativePath || entry.path || entry.name || '';
-      if (!path) continue;
-      acc.push(entry);
-      if (entry.type === 'folder') await listFilesRecursive(path, depth + 1, acc);
+  async function listFilesBreadthFirst() {
+    const queue = [''];
+    const entries = [];
+    let incomplete = false;
+    while (queue.length && entries.length < FILE_INDEX_LIMIT) {
+      const dir = queue.shift();
+      try {
+        const response = await App.ListVaultFiles('verstak.search', dir);
+        const tuple = Array.isArray(response) && response.length === 2 ? response : [response, ''];
+        if (tuple[1]) {
+          incomplete = true;
+          continue;
+        }
+        for (const entry of tuple[0] || []) {
+          if (entries.length >= FILE_INDEX_LIMIT) {
+            incomplete = true;
+            break;
+          }
+          const path = entry.relativePath || entry.path || entry.name || '';
+          if (!path) continue;
+          entries.push(entry);
+          if (entry.type === 'folder') queue.push(path);
+        }
+      } catch (_) {
+        incomplete = true;
+      }
     }
-    return acc;
+    if (queue.length) incomplete = true;
+    return { entries, partial: incomplete };
   }
 
   async function readFileSnippet(path) {
@@ -168,6 +193,8 @@
   async function buildIndex() {
     const seq = ++buildSeq;
     loading = true;
+    contentReady = false;
+    partial = false;
     const next = [];
 
     const tree = await resultOrEmpty(App.GetWorkspaceTree(), { nodes: [] });
@@ -213,16 +240,16 @@
       });
     });
 
-    const files = await listFilesRecursive();
-    for (const entry of files) {
+    const fileScan = await listFilesBreadthFirst();
+    const fileItems = [];
+    for (const entry of fileScan.entries) {
       const path = entry.relativePath || entry.path || entry.name || '';
-      const snippet = await readFileSnippet(path);
-      next.push({
+      fileItems.push({
         type: entry.type === 'folder' ? 'Folder' : 'File',
         typeLabel: tr(entry.type === 'folder' ? 'search.type.folder' : 'search.type.file'),
         title: path.split('/').pop() || path,
         subtitle: path,
-        keywords: snippet,
+        keywords: '',
         rank: entry.type === 'folder' ? 30 : 40,
         action: entry.type === 'folder' ? 'file-folder' : 'file',
         path,
@@ -230,15 +257,26 @@
       });
     }
 
-    const pluginItems = await Promise.all([
+    if (seq !== buildSeq) return;
+    index = next.concat(fileItems);
+    partial = fileScan.partial;
+    revision += 1;
+    runSearch(query);
+
+    const [snippets, pluginItems] = await Promise.all([
+      Promise.all(fileItems.map(item => readFileSnippet(item.path))),
+      Promise.all([
       indexPluginSettings('verstak.journal', tr('search.type.journal'), 50, viewByPluginId.get('verstak.journal'), nodes),
       indexPluginSettings('verstak.browser-inbox', tr('search.type.browserInbox'), 55, viewByPluginId.get('verstak.browser-inbox'), nodes),
       indexPluginSettings('verstak.activity', tr('search.type.activity'), 60, viewByPluginId.get('verstak.activity'), nodes),
+      ]),
     ]);
 
     if (seq !== buildSeq) return;
-    index = next.concat(pluginItems.flat());
+    index = next.concat(fileItems.map((item, idx) => ({ ...item, keywords: snippets[idx] || '' })), pluginItems.flat());
+    contentReady = true;
     loading = false;
+    revision += 1;
     runSearch(query);
   }
 
@@ -311,7 +349,7 @@
   }
 </script>
 
-<div class="global-search" class:open={focused && (query || results.length)}>
+<div class="global-search" class:open={focused && (query || results.length)} data-index-revision={revision} data-index-building={loading} data-index-partial={partial}>
   <div class="global-search-box">
     <Icon name="search" size={14} class="global-search-icon" />
     <input
@@ -339,6 +377,10 @@
             <span class="global-search-result-meta">{item.typeLabel || item.type} · {item.subtitle}</span>
           </button>
         {/each}
+      {:else if loading || !contentReady}
+        <div class="global-search-empty vt-empty-title">{tr('search.indexing')}</div>
+      {:else if partial}
+        <div class="global-search-empty vt-empty-title">{tr('search.partial')}</div>
       {:else}
         <div class="global-search-empty vt-empty-title">{tr('search.noResults')}</div>
       {/if}

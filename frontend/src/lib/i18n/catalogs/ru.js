@@ -212,6 +212,7 @@ export default {
   'search.placeholder': 'Поиск',
   'search.global': 'Глобальный поиск',
   'search.noResults': 'Ничего не найдено',
+  'search.partial': 'Индекс неполный — некоторые результаты могут отсутствовать',
   'search.type.workspace': 'Дело',
   'search.type.tool': 'Инструмент',
   'search.type.folder': 'Папка',
