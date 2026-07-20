@@ -5,6 +5,7 @@ import (
 	"embed"
 	"log"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/wailsapp/wails/v2"
@@ -51,6 +52,14 @@ func main() {
 
 	// ─── Initialize App Settings ─────────────────────────────
 	appSettingsMgr := appsettings.NewDefaultManager()
+	if bindingGeneration {
+		configDir, err := os.MkdirTemp("", "verstak-wails-bindings-")
+		if err != nil {
+			log.Fatalf("[main] create isolated bindings config: %v", err)
+		}
+		defer os.RemoveAll(configDir)
+		appSettingsMgr = appsettings.NewManager(filepath.Join(configDir, "config.json"))
+	}
 	if err := appSettingsMgr.Load(); err != nil {
 		log.Printf("[main] app settings: %v", err)
 	}
@@ -100,7 +109,10 @@ func main() {
 	log.Printf("[main] registered vault capability")
 
 	// ─── Plugin Discovery ───────────────────────────────────
-	discoveryDirs := plugin.DefaultDiscoveryDirs()
+	var discoveryDirs []string
+	if !bindingGeneration {
+		discoveryDirs = plugin.DefaultDiscoveryDirs()
+	}
 	log.Printf("[main] plugin dirs: %v", discoveryDirs)
 	if debugEnabled {
 		debug.Logf("[main] plugin dirs: %v", discoveryDirs)
@@ -198,9 +210,13 @@ func main() {
 	if vaultService.GetVaultStatus() == vault.StatusOpen {
 		syncService = syncsvc.NewService(vaultService.GetVaultPath(), "")
 	}
-	receiverToken, err := appSettingsMgr.EnsureBrowserReceiverToken()
-	if err != nil {
-		log.Printf("[browserreceiver] local receiver disabled: %v", err)
+	var receiverToken string
+	if !bindingGeneration {
+		var ensureErr error
+		receiverToken, ensureErr = appSettingsMgr.EnsureBrowserReceiverToken()
+		if ensureErr != nil {
+			log.Printf("[browserreceiver] local receiver disabled: %v", ensureErr)
+		}
 	}
 	var app *api.App
 	var browserReceiver *browserreceiver.Receiver
@@ -273,9 +289,7 @@ func main() {
 			app,
 		},
 	}
-	err = wails.Run(appOptions)
-
-	if err != nil {
+	if err := wails.Run(appOptions); err != nil {
 		log.Fatalf("Error: %v", err)
 	}
 }
