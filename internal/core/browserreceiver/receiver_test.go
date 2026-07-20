@@ -89,6 +89,18 @@ func TestReceiverAcceptsSelectionCaptureAndPublishesEvent(t *testing.T) {
 	}
 }
 
+func TestLocalReceiverLimitsHeaderReadTime(t *testing.T) {
+	server, err := Start("127.0.0.1:0", New(events.NewBus()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer server.Close()
+
+	if server.server.ReadHeaderTimeout <= 0 {
+		t.Fatal("local browser receiver must set ReadHeaderTimeout")
+	}
+}
+
 func TestReceiverAcceptsFileCaptureAndPublishesEvent(t *testing.T) {
 	bus := events.NewBus()
 	received := make(chan events.Event, 1)

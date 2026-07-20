@@ -189,7 +189,8 @@ func Start(addr string, receiver *Receiver) (*Server, error) {
 	s := &Server{
 		listener: listener,
 		server: &http.Server{
-			Handler: receiver,
+			Handler:           receiver,
+			ReadHeaderTimeout: 5 * time.Second,
 		},
 	}
 	go func() {
