@@ -101,6 +101,7 @@ type App struct {
 	secretsSession      *coresecrets.VaultSession
 	fileWatcher         *filewatcher.Service
 	syncRunMu           sync.Mutex
+	syncRunning         atomic.Bool
 	syncTimerMu         sync.Mutex
 	syncScanTimer       *time.Timer
 	notifications       notificationService
@@ -3076,8 +3077,12 @@ func (a *App) SetFolderAppearance(folderID string, patch map[string]interface{})
 		return "not initialized"
 	}
 	fa := &workspacetree.FolderAppearance{}
-	if v, ok := patch["icon"].(string); ok { fa.Icon = v }
-	if v, ok := patch["color"].(string); ok { fa.Color = v }
+	if v, ok := patch["icon"].(string); ok {
+		fa.Icon = v
+	}
+	if v, ok := patch["color"].(string); ok {
+		fa.Color = v
+	}
 	if err := a.treeV2.SetFolderAppearance(folderID, fa); err != nil {
 		return err.Error()
 	}
@@ -3410,6 +3415,7 @@ func (a *App) vaultPath() string {
 // SyncStatusDTO holds sync status information for the frontend.
 type SyncStatusDTO struct {
 	Configured   bool   `json:"configured"`
+	Syncing      bool   `json:"syncing"`
 	ServerURL    string `json:"serverUrl"`
 	VaultID      string `json:"vaultId"`
 	DeviceID     string `json:"deviceId"`
@@ -3447,6 +3453,7 @@ func (a *App) syncStatus() (*SyncStatusDTO, error) {
 
 	dto := &SyncStatusDTO{
 		Configured:   serverURL != "" && (apiKey != "" || deviceToken != ""),
+		Syncing:      a.syncRunning.Load(),
 		ServerURL:    serverURL,
 		VaultID:      remoteVaultID,
 		LastSyncAt:   lastSyncAt,
@@ -3744,6 +3751,8 @@ func (a *App) PluginSyncResetKey(pluginID string) string {
 func (a *App) syncNow() (map[string]interface{}, error) {
 	a.syncRunMu.Lock()
 	defer a.syncRunMu.Unlock()
+	a.syncRunning.Store(true)
+	defer a.syncRunning.Store(false)
 	if err := a.requireVault(); err != nil {
 		return nil, err
 	}
@@ -3996,6 +4005,7 @@ func (a *App) PluginSyncNow(pluginID string) (map[string]interface{}, string) {
 	}
 	result, err := a.syncNow()
 	if err != nil {
+		_ = a.updateSyncError(err.Error())
 		return nil, err.Error()
 	}
 	return result, ""

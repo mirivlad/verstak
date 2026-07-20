@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -1945,6 +1946,80 @@ func TestSyncNowPushesLocalOpsAndAppliesPulledFileOps(t *testing.T) {
 	}
 	if lastPullSeq != 2 {
 		t.Fatalf("last pull seq = %d, want 2", lastPullSeq)
+	}
+}
+
+func TestSyncStatusReportsRunningSync(t *testing.T) {
+	app, root := newSyncFilesTestApp(t, []string{"files.read", "files.write", "files.delete"}, "local-device")
+	started := make(chan struct{})
+	release := make(chan struct{})
+	var pullCount atomic.Int32
+	server := newLocalHTTPTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v1/sync/pull" {
+			http.NotFound(w, r)
+			return
+		}
+		if pullCount.Add(1) == 1 {
+			close(started)
+			<-release
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{"server_sequence": 0, "page_last_sequence": 0, "has_more": false, "ops": []interface{}{}})
+	}))
+	defer server.Close()
+	if err := app.syncSvc.SetState(server.URL, ""); err != nil {
+		t.Fatal(err)
+	}
+	if err := syncsvc.SaveDeviceToken(root, "device-token"); err != nil {
+		t.Fatal(err)
+	}
+
+	done := make(chan error, 1)
+	go func() { _, err := app.syncNow(); done <- err }()
+	<-started
+	status, err := app.syncStatus()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !status.Syncing {
+		t.Fatal("Syncing = false during an active sync")
+	}
+	close(release)
+	if err := <-done; err != nil {
+		t.Fatalf("syncNow: %v", err)
+	}
+	status, err = app.syncStatus()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if status.Syncing {
+		t.Fatal("Syncing = true after sync completed")
+	}
+}
+
+func TestPluginSyncFailureStatusPreservesLastSuccess(t *testing.T) {
+	app, _ := newSyncFilesTestApp(t, []string{"files.read"}, "local-device")
+	app.plugins = append(app.plugins, plugin.Plugin{Manifest: plugin.Manifest{ID: "sync.local", Permissions: []string{"sync.participate", "network.remote"}}, Status: plugin.StatusLoaded, Enabled: true})
+	cfg := app.appSettings.Get()
+	cfg.Sync.LastSyncAt = "2026-07-20T10:00:00Z"
+	if err := app.appSettings.UpdateSync(cfg.Sync); err != nil {
+		t.Fatal(err)
+	}
+	if err := app.syncSvc.SetLastSyncAt(cfg.Sync.LastSyncAt); err != nil {
+		t.Fatal(err)
+	}
+	if _, errText := app.PluginSyncNow("sync.local"); !strings.Contains(errText, "sync not configured") {
+		t.Fatalf("PluginSyncNow error = %q", errText)
+	}
+	status, err := app.syncStatus()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(status.LastError, "sync not configured") {
+		t.Fatalf("LastError = %q", status.LastError)
+	}
+	if status.LastSyncAt != "2026-07-20T10:00:00Z" {
+		t.Fatalf("LastSyncAt = %q", status.LastSyncAt)
 	}
 }
 
