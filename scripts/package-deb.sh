@@ -14,9 +14,14 @@ if ! command -v dpkg-deb >/dev/null; then
   exit 1
 fi
 
+PACKAGE_VERSION="${VERSION#v}"
+if [[ ! "$PACKAGE_VERSION" =~ ^[0-9] ]]; then
+  echo "Debian package version must start with a digit after an optional v prefix: $VERSION" >&2
+  exit 2
+fi
+
 "$ROOT/scripts/build-linux-bundle.sh"
 
-PACKAGE_VERSION="${VERSION#v}"
 BUNDLE="${VERSTAK_LINUX_BUNDLE_DIR:-$ROOT/build/linux-amd64}"
 STAGING="$ROOT/build/deb/verstak_$PACKAGE_VERSION"
 RELEASE_ROOT="$ROOT/release"
