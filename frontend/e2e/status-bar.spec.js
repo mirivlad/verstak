@@ -20,6 +20,12 @@ test.describe('Status Bar host', () => {
     await expect(statusBar).toBeVisible();
     await expect(statusBar.locator('.vault-status')).toContainText('Vault: open');
     await expect(statusBar.locator('[data-status-item-id="verstak.platform-test.status"]')).toContainText('All Tests Pass');
+    const sync = statusBar.locator('[data-plugin-status-handler="SyncStatusBar"]');
+    await expect(sync.locator('.mock-sync-status')).toContainText('Synced');
+    await sync.locator('.mock-sync-status').click();
+    await expect(page.locator('.modal[aria-label="Plugin Settings"]')).toBeVisible();
+    const statusBox = await statusBar.boundingBox();
+    expect(statusBox.height).toBeLessThanOrEqual(36);
   });
 
   test('opens settings menu with plugin manager and plugin settings', async ({ page }) => {

@@ -16,6 +16,7 @@ function assertIncludes(source, needle, message) {
 const workspaceHost = read('frontend/src/lib/shell/WorkspaceHost.svelte');
 const app = read('frontend/src/App.svelte');
 const statusBar = read('frontend/src/lib/shell/StatusBar.svelte');
+const compactPluginHost = read('frontend/src/lib/plugin-host/CompactPluginHost.svelte');
 const pluginManager = read('frontend/src/lib/plugin-manager/PluginManager.svelte');
 const syncManifest = JSON.parse(read('../verstak-official-plugins/plugins/sync/plugin.json'));
 
@@ -42,9 +43,11 @@ assertIncludes(
 );
 assertIncludes(
   statusBar,
-  '{item.label || item.id}',
-  'StatusBar should render the compact status label without mounting plugin UI'
+  '<CompactPluginHost pluginId={item.pluginId} handler={item.handler}',
+  'StatusBar should mount declared compact plugin status handlers'
 );
+assertIncludes(compactPluginHost, 'data-plugin-status-handler', 'Compact plugin status host should expose a stable mount selector');
+if (statusBar.includes('compact status only')) throw new Error('StatusBar should not replace handler contributions with a warning label');
 
 const syncStatus = syncManifest.contributes.statusBarItems.find((item) => item.id === 'verstak.sync.status');
 if (!syncStatus || syncStatus.handler !== 'SyncStatusBar') {

@@ -2,6 +2,7 @@
   import { onDestroy, onMount } from 'svelte';
   import * as App from '../../../wailsjs/go/api/App';
   import Icon from '../ui/Icon.svelte';
+  import CompactPluginHost from '../plugin-host/CompactPluginHost.svelte';
   import { i18n } from '../i18n/index.js';
 
   let items = [];
@@ -127,10 +128,9 @@
         class:status-bar-warning={item.handler}
         class="status-bar-item"
         data-status-item-id={item.id}
-        title={item.handler ? `${item.pluginId}: compact status only` : item.pluginId}
+        title={item.pluginId}
       >
-        {#if item.handler}<Icon name="warning" size={11} class="status-warning-icon" />{/if}
-        {item.label || item.id}
+        {#if item.handler}<CompactPluginHost pluginId={item.pluginId} handler={item.handler} label={item.label || item.id} />{:else}{item.label || item.id}{/if}
       </span>
     {/each}
   </div>
@@ -140,10 +140,9 @@
         class:status-bar-warning={item.handler}
         class="status-bar-item"
         data-status-item-id={item.id}
-        title={item.handler ? `${item.pluginId}: compact status only` : item.pluginId}
+        title={item.pluginId}
       >
-        {#if item.handler}<Icon name="warning" size={11} class="status-warning-icon" />{/if}
-        {item.label || item.id}
+        {#if item.handler}<CompactPluginHost pluginId={item.pluginId} handler={item.handler} label={item.label || item.id} />{:else}{item.label || item.id}{/if}
       </span>
     {/each}
   </div>
@@ -153,10 +152,9 @@
         class:status-bar-warning={item.handler}
         class="status-bar-item"
         data-status-item-id={item.id}
-        title={item.handler ? `${item.pluginId}: compact status only` : item.pluginId}
+        title={item.pluginId}
       >
-        {#if item.handler}<Icon name="warning" size={11} class="status-warning-icon" />{/if}
-        {item.label || item.id}
+        {#if item.handler}<CompactPluginHost pluginId={item.pluginId} handler={item.handler} label={item.label || item.id} />{:else}{item.label || item.id}{/if}
       </span>
     {/each}
     <div class="settings-menu-wrap">

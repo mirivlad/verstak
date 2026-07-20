@@ -1892,6 +1892,16 @@ import journalSource from '../../../../../verstak-official-plugins/plugins/journ
     return '(function(){var Component={mount:function(containerEl){containerEl.innerHTML=' + JSON.stringify(markup) + ';},unmount:function(containerEl){containerEl.innerHTML="";}};window.VerstakPluginRegister(' + JSON.stringify(pluginId) + ',{components:{' + componentName + ':Component}});})();';
   }
 
+  function syncPluginBundle() {
+    return [
+      "(function(){",
+      "var SyncStatusBar={mount:function(container){container.innerHTML='';var button=document.createElement('button');button.type='button';button.className='mock-sync-status';button.textContent='Synced';button.addEventListener('click',function(){window.dispatchEvent(new CustomEvent('verstak:open-settings',{detail:{pluginId:'verstak.sync',panelId:'verstak.sync.settings'}}));});container.appendChild(button);},unmount:function(container){container.innerHTML='';}};",
+      "var SyncSettings={mount:function(container){container.innerHTML='<div class=\"sync-settings-root\">Sync settings</div>';},unmount:function(container){container.innerHTML='';}};",
+      "window.VerstakPluginRegister('verstak.sync',{components:{SyncStatusBar:SyncStatusBar,SyncSettings:SyncSettings}});",
+      "})();"
+    ].join('');
+  }
+
   function activityBundle() {
     return '(' + function () {
       var PLUGIN_ID = 'verstak.activity';
@@ -3583,6 +3593,9 @@ import journalSource from '../../../../../verstak-official-plugins/plugins/journ
       }
       if (pluginId === 'verstak.notes' && assetPath === 'frontend/dist/index.js') {
         return Promise.resolve(simplePluginBundle('verstak.notes', 'NotesView', 'notes-root', 'Notes'));
+      }
+      if (pluginId === 'verstak.sync' && assetPath === 'frontend/dist/index.js') {
+        return Promise.resolve(syncPluginBundle());
       }
       if (pluginId === 'verstak.activity') {
         return Promise.resolve(activitySource);
