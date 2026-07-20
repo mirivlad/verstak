@@ -376,6 +376,7 @@ import journalSource from '../../../../../verstak-official-plugins/plugins/journ
   var workspaceTree = makeDefaultWorkspaceTree();
   var workspaceMetadata = {};
   var reloadResponseMode = 'tuple';
+  var listVaultFilesResponseMode = 'tuple';
   var syncState = makeDefaultSyncState();
   var readTextDelay = 0;
 
@@ -3656,7 +3657,7 @@ import journalSource from '../../../../../verstak-official-plugins/plugins/journ
         if (!rest || rest.indexOf('/') !== -1) return;
         entries.push(fileEntry(path, vaultFiles[path]));
       });
-      return Promise.resolve([entries, '']);
+      return Promise.resolve(listVaultFilesResponseMode === 'plain' ? entries : [entries, '']);
     },
     GetVaultFileMetadata: function (pluginId, relativePath) {
       var err = requirePluginPermission(pluginId, 'files.read');
@@ -4376,6 +4377,7 @@ import journalSource from '../../../../../verstak-official-plugins/plugins/journ
       workspaceTree = makeDefaultWorkspaceTree();
       workspaceMetadata = {};
       reloadResponseMode = 'tuple';
+      listVaultFilesResponseMode = 'tuple';
       syncState = makeDefaultSyncState();
       readTextDelay = 0;
     },
@@ -4435,6 +4437,7 @@ import journalSource from '../../../../../verstak-official-plugins/plugins/journ
       });
     },
     setReloadResponseMode: function (mode) { reloadResponseMode = mode || 'tuple'; },
+    setListVaultFilesResponseMode: function (mode) { listVaultFilesResponseMode = mode || 'tuple'; },
     setReadTextDelay: function (delay) { readTextDelay = Math.max(0, Number(delay || 0)); },
     putVaultFile: function (relativePath, content) {
       var path = String(relativePath || '').replace(/^\/+|\/+$/g, '');

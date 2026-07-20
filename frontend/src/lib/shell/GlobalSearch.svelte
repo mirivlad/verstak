@@ -110,7 +110,9 @@
   async function resultOrEmpty(promise, fallback) {
     try {
       const response = await promise;
-      if (Array.isArray(response) && response.length === 2) return response[1] ? fallback : response[0];
+      if (Array.isArray(response) && response.length === 2 && (typeof response[1] === 'string' || response[1] == null)) {
+        return response[1] ? fallback : response[0];
+      }
       return response || fallback;
     } catch (_) {
       return fallback;
@@ -125,7 +127,9 @@
       const dir = queue.shift();
       try {
         const response = await App.ListVaultFiles('verstak.search', dir);
-        const tuple = Array.isArray(response) && response.length === 2 ? response : [response, ''];
+        const tuple = Array.isArray(response) && response.length === 2 && (typeof response[1] === 'string' || response[1] == null)
+          ? response
+          : [response, ''];
         if (tuple[1]) {
           incomplete = true;
           continue;
@@ -170,6 +174,7 @@
       const rows = Array.isArray(value) ? value : [];
       rows.forEach(row => {
         if (!row || typeof row !== 'object') return;
+        if (pluginId === 'verstak.browser-inbox' && String(row.globalState || 'inbox') === 'archived') return;
         const title = row.title || row.summary || row.url || row.captureId || row.activityId || row.entryId || label;
         const workspaceName = row.workspaceRootPath || row.workspaceName || '';
         items.push({
@@ -433,11 +438,13 @@
 
   .global-search-results {
     position: absolute;
-    left: 0.75rem;
-    right: 0.75rem;
+    left: auto;
+    right: 0;
     top: calc(100% - 0.25rem);
     z-index: 400;
-    max-height: 20rem;
+    width: min(36rem, calc(100vw - 2rem));
+    min-height: min(15rem, calc(100vh - 5rem));
+    max-height: min(28rem, calc(100vh - 5rem));
     overflow: auto;
     border: 1px solid var(--vt-color-border-strong);
     border-radius: var(--vt-radius-md);
