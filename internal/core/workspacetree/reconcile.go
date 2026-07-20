@@ -67,12 +67,12 @@ func (r *Reconciler) run() {
 			r.events = append(r.events, ReconEvent{
 				Name: "workspace-tree.changed",
 				Payload: map[string]interface{}{
-					"action":          "workspace.external-created",
-					"workspaceId":     id,
-					"workspaceName":   ws.Name,
-					"workspacePath":   ws.RootPath,
+					"action":            "workspace.external-created",
+					"workspaceId":       id,
+					"workspaceName":     ws.Name,
+					"workspacePath":     ws.RootPath,
 					"workspaceRootPath": ws.RootPath,
-					"timestamp":       now,
+					"timestamp":         now,
 				},
 			})
 		} else if prevEntry.Path != ws.RootPath {
@@ -85,11 +85,11 @@ func (r *Reconciler) run() {
 			r.events = append(r.events, ReconEvent{
 				Name: "workspace-tree.changed",
 				Payload: map[string]interface{}{
-					"action":          "workspace.external-deleted",
-					"workspaceId":     id,
-					"workspacePath":   prevEntry.Path,
+					"action":            "workspace.external-deleted",
+					"workspaceId":       id,
+					"workspacePath":     prevEntry.Path,
 					"workspaceRootPath": prevEntry.Path,
-					"timestamp":       now,
+					"timestamp":         now,
 				},
 			})
 		}
@@ -307,15 +307,15 @@ func (r *Reconciler) emitFolderMove(id string, f ScannedFolder, prevEntry Snapsh
 	r.events = append(r.events, ReconEvent{
 		Name: "workspace-tree.changed",
 		Payload: map[string]interface{}{
-			"action":       action,
-			"folderId":     id,
-			"folderName":   f.Name,
-			"folderPath":   f.Path,
-			"previousPath": prevEntry.Path,
-			"parentId":     f.ParentID,
-			"nameChanged":  mi.NameChanged,
+			"action":        action,
+			"folderId":      id,
+			"folderName":    f.Name,
+			"folderPath":    f.Path,
+			"previousPath":  prevEntry.Path,
+			"parentId":      f.ParentID,
+			"nameChanged":   mi.NameChanged,
 			"parentChanged": mi.ParentChanged,
-			"timestamp":    now,
+			"timestamp":     now,
 		},
 	})
 }

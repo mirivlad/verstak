@@ -154,5 +154,3 @@ func SetFolderAppearanceByID(vaultDir, folderID string, patch *FolderAppearance)
 	svc := &Service{vaultDir: vaultDir}
 	return svc.SetFolderAppearance(folderID, patch)
 }
-
-

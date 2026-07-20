@@ -12,14 +12,14 @@ import (
 )
 
 const (
-	EntityNode              = "node"
-	EntityNote              = "note"
-	EntityFile              = "file"
-	EntityFolder            = "folder"
-	EntityWorkspaceFolder   = "workspace-folder"
-	EntityWorkspace         = "workspace"
-	EntityAction            = "action"
-	EntityWorklog           = "worklog"
+	EntityNode            = "node"
+	EntityNote            = "note"
+	EntityFile            = "file"
+	EntityFolder          = "folder"
+	EntityWorkspaceFolder = "workspace-folder"
+	EntityWorkspace       = "workspace"
+	EntityAction          = "action"
+	EntityWorklog         = "worklog"
 )
 
 const (

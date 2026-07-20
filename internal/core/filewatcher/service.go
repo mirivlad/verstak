@@ -65,21 +65,21 @@ type Service struct {
 	bus      *events.Bus
 	interval time.Duration
 
-	mu       sync.Mutex
-	root     string
-	cancel   chan struct{}
-	done     chan struct{}
-	current  map[string]snapshotEntry
+	mu      sync.Mutex
+	root    string
+	cancel  chan struct{}
+	done    chan struct{}
+	current map[string]snapshotEntry
 
 	// Callbacks.
-	onChange           func()              // content changes (sync scan, etc.)
-	onStructuralChange func()              // triggers tree reconciliation
+	onChange           func()               // content changes (sync scan, etc.)
+	onStructuralChange func()               // triggers tree reconciliation
 	resolveWorkspace   ResolveWorkspaceFunc // resolves path → workspace
 
 	// scan error tracking.
-	scanErrors  int
-	lastErr     error
-	dirty       bool // structural dirty flag after scan error
+	scanErrors int
+	lastErr    error
+	dirty      bool // structural dirty flag after scan error
 }
 
 // NewService creates a watcher. interval=0 uses default.

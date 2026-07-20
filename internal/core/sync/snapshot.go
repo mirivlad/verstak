@@ -447,7 +447,9 @@ func scanTreeSnapshots(root string, preferredWS map[string]WorkspaceSnapshot, pr
 		// Check for workspace marker.
 		wsMarkerPath := filepath.Join(path, ".verstak", "workspace.json")
 		if data, err := os.ReadFile(wsMarkerPath); err == nil {
-			var marker struct{ WorkspaceID string `json:"workspaceId"` }
+			var marker struct {
+				WorkspaceID string `json:"workspaceId"`
+			}
 			if json.Unmarshal(data, &marker) != nil || !isValidUUID(marker.WorkspaceID) {
 				warnings = append(warnings, "invalid-workspace-id: "+rel)
 				return filepath.SkipDir
@@ -462,7 +464,9 @@ func scanTreeSnapshots(root string, preferredWS map[string]WorkspaceSnapshot, pr
 		// Check for folder marker.
 		fMarkerPath := filepath.Join(path, ".verstak", "folder.json")
 		if data, err := os.ReadFile(fMarkerPath); err == nil {
-			var marker struct{ FolderID string `json:"folderId"` }
+			var marker struct {
+				FolderID string `json:"folderId"`
+			}
 			if json.Unmarshal(data, &marker) != nil || !isValidUUID(marker.FolderID) {
 				warnings = append(warnings, "invalid-folder-id: "+rel)
 				return nil

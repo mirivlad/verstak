@@ -460,11 +460,11 @@ func writeWorkspaceMetadataV2(workspaceDir, workspaceID, workspaceName, template
 }
 
 var templateRegistry = map[string]templateDef{
-	"default":  {ID: "default", Name: "General", Selectable: true, Order: 10, WorkspaceTools: []string{"verstak.notes", "verstak.files", "verstak.journal", "verstak.activity", "verstak.browser-inbox"}},
-	"project":  {ID: "project", Name: "Project", Selectable: true, Order: 20, WorkspaceTools: []string{"verstak.notes", "verstak.files", "verstak.todo", "verstak.journal", "verstak.activity", "verstak.browser-inbox"}},
-	"writing":  {ID: "writing", Name: "Writing", Selectable: true, Order: 30, WorkspaceTools: []string{"verstak.notes", "verstak.files", "verstak.journal"}},
-	"admin":    {ID: "admin", Name: "Admin", Selectable: true, Order: 40, WorkspaceTools: []string{"verstak.notes", "verstak.files", "verstak.secrets", "verstak.todo", "verstak.journal"}},
-	"minimal":  {ID: "minimal", Name: "Minimal", Selectable: true, Order: 50, WorkspaceTools: []string{"verstak.notes", "verstak.files"}},
+	"default":        {ID: "default", Name: "General", Selectable: true, Order: 10, WorkspaceTools: []string{"verstak.notes", "verstak.files", "verstak.journal", "verstak.activity", "verstak.browser-inbox"}},
+	"project":        {ID: "project", Name: "Project", Selectable: true, Order: 20, WorkspaceTools: []string{"verstak.notes", "verstak.files", "verstak.todo", "verstak.journal", "verstak.activity", "verstak.browser-inbox"}},
+	"writing":        {ID: "writing", Name: "Writing", Selectable: true, Order: 30, WorkspaceTools: []string{"verstak.notes", "verstak.files", "verstak.journal"}},
+	"admin":          {ID: "admin", Name: "Admin", Selectable: true, Order: 40, WorkspaceTools: []string{"verstak.notes", "verstak.files", "verstak.secrets", "verstak.todo", "verstak.journal"}},
+	"minimal":        {ID: "minimal", Name: "Minimal", Selectable: true, Order: 50, WorkspaceTools: []string{"verstak.notes", "verstak.files"}},
 	"client-project": {ID: "client-project", Name: "Client Project", Selectable: false, WorkspaceTools: []string{"verstak.notes", "verstak.files", "verstak.secrets"}},
 }
 
@@ -494,11 +494,16 @@ func toolsToFeatures(tools []string) map[string]bool {
 	f := map[string]bool{"files": true, "notes": true}
 	for _, t := range tools {
 		switch t {
-		case "verstak.journal": f["journal"] = true
-		case "verstak.activity": f["activity"] = true
-		case "verstak.browser-inbox": f["browser-inbox"] = true
-		case "verstak.todo": f["todo"] = true
-		case "verstak.secrets": f["secrets"] = true
+		case "verstak.journal":
+			f["journal"] = true
+		case "verstak.activity":
+			f["activity"] = true
+		case "verstak.browser-inbox":
+			f["browser-inbox"] = true
+		case "verstak.todo":
+			f["todo"] = true
+		case "verstak.secrets":
+			f["secrets"] = true
 		}
 	}
 	return f

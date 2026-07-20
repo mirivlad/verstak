@@ -8,7 +8,7 @@ import (
 
 const (
 	snapshotSchemaVersion = 1
-	snapshotRelPath        = ".verstak/cache/workspace-tree.json"
+	snapshotRelPath       = ".verstak/cache/workspace-tree.json"
 )
 
 // ReadSnapshot reads the last known semantic snapshot. Returns nil if none exists.
