@@ -60,7 +60,7 @@ VERSTAK_RELEASE_PLUGIN_DIR="$WINDOWS_PLUGIN_DIST" go test ./internal/core/plugin
 # therefore has to be supplied through the standard Go environment instead.
 # The portable archive uses the installed Evergreen WebView2 Runtime, so never
 # compile an Evergreen downloader into the executable.
-CC="$WINDOWS_CC" CGO_ENABLED=1 "$WAILS" build -clean -platform windows/amd64 \
+CC="$WINDOWS_CC" CGO_ENABLED=1 GOFLAGS="${GOFLAGS:+$GOFLAGS }-buildvcs=false" "$WAILS" build -clean -platform windows/amd64 \
   -webview2 error -o verstak-desktop.exe
 
 WINDOWS_BINARY="$ROOT/build/bin/verstak-desktop.exe"

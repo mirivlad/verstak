@@ -59,7 +59,7 @@ echo "  🔍 go vet..."
 echo "  ✅ go vet"
 
 echo "  🔨 go build..."
-(cd "$ROOT" && go build ./...)
+(cd "$ROOT" && go build -buildvcs=false ./...)
 echo "  ✅ go build"
 
 echo "  🧪 go test..."
@@ -131,7 +131,7 @@ if [ -z "$WAILS" ]; then
 fi
 
 echo "  🔨 wails build..."
-(cd "$ROOT" && "$WAILS" build -clean $WAILS_TAGS)
+(cd "$ROOT" && GOFLAGS="${GOFLAGS:+$GOFLAGS }-buildvcs=false" "$WAILS" build -clean $WAILS_TAGS)
 echo "  ✅ wails build"
 
 # Copy plugins/ to build/bin/ so the binary can find them at runtime
