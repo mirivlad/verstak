@@ -119,6 +119,8 @@ export function OpenWorkbenchResource(arg1:string,arg2:Record<string, any>):Prom
 
 export function PluginBrowserReceiverPairing(arg1:string):Promise<Record<string, string>|string>;
 
+export function PluginListWorkspaces(arg1:string):Promise<Array<api.PluginWorkspaceDTO>|string>;
+
 export function PluginRotateBrowserReceiverToken(arg1:string):Promise<Record<string, string>|string>;
 
 export function PluginSecretsCopyLink(arg1:string,arg2:string):Promise<string|string>;

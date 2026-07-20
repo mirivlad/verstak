@@ -29,6 +29,7 @@ import (
 	syncsvc "github.com/verstak/verstak-desktop/internal/core/sync"
 	"github.com/verstak/verstak-desktop/internal/core/vault"
 	"github.com/verstak/verstak-desktop/internal/core/workspace"
+	"github.com/verstak/verstak-desktop/internal/core/workspacetree"
 )
 
 type fakeNotificationScheduler struct {
@@ -2020,6 +2021,46 @@ func TestPluginSyncFailureStatusPreservesLastSuccess(t *testing.T) {
 	}
 	if status.LastSyncAt != "2026-07-20T10:00:00Z" {
 		t.Fatalf("LastSyncAt = %q", status.LastSyncAt)
+	}
+}
+
+func TestPluginListWorkspacesReturnsNestedDealsOnly(t *testing.T) {
+	app, root := newFilesTestApp(t, []string{"files.read"})
+	writeMarker := func(relativePath, fileName, body string) {
+		t.Helper()
+		dir := filepath.Join(root, filepath.FromSlash(relativePath), ".verstak")
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, fileName), []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	writeMarker("Clients", "folder.json", `{"schemaVersion":1,"folderId":"11111111-1111-4111-8111-111111111111"}`)
+	writeMarker("Clients/Acme", "workspace.json", `{"schemaVersion":1,"workspaceId":"22222222-2222-4222-8222-222222222222"}`)
+	writeMarker("Project", "workspace.json", `{"schemaVersion":1,"workspaceId":"33333333-3333-4333-8333-333333333333"}`)
+	app.treeV2 = workspacetree.NewService(root, nil)
+	if err := app.treeV2.Initialize(); err != nil {
+		t.Fatal(err)
+	}
+
+	rows, errText := app.PluginListWorkspaces("files.plugin")
+	if errText != "" {
+		t.Fatal(errText)
+	}
+	if len(rows) != 3 {
+		t.Fatalf("workspaces = %#v", rows)
+	}
+	paths := map[string]bool{}
+	for _, row := range rows {
+		paths[row.RootPath] = true
+	}
+	if !paths["Clients/Acme"] || !paths["Project"] || !paths["Workspace"] || paths["Clients"] {
+		t.Fatalf("workspaces = %#v", rows)
+	}
+	app.plugins[0].Manifest.Permissions = nil
+	if _, errText := app.PluginListWorkspaces("files.plugin"); !strings.Contains(errText, "files.read") {
+		t.Fatalf("permission error = %q", errText)
 	}
 }
 

@@ -398,6 +398,15 @@ export function createPluginAPI(pluginId) {
       }
     },
 
+    workspaces: {
+      list: function() {
+        assertActive('workspaces.list');
+        return callBackend(pluginId, 'workspaces.list', function() {
+          return App.PluginListWorkspaces(pluginId);
+        });
+      }
+    },
+
     files: {
       list: function(relativeDir) {
         assertActive('files.list');

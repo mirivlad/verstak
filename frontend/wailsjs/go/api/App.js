@@ -218,6 +218,10 @@ export function PluginBrowserReceiverPairing(arg1) {
   return window['go']['api']['App']['PluginBrowserReceiverPairing'](arg1);
 }
 
+export function PluginListWorkspaces(arg1) {
+  return window['go']['api']['App']['PluginListWorkspaces'](arg1);
+}
+
 export function PluginRotateBrowserReceiverToken(arg1) {
   return window['go']['api']['App']['PluginRotateBrowserReceiverToken'](arg1);
 }

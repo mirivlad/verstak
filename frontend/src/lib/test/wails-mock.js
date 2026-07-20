@@ -3953,6 +3953,19 @@ import journalSource from '../../../../../verstak-official-plugins/plugins/journ
     GetWorkspaceTreeV2: function () {
       return Promise.resolve(workspaceTreeV2Snapshot());
     },
+    PluginListWorkspaces: function (pluginId) {
+      var err = requirePluginPermission(pluginId, 'files.read');
+      if (err) return Promise.resolve([[], err]);
+      var out = [];
+      function collect(nodes) {
+        (nodes || []).forEach(function (node) {
+          if (node.kind === 'workspace') out.push({ id: node.id, name: node.name, rootPath: node.path });
+          collect(node.children);
+        });
+      }
+      collect(workspaceTreeV2Snapshot().roots);
+      return Promise.resolve([out, '']);
+    },
     GetWorkspaceByID: function (id) {
       for (var i = 0; i < workspaceTree.nodes.length; i++) {
         var n = workspaceTree.nodes[i];

@@ -2853,6 +2853,35 @@ func (a *App) GetWorkspaceTreeV2() map[string]interface{} {
 	}
 }
 
+// PluginWorkspaceDTO is the read-only Deal identity exposed to plugins.
+type PluginWorkspaceDTO struct {
+	ID       string `json:"id"`
+	Name     string `json:"name"`
+	RootPath string `json:"rootPath"`
+}
+
+// PluginListWorkspaces returns semantic Deal nodes recursively, excluding folders.
+func (a *App) PluginListWorkspaces(pluginID string) ([]PluginWorkspaceDTO, string) {
+	if _, err := a.requirePluginAccess(pluginID, "files.read"); err != nil {
+		return nil, err.Error()
+	}
+	if a.treeV2 == nil {
+		return nil, "workspace tree not initialized"
+	}
+	rows := make([]PluginWorkspaceDTO, 0)
+	var collect func([]workspacetree.TreeNode)
+	collect = func(nodes []workspacetree.TreeNode) {
+		for _, node := range nodes {
+			if node.Kind == "workspace" {
+				rows = append(rows, PluginWorkspaceDTO{ID: node.ID, Name: node.Name, RootPath: node.Path})
+			}
+			collect(node.Children)
+		}
+	}
+	collect(a.treeV2.GetTree().Roots)
+	return rows, ""
+}
+
 // GetWorkspaceByID returns a single workspace by its durable UUID.
 func (a *App) GetWorkspaceByID(id string) map[string]interface{} {
 	if a.treeV2 == nil {

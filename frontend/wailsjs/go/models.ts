@@ -307,8 +307,25 @@ export namespace api {
 	
 	
 	
+	export class PluginWorkspaceDTO {
+	    id: string;
+	    name: string;
+	    rootPath: string;
+
+	    static createFrom(source: any = {}) {
+	        return new PluginWorkspaceDTO(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.name = source["name"];
+	        this.rootPath = source["rootPath"];
+	    }
+	}
 	export class SyncStatusDTO {
 	    configured: boolean;
+	    syncing: boolean;
 	    serverUrl: string;
 	    vaultId: string;
 	    deviceId: string;
@@ -330,6 +347,7 @@ export namespace api {
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.configured = source["configured"];
+	        this.syncing = source["syncing"];
 	        this.serverUrl = source["serverUrl"];
 	        this.vaultId = source["vaultId"];
 	        this.deviceId = source["deviceId"];
@@ -1433,4 +1451,3 @@ export namespace workspacetree {
 	}
 
 }
-
