@@ -18,6 +18,7 @@
   let settingsPanel = null;
   let settingsData = {};
   let settingsPluginId = '';
+  let settingsHost = null;
   let settingsError = null;
   let settingsPluginInfo = null;
   let lastOpenedKey = '';
@@ -42,11 +43,15 @@
   export let activeSettingsPluginId = '';
   export let activeSettingsPanelId = '';
 
-  $: if (activeSettingsPluginId) {
-    const settingsPanelCount = (contributions.settingsPanels || []).length;
-    const key = `${activeSettingsPluginId}:${activeSettingsPanelId || '*'}`;
-    if (key !== lastOpenedKey || settingsPanelCount === 0) {
-      openSettingsFromProps(activeSettingsPluginId, activeSettingsPanelId);
+  $: {
+    if (activeSettingsPluginId) {
+      const settingsPanelCount = (contributions.settingsPanels || []).length;
+      const key = `${activeSettingsPluginId}:${activeSettingsPanelId || '*'}`;
+      if (key !== lastOpenedKey || settingsPanelCount === 0) {
+        openSettingsFromProps(activeSettingsPluginId, activeSettingsPanelId);
+      }
+    } else {
+      lastOpenedKey = '';
     }
   }
 
@@ -356,10 +361,11 @@
   }
 
   function closeSettings() {
+    settingsHost?.dispose?.();
+    settingsHost = null;
     settingsPanel = null;
     settingsPluginId = '';
     settingsError = null;
-    lastOpenedKey = '';
     window.dispatchEvent(new CustomEvent('verstak:close-settings'));
   }
 
@@ -591,6 +597,7 @@
         <p class="settings-hint">{tr('common.plugin')}: <code>{settingsPluginId}</code></p>
         {#if settingsPluginInfo && settingsPluginInfo.entry}
           <PluginBundleHost
+            bind:this={settingsHost}
             pluginId={settingsPluginId}
             componentId={settingsPanel.component || settingsPanel.id}
           />

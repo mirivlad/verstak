@@ -9,6 +9,8 @@ import secretsSource from '../../../../../verstak-official-plugins/plugins/secre
 import activitySource from '../../../../../verstak-official-plugins/plugins/activity/frontend/src/index.js?raw';
 import todoSource from '../../../../../verstak-official-plugins/plugins/todo/frontend/src/index.js?raw';
 import journalSource from '../../../../../verstak-official-plugins/plugins/journal/frontend/src/index.js?raw';
+import importSource from '../../../../../verstak-official-plugins/plugins/import/frontend/dist/index.js?raw';
+import importStyle from '../../../../../verstak-official-plugins/plugins/import/frontend/dist/style.css?raw';
 
 (function () {
   if (window.__wailsMockReady) return;
@@ -262,6 +264,7 @@ import journalSource from '../../../../../verstak-official-plugins/plugins/journ
     },
     'verstak.todo': makeTodoPluginState(),
     'verstak.secrets': makeSecretsPluginState(),
+    'verstak.import': makeImportPluginState(),
     'verstak.search': {
       status: 'loaded',
       enabled: true,
@@ -301,7 +304,8 @@ import journalSource from '../../../../../verstak-official-plugins/plugins/journ
     'verstak.search': 'Поиск',
     'verstak.trash': 'Корзина',
     'verstak.todo': 'Задачи',
-    'verstak.secrets': 'Секреты'
+    'verstak.secrets': 'Секреты',
+    'verstak.import': 'Импорт'
   };
   var russianContributionLabels = {
     'verstak.platform-test.diagnostics': 'Диагностика платформы',
@@ -355,6 +359,8 @@ import journalSource from '../../../../../verstak-official-plugins/plugins/journ
   vaultPluginState.desiredPlugins.push({ id: 'verstak.todo', version: '0.1.0', source: 'official' });
   vaultPluginState.enabledPlugins.push('verstak.secrets');
   vaultPluginState.desiredPlugins.push({ id: 'verstak.secrets', version: '0.1.0', source: 'official' });
+  vaultPluginState.enabledPlugins.push('verstak.import');
+  vaultPluginState.desiredPlugins.push({ id: 'verstak.import', version: '0.1.0', source: 'official' });
   var appSettings = {
     currentVaultPath: '/tmp/verstak-test/vault',
     recentVaults: [],
@@ -379,6 +385,9 @@ import journalSource from '../../../../../verstak-official-plugins/plugins/journ
   var listVaultFilesResponseMode = 'tuple';
   var syncState = makeDefaultSyncState();
   var readTextDelay = 0;
+  var importSessions = {};
+  var importSequence = 0;
+  var importRunCounts = { dokuwiki: 0, obsidian: 0 };
 
   // ── Helpers ────────────────────────────────────────────────────────
   function makeDefaultWorkspaceTree() {
@@ -644,6 +653,90 @@ import journalSource from '../../../../../verstak-official-plugins/plugins/journ
     };
   }
 
+  function makeImportPluginState() {
+    return {
+      status: 'loaded',
+      enabled: true,
+      manifest: {
+        schemaVersion: 1,
+        id: 'verstak.import',
+        name: 'Import',
+        version: '0.1.0',
+        apiVersion: '0.1.0',
+        description: 'Review and import current DokuWiki or Obsidian content.',
+        source: 'official',
+        icon: 'archive-restore',
+        provides: ['verstak/import/v1'],
+        requires: ['verstak/core/import/v1'],
+        permissions: ['imports.readExternal', 'imports.apply', 'storage.namespace', 'ui.register'],
+        frontend: { entry: 'frontend/dist/index.js', style: 'frontend/dist/style.css' },
+        contributes: {
+          settingsPanels: [{ id: 'verstak.import.settings', title: 'Import', component: 'ImportSettings' }]
+        }
+      },
+      rootPath: '/tmp/verstak-test/plugins/import',
+      error: ''
+    };
+  }
+
+  function importEntry(id, path, mediaHint) {
+    return {
+      id: id,
+      path: path,
+      kind: 'file',
+      size: 32,
+      modifiedAt: '2026-07-20T10:00:00Z',
+      mediaHint: mediaHint || 'application/octet-stream'
+    };
+  }
+
+  function makeImportSource(kind) {
+    importSequence += 1;
+    var handle = 'mock-import-' + kind + '-' + importSequence;
+    var isArchive = kind === 'archive';
+    var entries = isArchive ? [
+      importEntry('doku-start', 'wiki/data/pages/project/start.txt', 'text/plain'),
+      importEntry('doku-plan', 'wiki/data/pages/project/plan.txt', 'text/plain'),
+      importEntry('doku-private', 'wiki/data/pages/private/passwords.txt', 'text/plain'),
+      importEntry('doku-logo', 'wiki/data/media/media/logo.png', 'image/png'),
+      importEntry('legacy-home', 'legacy/pages/home.txt', 'text/plain')
+    ] : [
+      importEntry('obsidian-settings', 'Vault/.obsidian/app.json', 'application/json'),
+      importEntry('obsidian-readme', 'Vault/Projects/Readme.md', 'text/markdown'),
+      importEntry('obsidian-plan', 'Vault/Projects/Plan.md', 'text/markdown'),
+      importEntry('obsidian-diagram', 'Vault/Projects/diagram.png', 'image/png'),
+      importEntry('obsidian-backup', 'Vault/Projects/backup.zip', 'application/zip')
+    ];
+    var texts = isArchive ? {
+      'doku-start': '====== Start ======\n[[project:plan|Plan]] {{:media:logo.png|Logo}}',
+      'doku-plan': '====== Plan ======\n  * Review',
+      'doku-private': 'Ordinary synthetic page',
+      'legacy-home': '====== Legacy ======'
+    } : {
+      'obsidian-readme': '# Readme\n[[Plan]] ![[diagram.png]]',
+      'obsidian-plan': '# Plan\n- [ ] Review'
+    };
+    var fingerprint = 'mock-fingerprint-' + kind;
+    importSessions[handle] = { handle: handle, kind: kind, entries: entries, texts: texts, fingerprint: fingerprint, cancelled: false, closed: false };
+    return {
+      sourceHandle: handle,
+      kind: isArchive ? 'archive' : 'directory',
+      displayPath: isArchive ? 'backup.tar.gz' : 'Vault',
+      displayName: isArchive ? 'backup.tar.gz' : 'Vault',
+      fingerprint: fingerprint,
+      entryCount: entries.length,
+      totalBytes: entries.reduce(function (total, entry) { return total + entry.size; }, 0)
+    };
+  }
+
+  function importSession(pluginId, sourceHandle, permission) {
+    var err = requirePluginPermission(pluginId, permission);
+    if (err) return { error: err };
+    var session = importSessions[sourceHandle];
+    if (!session || session.closed) return { error: 'import-source-not-found' };
+    return { session: session };
+  }
+
   function makeDefaultSyncState() {
     return {
       configured: false,
@@ -742,6 +835,7 @@ import journalSource from '../../../../../verstak-official-plugins/plugins/journ
     caps.push({ name: 'verstak/core/workbench/v1', description: 'Workbench routing', pluginId: 'verstak-desktop', status: 'stable' });
     caps.push({ name: 'verstak/core/sync/v1', description: 'Sync API', pluginId: 'verstak-desktop', status: 'stable' });
     caps.push({ name: 'verstak/core/notifications/v1', description: 'Native notifications', pluginId: 'verstak-desktop', status: 'stable' });
+    caps.push({ name: 'verstak/core/import/v1', description: 'Safe external import sessions', pluginId: 'verstak-desktop', status: 'stable' });
     for (var id in pluginStates) {
       var s = pluginStates[id];
       if (s.status === 'loaded' && s.enabled && s.manifest && s.manifest.provides) {
@@ -767,7 +861,9 @@ import journalSource from '../../../../../verstak-official-plugins/plugins/journ
       { name: 'files.openExternal', description: 'Open vault files and folders externally', dangerous: true },
       { name: 'workbench.open', description: 'Request Workbench open/edit routing', dangerous: false },
       { name: 'network.remote', description: 'Connect to remote network services', dangerous: true },
-      { name: 'sync.participate', description: 'Participate in vault sync', dangerous: true }
+      { name: 'sync.participate', description: 'Participate in vault sync', dangerous: true },
+      { name: 'imports.readExternal', description: 'Read a selected external source', dangerous: true },
+      { name: 'imports.apply', description: 'Apply a reviewed import plan', dangerous: true }
     ];
   }
 
@@ -3404,6 +3500,70 @@ import journalSource from '../../../../../verstak-official-plugins/plugins/journ
     GetPluginLocalization: function (pluginId, locale) {
       return Promise.resolve([mockPluginCatalog(pluginId, locale), '']);
     },
+    PluginSelectImportDirectory: function (pluginId) {
+      var err = requirePluginPermission(pluginId, 'imports.readExternal');
+      return Promise.resolve(err ? [{}, err] : [makeImportSource('directory'), '']);
+    },
+    PluginSelectImportArchive: function (pluginId) {
+      var err = requirePluginPermission(pluginId, 'imports.readExternal');
+      return Promise.resolve(err ? [{}, err] : [makeImportSource('archive'), '']);
+    },
+    PluginListImportEntries: function (pluginId, sourceHandle, cursor) {
+      var found = importSession(pluginId, sourceHandle, 'imports.readExternal');
+      if (found.error) return Promise.resolve([{}, found.error]);
+      if (cursor) return Promise.resolve([{ entries: [], nextCursor: '', fingerprint: found.session.fingerprint }, '']);
+      return Promise.resolve([{ entries: found.session.entries.map(cloneJson), nextCursor: '', fingerprint: found.session.fingerprint }, '']);
+    },
+    PluginReadImportText: function (pluginId, sourceHandle, entryId) {
+      var found = importSession(pluginId, sourceHandle, 'imports.readExternal');
+      if (found.error) return Promise.resolve(['', found.error]);
+      if (!Object.prototype.hasOwnProperty.call(found.session.texts, entryId)) return Promise.resolve(['', 'import-entry-not-text']);
+      return Promise.resolve([found.session.texts[entryId], '']);
+    },
+    PluginApplyImportPlan: function (pluginId, sourceHandle, plan) {
+      var found = importSession(pluginId, sourceHandle, 'imports.apply');
+      if (found.error) return Promise.resolve([{}, found.error]);
+      var session = found.session;
+      session.cancelled = false;
+      var format = String((plan && plan.runName) || '').indexOf('DokuWiki') === 0 ? 'dokuwiki' : 'obsidian';
+      importRunCounts[format] += 1;
+      var runName = plan && plan.runName ? plan.runName : (format === 'dokuwiki' ? 'DokuWiki' : 'Obsidian');
+      var suffix = importRunCounts[format] > 1 ? ' (' + importRunCounts[format] + ')' : '';
+      var nodes = Array.isArray(plan && plan.nodes) ? plan.nodes : [];
+      var count = function (kind) { return nodes.filter(function (node) { return node.kind === kind; }).length; };
+      window.__VERSTAK_DISPATCH_IMPORT_PROGRESS__?.({ pluginId: pluginId, sourceHandle: sourceHandle, phase: 'staging', completed: 1, total: 2, cancellable: true, message: '' });
+      return new Promise(function (resolve) {
+        setTimeout(function () {
+          if (session.cancelled) {
+            resolve([{}, 'import-cancelled']);
+            return;
+          }
+          window.__VERSTAK_DISPATCH_IMPORT_PROGRESS__?.({ pluginId: pluginId, sourceHandle: sourceHandle, phase: 'publishing', completed: 2, total: 2, cancellable: false, message: '' });
+          resolve([{
+            runPath: 'Импортировано/' + runName + suffix,
+            folders: count('folder'),
+            workspaces: count('workspace'),
+            notes: count('note'),
+            files: count('file'),
+            skipped: count('skip'),
+            warnings: []
+          }, '']);
+        }, 250);
+      });
+    },
+    PluginCancelImport: function (pluginId, sourceHandle) {
+      var found = importSession(pluginId, sourceHandle, 'imports.apply');
+      if (found.error) return Promise.resolve(found.error);
+      found.session.cancelled = true;
+      return Promise.resolve('');
+    },
+    PluginCloseImportSource: function (pluginId, sourceHandle) {
+      var found = importSession(pluginId, sourceHandle, 'imports.readExternal');
+      if (found.error === 'import-source-not-found') return Promise.resolve('');
+      if (found.error) return Promise.resolve(found.error);
+      found.session.closed = true;
+      return Promise.resolve('');
+    },
     PluginSecretsStatus: function () {
       return Promise.resolve([{ initialized: true, unlocked: true }, '']);
     },
@@ -3616,6 +3776,12 @@ import journalSource from '../../../../../verstak-official-plugins/plugins/journ
       }
       if (pluginId === 'verstak.search' && assetPath === 'frontend/dist/index.js') {
         return Promise.resolve(searchPluginBundle());
+      }
+      if (pluginId === 'verstak.import' && assetPath === 'frontend/dist/index.js') {
+        return Promise.resolve(importSource);
+      }
+      if (pluginId === 'verstak.import' && assetPath === 'frontend/dist/style.css') {
+        return Promise.resolve(importStyle);
       }
       return Promise.resolve('');
     },
@@ -4328,6 +4494,7 @@ import journalSource from '../../../../../verstak-official-plugins/plugins/journ
         },
         'verstak.todo': makeTodoPluginState(),
         'verstak.secrets': makeSecretsPluginState(),
+        'verstak.import': makeImportPluginState(),
         'verstak.search': {
           status: 'loaded',
           enabled: true,
@@ -4362,12 +4529,15 @@ import journalSource from '../../../../../verstak-official-plugins/plugins/journ
       vaultPluginState.desiredPlugins.push({ id: 'verstak.todo', version: '0.1.0', source: 'official' });
       vaultPluginState.enabledPlugins.push('verstak.secrets');
       vaultPluginState.desiredPlugins.push({ id: 'verstak.secrets', version: '0.1.0', source: 'official' });
+      vaultPluginState.enabledPlugins.push('verstak.import');
+      vaultPluginState.desiredPlugins.push({ id: 'verstak.import', version: '0.1.0', source: 'official' });
       localStorage.removeItem('verstak-test-language');
       appSettings = { currentVaultPath: '/tmp/verstak-test/vault', recentVaults: [], language: 'system' };
       workbenchPreferences = {};
       openedResources = [];
       pluginSettings = { 'verstak.platform-test': { savedText: 'initial value' } };
       pluginNotifications = {};
+      pluginData = {};
       secretRecords = makeDefaultSecretRecords();
       vaultFiles = makeDefaultVaultFiles();
       externalOpens = [];
@@ -4380,6 +4550,9 @@ import journalSource from '../../../../../verstak-official-plugins/plugins/journ
       listVaultFilesResponseMode = 'tuple';
       syncState = makeDefaultSyncState();
       readTextDelay = 0;
+      importSessions = {};
+      importSequence = 0;
+      importRunCounts = { dokuwiki: 0, obsidian: 0 };
     },
     setPluginStatus: function (pluginId, status, enabled) {
       if (pluginStates[pluginId]) {
@@ -4389,6 +4562,9 @@ import journalSource from '../../../../../verstak-official-plugins/plugins/journ
     },
     getPluginState: function (pluginId) {
       return pluginStates[pluginId] ? Object.assign({}, pluginStates[pluginId]) : null;
+    },
+    getOpenImportSessionCount: function () {
+      return Object.keys(importSessions).filter(function (handle) { return !importSessions[handle].closed; }).length;
     },
     addSyntheticPlugins: function (count, source) {
       var total = Number(count || 0);

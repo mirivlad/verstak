@@ -50,17 +50,6 @@
   });
 
   function cleanup() {
-    if (releaseCurrentStyle) {
-      releaseCurrentStyle();
-      releaseCurrentStyle = null;
-    }
-    if (currentAPI && typeof currentAPI.dispose === 'function') {
-      try {
-        currentAPI.dispose();
-      } catch (e) {
-        console.error('[PluginBundleHost] API dispose error:', e);
-      }
-    }
     const reg = window.__VERSTAK_PLUGIN_REGISTRY__;
     if (currentPluginId && currentComponent && reg && reg[currentPluginId]) {
       const comp = reg[currentPluginId][currentComponent];
@@ -72,6 +61,17 @@
         }
       }
     }
+    if (currentAPI && typeof currentAPI.dispose === 'function') {
+      try {
+        currentAPI.dispose();
+      } catch (e) {
+        console.error('[PluginBundleHost] API dispose error:', e);
+      }
+    }
+    if (releaseCurrentStyle) {
+      releaseCurrentStyle();
+      releaseCurrentStyle = null;
+    }
     if (mountContainer) {
       mountContainer.innerHTML = '';
     }
@@ -79,6 +79,10 @@
     currentComponent = null;
     currentAPI = null;
     currentPropsKey = '';
+  }
+
+  export function dispose() {
+    cleanup();
   }
 
   function unpackBackendResult(result) {

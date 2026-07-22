@@ -17,12 +17,12 @@ fi
 
 # ── ensure dist packages exist ──
 DIST_ROOT="$OFFICIAL_PLUGINS/dist"
-if [ ! -d "$DIST_ROOT" ] || [ -z "$(find "$DIST_ROOT" -mindepth 1 -maxdepth 1 -type d 2>/dev/null)" ]; then
+if [ ! -d "$DIST_ROOT" ] || [ -z "$(find "$DIST_ROOT" -mindepth 1 -maxdepth 1 -type d 2>/dev/null)" ] || [ ! -f "$DIST_ROOT/import/plugin.json" ]; then
   echo "  ℹ️  dist packages not found at $DIST_ROOT"
   echo "  → Running build.sh in verstak-official-plugins..."
   (cd "$OFFICIAL_PLUGINS" && ./scripts/build.sh)
   echo ""
-  if [ ! -d "$DIST_ROOT" ] || [ -z "$(find "$DIST_ROOT" -mindepth 1 -maxdepth 1 -type d 2>/dev/null)" ]; then
+  if [ ! -d "$DIST_ROOT" ] || [ -z "$(find "$DIST_ROOT" -mindepth 1 -maxdepth 1 -type d 2>/dev/null)" ] || [ ! -f "$DIST_ROOT/import/plugin.json" ]; then
     echo "❌ dist packages still missing after build"
     exit 1
   fi
@@ -51,6 +51,10 @@ mv "$TMP_DIR" "$PLUGIN_DIR"
 
 # ── verify ──
 if [ -d "$PLUGIN_DIR" ]; then
+  if [ ! -f "$PLUGIN_DIR/import/plugin.json" ] || [ ! -f "$PLUGIN_DIR/import/frontend/dist/index.js" ]; then
+    echo "❌ install failed: official import plugin is incomplete"
+    exit 1
+  fi
   FILE_COUNT=$(find "$PLUGIN_DIR" -type f | wc -l)
   echo "  ✅ installed: $PLUGIN_DIR"
   echo "     files:     $FILE_COUNT"
