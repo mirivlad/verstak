@@ -99,6 +99,7 @@ coreCaps := []string{
     "verstak/core/permissions/v1",
     "verstak/core/events/v1",
     "verstak/core/files/v1",
+    "verstak/core/import/v1",
     "verstak/core/workbench/v1",
 }
 capRegistry.Register("verstak-desktop", coreCaps)
@@ -602,11 +603,56 @@ bundled runtime. Это реальный runtime contract для cooperative bun
 | `api.files.deleteTrash(trashId)` | ✅ Работает | Необратимо удаляет запись и payload из internal trash |
 | `api.files.openExternal(relativePath)` | ✅ Работает | Открывает vault file/folder во внешнем приложении, требует `files.openExternal` |
 | `api.files.showInFolder(relativePath)` | ✅ Работает | Показывает vault file/folder в системном файловом менеджере, требует `files.openExternal` |
+| `api.imports.selectDirectory()` | ✅ Работает | Открывает native directory selector и возвращает plugin-owned opaque source session |
+| `api.imports.selectArchive()` | ✅ Работает | Открывает native selector для `.zip`, `.tar`, `.tar.gz`, `.tgz` |
+| `api.imports.listEntries(handle, cursor?)` | ✅ Работает | Возвращает нормализованную inventory page без произвольного filesystem access |
+| `api.imports.readText(handle, entryId)` | ✅ Работает | Читает выбранный UTF-8 text entry до 16 MiB |
+| `api.imports.onProgress(handle, listener)` | ✅ Работает | Подписывает API instance на plugin/source-scoped progress events |
+| `api.imports.applyPlan(handle, plan)` | ✅ Работает | Проверяет fingerprint/plan и транзакционно публикует подтверждённую структуру |
+| `api.imports.cancel(handle)` | ✅ Работает | Отменяет validation/staging; после начала publication возвращает `import-not-cancellable` |
+| `api.imports.closeSource(handle)` | ✅ Работает | Идемпотентно закрывает источник и освобождает session resources |
 | `api.workbench.openResource(request)` | ✅ Работает | Routes vault resources to `openProviders` |
 | `api.workbench.editResource(request)` | ✅ Работает | Same routing, forcing `mode: "edit"` |
 | `api.sync.now()` | ✅ Работает | Snapshot scan, строгий ordered pull/retry и bounded retry/backoff для transient HTTP/network failures |
 | `api.sync.status()` | ✅ Работает | Возвращает configured/connected/error/revoked, remote `vaultId`, lastError/lastWarning и unpushed count |
 | `api.dispose()` | ✅ Работает | Очищает command handlers и event subscriptions текущего API instance |
+
+### Generic Import Runtime
+
+`verstak/core/import/v1` предоставляет UI-плагинам безопасный путь для
+review-first импорта. `imports.readExternal` разрешает native selection,
+inventory, bounded text reads, cancel и close. `imports.apply` дополнительно
+разрешает применение плана. Backend на каждом вызове проверяет, что plugin
+загружен, объявил capability и permission, а opaque `sourceHandle` принадлежит
+этому plugin ID. Session автоматически закрывается при `api.dispose()`, disable,
+закрытии vault или приложения и истекает после 30 минут бездействия.
+
+Fixed source limits:
+
+| Boundary | Limit |
+|---|---:|
+| Entries | 250,000 |
+| Inventory page | 500 |
+| Total unpacked bytes | 20 GiB |
+| One entry | 2 GiB |
+| One UTF-8 text read | 16 MiB |
+| Archive expansion ratio | 1000:1 |
+
+Directory sessions reject symlinks and special files. Archive sessions support
+ZIP, TAR, TAR.GZ and TGZ; they reject links, special entries, absolute/traversal
+paths, normalized duplicates and size/ratio violations. Inventory and source
+metadata form a fingerprint. `applyPlan()` rechecks the source and rejects a
+plan if the handle, fingerprint or referenced entry changed after analysis.
+
+The apply path serializes imports and validates the entire node graph before
+writing. Core checks free space, stages content and workspace registry records
+under `.verstak/import-staging/<handle>`, then publishes the run beneath the
+managed `Импортировано` folder. A private transaction journal supports startup
+recovery and rollback; repeated run names receive `(2)`, `(3)` and so on.
+Progress phases are `validating`, `staging`, `publishing` and `refreshing`.
+Cancellation is safe only through validation/staging and becomes disabled at
+publication, where an atomic rename and registry promotion are already in
+progress.
 
 Ограничения:
 
@@ -626,7 +672,11 @@ bundled runtime. Это реальный runtime contract для cooperative bun
 3. Вызывает `App.GetPluginAssetContent(pluginId, entry)` — получает JS контент
 4. Выполняет контент через `new Function(content)` — bundle вызывает `VerstakPluginRegister`
 5. Находит компонент по componentId и вызывает `mount(container, props, api)`
-6. При смене view — вызывает `unmount(container)` для старого компонента
+6. Если manifest объявляет stylesheet, host получает его тем же asset API,
+   добавляет один ref-counted `<style data-verstak-plugin-style>` на plugin и
+   сохраняет shell CSS variables доступными bundle UI.
+7. При смене view — сначала вызывает `unmount(container)` для старого
+   компонента, затем `api.dispose()` и освобождает stylesheet reference.
 
 ### Безопасность asset path
 
