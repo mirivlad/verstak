@@ -186,6 +186,7 @@ export interface ImportPlanNode {
 
 export interface ImportPlan {
   schemaVersion: 1;
+  sourceHandle: string;
   sourceFingerprint: string;
   runName: string;
   nodes: ImportPlanNode[];
@@ -437,6 +438,7 @@ type PlanNode struct {
 
 type Plan struct {
   SchemaVersion int `json:"schemaVersion"`
+  SourceHandle string `json:"sourceHandle"`
   SourceFingerprint string `json:"sourceFingerprint"`
   RunName string `json:"runName"`
   Nodes []PlanNode `json:"nodes"`
