@@ -90,6 +90,94 @@ if (!window.__VERSTAK_BACKEND_EVENT_BRIDGE__ && window.runtime && typeof window.
   window.__VERSTAK_BACKEND_EVENT_BRIDGE__ = window.runtime.EventsOnMultiple('verstak:plugin-event', dispatchBackendEvent, -1);
 }
 
+window.__VERSTAK_IMPORT_PROGRESS_HANDLERS__ = window.__VERSTAK_IMPORT_PROGRESS_HANDLERS__ || {};
+
+function importProgressKey(pluginId, sourceHandle) {
+  return pluginId + ':' + sourceHandle;
+}
+
+function dispatchImportProgress(progress) {
+  if (!progress || !progress.pluginId || !progress.sourceHandle) return;
+  const key = importProgressKey(progress.pluginId, progress.sourceHandle);
+  const handlers = (window.__VERSTAK_IMPORT_PROGRESS_HANDLERS__[key] || []).slice();
+  handlers.forEach(function(handler) {
+    try {
+      handler(progress);
+    } catch (e) {
+      console.error('[VerstakPluginAPI] import progress handler error:', e);
+    }
+  });
+}
+
+function trackImportProgress(pluginId, sourceHandle, listener) {
+  const key = importProgressKey(pluginId, sourceHandle);
+  const handlers = window.__VERSTAK_IMPORT_PROGRESS_HANDLERS__[key] || [];
+  handlers.push(listener);
+  window.__VERSTAK_IMPORT_PROGRESS_HANDLERS__[key] = handlers;
+  let active = true;
+  return function unsubscribeImportProgress() {
+    if (!active) return;
+    active = false;
+    const current = window.__VERSTAK_IMPORT_PROGRESS_HANDLERS__[key] || [];
+    const remaining = current.filter(function(item) { return item !== listener; });
+    if (remaining.length > 0) {
+      window.__VERSTAK_IMPORT_PROGRESS_HANDLERS__[key] = remaining;
+    } else {
+      delete window.__VERSTAK_IMPORT_PROGRESS_HANDLERS__[key];
+    }
+  };
+}
+
+function clearImportProgress(pluginId, sourceHandle) {
+  delete window.__VERSTAK_IMPORT_PROGRESS_HANDLERS__[importProgressKey(pluginId, sourceHandle)];
+}
+
+window.__VERSTAK_DISPATCH_IMPORT_PROGRESS__ = dispatchImportProgress;
+
+if (!window.__VERSTAK_IMPORT_PROGRESS_BRIDGE__ && window.runtime && typeof window.runtime.EventsOnMultiple === 'function') {
+  window.__VERSTAK_IMPORT_PROGRESS_BRIDGE__ = window.runtime.EventsOnMultiple('verstak:import-progress', dispatchImportProgress, -1);
+}
+
+window.__VERSTAK_PLUGIN_STYLE_RECORDS__ = window.__VERSTAK_PLUGIN_STYLE_RECORDS__ || {};
+
+export async function acquirePluginStyle(pluginId, stylePath) {
+  if (!stylePath) return function() {};
+  const records = window.__VERSTAK_PLUGIN_STYLE_RECORDS__;
+  let record = records[pluginId];
+  if (!record) {
+    record = { refs: 0, element: null, promise: null };
+    records[pluginId] = record;
+    record.promise = callBackend(pluginId, 'frontend.style', function() {
+      return App.GetPluginAssetContent(pluginId, stylePath);
+    }).then(function(content) {
+      if (!content) throw new Error('declared plugin stylesheet is empty');
+      const element = document.createElement('style');
+      element.setAttribute('data-verstak-plugin-style', pluginId);
+      element.textContent = content;
+      document.head.appendChild(element);
+      record.element = element;
+    });
+  }
+  record.refs += 1;
+  try {
+    await record.promise;
+  } catch (error) {
+    record.refs -= 1;
+    if (record.refs === 0 && records[pluginId] === record) delete records[pluginId];
+    throw error;
+  }
+  let released = false;
+  return function releasePluginStyle() {
+    if (released) return;
+    released = true;
+    record.refs -= 1;
+    if (record.refs === 0) {
+      record.element?.remove();
+      if (records[pluginId] === record) delete records[pluginId];
+    }
+  };
+}
+
 function commandKey(pluginId, commandId) {
   return pluginId + ':' + commandId;
 }
@@ -123,6 +211,7 @@ export function createPluginAPI(pluginId) {
   }
 
   const cleanups = [];
+  const importSourceHandles = new Set();
   let disposed = false;
 
   function assertActive(label) {
@@ -140,6 +229,32 @@ export function createPluginAPI(pluginId) {
       }
       fn();
     };
+  }
+
+  async function selectImportSource(kind) {
+    assertActive('imports.select' + (kind === 'archive' ? 'Archive' : 'Directory'));
+    const source = await callBackend(pluginId, 'imports.select' + (kind === 'archive' ? 'Archive' : 'Directory'), function() {
+      return kind === 'archive'
+        ? App.PluginSelectImportArchive(pluginId)
+        : App.PluginSelectImportDirectory(pluginId);
+    });
+    if (!source || !source.sourceHandle) return null;
+    if (disposed) {
+      Promise.resolve(App.PluginCloseImportSource(pluginId, source.sourceHandle)).catch(function() {});
+      throw new Error('[plugin:' + pluginId + '] imports.select failed: API disposed');
+    }
+    importSourceHandles.add(source.sourceHandle);
+    return source;
+  }
+
+  function closeImportSource(sourceHandle) {
+    assertActive('imports.closeSource');
+    return callBackendErrorString(pluginId, 'imports.closeSource', function() {
+      return App.PluginCloseImportSource(pluginId, sourceHandle);
+    }).finally(function() {
+      importSourceHandles.delete(sourceHandle);
+      clearImportProgress(pluginId, sourceHandle);
+    });
   }
 
   return {
@@ -500,6 +615,50 @@ export function createPluginAPI(pluginId) {
       }
     },
 
+    imports: {
+      selectDirectory: function() {
+        return selectImportSource('directory');
+      },
+      selectArchive: function() {
+        return selectImportSource('archive');
+      },
+      listEntries: function(sourceHandle, cursor) {
+        assertActive('imports.listEntries');
+        return callBackend(pluginId, 'imports.listEntries', function() {
+          return App.PluginListImportEntries(pluginId, sourceHandle, cursor || '');
+        });
+      },
+      readText: function(sourceHandle, entryId) {
+        assertActive('imports.readText');
+        return callBackend(pluginId, 'imports.readText', function() {
+          return App.PluginReadImportText(pluginId, sourceHandle, entryId);
+        });
+      },
+      onProgress: function(sourceHandle, listener) {
+        assertActive('imports.onProgress');
+        if (!importSourceHandles.has(sourceHandle)) {
+          throw new Error('[plugin:' + pluginId + '] imports.onProgress failed: unknown source handle');
+        }
+        if (typeof listener !== 'function') {
+          throw new Error('imports.onProgress requires a listener function');
+        }
+        return trackCleanup(trackImportProgress(pluginId, sourceHandle, listener));
+      },
+      applyPlan: function(sourceHandle, plan) {
+        assertActive('imports.applyPlan');
+        return callBackend(pluginId, 'imports.applyPlan', function() {
+          return App.PluginApplyImportPlan(pluginId, sourceHandle, plan);
+        });
+      },
+      cancel: function(sourceHandle) {
+        assertActive('imports.cancel');
+        return callBackendErrorString(pluginId, 'imports.cancel', function() {
+          return App.PluginCancelImport(pluginId, sourceHandle);
+        });
+      },
+      closeSource: closeImportSource
+    },
+
     sync: {
       status: function() {
         assertActive('sync.status');
@@ -634,6 +793,15 @@ export function createPluginAPI(pluginId) {
           console.error('[VerstakPluginAPI] cleanup error:', e);
         }
       }
+      importSourceHandles.forEach(function(sourceHandle) {
+        clearImportProgress(pluginId, sourceHandle);
+        Promise.resolve(App.PluginCloseImportSource(pluginId, sourceHandle)).then(function(error) {
+          if (error) console.error('[VerstakPluginAPI] source cleanup error:', error);
+        }).catch(function(error) {
+          console.error('[VerstakPluginAPI] source cleanup error:', error);
+        });
+      });
+      importSourceHandles.clear();
     }
   };
 }

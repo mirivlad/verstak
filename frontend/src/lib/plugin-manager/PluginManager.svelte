@@ -878,7 +878,17 @@
   .modal-close:hover { color: #e94560; }
   .modal-body { padding: 1rem; overflow: auto; min-height: 0; flex: 1; display: flex; flex-direction: column; }
   .settings-modal-body { padding: 0; }
-  .plugin-settings-surface { width: 90%; min-height: 100%; margin: 0 auto; box-sizing: border-box; display: flex; flex-direction: column; padding: clamp(0.75rem, 1.5vw, 1.25rem); }
+  .plugin-settings-surface {
+    --verstak-plugin-surface: #16213e;
+    --verstak-plugin-border: #0f3460;
+    --verstak-plugin-text: #e0e0f0;
+    --verstak-plugin-text-muted: #a0a0b8;
+    --verstak-plugin-accent: #4ecca3;
+    --verstak-plugin-danger: #e94560;
+    --verstak-plugin-radius: 8px;
+    --verstak-plugin-control-height: 2.25rem;
+    width: 90%; min-height: 100%; margin: 0 auto; box-sizing: border-box; display: flex; flex-direction: column; padding: clamp(0.75rem, 1.5vw, 1.25rem);
+  }
   .plugin-settings-surface :global(.plugin-bundle-host) { flex: 1; min-height: 0; display: flex; flex-direction: column; }
   .settings-hint { color: #666; font-size: 0.8rem; margin: 0.25rem 0; }
   .settings-hint code { color: #4ecca3; }

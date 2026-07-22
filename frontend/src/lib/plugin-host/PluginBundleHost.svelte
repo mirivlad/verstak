@@ -4,7 +4,7 @@
   import Icon from '../ui/Icon.svelte';
   import { i18n } from '../i18n/index.js';
 
-  import { createPluginAPI } from './VerstakPluginAPI.js';
+  import { acquirePluginStyle, createPluginAPI } from './VerstakPluginAPI.js';
 
   export let pluginId = null;
   export let componentId = null;
@@ -18,6 +18,7 @@
   let currentPluginId = null;
   let currentComponent = null;
   let currentAPI = null;
+  let releaseCurrentStyle = null;
   let currentPropsKey = '';
   let locale = i18n.getLocale();
   let unsubscribeLocale = null;
@@ -49,6 +50,10 @@
   });
 
   function cleanup() {
+    if (releaseCurrentStyle) {
+      releaseCurrentStyle();
+      releaseCurrentStyle = null;
+    }
     if (currentAPI && typeof currentAPI.dispose === 'function') {
       try {
         currentAPI.dispose();
@@ -120,6 +125,15 @@
         await i18n.loadPlugin(pId, info.localization);
       } catch (catalogError) {
         console.warn(`[PluginBundleHost] localization unavailable for ${pId}:`, catalogError);
+      }
+
+      if (info.style) {
+        const releaseStyle = await acquirePluginStyle(pId, info.style);
+        if (currentPluginId !== pId || currentComponent !== compId) {
+          releaseStyle();
+          return;
+        }
+        releaseCurrentStyle = releaseStyle;
       }
 
       // Check if bundle already loaded for this plugin

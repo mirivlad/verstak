@@ -1,7 +1,7 @@
 <script>
   import { onDestroy } from 'svelte';
   import * as App from '../../../wailsjs/go/api/App';
-  import { createPluginAPI } from './VerstakPluginAPI.js';
+  import { acquirePluginStyle, createPluginAPI } from './VerstakPluginAPI.js';
 
   export let pluginId;
   export let handler;
@@ -15,7 +15,10 @@
 
   $: if (pluginId && handler && container) mount(pluginId, handler);
 
-  onDestroy(() => cleanup());
+  onDestroy(() => {
+    sequence += 1;
+    cleanup();
+  });
 
   function unpack(result) {
     if (Array.isArray(result) && result.length === 2) return { value: result[0], error: result[1] || '' };
@@ -26,6 +29,7 @@
     if (!current) return;
     try { current.component?.unmount?.(container); } catch (_) {}
     try { current.api?.dispose?.(); } catch (_) {}
+    try { current.releaseStyle?.(); } catch (_) {}
     if (container) container.innerHTML = '';
     current = null;
   }
@@ -36,9 +40,11 @@
     cleanup();
     state = 'loading';
     errorText = '';
+    let releaseStyle = null;
     try {
       const info = await App.GetPluginFrontendInfo(nextPluginId);
       if (!info?.entry) throw new Error('plugin frontend is unavailable');
+      releaseStyle = await acquirePluginStyle(nextPluginId, info.style);
       let registry = window.__VERSTAK_PLUGIN_REGISTRY__ || {};
       if (!registry[nextPluginId]) {
         const asset = unpack(await App.GetPluginAssetContent(nextPluginId, info.entry));
@@ -48,12 +54,17 @@
       }
       const component = registry[nextPluginId]?.[nextHandler];
       if (!component?.mount) throw new Error(`component ${nextHandler} is unavailable`);
-      if (run !== sequence) return;
+      if (run !== sequence) {
+        releaseStyle();
+        return;
+      }
       const api = createPluginAPI(nextPluginId);
       component.mount(container, { componentId: nextHandler, compact: true }, api);
-      current = { pluginId: nextPluginId, handler: nextHandler, component, api };
+      current = { pluginId: nextPluginId, handler: nextHandler, component, api, releaseStyle };
+      releaseStyle = null;
       state = 'loaded';
     } catch (error) {
+      releaseStyle?.();
       if (run !== sequence) return;
       state = 'error';
       errorText = error?.message || String(error);
