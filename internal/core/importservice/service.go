@@ -2,6 +2,7 @@ package importservice
 
 import (
 	"bytes"
+	"context"
 	"io"
 	"strconv"
 	"sync"
@@ -16,20 +17,26 @@ type sourceSessionState struct {
 	handle   string
 	source   indexedSource
 	lastUsed time.Time
+	cancel   context.CancelFunc
+	phase    string
 }
 
 type Service struct {
-	mu           sync.Mutex
-	vaultDir     string
-	limits       limits
-	now          func() time.Time
-	sessions     map[string]*sourceSessionState
-	closedOwners map[string]string
+	mu              sync.Mutex
+	applyMu         sync.Mutex
+	vaultDir        string
+	limits          limits
+	now             func() time.Time
+	sessions        map[string]*sourceSessionState
+	closedOwners    map[string]string
+	onProgress      func(pluginID string, progress Progress)
+	refresh         func() error
+	promoteRegistry func(sourcePath, targetPath string) error
 }
 
 func New(vaultDir string, options Options) *Service {
 	resolved, now := resolveOptions(options)
-	return &Service{vaultDir: vaultDir, limits: resolved, now: now, sessions: make(map[string]*sourceSessionState), closedOwners: make(map[string]string)}
+	return &Service{vaultDir: vaultDir, limits: resolved, now: now, sessions: make(map[string]*sourceSessionState), closedOwners: make(map[string]string), onProgress: options.OnProgress, refresh: options.Refresh, promoteRegistry: promoteRegistryFile}
 }
 
 func (service *Service) OpenDirectory(pluginID, selectedPath string) (SourceSession, error) {
@@ -146,15 +153,23 @@ func (service *Service) Verify(pluginID, handle string) error {
 }
 
 func (service *Service) Cancel(pluginID, handle string) error {
-	_, err := service.get(pluginID, handle)
-	if err == nil {
+	service.mu.Lock()
+	defer service.mu.Unlock()
+	if session, ok := service.sessions[handle]; ok {
+		if session.pluginID != pluginID {
+			return sourceError("source-session-owner", "%s", handle)
+		}
+		if session.phase == "publishing" || session.phase == "refreshing" {
+			return sourceError("import-not-cancellable", "publication has started")
+		}
+		if session.cancel != nil {
+			session.cancel()
+		}
 		return nil
 	}
-	service.mu.Lock()
 	owner, closed := service.closedOwners[handle]
-	service.mu.Unlock()
 	if !closed {
-		return err
+		return sourceError("source-session-not-found", "%s", handle)
 	}
 	if owner != pluginID {
 		return sourceError("source-session-owner", "%s", handle)

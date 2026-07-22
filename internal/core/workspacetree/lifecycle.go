@@ -431,6 +431,22 @@ func writeWorkspaceMetadataV2(workspaceDir, workspaceID, workspaceName, template
 		return err
 	}
 
+	data, err := marshalWorkspaceMetadataV2(workspaceID, workspaceName, templateID, workspaceTools)
+	if err != nil {
+		return err
+	}
+	path := filepath.Join(wsDir, "uuid-"+workspaceID+".json")
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, data, 0o600); err != nil {
+		return err
+	}
+	return os.Rename(tmp, path)
+}
+
+func marshalWorkspaceMetadataV2(workspaceID, workspaceName, templateID string, workspaceTools []string) ([]byte, error) {
+	if workspaceID == "" {
+		return nil, fmt.Errorf("workspace ID is required")
+	}
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	meta := map[string]interface{}{
 		"workspaceId":    workspaceID,
@@ -447,16 +463,7 @@ func writeWorkspaceMetadataV2(workspaceDir, workspaceID, workspaceName, template
 		}
 	}
 
-	data, err := json.MarshalIndent(meta, "", "  ")
-	if err != nil {
-		return err
-	}
-	path := filepath.Join(wsDir, "uuid-"+workspaceID+".json")
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o600); err != nil {
-		return err
-	}
-	return os.Rename(tmp, path)
+	return json.MarshalIndent(meta, "", "  ")
 }
 
 var templateRegistry = map[string]templateDef{

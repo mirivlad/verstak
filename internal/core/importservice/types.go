@@ -25,6 +25,8 @@ type Options struct {
 	PageSize       int
 	SessionTTL     time.Duration
 	Now            func() time.Time
+	OnProgress     func(pluginID string, progress Progress)
+	Refresh        func() error
 }
 
 type SourceSession struct {
@@ -50,6 +52,46 @@ type EntryPage struct {
 	Entries     []Entry `json:"entries"`
 	NextCursor  string  `json:"nextCursor"`
 	Fingerprint string  `json:"fingerprint"`
+}
+
+type PlanNode struct {
+	ID            string `json:"id"`
+	ParentID      string `json:"parentId"`
+	Kind          string `json:"kind"`
+	Name          string `json:"name"`
+	TargetSubpath string `json:"targetSubpath,omitempty"`
+	TemplateID    string `json:"templateId,omitempty"`
+	Text          string `json:"text,omitempty"`
+	SourceEntryID string `json:"sourceEntryId,omitempty"`
+	SourcePath    string `json:"sourcePath,omitempty"`
+	ModifiedAt    string `json:"modifiedAt,omitempty"`
+}
+
+type Plan struct {
+	SchemaVersion     int        `json:"schemaVersion"`
+	SourceHandle      string     `json:"sourceHandle"`
+	SourceFingerprint string     `json:"sourceFingerprint"`
+	RunName           string     `json:"runName"`
+	Nodes             []PlanNode `json:"nodes"`
+}
+
+type Progress struct {
+	SourceHandle string `json:"sourceHandle"`
+	Phase        string `json:"phase"`
+	Completed    int    `json:"completed"`
+	Total        int    `json:"total"`
+	Cancellable  bool   `json:"cancellable"`
+	Message      string `json:"message"`
+}
+
+type ApplyResult struct {
+	RunPath    string   `json:"runPath"`
+	Folders    int      `json:"folders"`
+	Workspaces int      `json:"workspaces"`
+	Notes      int      `json:"notes"`
+	Files      int      `json:"files"`
+	Skipped    int      `json:"skipped"`
+	Warnings   []string `json:"warnings"`
 }
 
 type sourceEntry struct {
