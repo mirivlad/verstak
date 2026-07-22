@@ -109,7 +109,9 @@ imports.selectDirectory()
 imports.selectArchive()
 imports.listEntries(sourceHandle, cursor)
 imports.readText(sourceHandle, entryID)
+imports.onProgress(sourceHandle, listener)
 imports.applyPlan(sourceHandle, plan)
+imports.cancel(sourceHandle)
 imports.closeSource(sourceHandle)
 ```
 
@@ -134,9 +136,15 @@ Binary and unchanged file payloads stay behind the source handle. An approved
 plan refers to their entry IDs so desktop can stream them directly into staging
 without routing the bytes through the WebView.
 
+`onProgress()` subscribes to progress owned by this plugin and source session.
+It reports the current phase, completed and total units, and whether the phase
+is still cancellable. The subscription is removed when the session closes.
+`cancel()` is idempotent and stops active indexing or staging; it cannot
+interrupt the short final publish phase after progress marks it non-cancellable.
+
 `closeSource()` is idempotent. Desktop also closes sessions when the settings
 host unmounts, the plugin is disabled/reloaded, the vault closes, or the session
-expires.
+expires. Closing a session first cancels any cancellable work it owns.
 
 ## Source Safety
 
@@ -308,6 +316,8 @@ The plan schema is versioned and format-neutral. It contains:
 - node kind: organizational folder, Deal, note, file, or skipped;
 - proposed and user-approved names;
 - default template ID for each Deal;
+- a normalized relative target subpath for notes and files inside the owning
+  Deal's `Notes/` or `Files/` directory;
 - converted text for notes or a source entry ID for copied payloads;
 - original modified time;
 - source-to-target mapping and warnings.
@@ -321,6 +331,12 @@ Deal. Notes map below `Notes/`; files map below `Files/`. The plan UI blocks
 confirmation only for invalid topology, duplicate final paths, missing source
 entries, or another fatal validation error. Low confidence and conversion
 warnings remain reviewable but non-blocking.
+
+Organizational folders and Deals use parent IDs to form the editable structural
+tree. A note or file names its owning Deal with `parentID` and carries its
+remaining path in `targetSubpath`; intermediate content directories are derived
+from that path. This preserves mixed project trees without inventing a sixth
+user-editable node kind.
 
 ## Generic Plan Application
 
