@@ -387,6 +387,9 @@ func (service *Service) setApplyState(handle string, cancel context.CancelFunc, 
 	if session := service.sessions[handle]; session != nil {
 		session.cancel = cancel
 		session.phase = phase
+		if session.closeRequested {
+			cancel()
+		}
 	}
 }
 

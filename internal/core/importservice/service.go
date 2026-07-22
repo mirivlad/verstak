@@ -13,12 +13,13 @@ import (
 )
 
 type sourceSessionState struct {
-	pluginID string
-	handle   string
-	source   indexedSource
-	lastUsed time.Time
-	cancel   context.CancelFunc
-	phase    string
+	pluginID       string
+	handle         string
+	source         indexedSource
+	lastUsed       time.Time
+	cancel         context.CancelFunc
+	phase          string
+	closeRequested bool
 }
 
 type Service struct {
@@ -179,6 +180,17 @@ func (service *Service) Cancel(pluginID, handle string) error {
 
 func (service *Service) Close(pluginID, handle string) error {
 	service.mu.Lock()
+	if session, ok := service.sessions[handle]; ok && session.pluginID == pluginID {
+		session.closeRequested = true
+		if session.cancel != nil {
+			session.cancel()
+		}
+	}
+	service.mu.Unlock()
+	service.applyMu.Lock()
+	defer service.applyMu.Unlock()
+
+	service.mu.Lock()
 	defer service.mu.Unlock()
 	if session, ok := service.sessions[handle]; ok {
 		if session.pluginID != pluginID {
@@ -196,6 +208,19 @@ func (service *Service) Close(pluginID, handle string) error {
 
 func (service *Service) ClosePlugin(pluginID string) {
 	service.mu.Lock()
+	for _, session := range service.sessions {
+		if session.pluginID == pluginID {
+			session.closeRequested = true
+			if session.cancel != nil {
+				session.cancel()
+			}
+		}
+	}
+	service.mu.Unlock()
+	service.applyMu.Lock()
+	defer service.applyMu.Unlock()
+
+	service.mu.Lock()
 	defer service.mu.Unlock()
 	for handle, session := range service.sessions {
 		if session.pluginID != pluginID {
@@ -209,6 +234,17 @@ func (service *Service) ClosePlugin(pluginID string) {
 
 func (service *Service) CloseAll() {
 	service.mu.Lock()
+	for _, session := range service.sessions {
+		session.closeRequested = true
+		if session.cancel != nil {
+			session.cancel()
+		}
+	}
+	service.mu.Unlock()
+	service.applyMu.Lock()
+	defer service.applyMu.Unlock()
+
+	service.mu.Lock()
 	defer service.mu.Unlock()
 	for handle, session := range service.sessions {
 		_ = session.source.close()
@@ -220,6 +256,9 @@ func (service *Service) CloseAll() {
 func (service *Service) expireLocked() {
 	now := service.now()
 	for handle, session := range service.sessions {
+		if session.cancel != nil {
+			continue
+		}
 		if now.Sub(session.lastUsed) <= service.limits.sessionTTL {
 			continue
 		}

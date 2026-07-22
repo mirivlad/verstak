@@ -24,8 +24,10 @@ import (
 	"github.com/verstak/verstak-desktop/internal/core/contribution"
 	"github.com/verstak/verstak-desktop/internal/core/events"
 	corefiles "github.com/verstak/verstak-desktop/internal/core/files"
+	"github.com/verstak/verstak-desktop/internal/core/importservice"
 	"github.com/verstak/verstak-desktop/internal/core/notifications"
 	"github.com/verstak/verstak-desktop/internal/core/plugin"
+	"github.com/verstak/verstak-desktop/internal/core/pluginstate"
 	"github.com/verstak/verstak-desktop/internal/core/storage"
 	syncsvc "github.com/verstak/verstak-desktop/internal/core/sync"
 	"github.com/verstak/verstak-desktop/internal/core/vault"
@@ -42,6 +44,237 @@ type fakeNotificationScheduler struct {
 	requests     []notifications.Request
 	onStart      func()
 	onStop       func()
+}
+
+func TestPluginImportAuthorizationSelectionAndOwnership(t *testing.T) {
+	source := t.TempDir()
+	if err := os.WriteFile(filepath.Join(source, "page.md"), []byte("hello"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	vaultDir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(vaultDir, ".verstak", "workspaces"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	app := &App{
+		ctx:     context.Background(),
+		imports: importservice.New(vaultDir, importservice.Options{}),
+		plugins: []plugin.Plugin{
+			{Manifest: plugin.Manifest{ID: "import.one", Requires: []string{"verstak/core/import/v1"}, Permissions: []string{"imports.readExternal"}}, Status: plugin.StatusLoaded, Enabled: true},
+			{Manifest: plugin.Manifest{ID: "import.two", Requires: []string{"verstak/core/import/v1"}, Permissions: []string{"imports.readExternal"}}, Status: plugin.StatusLoaded, Enabled: true},
+			{Manifest: plugin.Manifest{ID: "missing.cap", Permissions: []string{"imports.readExternal"}}, Status: plugin.StatusLoaded, Enabled: true},
+			{Manifest: plugin.Manifest{ID: "missing.permission", Requires: []string{"verstak/core/import/v1"}}, Status: plugin.StatusLoaded, Enabled: true},
+			{Manifest: plugin.Manifest{ID: "disabled.import", Requires: []string{"verstak/core/import/v1"}, Permissions: []string{"imports.readExternal"}}, Status: plugin.StatusDisabled, Enabled: false},
+		},
+	}
+	dialogCalls := 0
+	app.selectImportDirectory = func(_ context.Context, options runtime.OpenDialogOptions) (string, error) {
+		dialogCalls++
+		if options.Title == "" {
+			t.Fatal("dialog title is empty")
+		}
+		return source, nil
+	}
+
+	if _, errText := app.PluginSelectImportDirectory("missing.cap"); !strings.Contains(errText, "does not declare capability") {
+		t.Fatalf("missing capability error=%q", errText)
+	}
+	if _, errText := app.PluginSelectImportDirectory("missing.permission"); !strings.Contains(errText, "imports.readExternal") {
+		t.Fatalf("missing permission error=%q", errText)
+	}
+	if _, errText := app.PluginSelectImportDirectory("disabled.import"); !strings.Contains(errText, "not enabled") {
+		t.Fatalf("disabled error=%q", errText)
+	}
+	if dialogCalls != 0 {
+		t.Fatalf("dialog called before authorization: %d", dialogCalls)
+	}
+
+	session, errText := app.PluginSelectImportDirectory("import.one")
+	if errText != "" || session.SourceHandle == "" {
+		t.Fatalf("session=%+v error=%q", session, errText)
+	}
+	if _, errText := app.PluginListImportEntries("import.two", session.SourceHandle, ""); !strings.Contains(errText, "source-session-owner") {
+		t.Fatalf("cross-plugin error=%q", errText)
+	}
+	page, errText := app.PluginListImportEntries("import.one", session.SourceHandle, "")
+	if errText != "" || len(page.Entries) != 1 {
+		t.Fatalf("page=%+v error=%q", page, errText)
+	}
+	if text, errText := app.PluginReadImportText("import.one", session.SourceHandle, page.Entries[0].ID); errText != "" || text != "hello" {
+		t.Fatalf("text=%q error=%q", text, errText)
+	}
+	if errText := app.PluginCloseImportSource("import.one", session.SourceHandle); errText != "" {
+		t.Fatalf("close error=%q", errText)
+	}
+	if errText := app.PluginCancelImport("import.one", session.SourceHandle); errText != "" {
+		t.Fatalf("idempotent cancel error=%q", errText)
+	}
+}
+
+func TestPluginImportArchiveFilterAndApplyPermission(t *testing.T) {
+	vaultDir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(vaultDir, ".verstak", "workspaces"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	app := &App{
+		ctx:     context.Background(),
+		imports: importservice.New(vaultDir, importservice.Options{}),
+		plugins: []plugin.Plugin{{Manifest: plugin.Manifest{ID: "import.plugin", Requires: []string{"verstak/core/import/v1"}, Permissions: []string{"imports.readExternal"}}, Status: plugin.StatusLoaded, Enabled: true}},
+	}
+	app.selectImportArchive = func(_ context.Context, options runtime.OpenDialogOptions) (string, error) {
+		if len(options.Filters) != 1 || options.Filters[0].Pattern != "*.zip;*.tar;*.tar.gz;*.tgz" {
+			t.Fatalf("archive filters=%+v", options.Filters)
+		}
+		return "", nil
+	}
+	if session, errText := app.PluginSelectImportArchive("import.plugin"); errText != "" || session.SourceHandle != "" {
+		t.Fatalf("cancelled session=%+v error=%q", session, errText)
+	}
+	plan := importservice.Plan{SchemaVersion: 1, SourceHandle: "missing", SourceFingerprint: "missing", RunName: "Run"}
+	if _, errText := app.PluginApplyImportPlan("import.plugin", "missing", plan); !strings.Contains(errText, "imports.apply") {
+		t.Fatalf("apply permission error=%q", errText)
+	}
+}
+
+func TestPluginImportApplyEmitsContentFreeProgress(t *testing.T) {
+	vaultDir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(vaultDir, ".verstak", "workspaces"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	app := &App{
+		ctx: context.Background(),
+		plugins: []plugin.Plugin{{Manifest: plugin.Manifest{
+			ID: "import.plugin", Requires: []string{"verstak/core/import/v1"}, Permissions: []string{"imports.readExternal", "imports.apply"},
+		}, Status: plugin.StatusLoaded, Enabled: true}},
+	}
+	eventsSeen := make([]map[string]any, 0)
+	originalEmit := emitFrontendEvent
+	emitFrontendEvent = func(_ context.Context, eventName string, data ...interface{}) {
+		if eventName != "verstak:import-progress" || len(data) != 1 {
+			t.Fatalf("event=%q data=%#v", eventName, data)
+		}
+		payload, ok := data[0].(map[string]any)
+		if !ok {
+			t.Fatalf("payload type=%T", data[0])
+		}
+		eventsSeen = append(eventsSeen, payload)
+	}
+	t.Cleanup(func() { emitFrontendEvent = originalEmit })
+	app.imports = importservice.New(vaultDir, importservice.Options{OnProgress: app.emitImportProgress})
+	source := t.TempDir()
+	session, err := app.imports.OpenDirectory("import.plugin", source)
+	if err != nil {
+		t.Fatal(err)
+	}
+	plan := importservice.Plan{SchemaVersion: 1, SourceHandle: session.SourceHandle, SourceFingerprint: session.Fingerprint, RunName: "Run"}
+	if _, errText := app.PluginApplyImportPlan("import.plugin", session.SourceHandle, plan); errText != "" {
+		t.Fatal(errText)
+	}
+	if len(eventsSeen) == 0 {
+		t.Fatal("no progress events emitted")
+	}
+	allowed := map[string]bool{"pluginId": true, "sourceHandle": true, "phase": true, "completed": true, "total": true, "cancellable": true, "message": true}
+	for _, event := range eventsSeen {
+		for key := range event {
+			if !allowed[key] {
+				t.Fatalf("unexpected progress field %q in %#v", key, event)
+			}
+		}
+	}
+}
+
+func TestImportLifecycleDisableAndCloseVaultReleaseSessions(t *testing.T) {
+	root := t.TempDir()
+	bus := events.NewBus()
+	vaultService := vault.NewVault(bus)
+	if err := vaultService.CreateVault(root); err != nil {
+		t.Fatal(err)
+	}
+	manager := pluginstate.NewManager(vaultService)
+	if err := manager.Load(); err != nil {
+		t.Fatal(err)
+	}
+	service := importservice.New(vaultService.GetVaultPath(), importservice.Options{})
+	source := t.TempDir()
+	if err := os.WriteFile(filepath.Join(source, "page.md"), []byte("hello"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	session, err := service.OpenDirectory("import.plugin", source)
+	if err != nil {
+		t.Fatal(err)
+	}
+	app := &App{vault: vaultService, pluginState: manager, imports: service}
+	if errText := app.DisablePlugin("import.plugin"); errText != "" {
+		t.Fatal(errText)
+	}
+	if _, err := service.ListEntries("import.plugin", session.SourceHandle, ""); err == nil || !strings.Contains(err.Error(), "source-session-not-found") {
+		t.Fatalf("session remains after disable: %v", err)
+	}
+
+	session, err = service.OpenDirectory("import.plugin", source)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := app.CloseVault(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.ListEntries("import.plugin", session.SourceHandle, ""); err == nil || !strings.Contains(err.Error(), "source-session-not-found") {
+		t.Fatalf("session remains after vault close: %v", err)
+	}
+}
+
+func TestImportLifecycleRecoveryPrecedesTreeInitialization(t *testing.T) {
+	tmpDir := t.TempDir()
+	vaultParent := filepath.Join(tmpDir, "vault-parent")
+	if err := os.MkdirAll(vaultParent, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	bus := events.NewBus()
+	vaultService := vault.NewVault(bus)
+	if err := vaultService.CreateVault(vaultParent); err != nil {
+		t.Fatal(err)
+	}
+	vaultPath := vaultService.GetVaultPath()
+	interrupted := filepath.Join(vaultPath, "Импортировано")
+	if err := os.MkdirAll(interrupted, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := workspacetree.WriteFolderMarker(interrupted, "fbd4cb82-d28e-476a-916a-93be17f1c430"); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(interrupted, ".verstak", "import-transaction.json"), []byte(`{"transactionId":"test-transaction"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	txnDir := filepath.Join(vaultPath, ".verstak", "import-staging", "test-handle")
+	if err := os.MkdirAll(txnDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	journal := `{"version":1,"transactionId":"test-transaction","status":"publishing","publishedRoot":"Импортировано","createdImportRoot":true}`
+	if err := os.WriteFile(filepath.Join(txnDir, "transaction.json"), []byte(journal), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	vaultService.CloseVault()
+	settings := appsettings.NewManager(filepath.Join(tmpDir, "config.json"))
+	if err := settings.Load(); err != nil {
+		t.Fatal(err)
+	}
+	app := &App{capRegistry: capability.NewRegistry(), eventBus: bus, vault: vaultService, appSettings: settings}
+	if errText := app.SetCurrentVault(vaultParent); errText != "" {
+		t.Fatal(errText)
+	}
+	t.Cleanup(func() {
+		if app.treeV2 != nil {
+			app.treeV2.Stop()
+		}
+		_ = app.CloseVault()
+	})
+	if _, err := os.Stat(interrupted); !os.IsNotExist(err) {
+		t.Fatalf("interrupted tree remains: %v", err)
+	}
+	for _, root := range app.treeV2.GetTree().Roots {
+		if root.Name == "Импортировано" {
+			t.Fatalf("tree initialized before recovery: %+v", root)
+		}
+	}
 }
 
 func (s *fakeNotificationScheduler) Replace(pluginID string, requests []notifications.Request) error {

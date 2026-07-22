@@ -339,11 +339,11 @@ export namespace api {
 	    lastError: string;
 	    lastWarning: string;
 	    statusLabel: string;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new SyncStatusDTO(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.configured = source["configured"];
@@ -367,17 +367,17 @@ export namespace api {
 }
 
 export namespace capability {
-	
+
 	export class Entry {
 	    name: string;
 	    description?: string;
 	    pluginId: string;
 	    status: string;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new Entry(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.name = source["name"];
@@ -390,17 +390,17 @@ export namespace capability {
 }
 
 export namespace files {
-	
+
 	export class FileBytes {
 	    relativePath: string;
 	    size: number;
 	    mimeHint: string;
 	    dataBase64: string;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new FileBytes(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.relativePath = source["relativePath"];
@@ -420,11 +420,11 @@ export namespace files {
 	    isReserved: boolean;
 	    canRead: boolean;
 	    canWrite: boolean;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new FileEntry(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.name = source["name"];
@@ -452,11 +452,11 @@ export namespace files {
 	    isReserved: boolean;
 	    canRead: boolean;
 	    canWrite: boolean;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new FileMetadata(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.relativePath = source["relativePath"];
@@ -475,11 +475,11 @@ export namespace files {
 	}
 	export class MoveOptions {
 	    overwrite: boolean;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new MoveOptions(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.overwrite = source["overwrite"];
@@ -488,11 +488,11 @@ export namespace files {
 	export class RestoreOptions {
 	    targetPath?: string;
 	    overwrite: boolean;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new RestoreOptions(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.targetPath = source["targetPath"];
@@ -507,11 +507,11 @@ export namespace files {
 	    originalType: string;
 	    basename: string;
 	    size: number;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new TrashEntry(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.originalPath = source["originalPath"];
@@ -529,11 +529,11 @@ export namespace files {
 	    trashId: string;
 	    deletedAt: string;
 	    size: number;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new TrashResult(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.originalPath = source["originalPath"];
@@ -546,11 +546,11 @@ export namespace files {
 	export class WriteOptions {
 	    createIfMissing: boolean;
 	    overwrite: boolean;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new WriteOptions(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.createIfMissing = source["createIfMissing"];
@@ -560,14 +560,192 @@ export namespace files {
 
 }
 
+export namespace importservice {
+
+	export class ApplyResult {
+	    runPath: string;
+	    folders: number;
+	    workspaces: number;
+	    notes: number;
+	    files: number;
+	    skipped: number;
+	    warnings: string[];
+
+	    static createFrom(source: any = {}) {
+	        return new ApplyResult(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.runPath = source["runPath"];
+	        this.folders = source["folders"];
+	        this.workspaces = source["workspaces"];
+	        this.notes = source["notes"];
+	        this.files = source["files"];
+	        this.skipped = source["skipped"];
+	        this.warnings = source["warnings"];
+	    }
+	}
+	export class Entry {
+	    id: string;
+	    path: string;
+	    kind: string;
+	    size: number;
+	    modifiedAt: string;
+	    mediaHint: string;
+
+	    static createFrom(source: any = {}) {
+	        return new Entry(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.path = source["path"];
+	        this.kind = source["kind"];
+	        this.size = source["size"];
+	        this.modifiedAt = source["modifiedAt"];
+	        this.mediaHint = source["mediaHint"];
+	    }
+	}
+	export class EntryPage {
+	    entries: Entry[];
+	    nextCursor: string;
+	    fingerprint: string;
+
+	    static createFrom(source: any = {}) {
+	        return new EntryPage(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.entries = this.convertValues(source["entries"], Entry);
+	        this.nextCursor = source["nextCursor"];
+	        this.fingerprint = source["fingerprint"];
+	    }
+
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class PlanNode {
+	    id: string;
+	    parentId: string;
+	    kind: string;
+	    name: string;
+	    targetSubpath?: string;
+	    templateId?: string;
+	    text?: string;
+	    sourceEntryId?: string;
+	    sourcePath?: string;
+	    modifiedAt?: string;
+
+	    static createFrom(source: any = {}) {
+	        return new PlanNode(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.parentId = source["parentId"];
+	        this.kind = source["kind"];
+	        this.name = source["name"];
+	        this.targetSubpath = source["targetSubpath"];
+	        this.templateId = source["templateId"];
+	        this.text = source["text"];
+	        this.sourceEntryId = source["sourceEntryId"];
+	        this.sourcePath = source["sourcePath"];
+	        this.modifiedAt = source["modifiedAt"];
+	    }
+	}
+	export class Plan {
+	    schemaVersion: number;
+	    sourceHandle: string;
+	    sourceFingerprint: string;
+	    runName: string;
+	    nodes: PlanNode[];
+
+	    static createFrom(source: any = {}) {
+	        return new Plan(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.schemaVersion = source["schemaVersion"];
+	        this.sourceHandle = source["sourceHandle"];
+	        this.sourceFingerprint = source["sourceFingerprint"];
+	        this.runName = source["runName"];
+	        this.nodes = this.convertValues(source["nodes"], PlanNode);
+	    }
+
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+
+	export class SourceSession {
+	    sourceHandle: string;
+	    kind: string;
+	    displayPath: string;
+	    displayName: string;
+	    fingerprint: string;
+	    entryCount: number;
+	    totalBytes: number;
+
+	    static createFrom(source: any = {}) {
+	        return new SourceSession(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.sourceHandle = source["sourceHandle"];
+	        this.kind = source["kind"];
+	        this.displayPath = source["displayPath"];
+	        this.displayName = source["displayName"];
+	        this.fingerprint = source["fingerprint"];
+	        this.entryCount = source["entryCount"];
+	        this.totalBytes = source["totalBytes"];
+	    }
+	}
+
+}
+
 export namespace notifications {
-	
+
 	export class Request {
 	    id: string;
 	    dueAt: string;
 	    title: string;
 	    body?: string;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new Request(source);
 	    }

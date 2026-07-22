@@ -9,6 +9,7 @@ import {permissions} from '../models';
 import {plugin} from '../models';
 import {files} from '../models';
 import {workspacetree} from '../models';
+import {importservice} from '../models';
 import {notifications} from '../models';
 
 export function ArchiveWorkspaceNode(arg1:string):Promise<string>;
@@ -117,9 +118,19 @@ export function OpenVaultPathExternal(arg1:string,arg2:string):Promise<string>;
 
 export function OpenWorkbenchResource(arg1:string,arg2:Record<string, any>):Promise<workbench.OpenResourceResult|string>;
 
+export function PluginApplyImportPlan(arg1:string,arg2:string,arg3:importservice.Plan):Promise<importservice.ApplyResult|string>;
+
 export function PluginBrowserReceiverPairing(arg1:string):Promise<Record<string, string>|string>;
 
+export function PluginCancelImport(arg1:string,arg2:string):Promise<string>;
+
+export function PluginCloseImportSource(arg1:string,arg2:string):Promise<string>;
+
+export function PluginListImportEntries(arg1:string,arg2:string,arg3:string):Promise<importservice.EntryPage|string>;
+
 export function PluginListWorkspaces(arg1:string):Promise<Array<api.PluginWorkspaceDTO>|string>;
+
+export function PluginReadImportText(arg1:string,arg2:string,arg3:string):Promise<string|string>;
 
 export function PluginRotateBrowserReceiverToken(arg1:string):Promise<Record<string, string>|string>;
 
@@ -136,6 +147,10 @@ export function PluginSecretsStatus(arg1:string):Promise<Record<string, any>|str
 export function PluginSecretsUnlock(arg1:string,arg2:string):Promise<string>;
 
 export function PluginSecretsWrite(arg1:string,arg2:Record<string, any>):Promise<Record<string, any>|string>;
+
+export function PluginSelectImportArchive(arg1:string):Promise<importservice.SourceSession|string>;
+
+export function PluginSelectImportDirectory(arg1:string):Promise<importservice.SourceSession|string>;
 
 export function PluginSyncConfigure(arg1:string,arg2:string,arg3:string,arg4:string,arg5:string):Promise<string>;
 

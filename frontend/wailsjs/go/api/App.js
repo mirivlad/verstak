@@ -214,12 +214,32 @@ export function OpenWorkbenchResource(arg1, arg2) {
   return window['go']['api']['App']['OpenWorkbenchResource'](arg1, arg2);
 }
 
+export function PluginApplyImportPlan(arg1, arg2, arg3) {
+  return window['go']['api']['App']['PluginApplyImportPlan'](arg1, arg2, arg3);
+}
+
 export function PluginBrowserReceiverPairing(arg1) {
   return window['go']['api']['App']['PluginBrowserReceiverPairing'](arg1);
 }
 
+export function PluginCancelImport(arg1, arg2) {
+  return window['go']['api']['App']['PluginCancelImport'](arg1, arg2);
+}
+
+export function PluginCloseImportSource(arg1, arg2) {
+  return window['go']['api']['App']['PluginCloseImportSource'](arg1, arg2);
+}
+
+export function PluginListImportEntries(arg1, arg2, arg3) {
+  return window['go']['api']['App']['PluginListImportEntries'](arg1, arg2, arg3);
+}
+
 export function PluginListWorkspaces(arg1) {
   return window['go']['api']['App']['PluginListWorkspaces'](arg1);
+}
+
+export function PluginReadImportText(arg1, arg2, arg3) {
+  return window['go']['api']['App']['PluginReadImportText'](arg1, arg2, arg3);
 }
 
 export function PluginRotateBrowserReceiverToken(arg1) {
@@ -252,6 +272,14 @@ export function PluginSecretsUnlock(arg1, arg2) {
 
 export function PluginSecretsWrite(arg1, arg2) {
   return window['go']['api']['App']['PluginSecretsWrite'](arg1, arg2);
+}
+
+export function PluginSelectImportArchive(arg1) {
+  return window['go']['api']['App']['PluginSelectImportArchive'](arg1);
+}
+
+export function PluginSelectImportDirectory(arg1) {
+  return window['go']['api']['App']['PluginSelectImportDirectory'](arg1);
 }
 
 export function PluginSyncConfigure(arg1, arg2, arg3, arg4, arg5) {

@@ -29,6 +29,7 @@ import (
 	"github.com/verstak/verstak-desktop/internal/core/externalopen"
 	corefiles "github.com/verstak/verstak-desktop/internal/core/files"
 	"github.com/verstak/verstak-desktop/internal/core/filewatcher"
+	"github.com/verstak/verstak-desktop/internal/core/importservice"
 	"github.com/verstak/verstak-desktop/internal/core/notifications"
 	"github.com/verstak/verstak-desktop/internal/core/permissions"
 	"github.com/verstak/verstak-desktop/internal/core/plugin"
@@ -85,37 +86,41 @@ const workspaceSelectedEventName = "workspace.selected"
 
 // App is the main application struct exposed to the Wails frontend.
 type App struct {
-	ctx                 context.Context
-	capRegistry         *capability.Registry
-	contribRegistry     *contribution.Registry
-	permRegistry        *permissions.Registry
-	eventBus            *events.Bus
-	plugins             []plugin.Plugin
-	vault               *vault.Vault
-	storage             *storage.Storage
-	files               *corefiles.Service
-	externalOpen        externalOpenService
-	appSettings         *appsettings.Manager
-	pluginState         *pluginstate.Manager
-	workbench           *coreworkbench.Router
-	workspace           *workspace.Manager
-	treeV2              *workspacetree.Service
-	syncSvc             *syncsvc.Service
-	browserReceiver     *browserreceiver.Receiver
-	secretsSession      *coresecrets.VaultSession
-	fileWatcher         *filewatcher.Service
-	syncRunMu           sync.Mutex
-	syncRunning         atomic.Bool
-	syncTimerMu         sync.Mutex
-	syncScanTimer       *time.Timer
-	notifications       notificationService
-	debug               bool
-	activityEvents      map[string]bool
-	browserInboxEvents  map[string]bool
-	browserInboxEnabled atomic.Bool
-	allowQuit           atomic.Bool
-	trayReady           atomic.Bool
-	quitOnce            sync.Once
+	ctx                   context.Context
+	capRegistry           *capability.Registry
+	contribRegistry       *contribution.Registry
+	permRegistry          *permissions.Registry
+	eventBus              *events.Bus
+	plugins               []plugin.Plugin
+	vault                 *vault.Vault
+	storage               *storage.Storage
+	files                 *corefiles.Service
+	externalOpen          externalOpenService
+	appSettings           *appsettings.Manager
+	pluginState           *pluginstate.Manager
+	workbench             *coreworkbench.Router
+	workspace             *workspace.Manager
+	treeV2                *workspacetree.Service
+	syncSvc               *syncsvc.Service
+	browserReceiver       *browserreceiver.Receiver
+	secretsSession        *coresecrets.VaultSession
+	fileWatcher           *filewatcher.Service
+	importsMu             sync.RWMutex
+	imports               *importservice.Service
+	selectImportDirectory func(context.Context, runtime.OpenDialogOptions) (string, error)
+	selectImportArchive   func(context.Context, runtime.OpenDialogOptions) (string, error)
+	syncRunMu             sync.Mutex
+	syncRunning           atomic.Bool
+	syncTimerMu           sync.Mutex
+	syncScanTimer         *time.Timer
+	notifications         notificationService
+	debug                 bool
+	activityEvents        map[string]bool
+	browserInboxEvents    map[string]bool
+	browserInboxEnabled   atomic.Bool
+	allowQuit             atomic.Bool
+	trayReady             atomic.Bool
+	quitOnce              sync.Once
 }
 
 // SetNotificationService attaches the core-owned plugin notification scheduler.
@@ -149,25 +154,27 @@ func NewApp(
 	debugEnabled bool,
 ) *App {
 	app := &App{
-		capRegistry:        capReg,
-		contribRegistry:    contribReg,
-		permRegistry:       permReg,
-		eventBus:           bus,
-		plugins:            plugins,
-		vault:              vaultService,
-		storage:            storageService,
-		files:              filesService,
-		externalOpen:       externalopen.NewService(),
-		appSettings:        appSettingsMgr,
-		pluginState:        pluginStateMgr,
-		workbench:          coreworkbench.NewRouter(workbenchPrefsFromSettings(appSettingsMgr)),
-		workspace:          workspaceMgr,
-		syncSvc:            syncService,
-		browserReceiver:    browserReceiverService,
-		fileWatcher:        filewatcher.NewService(bus, 0),
-		debug:              debugEnabled,
-		activityEvents:     make(map[string]bool),
-		browserInboxEvents: make(map[string]bool),
+		capRegistry:           capReg,
+		contribRegistry:       contribReg,
+		permRegistry:          permReg,
+		eventBus:              bus,
+		plugins:               plugins,
+		vault:                 vaultService,
+		storage:               storageService,
+		files:                 filesService,
+		externalOpen:          externalopen.NewService(),
+		appSettings:           appSettingsMgr,
+		pluginState:           pluginStateMgr,
+		workbench:             coreworkbench.NewRouter(workbenchPrefsFromSettings(appSettingsMgr)),
+		workspace:             workspaceMgr,
+		syncSvc:               syncService,
+		browserReceiver:       browserReceiverService,
+		fileWatcher:           filewatcher.NewService(bus, 0),
+		selectImportDirectory: runtime.OpenDirectoryDialog,
+		selectImportArchive:   runtime.OpenFileDialog,
+		debug:                 debugEnabled,
+		activityEvents:        make(map[string]bool),
+		browserInboxEvents:    make(map[string]bool),
 	}
 	if app.syncSvc == nil {
 		app.rebindSyncService()
@@ -231,6 +238,9 @@ func (a *App) DomReady(ctx context.Context) {
 
 // Shutdown stops scheduled delivery before releasing native notification resources.
 func (a *App) Shutdown(ctx context.Context) {
+	if service := a.currentImportService(); service != nil {
+		service.CloseAll()
+	}
 	if a.notifications != nil {
 		a.notifications.Stop()
 	}
@@ -657,6 +667,20 @@ func (a *App) requirePluginCapabilityAccess(pluginID, capabilityName string) (*p
 	return p, nil
 }
 
+func (a *App) requireImportAccess(pluginID string, apply bool) error {
+	p, err := a.requirePluginCapabilityAccess(pluginID, "verstak/core/import/v1")
+	if err != nil {
+		return err
+	}
+	if !hasString(p.Manifest.Permissions, "imports.readExternal") {
+		return fmt.Errorf("plugin %q lacks required permission %q", pluginID, "imports.readExternal")
+	}
+	if apply && !hasString(p.Manifest.Permissions, "imports.apply") {
+		return fmt.Errorf("plugin %q lacks required permission %q", pluginID, "imports.apply")
+	}
+	return nil
+}
+
 func hasString(items []string, want string) bool {
 	for _, item := range items {
 		if item == want {
@@ -1081,6 +1105,9 @@ func (a *App) GetContributions() ContributionSummary {
 
 // ReloadPlugins re-discovers plugins from disk and returns a summary.
 func (a *App) ReloadPlugins() (int, string) {
+	if service := a.currentImportService(); service != nil {
+		service.CloseAll()
+	}
 	discoveryDirs := plugin.DefaultDiscoveryDirs()
 	log.Printf("[api] ReloadPlugins: scanning dirs: %v", discoveryDirs)
 
@@ -1210,10 +1237,14 @@ func (a *App) CreateVault(path string) error {
 	if a.vault == nil {
 		return fmt.Errorf("vault service not initialized")
 	}
+	a.closeImportService()
 	if err := a.vault.CreateVault(path); err != nil {
 		return err
 	}
 	a.rebindSyncService()
+	if err := a.rebindImportService(); err != nil {
+		return fmt.Errorf("recover import transactions: %w", err)
+	}
 	a.secretsSession = nil
 	a.startFileWatcherForOpenVault()
 	return nil
@@ -1224,10 +1255,14 @@ func (a *App) OpenVault(path string) error {
 	if a.vault == nil {
 		return fmt.Errorf("vault service not initialized")
 	}
+	a.closeImportService()
 	if err := a.vault.OpenVault(path); err != nil {
 		return err
 	}
 	a.rebindSyncService()
+	if err := a.rebindImportService(); err != nil {
+		return fmt.Errorf("recover import transactions: %w", err)
+	}
 	a.secretsSession = nil
 	a.startFileWatcherForOpenVault()
 	return nil
@@ -1241,6 +1276,7 @@ func (a *App) CloseVault() error {
 	if a.fileWatcher != nil {
 		a.fileWatcher.Stop()
 	}
+	a.closeImportService()
 	a.stopScheduledSnapshotScan()
 	a.vault.CloseVault()
 	a.syncSvc = nil
@@ -2339,6 +2375,7 @@ func (a *App) SetCurrentVault(path string) string {
 	if a.vault == nil {
 		return "vault service not initialized"
 	}
+	a.closeImportService()
 	// Try to open the vault first
 	if err := a.vault.OpenVault(path); err != nil {
 		return fmt.Sprintf("failed to open vault: %v", err)
@@ -2347,6 +2384,9 @@ func (a *App) SetCurrentVault(path string) string {
 	// Save the actual vault path (normalized by OpenVault, includes VerstakVault/)
 	vaultPath := a.vault.GetVaultPath()
 	a.rebindSyncService()
+	if err := a.rebindImportService(); err != nil {
+		return fmt.Sprintf("failed to recover import transactions: %v", err)
+	}
 	if err := a.appSettings.SetCurrentVault(vaultPath); err != nil {
 		return fmt.Sprintf("failed to save app settings: %v", err)
 	}
@@ -2396,12 +2436,88 @@ func (a *App) rebindSyncService() {
 	a.syncSvc = syncsvc.NewService(a.vault.GetVaultPath(), "")
 }
 
+func (a *App) rebindImportService() error {
+	if a == nil {
+		return nil
+	}
+	a.closeImportService()
+	if a.vault == nil || a.vault.GetVaultStatus() != vault.StatusOpen {
+		return nil
+	}
+	service := importservice.New(a.vault.GetVaultPath(), importservice.Options{
+		OnProgress: a.emitImportProgress,
+		Refresh:    a.refreshImportedTree,
+	})
+	if err := service.Recover(); err != nil {
+		return err
+	}
+	a.importsMu.Lock()
+	a.imports = service
+	a.importsMu.Unlock()
+	return nil
+}
+
+func (a *App) currentImportService() *importservice.Service {
+	if a == nil {
+		return nil
+	}
+	a.importsMu.RLock()
+	defer a.importsMu.RUnlock()
+	return a.imports
+}
+
+func (a *App) closeImportService() {
+	if a == nil {
+		return
+	}
+	a.importsMu.Lock()
+	service := a.imports
+	a.imports = nil
+	a.importsMu.Unlock()
+	if service != nil {
+		service.CloseAll()
+	}
+}
+
+func (a *App) refreshImportedTree() error {
+	if a.treeV2 != nil {
+		if err := a.treeV2.RescanWorkspaceTree(); err != nil {
+			return err
+		}
+	}
+	if a.fileWatcher != nil {
+		return a.fileWatcher.RefreshBaseline()
+	}
+	return nil
+}
+
+func (a *App) emitImportProgress(pluginID string, progress importservice.Progress) {
+	if a == nil || a.ctx == nil {
+		return
+	}
+	emitFrontendEvent(a.ctx, "verstak:import-progress", map[string]any{
+		"pluginId":     pluginID,
+		"sourceHandle": progress.SourceHandle,
+		"phase":        progress.Phase,
+		"completed":    progress.Completed,
+		"total":        progress.Total,
+		"cancellable":  progress.Cancellable,
+		"message":      progress.Message,
+	})
+}
+
 func (a *App) startFileWatcherForOpenVault() {
 	if a == nil || a.vault == nil || a.eventBus == nil {
 		return
 	}
 	if a.vault.GetVaultStatus() != vault.StatusOpen {
 		return
+	}
+	if a.currentImportService() == nil {
+		if err := a.rebindImportService(); err != nil {
+			log.Printf("[api] import recovery failed: %v", err)
+			return
+		}
 	}
 	if a.fileWatcher == nil {
 		a.fileWatcher = filewatcher.NewService(a.eventBus, 0)
@@ -3197,6 +3313,9 @@ func (a *App) DisablePlugin(pluginID string) string {
 	if a.pluginState == nil {
 		return "plugin state not initialized"
 	}
+	if service := a.currentImportService(); service != nil {
+		service.ClosePlugin(pluginID)
+	}
 	if err := a.pluginState.DisablePlugin(pluginID); err != nil {
 		return err.Error()
 	}
@@ -3222,6 +3341,142 @@ func (a *App) WriteFrontendLog(component, message string) {
 }
 
 // ─── Dialog API ─────────────────────────────────────────────
+
+func (a *App) PluginSelectImportDirectory(pluginID string) (importservice.SourceSession, string) {
+	if err := a.requireImportAccess(pluginID, false); err != nil {
+		return importservice.SourceSession{}, err.Error()
+	}
+	service := a.currentImportService()
+	if service == nil {
+		return importservice.SourceSession{}, "import service not initialized"
+	}
+	dialog := a.selectImportDirectory
+	if dialog == nil {
+		dialog = runtime.OpenDirectoryDialog
+	}
+	home, _ := os.UserHomeDir()
+	selected, err := dialog(a.ctx, runtime.OpenDialogOptions{Title: "Выберите папку с данными для импорта", DefaultDirectory: home})
+	if err != nil {
+		return importservice.SourceSession{}, err.Error()
+	}
+	if selected == "" {
+		return importservice.SourceSession{}, ""
+	}
+	session, err := service.OpenDirectory(pluginID, selected)
+	if err != nil {
+		return importservice.SourceSession{}, err.Error()
+	}
+	return session, ""
+}
+
+func (a *App) PluginSelectImportArchive(pluginID string) (importservice.SourceSession, string) {
+	if err := a.requireImportAccess(pluginID, false); err != nil {
+		return importservice.SourceSession{}, err.Error()
+	}
+	service := a.currentImportService()
+	if service == nil {
+		return importservice.SourceSession{}, "import service not initialized"
+	}
+	dialog := a.selectImportArchive
+	if dialog == nil {
+		dialog = runtime.OpenFileDialog
+	}
+	home, _ := os.UserHomeDir()
+	selected, err := dialog(a.ctx, runtime.OpenDialogOptions{
+		Title:            "Выберите архив для импорта",
+		DefaultDirectory: home,
+		Filters:          []runtime.FileFilter{{DisplayName: "Архивы ZIP и TAR", Pattern: "*.zip;*.tar;*.tar.gz;*.tgz"}},
+	})
+	if err != nil {
+		return importservice.SourceSession{}, err.Error()
+	}
+	if selected == "" {
+		return importservice.SourceSession{}, ""
+	}
+	session, err := service.OpenArchive(pluginID, selected)
+	if err != nil {
+		return importservice.SourceSession{}, err.Error()
+	}
+	return session, ""
+}
+
+func (a *App) PluginListImportEntries(pluginID, sourceHandle, cursor string) (importservice.EntryPage, string) {
+	if err := a.requireImportAccess(pluginID, false); err != nil {
+		return importservice.EntryPage{}, err.Error()
+	}
+	service := a.currentImportService()
+	if service == nil {
+		return importservice.EntryPage{}, "import service not initialized"
+	}
+	page, err := service.ListEntries(pluginID, sourceHandle, cursor)
+	if err != nil {
+		return importservice.EntryPage{}, err.Error()
+	}
+	return page, ""
+}
+
+func (a *App) PluginReadImportText(pluginID, sourceHandle, entryID string) (string, string) {
+	if err := a.requireImportAccess(pluginID, false); err != nil {
+		return "", err.Error()
+	}
+	service := a.currentImportService()
+	if service == nil {
+		return "", "import service not initialized"
+	}
+	text, err := service.ReadText(pluginID, sourceHandle, entryID)
+	if err != nil {
+		return "", err.Error()
+	}
+	return text, ""
+}
+
+func (a *App) PluginApplyImportPlan(pluginID, sourceHandle string, plan importservice.Plan) (importservice.ApplyResult, string) {
+	if err := a.requireImportAccess(pluginID, true); err != nil {
+		return importservice.ApplyResult{}, err.Error()
+	}
+	service := a.currentImportService()
+	if service == nil {
+		return importservice.ApplyResult{}, "import service not initialized"
+	}
+	ctx := a.ctx
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	result, applyErr := service.ApplyPlan(ctx, pluginID, sourceHandle, plan)
+	if applyErr != nil {
+		return importservice.ApplyResult{}, applyErr.Error()
+	}
+	a.scheduleSnapshotScan()
+	return result, ""
+}
+
+func (a *App) PluginCancelImport(pluginID, sourceHandle string) string {
+	if err := a.requireImportAccess(pluginID, false); err != nil {
+		return err.Error()
+	}
+	service := a.currentImportService()
+	if service == nil {
+		return "import service not initialized"
+	}
+	if err := service.Cancel(pluginID, sourceHandle); err != nil {
+		return err.Error()
+	}
+	return ""
+}
+
+func (a *App) PluginCloseImportSource(pluginID, sourceHandle string) string {
+	if err := a.requireImportAccess(pluginID, false); err != nil {
+		return err.Error()
+	}
+	service := a.currentImportService()
+	if service == nil {
+		return "import service not initialized"
+	}
+	if err := service.Close(pluginID, sourceHandle); err != nil {
+		return err.Error()
+	}
+	return ""
+}
 
 // SelectDirectory opens a native directory picker dialog.
 // Returns the selected path or empty string if cancelled.
