@@ -8,6 +8,7 @@
   export let activeWid = '';
   export let focusedKey = '';
   export let appearanceCache = {};
+  export let dragTarget = null;
   export let newDealLabel = 'New Deal';
   export let newFolderLabel = 'New folder';
 
@@ -23,6 +24,7 @@
   $: folderAppearance = isFolder ? (appearanceCache[node.id] || {}) : {};
   $: folderIconName = folderAppearance.iconId || 'folder';
   $: folderIconColor = folderAppearance.colorId || '';
+  $: activeDropPosition = dragTarget?.targetKey === node.key ? dragTarget.position : '';
 
   function handleClick() {
     if (isFolder) {
@@ -67,9 +69,9 @@
   }
 
   function onDragStart(e) {
-    e.dataTransfer.setData('application/x-verstak-node', JSON.stringify({ kind: node.kind, id: node.id, name: node.name }));
+    e.dataTransfer.setData('application/x-verstak-node', JSON.stringify({ key: node.key }));
     e.dataTransfer.effectAllowed = 'move';
-    dispatch('dragstart', { kind: node.kind, id: node.id });
+    dispatch('dragstart', { sourceKey: node.key });
   }
 
   function onDragOver(e) {
@@ -80,15 +82,26 @@
       fileDragOver = true;
       return;
     }
-    if (!isFolder) return;
+    if (!Array.from(e.dataTransfer?.types || []).includes('application/x-verstak-node')) return;
     e.preventDefault();
+    e.stopPropagation();
     e.dataTransfer.dropEffect = 'move';
-    dispatch('dragover', { targetId: node.id });
+    const rect = e.currentTarget.getBoundingClientRect();
+    const ratio = rect.height > 0 ? (e.clientY - rect.top) / rect.height : 0.5;
+    let position;
+    if (isFolder) {
+      position = ratio < 1 / 3 ? 'before' : ratio > 2 / 3 ? 'after' : 'inside';
+    } else {
+      position = ratio < 0.5 ? 'before' : 'after';
+    }
+    dispatch('dragtarget', { targetKey: node.key, position, clientY: e.clientY });
   }
 
-  function onDragLeave() {
+  function onDragLeave(e) {
     fileDragOver = false;
-    if (isFolder) dispatch('dragleave', { targetId: node.id });
+    if (!e.currentTarget.contains(e.relatedTarget)) {
+      dispatch('dragleave', { targetKey: node.key });
+    }
   }
 
   function onDrop(e) {
@@ -102,11 +115,40 @@
       } catch {}
       return;
     }
-    if (!isFolder) return;
     try {
       const data = JSON.parse(e.dataTransfer.getData('application/x-verstak-node'));
-      dispatch('drop', { source: data, targetId: node.id });
-    } catch {}
+      if (!data.key || !activeDropPosition) {
+        dispatch('dragcancel');
+        return;
+      }
+      dispatch('drop', {
+        sourceKey: data.key,
+        targetKey: node.key,
+        position: activeDropPosition,
+      });
+    } catch {
+      dispatch('dragcancel');
+    }
+  }
+
+  function onChildListDragOver(e) {
+    if (!Array.from(e.dataTransfer?.types || []).includes('application/x-verstak-node')) return;
+    e.preventDefault();
+    e.stopPropagation();
+    e.dataTransfer.dropEffect = 'move';
+    dispatch('dragtarget', { targetKey: node.key, position: 'inside', clientY: e.clientY });
+  }
+
+  function onChildListDrop(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    try {
+      const data = JSON.parse(e.dataTransfer.getData('application/x-verstak-node'));
+      if (!data.key) throw new Error('missing stable key');
+      dispatch('drop', { sourceKey: data.key, targetKey: node.key, position: 'inside' });
+    } catch {
+      dispatch('dragcancel');
+    }
   }
 
   function createFolder() { dispatch('createFolder', node.id); }
@@ -117,6 +159,11 @@
   <div
     class="trow wt-node" class:selected={isActive} class:focused={focusedKey === node.key}
     class:drag-over={fileDragOver}
+    class:drop-before={activeDropPosition === 'before'}
+    class:drop-inside={activeDropPosition === 'inside'}
+    class:drop-after={activeDropPosition === 'after'}
+    data-tree-key={node.key}
+    data-drop-position={activeDropPosition || undefined}
     role="treeitem"
     aria-expanded={isFolder ? isExpanded : undefined}
     aria-selected={isActive || undefined}
@@ -126,6 +173,7 @@
     on:contextmenu={onCtxMenu}
     draggable="true"
     on:dragstart={onDragStart}
+    on:dragend={() => dispatch('dragend')}
     on:dragover={onDragOver}
     on:dragleave={onDragLeave}
     on:drop={onDrop}
@@ -149,12 +197,24 @@
   {#if isFolder && isExpanded && hasChildren}
     {#each node.children as child (child.key)}
       <svelte:self
-        node={child} depth={depth + 1} {expandedIds} {activeWid} {focusedKey} {appearanceCache} {newDealLabel} {newFolderLabel}
+        node={child} depth={depth + 1} {expandedIds} {activeWid} {focusedKey} {appearanceCache} {dragTarget} {newDealLabel} {newFolderLabel}
         on:toggle on:select on:nav on:rename on:trash on:contextmenu
-        on:dragstart on:dragover on:dragleave on:drop on:filedrop
+        on:dragstart on:dragtarget on:dragleave on:drop on:filedrop on:dragend on:dragcancel
         on:createFolder on:createWorkspace
       />
     {/each}
+  {/if}
+  {#if isFolder && isExpanded}
+    <div
+      class="tchild-drop"
+      class:active={activeDropPosition === 'inside'}
+      data-tree-drop-children={node.key}
+      data-drop-active={activeDropPosition === 'inside' ? 'inside' : undefined}
+      style="margin-left:{(depth + 1) * INDENT}rem"
+      role="none"
+      on:dragover={onChildListDragOver}
+      on:drop={onChildListDrop}
+    />
   {/if}
 </div>
 
@@ -174,6 +234,16 @@
   .trow.selected .tname { color: var(--vt-color-text-primary); }
   .trow.focused { outline: 1px solid var(--vt-color-accent); outline-offset: -1px; }
   .trow.drag-over { background: var(--vt-color-accent-muted); outline: 1px dashed var(--vt-color-accent); outline-offset: -2px; }
+  .trow.drop-before::before, .trow.drop-after::after {
+    content: ''; position: absolute; left: 0.35rem; right: 0.35rem; height: 2px;
+    background: var(--vt-color-accent); border-radius: 999px; pointer-events: none; z-index: 2;
+  }
+  .trow.drop-before::before { top: -1px; }
+  .trow.drop-after::after { bottom: -1px; }
+  .trow.drop-inside { background: var(--vt-color-accent-muted); outline: 1px solid var(--vt-color-accent); outline-offset: -1px; }
+  .trow { position: relative; }
+  .tchild-drop { min-height: 0.55rem; border-radius: var(--vt-radius-sm); }
+  .tchild-drop.active { min-height: 1rem; background: var(--vt-color-accent-muted); outline: 1px dashed var(--vt-color-accent); outline-offset: -2px; }
   .tchev { width: 0.9rem; height: 0.9rem; display: flex; align-items: center; justify-content: center; flex-shrink: 0; color: var(--vt-color-text-muted); transition: transform 0.15s; }
   .tchev.open { transform: rotate(90deg); }
   .tempty { visibility: hidden; }

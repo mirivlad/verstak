@@ -382,6 +382,9 @@ import importStyle from '../../../../../verstak-official-plugins/plugins/import/
   var trashPayloads = {};
   window.__wailsMockExternalOpens = [];
   var workspaceTree = makeDefaultWorkspaceTree();
+  var workspaceTreeV2Override = null;
+  var treePlacementRequests = [];
+  var treePlacementError = '';
   var workspaceMetadata = makeDefaultWorkspaceMetadata();
   var reloadResponseMode = 'tuple';
   var listVaultFilesResponseMode = 'tuple';
@@ -427,6 +430,7 @@ import importStyle from '../../../../../verstak-official-plugins/plugins/import/
   }
 
   function workspaceTreeV2Snapshot() {
+    if (workspaceTreeV2Override) return cloneJson(workspaceTreeV2Override);
     var roots = workspaceTree.nodes.map(function (n, i) {
       return {
         key: 'workspace:' + (n.workspaceId || n.id),
@@ -4266,6 +4270,10 @@ import importStyle from '../../../../../verstak-official-plugins/plugins/import/
     RenameFolderV2: function (folderID, newName) { return Promise.resolve(''); },
     MoveWorkspaceV2: function (workspaceID, targetParentFolderID) { return Promise.resolve(''); },
     MoveFolderV2: function (folderID, targetParentFolderID) { return Promise.resolve(''); },
+    PlaceWorkspaceTreeNodeV2: function (request) {
+      treePlacementRequests.push(cloneJson(request || {}));
+      return Promise.resolve(treePlacementError);
+    },
     TrashWorkspaceV2: function (workspaceID) {
       var found = workspaceTree.nodes.find(function (node) { return (node.workspaceId || node.id) === workspaceID; });
       return found ? this.TrashWorkspace(found.id) : Promise.resolve('workspace not found: ' + workspaceID);
@@ -4632,6 +4640,9 @@ import importStyle from '../../../../../verstak-official-plugins/plugins/import/
       trashPayloads = {};
       window.__wailsMockExternalOpens = [];
       workspaceTree = makeDefaultWorkspaceTree();
+      workspaceTreeV2Override = null;
+      treePlacementRequests = [];
+      treePlacementError = '';
       workspaceMetadata = makeDefaultWorkspaceMetadata();
       reloadResponseMode = 'tuple';
       listVaultFilesResponseMode = 'tuple';
@@ -4702,6 +4713,13 @@ import importStyle from '../../../../../verstak-official-plugins/plugins/import/
     setReloadResponseMode: function (mode) { reloadResponseMode = mode || 'tuple'; },
     setListVaultFilesResponseMode: function (mode) { listVaultFilesResponseMode = mode || 'tuple'; },
     setReadTextDelay: function (delay) { readTextDelay = Math.max(0, Number(delay || 0)); },
+    setWorkspaceTreeV2: function (snapshot) {
+      workspaceTreeV2Override = cloneJson(snapshot);
+      treePlacementRequests = [];
+      treePlacementError = '';
+    },
+    getTreePlacementRequests: function () { return cloneJson(treePlacementRequests); },
+    setTreePlacementError: function (message) { treePlacementError = String(message || ''); },
     putVaultFile: function (relativePath, content) {
       var path = String(relativePath || '').replace(/^\/+|\/+$/g, '');
       var parts = path.split('/');

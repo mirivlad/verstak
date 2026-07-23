@@ -26,13 +26,19 @@
   let ctxMenu = null;
 
   // Drag state
-  let dragOverRoot = false;
-  let dragOverFolderId = '';
+  let dragSourceKey = '';
+  let dragTarget = null;
+  let hoverExpandTimer = null;
+  let hoverExpandKey = '';
+  let autoscrollFrame = null;
+  let dragPointerY = 0;
+  let treeListElement;
 
   onMount(async () => {
     unsubscribeLocale = i18n.subscribe((l) => { locale = l; });
     window.addEventListener('verstak:workspace-tree-changed', loadTree);
     window.addEventListener('verstak:workspace-active-changed', handleActiveWorkspace);
+    window.addEventListener('keydown', handleDragKeyDown);
     await loadTree(); await loadTemplates();
     // Also listen via Wails runtime events (Go EventsEmit).
     if (window.runtime?.EventsOn) {
@@ -43,6 +49,8 @@
     if (unsubscribeLocale) unsubscribeLocale();
     window.removeEventListener('verstak:workspace-tree-changed', loadTree);
     window.removeEventListener('verstak:workspace-active-changed', handleActiveWorkspace);
+    window.removeEventListener('keydown', handleDragKeyDown);
+    resetDragState();
   });
 
   async function loadTree() {
@@ -286,42 +294,153 @@
   }
 
   // ── Drag-and-drop ──────────────────────────────────────────────────────────
-  let dragCounter = 0;
-  let draggedNodeParentId = ''; // Track whether dragged node has a parent
   function onRootDragOver(e) {
+    if (!Array.from(e.dataTransfer?.types || []).includes('application/x-verstak-node')) return;
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
-    dragCounter++;
-    // Only show root drop zone if dragged node is nested (has a parent folder).
-    if (!draggedNodeParentId) return;
-    dragOverRoot = true;
+    if (!dragSourceKey) dragSourceKey = stableKeyFromTransfer(e.dataTransfer);
+    setDragTarget({ targetKey: '', position: 'root', clientY: e.clientY });
   }
-  function onRootDragLeave(e) { dragCounter--; if (dragCounter <= 0) { dragOverRoot = false; dragCounter = 0; } }
+
+  function onRootDragLeave(e) {
+    const rect = treeListElement?.getBoundingClientRect();
+    if (!rect) return;
+    if (e.clientX < rect.left || e.clientX > rect.right || e.clientY < rect.top || e.clientY > rect.bottom) {
+      resetDragState();
+    }
+  }
+
   function resetDragState() {
-    dragOverRoot = false;
-    dragOverFolderId = '';
-    dragCounter = 0;
-    draggedNodeParentId = '';
+    dragSourceKey = '';
+    dragTarget = null;
+    clearHoverExpand();
+    stopAutoscroll();
   }
+
   function onNodeDragStart(e) {
-    draggedNodeParentId = findNodeParentID(e.detail?.id) || '';
+    resetDragState();
+    dragSourceKey = e.detail?.sourceKey || '';
+  }
+
+  function onNodeDragTarget(e) {
+    setDragTarget(e.detail);
+  }
+
+  function onNodeDragLeave(e) {
+    if (dragTarget?.targetKey === e.detail?.targetKey) {
+      dragTarget = null;
+      clearHoverExpand();
+    }
+  }
+
+  function setDragTarget(target) {
+    if (!target) return;
+    dragTarget = { targetKey: target.targetKey || '', position: target.position };
+    updateHoverExpand(dragTarget);
+    updateAutoscroll(target.clientY);
+  }
+
+  function updateHoverExpand(target) {
+    const node = target.position === 'inside' ? findNodeByKey(tree.roots || [], target.targetKey) : null;
+    if (!node || node.kind !== 'folder' || expandedIds[node.key]) {
+      clearHoverExpand();
+      return;
+    }
+    if (hoverExpandKey === node.key && hoverExpandTimer) return;
+    clearHoverExpand();
+    hoverExpandKey = node.key;
+    hoverExpandTimer = window.setTimeout(() => {
+      if (dragTarget?.targetKey !== node.key || dragTarget?.position !== 'inside') return;
+      expandedIds[node.key] = true;
+      expandedIds = expandedIds;
+      saveExpanded();
+      hoverExpandTimer = null;
+    }, 700);
+  }
+
+  function clearHoverExpand() {
+    if (hoverExpandTimer) window.clearTimeout(hoverExpandTimer);
+    hoverExpandTimer = null;
+    hoverExpandKey = '';
+  }
+
+  function updateAutoscroll(clientY) {
+    if (!Number.isFinite(clientY)) return;
+    dragPointerY = clientY;
+    if (autoscrollFrame == null) autoscrollFrame = window.requestAnimationFrame(runAutoscroll);
+  }
+
+  function runAutoscroll() {
+    autoscrollFrame = null;
+    if (!treeListElement || !dragSourceKey) return;
+    const rect = treeListElement.getBoundingClientRect();
+    const edge = Math.min(48, rect.height / 4);
+    let delta = 0;
+    if (dragPointerY < rect.top + edge) {
+      delta = -Math.ceil(((rect.top + edge - dragPointerY) / edge) * 12);
+    } else if (dragPointerY > rect.bottom - edge) {
+      delta = Math.ceil(((dragPointerY - (rect.bottom - edge)) / edge) * 12);
+    }
+    if (delta) {
+      treeListElement.scrollTop += delta;
+      autoscrollFrame = window.requestAnimationFrame(runAutoscroll);
+    }
+  }
+
+  function stopAutoscroll() {
+    if (autoscrollFrame != null) window.cancelAnimationFrame(autoscrollFrame);
+    autoscrollFrame = null;
+    dragPointerY = 0;
+  }
+
+  function stableKeyFromTransfer(dataTransfer) {
+    try {
+      const payload = JSON.parse(dataTransfer?.getData('application/x-verstak-node') || '{}');
+      return typeof payload.key === 'string' ? payload.key : '';
+    } catch {
+      return '';
+    }
+  }
+
+  async function placeTreeNode(request) {
+    resetDragState();
+    error = '';
+    try {
+      const err = await App.PlaceWorkspaceTreeNodeV2(request);
+      if (err) {
+        error = err;
+        return;
+      }
+      await loadTree();
+    } catch (e) {
+      error = tr('workspaceTree.loadError');
+    } finally {
+      resetDragState();
+    }
   }
 
   function onRootDrop(e) {
     e.preventDefault();
     e.stopPropagation();
-    resetDragState();
-    try {
-      const data = JSON.parse(e.dataTransfer.getData('application/x-verstak-node'));
-      if (data.kind === 'folder') App.MoveFolderV2(data.id, '').then(loadTree).catch(() => {}).finally(resetDragState);
-      else App.MoveWorkspaceV2(data.id, '').then(loadTree).catch(() => {}).finally(resetDragState);
-    } catch { resetDragState(); }
+    const sourceKey = stableKeyFromTransfer(e.dataTransfer) || dragSourceKey;
+    if (!sourceKey) {
+      resetDragState();
+      return;
+    }
+    placeTreeNode({ sourceKey, targetKey: '', position: 'root' });
   }
+
   function onNodeDrop(e) {
-    resetDragState();
-    const { source, targetId } = e.detail;
-    if (source.kind === 'folder') App.MoveFolderV2(source.id, targetId).then(loadTree).catch(() => {}).finally(resetDragState);
-    else App.MoveWorkspaceV2(source.id, targetId).then(loadTree).catch(() => {}).finally(resetDragState);
+    const { sourceKey, targetKey, position } = e.detail || {};
+    if (!sourceKey || !targetKey || !position) {
+      resetDragState();
+      return;
+    }
+    placeTreeNode({ sourceKey, targetKey, position });
+  }
+
+  function handleDragKeyDown(e) {
+    if (e.key === 'Escape' && (dragSourceKey || dragTarget)) resetDragState();
   }
   async function onFileDrop(e) {
     resetDragState();
@@ -368,9 +487,8 @@
   function subtreeCounts(id) { let folders = 0, wss = 0; const n = findNode(tree.roots || [], id); if (n) count(n); return { folders, workspaces: wss };
     function count(nd) { for (const c of nd.children || []) { if (c.kind === 'folder') { folders++; count(c); } else wss++; } } }
   function findNode(nodes, id) { for (const n of nodes) { if (n.id === id) return n; const f = findNode(n.children || [], id); if (f) return f; } return null; }
+  function findNodeByKey(nodes, key) { for (const n of nodes) { if (n.key === key) return n; const f = findNodeByKey(n.children || [], key); if (f) return f; } return null; }
   function findWorkspaceByName(nodes, name) { for (const n of nodes) { if (n.kind === 'workspace' && (n.path === name || n.name === name)) return n; const f = findWorkspaceByName(n.children || [], name); if (f) return f; } return null; }
-  function findNodeParentID(id) { return parentIDFor(tree.roots, id); }
-  function parentIDFor(nodes, id) { for (const n of nodes) { if (n.children) for (const c of n.children) { if (c.id === id) return n.id; } const f = parentIDFor(n.children, id); if (f) return f; } return ''; }
 
   // ── Template plugin display ─────────────────────────────────────────────────
   const PLUGIN_NAMES = {
@@ -436,7 +554,7 @@
     </div>
   {/if}
 
-  <div class="wt-list" role="tree" aria-label={tr('workspaceTree.title')} tabindex="0"
+  <div class="wt-list" role="tree" aria-label={tr('workspaceTree.title')} tabindex="0" bind:this={treeListElement}
     on:dragover={onRootDragOver} on:dragleave={onRootDragLeave} on:drop={onRootDrop}
     on:dragend={resetDragState}
   >
@@ -451,7 +569,7 @@
       </div>
     {:else}
       {#each tree.roots as node (node.key)}
-        <TreeNode {node} depth={0} {expandedIds} {activeWid} {focusedKey} {appearanceCache}
+        <TreeNode {node} depth={0} {expandedIds} {activeWid} {focusedKey} {appearanceCache} {dragTarget}
           newDealLabel={tr('workspaceTree.newDeal')}
           newFolderLabel={tr('workspaceTree.newFolder')}
           on:toggle={(e) => toggleExpand(e.detail.key)}
@@ -463,14 +581,21 @@
           on:drop={onNodeDrop}
           on:filedrop={onFileDrop}
           on:dragstart={onNodeDragStart}
+          on:dragtarget={onNodeDragTarget}
+          on:dragleave={onNodeDragLeave}
+          on:dragend={resetDragState}
+          on:dragcancel={resetDragState}
           on:createFolder={(e) => openCreateFolder(e.detail)}
           on:createWorkspace={(e) => openCreateWorkspace(e.detail)}
         />
       {/each}
     {/if}
-    {#if dragOverRoot}
-      <div class="wt-root-drop">Переместить в корень</div>
-    {/if}
+    <div
+      class="wt-root-drop"
+      class:active={dragTarget?.position === 'root'}
+      data-tree-drop-root
+      data-drop-active={dragTarget?.position === 'root' ? 'root' : undefined}
+    >{dragTarget?.position === 'root' ? tr('workspaceTree.root') : ''}</div>
   </div>
 </div>
 
@@ -626,7 +751,8 @@
   .wt-empty { padding: 1rem 0.5rem; text-align: center; color: var(--vt-color-text-muted); font-size: 0.8rem; }
   .wt-empty-hint { font-size: 0.72rem; opacity: 0.7; }
 
-  .wt-root-drop { margin: 0.2rem 0.4rem; padding: 0.4rem; border: 1px dashed var(--vt-color-accent); border-radius: var(--vt-radius-sm); text-align: center; color: var(--vt-color-accent); font-size: 0.75rem; background: var(--vt-color-accent-muted); }
+  .wt-root-drop { min-height: 0.65rem; margin: 0.1rem 0.4rem; border: 1px solid transparent; border-radius: var(--vt-radius-sm); text-align: center; color: var(--vt-color-accent); font-size: 0.75rem; }
+  .wt-root-drop.active { min-height: 1.8rem; padding: 0.35rem; border-style: dashed; border-color: var(--vt-color-accent); background: var(--vt-color-accent-muted); }
 
   .ti-btn { width: 1.6rem; height: 1.6rem; min-height: 0; padding: 0; border: 1px solid transparent; background: transparent; color: var(--vt-color-text-muted); cursor: pointer; border-radius: var(--vt-radius-sm); display: inline-flex; align-items: center; justify-content: center; }
   .ti-btn:hover { color: var(--vt-color-accent); background: var(--vt-color-accent-muted); border-color: rgba(78,204,163,0.25); }
