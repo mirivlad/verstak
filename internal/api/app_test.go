@@ -975,6 +975,14 @@ func TestFilesBridgeReadWriteListMoveTrash(t *testing.T) {
 		t.Fatalf("metadata = %+v", meta)
 	}
 
+	if errStr := app.CopyVaultPath("files.plugin", "Docs/one.txt", "Docs/copied.txt", corefiles.CopyOptions{}); errStr != "" {
+		t.Fatalf("CopyVaultPath: %s", errStr)
+	}
+	copied, errStr := app.ReadVaultTextFile("files.plugin", "Docs/copied.txt")
+	if errStr != "" || copied != "hello" {
+		t.Fatalf("copied text = %q, error = %q", copied, errStr)
+	}
+
 	if errStr := app.MoveVaultPath("files.plugin", "Docs/one.txt", "Docs/two.txt", corefiles.MoveOptions{}); errStr != "" {
 		t.Fatalf("MoveVaultPath: %s", errStr)
 	}

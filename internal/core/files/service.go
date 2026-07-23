@@ -397,6 +397,9 @@ func (s *Service) MoveVaultPath(fromRelativePath string, toRelativePath string, 
 	if fromInfo.Mode()&os.ModeSymlink != 0 {
 		return fmt.Errorf("symlink-not-allowed: %s", fromRel)
 	}
+	if err := validateTransferSource(root, fromRel, fromFull, fromInfo); err != nil {
+		return err
+	}
 	if fromInfo.IsDir() && (toRel == fromRel || strings.HasPrefix(toRel, fromRel+"/")) {
 		return fmt.Errorf("move-into-self: %s -> %s", fromRel, toRel)
 	}
@@ -415,6 +418,175 @@ func (s *Service) MoveVaultPath(fromRelativePath string, toRelativePath string, 
 		return err
 	}
 	return os.Rename(fromFull, toFull)
+}
+
+func (s *Service) CopyVaultPath(fromRelativePath string, toRelativePath string, options CopyOptions) error {
+	root, fromRel, fromFull, err := s.resolveFile(fromRelativePath)
+	if err != nil {
+		return err
+	}
+	_, toRel, toFull, err := s.resolveFile(toRelativePath)
+	if err != nil {
+		return err
+	}
+	if fromRel == "" || toRel == "" {
+		return fmt.Errorf("invalid-path: cannot copy root")
+	}
+	if err := rejectSymlinkPath(root, fromRel, true); err != nil {
+		return err
+	}
+	if err := rejectSymlinkPath(root, toRel, false); err != nil {
+		return err
+	}
+	fromInfo, err := os.Lstat(fromFull)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return fmt.Errorf("not-found: %s", fromRel)
+		}
+		return err
+	}
+	if err := validateTransferSource(root, fromRel, fromFull, fromInfo); err != nil {
+		return err
+	}
+	if fromInfo.IsDir() && (toRel == fromRel || strings.HasPrefix(toRel, fromRel+"/")) {
+		return fmt.Errorf("copy-into-self: %s -> %s", fromRel, toRel)
+	}
+	parent := filepath.Dir(toFull)
+	if info, err := os.Stat(parent); err != nil {
+		if os.IsNotExist(err) {
+			return fmt.Errorf("parent-not-found: %s", pathDir(toRel))
+		}
+		return err
+	} else if !info.IsDir() {
+		return fmt.Errorf("parent-not-directory: %s", pathDir(toRel))
+	}
+	existing, err := os.Lstat(toFull)
+	if err == nil {
+		if err := rejectProtectedRoot(toFull, toRel, existing); err != nil {
+			return err
+		}
+		if !options.Overwrite {
+			return fmt.Errorf("conflict: %s", toRel)
+		}
+	} else if !os.IsNotExist(err) {
+		return err
+	}
+
+	stagingRoot, err := os.MkdirTemp(parent, ".verstak-copy-*")
+	if err != nil {
+		return err
+	}
+	defer os.RemoveAll(stagingRoot)
+	staged := filepath.Join(stagingRoot, filepath.Base(toFull))
+	if err := copyVaultTree(fromFull, staged, fromInfo); err != nil {
+		return err
+	}
+	if existing != nil {
+		if err := os.RemoveAll(toFull); err != nil {
+			return err
+		}
+	}
+	return os.Rename(staged, toFull)
+}
+
+func validateTransferSource(root, rel, full string, info fs.FileInfo) error {
+	if info.Mode()&os.ModeSymlink != 0 {
+		return fmt.Errorf("symlink-not-allowed: %s", rel)
+	}
+	if err := rejectProtectedRoot(full, rel, info); err != nil {
+		return err
+	}
+	if !info.IsDir() {
+		if !info.Mode().IsRegular() {
+			return fmt.Errorf("not-regular-file: %s", rel)
+		}
+		return nil
+	}
+	return filepath.WalkDir(full, func(path string, entry fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		childRel, err := filepath.Rel(root, path)
+		if err != nil {
+			return err
+		}
+		childRel = filepath.ToSlash(childRel)
+		if IsReservedPathNoNormalize(childRel) {
+			return fmt.Errorf("reserved-path: %s", childRel)
+		}
+		if entry.Type()&os.ModeSymlink != 0 {
+			return fmt.Errorf("symlink-not-allowed: %s", childRel)
+		}
+		if entry.IsDir() {
+			return nil
+		}
+		info, err := entry.Info()
+		if err != nil {
+			return err
+		}
+		if !info.Mode().IsRegular() {
+			return fmt.Errorf("not-regular-file: %s", childRel)
+		}
+		return nil
+	})
+}
+
+func rejectProtectedRoot(full, rel string, info fs.FileInfo) error {
+	if !info.IsDir() {
+		return nil
+	}
+	for _, marker := range []string{"workspace.json", "folder.json"} {
+		if _, err := os.Stat(filepath.Join(full, ".verstak", marker)); err == nil {
+			return fmt.Errorf("protected-root: %s", rel)
+		} else if !os.IsNotExist(err) {
+			return err
+		}
+	}
+	return nil
+}
+
+func copyVaultTree(source, target string, sourceInfo fs.FileInfo) error {
+	if sourceInfo.Mode().IsRegular() {
+		return copyRegularFile(source, target, sourceInfo.Mode().Perm())
+	}
+	return filepath.WalkDir(source, func(path string, entry fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		relative, err := filepath.Rel(source, path)
+		if err != nil {
+			return err
+		}
+		destination := target
+		if relative != "." {
+			destination = filepath.Join(target, relative)
+		}
+		info, err := entry.Info()
+		if err != nil {
+			return err
+		}
+		if entry.IsDir() {
+			return os.Mkdir(destination, info.Mode().Perm())
+		}
+		return copyRegularFile(path, destination, info.Mode().Perm())
+	})
+}
+
+func copyRegularFile(source, target string, mode fs.FileMode) error {
+	input, err := os.Open(source)
+	if err != nil {
+		return err
+	}
+	defer input.Close()
+	output, err := os.OpenFile(target, os.O_CREATE|os.O_EXCL|os.O_WRONLY, mode)
+	if err != nil {
+		return err
+	}
+	if _, err := io.Copy(output, input); err != nil {
+		_ = output.Close()
+		return err
+	}
+	return output.Close()
 }
 
 func (s *Service) TrashVaultPath(relativePath string) (TrashResult, error) {

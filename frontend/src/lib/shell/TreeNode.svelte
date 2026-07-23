@@ -13,6 +13,7 @@
 
   const dispatch = createEventDispatcher();
   const INDENT = 1.15; // rem
+  let fileDragOver = false;
 
   $: isFolder = node.kind === 'folder';
   $: isWorkspace = node.kind === 'workspace';
@@ -71,6 +72,13 @@
   }
 
   function onDragOver(e) {
+    if (isWorkspace && Array.from(e.dataTransfer?.types || []).includes('application/x-verstak-files')) {
+      e.preventDefault();
+      e.stopPropagation();
+      e.dataTransfer.dropEffect = 'move';
+      fileDragOver = true;
+      return;
+    }
     if (!isFolder) return;
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
@@ -78,12 +86,21 @@
   }
 
   function onDragLeave() {
-    dispatch('dragleave', { targetId: node.id });
+    fileDragOver = false;
+    if (isFolder) dispatch('dragleave', { targetId: node.id });
   }
 
   function onDrop(e) {
     e.preventDefault();
     e.stopPropagation();
+    fileDragOver = false;
+    const filePayload = e.dataTransfer.getData('application/x-verstak-files');
+    if (filePayload && isWorkspace) {
+      try {
+        dispatch('filedrop', { payload: JSON.parse(filePayload), targetId: node.id });
+      } catch {}
+      return;
+    }
     if (!isFolder) return;
     try {
       const data = JSON.parse(e.dataTransfer.getData('application/x-verstak-node'));
@@ -98,7 +115,7 @@
 <div class="tnode" style="padding-left:{depth * INDENT}rem">
   <div
     class="trow wt-node" class:selected={isActive} class:focused={focusedKey === node.key}
-    class:drag-over={false}
+    class:drag-over={fileDragOver}
     role="treeitem"
     aria-expanded={isFolder ? isExpanded : undefined}
     aria-selected={isActive || undefined}
@@ -133,7 +150,7 @@
       <svelte:self
         node={child} depth={depth + 1} {expandedIds} {activeWid} {focusedKey} {appearanceCache} {newDealLabel} {newFolderLabel}
         on:toggle on:select on:nav on:rename on:trash on:contextmenu
-        on:dragstart on:dragover on:dragleave on:drop
+        on:dragstart on:dragover on:dragleave on:drop on:filedrop
         on:createFolder on:createWorkspace
       />
     {/each}

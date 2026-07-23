@@ -14,6 +14,10 @@ export function CloseVault() {
   return window['go']['api']['App']['CloseVault']();
 }
 
+export function CopyVaultPath(arg1, arg2, arg3, arg4) {
+  return window['go']['api']['App']['CopyVaultPath'](arg1, arg2, arg3, arg4);
+}
+
 export function CreateFolderV2(arg1, arg2) {
   return window['go']['api']['App']['CreateFolderV2'](arg1, arg2);
 }

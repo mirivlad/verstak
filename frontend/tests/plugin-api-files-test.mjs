@@ -23,6 +23,10 @@ globalThis.window = {
           calls.push({ method: 'WriteVaultFileBytes', pluginId, relativePath, dataBase64, options });
           return Promise.resolve('');
         },
+        CopyVaultPath: (pluginId, fromRelativePath, toRelativePath, options) => {
+          calls.push({ method: 'CopyVaultPath', pluginId, fromRelativePath, toRelativePath, options });
+          return Promise.resolve('');
+        },
         PluginListWorkspaces: (pluginId) => {
           calls.push({ method: 'PluginListWorkspaces', pluginId });
           return Promise.resolve([[{ id: 'ws-nested', name: 'Acme', rootPath: 'Clients/Acme' }], '']);
@@ -57,6 +61,9 @@ if (typeof api.files.readBytes !== 'function') {
 if (typeof api.files.writeBytes !== 'function') {
   throw new Error('api.files.writeBytes is missing');
 }
+if (typeof api.files.copy !== 'function') {
+  throw new Error('api.files.copy is missing');
+}
 if (!api.workspaces || typeof api.workspaces.list !== 'function') {
   throw new Error('api.workspaces.list is missing');
 }
@@ -67,6 +74,7 @@ if (bytes.dataBase64 !== 'iVBORw==' || bytes.mimeHint !== 'image/png') {
 }
 
 await api.files.writeBytes('Docs/copy.png', 'iVBORw==', { createIfMissing: true });
+await api.files.copy('Project/Files/report.pdf', 'Client/Files/report.pdf', { overwrite: false });
 
 const restored = await api.files.restoreTrash('trash-1', { overwrite: true });
 const workspaces = await api.workspaces.list();
@@ -76,16 +84,19 @@ if (restored !== 'Docs/restored.txt') {
 if (workspaces.length !== 1 || workspaces[0].rootPath !== 'Clients/Acme') {
   throw new Error(`unexpected workspace result: ${JSON.stringify(workspaces)}`);
 }
-if (calls.length !== 4 || calls[0].method !== 'ReadVaultFileBytes' || calls[0].pluginId !== 'verstak.files' || calls[0].relativePath !== 'Docs/image.png') {
+if (calls.length !== 5 || calls[0].method !== 'ReadVaultFileBytes' || calls[0].pluginId !== 'verstak.files' || calls[0].relativePath !== 'Docs/image.png') {
   throw new Error(`unexpected ReadVaultFileBytes call: ${JSON.stringify(calls)}`);
 }
 if (calls[1].method !== 'WriteVaultFileBytes' || calls[1].pluginId !== 'verstak.files' || calls[1].relativePath !== 'Docs/copy.png' || calls[1].dataBase64 !== 'iVBORw==' || calls[1].options.createIfMissing !== true) {
   throw new Error(`unexpected WriteVaultFileBytes call: ${JSON.stringify(calls)}`);
 }
-if (calls[2].method !== 'RestoreVaultTrash' || calls[2].pluginId !== 'verstak.files' || calls[2].trashId !== 'trash-1' || calls[2].options.overwrite !== true) {
+if (calls[2].method !== 'CopyVaultPath' || calls[2].fromRelativePath !== 'Project/Files/report.pdf' || calls[2].toRelativePath !== 'Client/Files/report.pdf' || calls[2].options.overwrite !== false) {
+  throw new Error(`unexpected CopyVaultPath call: ${JSON.stringify(calls)}`);
+}
+if (calls[3].method !== 'RestoreVaultTrash' || calls[3].pluginId !== 'verstak.files' || calls[3].trashId !== 'trash-1' || calls[3].options.overwrite !== true) {
   throw new Error(`unexpected RestoreVaultTrash call: ${JSON.stringify(calls)}`);
 }
-if (calls[3].method !== 'PluginListWorkspaces' || calls[3].pluginId !== 'verstak.files') {
+if (calls[4].method !== 'PluginListWorkspaces' || calls[4].pluginId !== 'verstak.files') {
   throw new Error(`unexpected PluginListWorkspaces call: ${JSON.stringify(calls)}`);
 }
 

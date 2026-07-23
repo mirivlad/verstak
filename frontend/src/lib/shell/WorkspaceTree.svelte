@@ -322,6 +322,41 @@
     if (source.kind === 'folder') App.MoveFolderV2(source.id, targetId).then(loadTree).catch(() => {}).finally(resetDragState);
     else App.MoveWorkspaceV2(source.id, targetId).then(loadTree).catch(() => {}).finally(resetDragState);
   }
+  async function onFileDrop(e) {
+    resetDragState();
+    error = '';
+    try {
+      const { payload, targetId } = e.detail || {};
+      const paths = Array.isArray(payload?.paths) ? payload.paths.filter(Boolean) : [];
+      if (!paths.length) throw new Error('empty file drop');
+      const api = window.createPluginAPI('verstak.files');
+      const workspaces = await api.workspaces.list();
+      const target = (workspaces || []).find((workspace) => workspace.id === targetId);
+      if (!target?.rootPath) {
+        error = tr('workspaceTree.filesDropUnavailable');
+        return;
+      }
+      const targetDir = target.rootPath + '/Files';
+      try {
+        await api.files.list(targetDir);
+      } catch {
+        error = tr('workspaceTree.filesDropUnavailable');
+        return;
+      }
+      for (const sourcePath of paths) {
+        const name = sourcePath.split('/').filter(Boolean).pop();
+        if (!name) throw new Error('invalid file drop path');
+        const destination = targetDir + '/' + name;
+        if (payload.operation === 'copy') {
+          await api.files.copy(sourcePath, destination, { overwrite: false });
+        } else {
+          await api.files.move(sourcePath, destination, { overwrite: false });
+        }
+      }
+    } catch {
+      error = tr('workspaceTree.filesDropError');
+    }
+  }
 
   // ── Helpers ────────────────────────────────────────────────────────────────
   function flatFolders(roots, out = []) { for (const r of roots || []) { if (r.kind === 'folder') { out.push(r); flatFolders(r.children, out); } } return out; }
@@ -425,6 +460,7 @@
           on:trash={handleTrash}
           on:contextmenu={onCtx}
           on:drop={onNodeDrop}
+          on:filedrop={onFileDrop}
           on:dragstart={onNodeDragStart}
           on:createFolder={(e) => openCreateFolder(e.detail)}
           on:createWorkspace={(e) => openCreateWorkspace(e.detail)}

@@ -1404,8 +1404,14 @@ import importStyle from '../../../../../verstak-official-plugins/plugins/import/
                 onDblclick: function () { open(item); },
                 onDragstart: function (ev) {
                   if (!selected[item.relativePath]) { selected = {}; selected[item.relativePath] = true; }
-                  ev.dataTransfer.setData('application/files-paths', JSON.stringify(Object.keys(selected)));
-                  ev.dataTransfer.effectAllowed = 'move';
+                  var paths = Object.keys(selected);
+                  ev.dataTransfer.setData('application/files-paths', JSON.stringify(paths));
+                  ev.dataTransfer.setData('application/x-verstak-files', JSON.stringify({
+                    paths: paths,
+                    workspaceRoot: root,
+                    operation: 'move'
+                  }));
+                  ev.dataTransfer.effectAllowed = 'copyMove';
                 }
               }, []);
               row.appendChild(e('span', { className: 'files-namecell' }, [e('span', { className: 'files-item-icon', 'data-file-icon': iconCategory, title: iconLabel, 'aria-label': iconLabel, innerHTML: fileIcon(item) }, []), e('span', { className: 'files-item-name' }, [item.name])]));
@@ -1575,7 +1581,7 @@ import importStyle from '../../../../../verstak-official-plugins/plugins/import/
           }
           function setClipboard(action, items) { if (!items.length) return; window.__filesClipboard = { action: action, workspaceRoot: root, items: items.map(function (item) { return { path: item.relativePath, name: item.name, type: item.type }; }) }; }
           function cutSelection() { setClipboard('cut', selectedEntries()); }
-          function copySelection() { setClipboard('copy', selectedEntries().filter(function (item) { return item.type !== 'folder'; })); }
+          function copySelection() { setClipboard('copy', selectedEntries()); }
           function uniqueName(name, occupied) { if (!occupied[name]) return name; var dot = name.lastIndexOf('.'); var b = dot > 0 ? name.slice(0, dot) : name; var x = dot > 0 ? name.slice(dot) : ''; for (var i = 2; i < 100; i++) { var c = b + ' (' + i + ')' + x; if (!occupied[c]) return c; } return b + ' (' + Date.now() + ')' + x; }
           function duplicate(item) {
             if (!item || item.type === 'folder') return;
@@ -1604,16 +1610,19 @@ import importStyle from '../../../../../verstak-official-plugins/plugins/import/
           function paste() {
             var clip = window.__filesClipboard;
             if (!clip || !clip.items || !clip.items.length) return;
-            var dest = scoped(current);
-            var occupied = {};
-            entries.forEach(function (item) { occupied[item.name] = true; });
-            Promise.all(clip.items.map(function (item) {
-              var name = uniqueName(item.name, occupied);
-              occupied[name] = true;
-              var to = dest ? dest + '/' + name : name;
-              if (clip.action === 'cut') return api.files.move(item.path, to, { overwrite: false });
-              return api.files.readText(item.path).then(function (text) { return api.files.writeText(to, text, { createIfMissing: true, overwrite: false }); });
-            })).then(function () { if (clip.action === 'cut') window.__filesClipboard = null; load(); });
+            var crossWorkspace = !!(clip.workspaceRoot && clip.workspaceRoot !== root);
+            var dest = crossWorkspace ? scoped(current || 'Files') : scoped(current);
+            api.files.list(dest).then(function (destinationEntries) {
+              var occupied = {};
+              (destinationEntries || []).forEach(function (item) { occupied[item.name] = true; });
+              return Promise.all(clip.items.map(function (item) {
+                var name = uniqueName(item.name, occupied);
+                occupied[name] = true;
+                var to = dest ? dest + '/' + name : name;
+                if (clip.action === 'cut') return api.files.move(item.path, to, { overwrite: false });
+                return api.files.copy(item.path, to, { overwrite: false });
+              }));
+            }).then(function () { if (clip.action === 'cut') window.__filesClipboard = null; load(); });
           }
           var menu = e('div', { className: 'files-ctx-menu', style: { display: 'none' } }, []);
           document.body.appendChild(menu);
@@ -3933,6 +3942,30 @@ import importStyle from '../../../../../verstak-official-plugins/plugins/import/
         var suffix = path.slice(from.path.length);
         vaultFiles[to.path + suffix] = vaultFiles[path];
         delete vaultFiles[path];
+      });
+      return Promise.resolve('');
+    },
+    CopyVaultPath: function (pluginId, fromRelativePath, toRelativePath, options) {
+      var readErr = requirePluginPermission(pluginId, 'files.read');
+      if (readErr) return Promise.resolve(readErr);
+      var writeErr = requirePluginPermission(pluginId, 'files.write');
+      if (writeErr) return Promise.resolve(writeErr);
+      var from = normalizeVaultPath(fromRelativePath, false);
+      var to = normalizeVaultPath(toRelativePath, false);
+      if (from.error) return Promise.resolve(from.error);
+      if (to.error) return Promise.resolve(to.error);
+      options = options || {};
+      if (!vaultFiles[from.path]) return Promise.resolve('not-found: ' + from.path);
+      if (vaultFiles[from.path].type === 'folder' && (to.path === from.path || to.path.indexOf(from.path + '/') === 0)) {
+        return Promise.resolve('copy-into-self: ' + from.path + ' -> ' + to.path);
+      }
+      if (vaultFiles[to.path] && !options.overwrite) return Promise.resolve('conflict: ' + to.path);
+      var parent = parentPath(to.path);
+      if (!vaultFiles[parent] || vaultFiles[parent].type !== 'folder') return Promise.resolve('parent-not-found: ' + parent);
+      var copying = Object.keys(vaultFiles).filter(function (path) { return path === from.path || path.indexOf(from.path + '/') === 0; });
+      copying.forEach(function (path) {
+        var suffix = path.slice(from.path.length);
+        vaultFiles[to.path + suffix] = Object.assign({}, vaultFiles[path], { modifiedAt: new Date().toISOString() });
       });
       return Promise.resolve('');
     },

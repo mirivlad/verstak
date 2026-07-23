@@ -1619,10 +1619,47 @@ func (a *App) MoveVaultPath(pluginID, fromRelativePath string, toRelativePath st
 	}); err != nil {
 		return err.Error()
 	}
+	a.publishFileActivity("file.changed", pluginID, fromRelativePath, map[string]interface{}{
+		"operation": syncsvc.OpMove,
+		"toPath":    toRelativePath,
+		"type":      string(meta.Type),
+	})
 	a.publishFileActivity("file.changed", pluginID, toRelativePath, map[string]interface{}{
 		"operation": syncsvc.OpMove,
 		"fromPath":  fromRelativePath,
 		"type":      string(meta.Type),
+	})
+	return ""
+}
+
+// CopyVaultPath copies a vault-relative file or folder for a plugin with files.read and files.write.
+func (a *App) CopyVaultPath(pluginID, fromRelativePath string, toRelativePath string, options corefiles.CopyOptions) string {
+	if _, err := a.requirePluginAccess(pluginID, "files.read"); err != nil {
+		return err.Error()
+	}
+	if _, err := a.requirePluginAccess(pluginID, "files.write"); err != nil {
+		return err.Error()
+	}
+	if a.files == nil {
+		return "files service not initialized"
+	}
+	meta, err := a.files.GetVaultFileMetadata(fromRelativePath)
+	if err != nil {
+		return err.Error()
+	}
+	if err := a.files.CopyVaultPath(fromRelativePath, toRelativePath, options); err != nil {
+		return err.Error()
+	}
+	if err := a.recordFileSyncOp(syncEntityTypeForFileType(meta.Type), toRelativePath, syncsvc.OpCreate, map[string]string{
+		"path":       toRelativePath,
+		"copiedFrom": fromRelativePath,
+	}); err != nil {
+		return err.Error()
+	}
+	a.publishFileActivity("file.changed", pluginID, toRelativePath, map[string]interface{}{
+		"operation":  syncsvc.OpCreate,
+		"copiedFrom": fromRelativePath,
+		"type":       string(meta.Type),
 	})
 	return ""
 }

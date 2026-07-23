@@ -46,6 +46,111 @@ test.describe('G: Files Plugin', () => {
     await expect(page.locator('.files-item-name').filter({ hasText: 'project-only.txt' })).toHaveCount(0);
   });
 
+  test('copy and cut move files and folders between Deals through the Files root', async ({ page }) => {
+    await page.evaluate(async () => {
+      const err = await window.go.api.App.CreateVaultFolder('verstak.files', 'Test/Files');
+      if (err) throw new Error(err);
+      window.__filesCopyCalls = [];
+      window.__filesListCalls = [];
+      const copy = window.go.api.App.CopyVaultPath;
+      const list = window.go.api.App.ListVaultFiles;
+      window.go.api.App.CopyVaultPath = (...args) => {
+        window.__filesCopyCalls.push(args);
+        return copy(...args);
+      };
+      window.go.api.App.ListVaultFiles = (...args) => {
+        window.__filesListCalls.push(args);
+        return list(...args);
+      };
+    });
+    await page.locator('.wt-label').filter({ hasText: 'Project' }).click();
+    await openFilesTool(page);
+
+    await page.locator('[data-file-name="project-only.txt"]').click();
+    await page.locator('[data-files-action="copy"]').click();
+    await expect.poll(() => page.evaluate(() => window.__filesClipboard)).toEqual({
+      action: 'copy',
+      workspaceRoot: 'Project',
+      items: [{ path: 'Project/project-only.txt', name: 'project-only.txt', type: 'file' }],
+    });
+    await page.locator('.wt-label').filter({ hasText: 'Test' }).click();
+    await page.getByRole('tab', { name: 'Files' }).click();
+    await page.locator('[data-files-action="paste"]').click();
+    await expect.poll(() => page.evaluate(() => window.__filesListCalls)).toContainEqual(['verstak.files', 'Test/Files']);
+    await expect.poll(() => page.evaluate(() => window.__filesCopyCalls)).toEqual([[
+      'verstak.files',
+      'Project/project-only.txt',
+      'Test/Files/project-only.txt',
+      { overwrite: false },
+    ]]);
+    await expect.poll(async () => page.evaluate(async () => {
+      const [text, err] = await window.go.api.App.ReadVaultTextFile('verstak.files', 'Test/Files/project-only.txt');
+      return err || text;
+    })).toBe('project file');
+    await page.locator('[data-file-name="Files"]').dblclick();
+    await expect(page.locator('[data-file-name="project-only.txt"]')).toBeVisible();
+
+    await page.locator('.wt-label').filter({ hasText: 'Project' }).click();
+    await page.getByRole('tab', { name: 'Files' }).click();
+    await page.locator('[data-file-name="Notes"]').click();
+    await page.locator('[data-files-action="cut"]').click();
+    await page.locator('.wt-label').filter({ hasText: 'Test' }).click();
+    await page.getByRole('tab', { name: 'Files' }).click();
+    await page.locator('[data-files-action="paste"]').click();
+    await expect(page.locator('[data-file-name="Notes"]')).toBeVisible();
+    await expect.poll(async () => page.evaluate(async () => {
+      const [entries, err] = await window.go.api.App.ListVaultFiles('verstak.files', 'Test/Files/Notes');
+      return err || entries.length;
+    })).toBeGreaterThan(0);
+    await expect.poll(async () => page.evaluate(() => window.go.api.App.GetVaultFileMetadata('verstak.files', 'Project/Notes')))
+      .toEqual([{}, 'not-found: Project/Notes']);
+  });
+
+  test('dropping a file onto a Deal moves it into that Deal Files folder', async ({ page }) => {
+    await page.evaluate(async () => {
+      const err = await window.go.api.App.CreateVaultFolder('verstak.files', 'Test/Files');
+      if (err) throw new Error(err);
+    });
+    await page.locator('.wt-label').filter({ hasText: 'Project' }).click();
+    await openFilesTool(page);
+
+    const source = page.locator('[data-file-name="project-only.txt"]');
+    const target = page.locator('.wt-node').filter({ hasText: 'Test' });
+    await source.dragTo(target);
+
+    await expect.poll(async () => page.evaluate(async () => {
+      const [text, err] = await window.go.api.App.ReadVaultTextFile(
+        'verstak.files',
+        'Test/Files/project-only.txt',
+      );
+      return err || text;
+    })).toBe('project file');
+    await expect.poll(async () => page.evaluate(
+      () => window.go.api.App.GetVaultFileMetadata('verstak.files', 'Project/project-only.txt'),
+    )).toEqual([{}, 'not-found: Project/project-only.txt']);
+  });
+
+  test('dropping a file onto a Deal without Files reports an error and creates nothing', async ({ page }) => {
+    await page.locator('.wt-label').filter({ hasText: 'Project' }).click();
+    await openFilesTool(page);
+
+    const source = page.locator('[data-file-name="project-only.txt"]');
+    const target = page.locator('.wt-node').filter({ hasText: 'Test' });
+    await source.dragTo(target);
+
+    await expect(page.locator('.wt-error')).toContainText('does not have an available Files folder');
+    await expect.poll(async () => page.evaluate(
+      () => window.go.api.App.GetVaultFileMetadata('verstak.files', 'Test/Files'),
+    )).toEqual([{}, 'not-found: Test/Files']);
+    await expect.poll(async () => page.evaluate(async () => {
+      const [text, err] = await window.go.api.App.ReadVaultTextFile(
+        'verstak.files',
+        'Project/project-only.txt',
+      );
+      return err || text;
+    })).toBe('project file');
+  });
+
   test('files explorer supports create navigate rename filter sort open and trash', async ({ page }) => {
     await page.locator('.wt-label').filter({ hasText: 'Project' }).click();
     await openFilesTool(page);

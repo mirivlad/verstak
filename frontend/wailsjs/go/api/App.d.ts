@@ -18,6 +18,8 @@ export function ClearPluginNotifications(arg1:string):Promise<string>;
 
 export function CloseVault():Promise<void>;
 
+export function CopyVaultPath(arg1:string,arg2:string,arg3:string,arg4:files.CopyOptions):Promise<string>;
+
 export function CreateFolderV2(arg1:string,arg2:string):Promise<Record<string, any>>;
 
 export function CreateVault(arg1:string):Promise<void>;

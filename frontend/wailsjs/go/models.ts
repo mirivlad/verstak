@@ -473,6 +473,18 @@ export namespace files {
 	        this.canWrite = source["canWrite"];
 	    }
 	}
+	export class CopyOptions {
+	    overwrite: boolean;
+
+	    static createFrom(source: any = {}) {
+	        return new CopyOptions(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.overwrite = source["overwrite"];
+	    }
+	}
 	export class MoveOptions {
 	    overwrite: boolean;
 

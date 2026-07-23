@@ -168,6 +168,8 @@ export default {
   'workspaceTree.createError': 'Не удалось создать Дело. Повторите попытку.',
   'workspaceTree.renameError': 'Не удалось переименовать Дело. Повторите попытку.',
   'workspaceTree.trashError': 'Не удалось переместить Дело в корзину. Повторите попытку.',
+  'workspaceTree.filesDropUnavailable': 'В этом Деле нет доступной папки «Файлы».',
+  'workspaceTree.filesDropError': 'Не удалось переместить элемент в это Дело. Проверьте конфликт имён и повторите попытку.',
   'workspaceTree.newFolder': 'Новая папка',
   'workspaceTree.newDeal': 'Новое Дело',
   'workspaceTree.location': 'Расположение',

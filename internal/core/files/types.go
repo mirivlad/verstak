@@ -62,6 +62,10 @@ type MoveOptions struct {
 	Overwrite bool `json:"overwrite"`
 }
 
+type CopyOptions struct {
+	Overwrite bool `json:"overwrite"`
+}
+
 type RestoreOptions struct {
 	TargetPath string `json:"targetPath,omitempty"`
 	Overwrite  bool   `json:"overwrite"`

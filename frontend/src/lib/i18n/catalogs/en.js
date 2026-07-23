@@ -168,6 +168,8 @@ export default {
   'workspaceTree.createError': 'Could not create the Deal. Please try again.',
   'workspaceTree.renameError': 'Could not rename the Deal. Please try again.',
   'workspaceTree.trashError': 'Could not move the Deal to trash. Please try again.',
+  'workspaceTree.filesDropUnavailable': 'This Deal does not have an available Files folder.',
+  'workspaceTree.filesDropError': 'Could not move the item into this Deal. Check for a name conflict and try again.',
   'workspaceTree.newFolder': 'New folder',
   'workspaceTree.newDeal': 'New Deal',
   'workspaceTree.location': 'Location',

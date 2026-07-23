@@ -317,6 +317,76 @@ func TestMoveVaultPathRules(t *testing.T) {
 	}
 }
 
+func TestCopyVaultPathCopiesBinaryFilesAndFoldersWithoutPartialTargets(t *testing.T) {
+	s, root := newTestService(t)
+	if err := os.MkdirAll(filepath.Join(root, "Source", "Nested"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	payload := []byte{0x00, 0xff, 0x10, 0x0a}
+	if err := os.WriteFile(filepath.Join(root, "Source", "Nested", "data.bin"), payload, 0o640); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(filepath.Join(root, "Target"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := s.CopyVaultPath("Source", "Target/SourceCopy", CopyOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	copied, err := os.ReadFile(filepath.Join(root, "Target", "SourceCopy", "Nested", "data.bin"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(copied) != string(payload) {
+		t.Fatalf("copied bytes = %v", copied)
+	}
+	if err := s.CopyVaultPath("Source", "Target/SourceCopy", CopyOptions{}); err == nil || !strings.Contains(err.Error(), "conflict") {
+		t.Fatalf("copy conflict error = %v", err)
+	}
+	if err := s.CopyVaultPath("Source", "Missing/SourceCopy", CopyOptions{}); err == nil || !strings.Contains(err.Error(), "parent-not-found") {
+		t.Fatalf("missing parent error = %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(root, "Missing")); !os.IsNotExist(err) {
+		t.Fatalf("copy created a missing target parent: %v", err)
+	}
+}
+
+func TestCopyAndMoveRejectProtectedOrUnsafeDirectoryTrees(t *testing.T) {
+	s, root := newTestService(t)
+	protected := filepath.Join(root, "Deal")
+	if err := os.MkdirAll(filepath.Join(protected, ".verstak"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(protected, ".verstak", "workspace.json"), []byte(`{"workspaceId":"deal-id"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.CopyVaultPath("Deal", "DealCopy", CopyOptions{}); err == nil || !strings.Contains(err.Error(), "protected-root") {
+		t.Fatalf("protected copy error = %v", err)
+	}
+	if err := s.MoveVaultPath("Deal", "DealMoved", MoveOptions{}); err == nil || !strings.Contains(err.Error(), "protected-root") {
+		t.Fatalf("protected move error = %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(root, "DealCopy")); !os.IsNotExist(err) {
+		t.Fatalf("protected copy left a target: %v", err)
+	}
+
+	if runtime.GOOS != "windows" {
+		unsafeDir := filepath.Join(root, "Unsafe")
+		if err := os.Mkdir(unsafeDir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Symlink(filepath.Join(root, "Deal"), filepath.Join(unsafeDir, "link")); err != nil {
+			t.Fatal(err)
+		}
+		if err := s.CopyVaultPath("Unsafe", "UnsafeCopy", CopyOptions{}); err == nil || !strings.Contains(err.Error(), "symlink-not-allowed") {
+			t.Fatalf("symlink tree copy error = %v", err)
+		}
+		if _, err := os.Stat(filepath.Join(root, "UnsafeCopy")); !os.IsNotExist(err) {
+			t.Fatalf("unsafe copy left a target: %v", err)
+		}
+	}
+}
+
 func TestTrashVaultPathMovesToReservedTrashAndHidesFromList(t *testing.T) {
 	s, root := newTestService(t)
 	if err := os.WriteFile(filepath.Join(root, "delete-me.txt"), []byte("bye"), 0o644); err != nil {

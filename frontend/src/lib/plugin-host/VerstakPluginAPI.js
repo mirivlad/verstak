@@ -571,6 +571,12 @@ export function createPluginAPI(pluginId) {
           return App.MoveVaultPath(pluginId, fromRelativePath, toRelativePath, options || {});
         });
       },
+      copy: function(fromRelativePath, toRelativePath, options) {
+        assertActive('files.copy(' + fromRelativePath + ')');
+        return callBackendErrorString(pluginId, 'files.copy(' + fromRelativePath + ')', function() {
+          return App.CopyVaultPath(pluginId, fromRelativePath, toRelativePath, options || {});
+        });
+      },
       trash: function(relativePath) {
         assertActive('files.trash(' + relativePath + ')');
         return callBackend(pluginId, 'files.trash(' + relativePath + ')', function() {
