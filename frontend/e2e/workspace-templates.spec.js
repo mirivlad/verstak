@@ -61,6 +61,53 @@ test.describe('Workspace templates', () => {
     await expect(page.getByRole('tab', { name: 'Secrets' })).toHaveCount(0);
   });
 
+  test('template tools are an editable initial selection and creation persists the exact set', async ({ page }) => {
+    const modal = await openCreateModal(page);
+    await modal.locator('[data-workspace-template]').selectOption('project');
+
+    const todo = modal.locator('[data-workspace-tool="verstak.todo"]');
+    const files = modal.locator('[data-workspace-tool="verstak.files"]');
+    const secrets = modal.locator('[data-workspace-tool="verstak.secrets"]');
+    await expect(todo).toHaveAttribute('aria-pressed', 'true');
+    await expect(files).toHaveAttribute('aria-pressed', 'true');
+    await expect(secrets).toHaveAttribute('aria-pressed', 'false');
+
+    await files.click();
+    await secrets.click();
+    await expect(files).toHaveAttribute('aria-pressed', 'false');
+    await expect(secrets).toHaveAttribute('aria-pressed', 'true');
+
+    await modal.locator('[data-workspace-name]').fill('ExactTools');
+    await modal.getByRole('button', { name: 'Create Deal' }).click();
+    await expect.poll(async () => page.evaluate(async () => {
+      const result = await window.go.api.App.GetWorkspaceMetadata('ExactTools');
+      const metadata = Array.isArray(result) ? result[0] : result;
+      return metadata.workspaceTools;
+    })).toEqual([
+      'verstak.notes',
+      'verstak.todo',
+      'verstak.journal',
+      'verstak.activity',
+      'verstak.browser-inbox',
+      'verstak.secrets',
+    ]);
+  });
+
+  test('Custom shows every eligible workspace plugin and cancel does not mutate the tree', async ({ page }) => {
+    const before = await page.evaluate(async () => (await window.go.api.App.GetWorkspaceTreeV2()).roots.length);
+    const modal = await openCreateModal(page);
+    await modal.locator('[data-workspace-template]').selectOption('custom');
+    await expect(modal.locator('[data-workspace-tool]')).toHaveCount(8);
+    await expect(modal.locator('[data-workspace-tool][aria-pressed="true"]')).toHaveCount(0);
+    await expect(modal.locator('[data-workspace-tool="verstak.default-editor"]')).toHaveCount(0);
+    await modal.locator('[data-workspace-name]').fill('CancelledDeal');
+    await modal.getByRole('button', { name: 'Cancel' }).click();
+    await expect(modal).toBeHidden();
+    const after = await page.evaluate(async () => (await window.go.api.App.GetWorkspaceTreeV2()).roots.length);
+    expect(after).toBe(before);
+    await expect(page.locator('.wt-label').filter({ hasText: 'CancelledDeal' })).toHaveCount(0);
+  });
+
   test('Minimal keeps global tools available while limiting workspace tabs', async ({ page }) => {
     const modal = await openCreateModal(page);
     await modal.locator('[data-workspace-name]').fill('MinimalSpace');

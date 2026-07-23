@@ -30,6 +30,8 @@ export function CreateWorkspaceNode(arg1:string,arg2:string,arg3:string):Promise
 
 export function CreateWorkspaceV2(arg1:string,arg2:string,arg3:string):Promise<Record<string, any>>;
 
+export function CreateWorkspaceV2WithTools(arg1:string,arg2:string,arg3:string,arg4:Array<string>):Promise<Record<string, any>>;
+
 export function DeleteVaultTrash(arg1:string,arg2:string):Promise<string>;
 
 export function DisablePlugin(arg1:string):Promise<string>;

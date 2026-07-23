@@ -4183,6 +4183,44 @@ import importStyle from '../../../../../verstak-official-plugins/plugins/import/
       workspaceTree.nodes.push(node);
       return Promise.resolve({ id: node.workspaceId || node.id, name: norm.path, rootPath: norm.path });
     },
+    CreateWorkspaceV2WithTools: function (parentFolderID, name, templateID, workspaceTools) {
+      var norm = normalizeVaultPath(name, false);
+      if (norm.error || norm.path !== String(name || '').trim() || norm.path.indexOf('/') !== -1) {
+        return Promise.resolve({ error: norm.error || 'invalid-workspace-name' });
+      }
+      if (vaultFiles[norm.path]) return Promise.resolve({ error: 'conflict: ' + norm.path });
+      var eligible = allPlugins().filter(function (plugin) {
+        return (plugin.manifest && plugin.manifest.contributes && plugin.manifest.contributes.workspaceItems || []).length > 0;
+      }).map(function (plugin) { return plugin.manifest.id; });
+      var tools = Array.isArray(workspaceTools) ? workspaceTools.slice() : [];
+      var invalid = tools.find(function (toolID) { return eligible.indexOf(toolID) === -1; });
+      if (invalid) return Promise.resolve({ error: 'workspace tool is not available: ' + invalid });
+      var template = workspaceTemplateByID(templateID || 'default');
+      if (!template && templateID !== 'custom') return Promise.resolve({ error: 'template-not-found: ' + String(templateID || '') });
+      template = template || { id: 'custom', name: 'Custom', version: 1, folders: ['Notes', 'Files'], features: {}, workspaceTools: [] };
+      vaultFiles[norm.path] = { type: 'folder', modifiedAt: new Date().toISOString() };
+      template.folders.forEach(function (folder) {
+        vaultFiles[norm.path + '/' + folder] = { type: 'folder', modifiedAt: new Date().toISOString() };
+      });
+      if (tools.indexOf('verstak.secrets') !== -1) {
+        vaultFiles[norm.path + '/Secrets'] = { type: 'folder', modifiedAt: new Date().toISOString() };
+      }
+      var metadata = metadataForTemplate(norm.path, template);
+      metadata.workspaceTools = tools.slice();
+      metadata.features = {};
+      metadata.folders = {};
+      tools.forEach(function (toolID) {
+        var key = toolID.replace('verstak.', '');
+        metadata.features[key] = true;
+        if (key === 'notes') metadata.folders.notes = 'Notes';
+        if (key === 'files') metadata.folders.files = 'Files';
+        if (key === 'secrets') metadata.folders.secrets = 'Secrets';
+      });
+      workspaceMetadata[norm.path] = metadata;
+      var node = makeWorkspaceNodeV2(norm.path, workspaceTree.nodes.length + 1);
+      workspaceTree.nodes.push(node);
+      return Promise.resolve({ id: node.workspaceId || node.id, name: norm.path, rootPath: norm.path });
+    },
     CreateFolderV2: function (parentFolderID, name) {
       return Promise.resolve({ id: 'folder-' + Math.random().toString(36).slice(2, 10), name: name, path: name });
     },

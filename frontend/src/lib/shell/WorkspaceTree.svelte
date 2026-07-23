@@ -20,6 +20,7 @@
   let formError = ''; let formBusy = false;
   let templates = [];
   let templatePlugins = [];
+  let selectedWorkspaceTools = [];
   let templateWarning = null;
   let ctxMenu = null;
 
@@ -79,6 +80,12 @@
         i18n.loadPlugin(plugin.manifest?.id, plugin.manifest?.localization).catch(() => {})
       )));
       templates = Array.isArray(tlist) ? tlist : [];
+      templates = [...templates, {
+        id: 'custom',
+        name: tr('workspaceTree.customTemplateName'),
+        description: tr('workspaceTree.customTemplateDescription'),
+        workspaceTools: [],
+      }];
       templatePlugins = (plugins || []).map((plugin) => i18n.localizePlugin(plugin));
     } catch { templates = []; templatePlugins = []; }
   }
@@ -149,7 +156,7 @@
 
   // ── Create/Rename/Move/Trash modals ────────────────────────────────────────
   function openCreateFolder(pid) { modal = { type: 'create-folder', parentId: pid }; formName = ''; formParentId = pid || ''; formError = ''; formBusy = false; folderIconId = ''; folderColor = ''; folderEditorView = 'form'; }
-  async function openCreateWorkspace(pid) { await loadTemplates(); modal = { type: 'create-workspace', parentId: pid }; formName = ''; formParentId = pid || ''; formTemplateId = templates[0]?.id || 'default'; formError = ''; formBusy = false; }
+  async function openCreateWorkspace(pid) { await loadTemplates(); modal = { type: 'create-workspace', parentId: pid }; formName = ''; formParentId = pid || ''; formTemplateId = templates[0]?.id || 'default'; resetTemplateTools(); formError = ''; formBusy = false; }
   function openRename(kind, id, name) { modal = { type: 'rename', kind, id }; formName = name; formError = ''; formBusy = false; }
   function openTrash(kind, id, name) { modal = { type: 'trash', kind, id, name }; formBusy = false; }
   function openEditFolder(id, name) {
@@ -221,9 +228,9 @@
     const n = formName.trim();
     if (!n) { formError = tr('workspaceTree.nameRequired'); return; }
     const template = templates.find((item) => item.id === formTemplateId);
-    const unavailable = (template?.workspaceTools || []).map(pluginIssue).filter((item) => item.reason);
+    const unavailable = selectedWorkspaceTools.map(pluginIssue).filter((item) => item.reason);
     formBusy = true;
-    const r = await App.CreateWorkspaceV2(formParentId || '', n, formTemplateId);
+    const r = await App.CreateWorkspaceV2WithTools(formParentId || '', n, formTemplateId, selectedWorkspaceTools);
     if (r?.error) { formError = tr('workspaceTree.createError'); formBusy = false; return; }
     if (formParentId) { expandedIds['folder:' + formParentId] = true; saveExpanded(); }
     const wid = r?.id;
@@ -352,6 +359,19 @@
   }
   function pluginAvailable(pluginId) {
     return !pluginIssue(pluginId).reason;
+  }
+  function eligibleWorkspacePlugins() {
+    return templatePlugins.filter((item) => item.manifest?.contributes?.workspaceItems?.length > 0)
+      .sort((a, b) => pluginDisplayName(a.manifest.id).localeCompare(pluginDisplayName(b.manifest.id), locale));
+  }
+  function resetTemplateTools() {
+    const template = templates.find((item) => item.id === formTemplateId);
+    selectedWorkspaceTools = [...(template?.workspaceTools || [])];
+  }
+  function toggleWorkspaceTool(pluginId) {
+    selectedWorkspaceTools = selectedWorkspaceTools.includes(pluginId)
+      ? selectedWorkspaceTools.filter((item) => item !== pluginId)
+      : [...selectedWorkspaceTools, pluginId];
   }
 
   function onKeyDown(e) { if (e.key === "Escape") { closeCtx(); closeModal(); resetDragState(); } }
@@ -512,19 +532,24 @@
 <Modal title={tr('workspaceTree.newDeal')} show={modal?.type === 'create-workspace'} on:close={closeModal} wide data-workspace-create-modal>
   <label class="vt-field"><span>{tr('workspaceTree.location')}</span><Select options={flatFolders(tree.roots).map(f => ({ value: f.id, label: f.path }))} placeholder={tr('workspaceTree.root')} bind:value={formParentId} labelKey="label" valueKey="value" /></label>
   <label class="vt-field"><span>{tr('workspaceTree.name')}</span><input class="vt-input" data-workspace-name type="text" bind:value={formName} placeholder={tr('workspaceTree.namePlaceholder')} disabled={formBusy} on:keydown={(e) => e.key === 'Enter' && doCreateWorkspace()} /></label>
-  <label class="vt-field"><span>{tr('workspaceTree.template')}</span><Select data-workspace-template options={templates} bind:value={formTemplateId} labelKey="name" valueKey="id" /></label>
+  <label class="vt-field"><span>{tr('workspaceTree.template')}</span><Select data-workspace-template options={templates} bind:value={formTemplateId} labelKey="name" valueKey="id" on:change={resetTemplateTools} /></label>
   {@const st = templates.find(t => t.id === formTemplateId)}
   {#if st}
     <div class="vt-template-info">
       {#if st.description}<p class="vt-template-desc" data-workspace-template-description>{st.description}</p>{/if}
-      {#if st.workspaceTools?.length}
-        <div class="vt-template-badges" data-workspace-template-tools>
-          {#each st.workspaceTools as pt}
+      <div class="vt-template-tools" data-workspace-template-tools>
+        <span class="vt-template-tools-label">{tr('workspaceTree.tools')}</span>
+        <div class="vt-template-tool-grid">
+          {#each eligibleWorkspacePlugins() as plugin}
+            {@const pt = plugin.manifest.id}
             {@const issue = pluginIssue(pt)}
-            <span class="vt-badge vt-tool-badge" class:vt-tool-unavailable={!pluginAvailable(pt)} title={pt} data-workspace-template-tool={pt} data-template-tool-status={issue.reason ? 'unavailable' : 'available'}>{issue.name}{issue.reason ? ` · ${issue.reason}` : ''}</span>
+            <button type="button" class="vt-tool-choice" class:vt-tool-selected={selectedWorkspaceTools.includes(pt)} class:vt-tool-unavailable={!pluginAvailable(pt)} aria-pressed={selectedWorkspaceTools.includes(pt)} on:click={() => toggleWorkspaceTool(pt)} title={pt} data-workspace-tool={pt} data-workspace-template-tool={pt} data-template-tool-status={issue.reason ? 'unavailable' : 'available'}>
+              <span>{issue.name}</span>
+              <span class="vt-tool-status">{issue.reason || tr('workspaceTree.templateAvailable')}</span>
+            </button>
           {/each}
         </div>
-      {/if}
+      </div>
     </div>
   {/if}
   {#if formError}<p class="vt-ferr" data-workspace-create-error>{formError}</p>{/if}
@@ -590,8 +615,13 @@
   .vt-ctx-d:hover { background: var(--vt-color-danger-muted); }
   .vt-template-info { margin: var(--vt-space-2) 0; }
   .vt-template-desc { color: var(--vt-color-text-secondary); font-size: 0.8rem; line-height: 1.4; margin-bottom: var(--vt-space-2); }
-  .vt-template-badges { display: flex; flex-wrap: wrap; gap: 0.35rem; }
-  .vt-tool-badge { font-size: 0.72rem; padding: 0.15rem 0.5rem; }
+  .vt-template-tools { display: grid; gap: 0.35rem; }
+  .vt-template-tools-label { color: var(--vt-color-text-muted); font-size: 0.72rem; }
+  .vt-template-tool-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr)); gap: 0.35rem; }
+  .vt-tool-choice { display: grid; gap: 0.1rem; min-height: 2.7rem; padding: 0.4rem 0.5rem; text-align: left; border: 1px solid var(--vt-color-border); border-radius: var(--vt-radius-sm); background: var(--vt-color-surface); color: var(--vt-color-text-secondary); cursor: pointer; }
+  .vt-tool-choice:hover { border-color: var(--vt-color-accent); }
+  .vt-tool-choice.vt-tool-selected { border-color: var(--vt-color-accent); background: var(--vt-color-accent-muted); color: var(--vt-color-text-primary); box-shadow: inset 3px 0 0 var(--vt-color-accent); }
+  .vt-tool-status { color: var(--vt-color-text-muted); font-size: 0.66rem; }
   .vt-tool-unavailable { opacity: 0.45; border-color: var(--vt-color-warning); color: var(--vt-color-warning); }
 
   .vt-appearance-row { display: flex; gap: 8px; }

@@ -2591,6 +2591,56 @@ func TestPluginListWorkspacesReturnsNestedDealsOnly(t *testing.T) {
 	}
 }
 
+func TestCreateWorkspaceV2WithToolsValidatesAndPersistsExactSelection(t *testing.T) {
+	app, root := newFilesTestApp(t, []string{"files.read"})
+	app.plugins[0].Manifest.Contributes = &plugin.Contributions{WorkspaceItems: []plugin.ContributionWorkspaceItem{{
+		ID: "files", Title: "Files", Component: "FilesView",
+	}}}
+	app.plugins = append(app.plugins, plugin.Plugin{
+		Manifest: plugin.Manifest{
+			ID: "todo.plugin",
+			Contributes: &plugin.Contributions{
+				WorkspaceItems: []plugin.ContributionWorkspaceItem{{
+					ID: "todo", Title: "Todos", Component: "TodoView",
+				}},
+			},
+		},
+		Status:  plugin.StatusLoaded,
+		Enabled: true,
+	})
+	app.treeV2 = workspacetree.NewService(root, nil)
+	if err := app.treeV2.Initialize(); err != nil {
+		t.Fatal(err)
+	}
+
+	rejected := app.CreateWorkspaceV2WithTools("", "Rejected", "default", []string{"system.component"})
+	if !strings.Contains(fmt.Sprint(rejected["error"]), "workspace tool") {
+		t.Fatalf("unexpected validation response: %#v", rejected)
+	}
+	if _, err := os.Stat(filepath.Join(root, "Rejected")); !os.IsNotExist(err) {
+		t.Fatalf("invalid selection created a Deal: %v", err)
+	}
+
+	created := app.CreateWorkspaceV2WithTools("", "Selected", "default", []string{"todo.plugin", "files.plugin"})
+	if created["error"] != nil {
+		t.Fatalf("create response: %#v", created)
+	}
+	workspaceID := fmt.Sprint(created["id"])
+	data, err := os.ReadFile(filepath.Join(root, ".verstak", "workspaces", "uuid-"+workspaceID+".json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var metadata struct {
+		WorkspaceTools []string `json:"workspaceTools"`
+	}
+	if err := json.Unmarshal(data, &metadata); err != nil {
+		t.Fatal(err)
+	}
+	if len(metadata.WorkspaceTools) != 2 || metadata.WorkspaceTools[0] != "todo.plugin" || metadata.WorkspaceTools[1] != "files.plugin" {
+		t.Fatalf("workspaceTools = %#v", metadata.WorkspaceTools)
+	}
+}
+
 func TestSyncNowAppliesEveryPullPageInOrder(t *testing.T) {
 	app, root := newSyncFilesTestApp(t, []string{"files.read", "files.write", "files.delete"}, "local-device")
 	server := newLocalHTTPTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

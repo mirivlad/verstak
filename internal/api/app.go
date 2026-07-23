@@ -3119,6 +3119,38 @@ func (a *App) CreateWorkspaceV2(parentFolderID, name, templateID string) map[str
 	}
 }
 
+// CreateWorkspaceV2WithTools creates a Deal with the exact selected workspace tool set.
+func (a *App) CreateWorkspaceV2WithTools(parentFolderID, name, templateID string, workspaceTools []string) map[string]interface{} {
+	if a.treeV2 == nil {
+		return map[string]interface{}{"error": "not initialized"}
+	}
+	eligible := make(map[string]bool)
+	for _, installed := range a.plugins {
+		if installed.Manifest.Contributes != nil && len(installed.Manifest.Contributes.WorkspaceItems) > 0 {
+			eligible[installed.Manifest.ID] = true
+		}
+	}
+	for _, toolID := range workspaceTools {
+		if !eligible[toolID] {
+			return map[string]interface{}{"error": fmt.Sprintf("workspace tool is not available: %s", toolID)}
+		}
+	}
+	ws, err := a.treeV2.CreateWorkspaceWithTools(parentFolderID, name, templateID, workspaceTools, func() error {
+		if a.fileWatcher != nil {
+			return a.fileWatcher.RefreshBaseline()
+		}
+		return nil
+	})
+	if err != nil {
+		return map[string]interface{}{"error": err.Error()}
+	}
+	return map[string]interface{}{
+		"id":       ws.ID,
+		"name":     ws.Name,
+		"rootPath": ws.RootPath,
+	}
+}
+
 func (a *App) RenameFolderV2(folderID, newName string) string {
 	if a.treeV2 == nil {
 		return "not initialized"

@@ -84,6 +84,25 @@ func (s *Service) CreateFolder(parentFolderID, name string, refreshBaseline func
 
 // CreateWorkspace creates a new workspace under parentFolderID (empty = root).
 func (s *Service) CreateWorkspace(parentFolderID, name, templateID string, refreshBaseline func() error) (ScannedWorkspace, error) {
+	return s.createWorkspace(parentFolderID, name, templateID, resolveTemplateTools(templateID), refreshBaseline)
+}
+
+// CreateWorkspaceWithTools creates a workspace with an explicit definitive tool set.
+func (s *Service) CreateWorkspaceWithTools(parentFolderID, name, templateID string, workspaceTools []string, refreshBaseline func() error) (ScannedWorkspace, error) {
+	tools := make([]string, 0, len(workspaceTools))
+	seen := make(map[string]bool, len(workspaceTools))
+	for _, toolID := range workspaceTools {
+		toolID = strings.TrimSpace(toolID)
+		if toolID == "" || seen[toolID] {
+			continue
+		}
+		seen[toolID] = true
+		tools = append(tools, toolID)
+	}
+	return s.createWorkspace(parentFolderID, name, templateID, tools, refreshBaseline)
+}
+
+func (s *Service) createWorkspace(parentFolderID, name, templateID string, workspaceTools []string, refreshBaseline func() error) (ScannedWorkspace, error) {
 	name = strings.TrimSpace(name)
 	if err := validateEntityName(name); err != nil {
 		return ScannedWorkspace{}, err
@@ -112,8 +131,6 @@ func (s *Service) CreateWorkspace(parentFolderID, name, templateID string, refre
 	stagingName := "." + name + ".staging." + uuid.NewString()[:8]
 	stagingRel := joinRelPath(parentPath, stagingName)
 
-	// Resolve template tools before creating.
-	templateTools := resolveTemplateTools(templateID)
 	stagingAbs := filepath.Join(vaultDir, filepath.FromSlash(stagingRel))
 
 	s.BeginInternalMutation()
@@ -136,9 +153,12 @@ func (s *Service) CreateWorkspace(parentFolderID, name, templateID string, refre
 			return ScannedWorkspace{}, err
 		}
 	}
+	if err := applyWorkspaceToolFolders(stagingAbs, workspaceTools); err != nil {
+		return ScannedWorkspace{}, err
+	}
 
 	// Write metadata with template features for UUID-keyed lookup.
-	if err := writeWorkspaceMetadataV2(stagingAbs, wsID, name, templateID, templateTools); err != nil {
+	if err := writeWorkspaceMetadataV2(stagingAbs, wsID, name, templateID, workspaceTools); err != nil {
 		// Non-fatal: workspace is created even if metadata write fails.
 		// The tree reconciliation will pick up the workspace marker.
 	}
@@ -404,6 +424,16 @@ func applyWorkspaceTemplate(workspaceDir, templateID string) error {
 	return nil
 }
 
+func applyWorkspaceToolFolders(workspaceDir string, workspaceTools []string) error {
+	folders := toolsToFolders(workspaceTools)
+	for _, folder := range folders {
+		if err := os.MkdirAll(filepath.Join(workspaceDir, folder), 0o755); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // writeWorkspaceMetadataV2 writes workspace metadata to the vault's workspace registry
 // keyed by the workspace UUID. This enables metadata lookup after move/rename.
 // workspaceTools is the definitive list of tool plugin IDs for this workspace.
@@ -452,7 +482,7 @@ func marshalWorkspaceMetadataV2(workspaceID, workspaceName, templateID string, w
 		"workspaceId":    workspaceID,
 		"workspaceName":  workspaceName,
 		"features":       toolsToFeatures(workspaceTools),
-		"folders":        defaultFoldersV2(),
+		"folders":        toolsToFolders(workspaceTools),
 		"workspaceTools": workspaceTools,
 		"updatedAt":      now,
 	}
@@ -498,9 +528,13 @@ func resolveTemplateTools(templateID string) []string {
 
 // toolsToFeatures derives a features map from a workspaceTools list.
 func toolsToFeatures(tools []string) map[string]bool {
-	f := map[string]bool{"files": true, "notes": true}
+	f := make(map[string]bool)
 	for _, t := range tools {
 		switch t {
+		case "verstak.files":
+			f["files"] = true
+		case "verstak.notes":
+			f["notes"] = true
 		case "verstak.journal":
 			f["journal"] = true
 		case "verstak.activity":
@@ -516,11 +550,19 @@ func toolsToFeatures(tools []string) map[string]bool {
 	return f
 }
 
-func defaultFoldersV2() map[string]string {
-	return map[string]string{
-		"notes": "Notes",
-		"files": "Files",
+func toolsToFolders(tools []string) map[string]string {
+	folders := make(map[string]string)
+	for _, toolID := range tools {
+		switch toolID {
+		case "verstak.notes":
+			folders["notes"] = "Notes"
+		case "verstak.files":
+			folders["files"] = "Files"
+		case "verstak.secrets":
+			folders["secrets"] = "Secrets"
+		}
 	}
+	return folders
 }
 
 // ── Set current workspace ────────────────────────────────────────────────────

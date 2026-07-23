@@ -1,6 +1,7 @@
 package workspacetree
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
@@ -55,6 +56,54 @@ func TestCreateWorkspaceInRoot(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(vault, "Project", ".verstak", "workspace.json")); err != nil {
 		t.Fatal("marker missing")
+	}
+}
+
+func TestCreateWorkspaceWithToolsPersistsExactSelection(t *testing.T) {
+	vault := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(vault, ".verstak"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(vault, ".verstak", "vault.json"), []byte(`{"schemaVersion":1}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	svc := NewService(vault, nil)
+	if err := svc.Initialize(); err != nil {
+		t.Fatal(err)
+	}
+
+	selected := []string{"verstak.files", "verstak.secrets"}
+	ws, err := svc.CreateWorkspaceWithTools("", "AdminFiles", "writing", selected, noopRefresh)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	data, err := os.ReadFile(filepath.Join(vault, ".verstak", "workspaces", "uuid-"+ws.ID+".json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var metadata struct {
+		WorkspaceTools []string          `json:"workspaceTools"`
+		Features       map[string]bool   `json:"features"`
+		Folders        map[string]string `json:"folders"`
+	}
+	if err := json.Unmarshal(data, &metadata); err != nil {
+		t.Fatal(err)
+	}
+	if len(metadata.WorkspaceTools) != 2 || metadata.WorkspaceTools[0] != "verstak.files" || metadata.WorkspaceTools[1] != "verstak.secrets" {
+		t.Fatalf("workspaceTools = %#v", metadata.WorkspaceTools)
+	}
+	if metadata.Features["notes"] || !metadata.Features["files"] || !metadata.Features["secrets"] {
+		t.Fatalf("features = %#v", metadata.Features)
+	}
+	if _, ok := metadata.Folders["notes"]; ok {
+		t.Fatalf("inactive Notes folder recorded in metadata: %#v", metadata.Folders)
+	}
+	if metadata.Folders["files"] != "Files" || metadata.Folders["secrets"] != "Secrets" {
+		t.Fatalf("folders = %#v", metadata.Folders)
+	}
+	if _, err := os.Stat(filepath.Join(vault, "AdminFiles", "Secrets")); err != nil {
+		t.Fatal("selected Secrets tool folder missing:", err)
 	}
 }
 
