@@ -2353,15 +2353,17 @@ func (a *App) GetAppSettings() map[string]interface{} {
 	}
 	cfg := a.appSettings.Get()
 	return map[string]interface{}{
-		"schemaVersion":    cfg.SchemaVersion,
-		"currentVaultPath": cfg.CurrentVaultPath,
-		"recentVaults":     cfg.RecentVaults,
-		"theme":            cfg.Theme,
-		"language":         cfg.Language,
-		"devMode":          cfg.DevMode,
-		"debug":            a.debug,
-		"userPluginsDir":   cfg.UserPluginsDir,
-		"lastOpenedAt":     cfg.LastOpenedAt,
+		"schemaVersion":     cfg.SchemaVersion,
+		"currentVaultPath":  cfg.CurrentVaultPath,
+		"recentVaults":      cfg.RecentVaults,
+		"theme":             cfg.Theme,
+		"language":          cfg.Language,
+		"devMode":           cfg.DevMode,
+		"debug":             a.debug,
+		"userPluginsDir":    cfg.UserPluginsDir,
+		"sidebarWidth":      cfg.SidebarWidth,
+		"expandedFolderIds": cfg.ExpandedFolderIDs,
+		"lastOpenedAt":      cfg.LastOpenedAt,
 	}
 }
 
@@ -2373,6 +2375,25 @@ func (a *App) UpdateAppSettings(patch map[string]interface{}) string {
 
 	cfg := &appsettings.Config{}
 	hasConfigPatch := false
+	var sidebarWidth *int
+	var expandedFolderIDs *[]string
+	if value, exists := patch["sidebarWidth"]; exists {
+		width, ok := appSettingInt(value)
+		if !ok {
+			return "sidebarWidth must be an integer"
+		}
+		if width < appsettings.MinSidebarWidth || width > appsettings.MaxSidebarWidth {
+			return fmt.Sprintf("sidebarWidth must be between %d and %d", appsettings.MinSidebarWidth, appsettings.MaxSidebarWidth)
+		}
+		sidebarWidth = &width
+	}
+	if value, exists := patch["expandedFolderIds"]; exists {
+		ids, ok := appSettingStringSlice(value)
+		if !ok {
+			return "expandedFolderIds must be an array of strings"
+		}
+		expandedFolderIDs = &ids
+	}
 	if v, ok := patch["theme"].(string); ok && v != "" {
 		cfg.Theme = v
 		hasConfigPatch = true
@@ -2400,7 +2421,43 @@ func (a *App) UpdateAppSettings(patch map[string]interface{}) string {
 			return err.Error()
 		}
 	}
+	if sidebarWidth != nil || expandedFolderIDs != nil {
+		if err := a.appSettings.UpdateUIState(sidebarWidth, expandedFolderIDs); err != nil {
+			return err.Error()
+		}
+	}
 	return ""
+}
+
+func appSettingInt(value interface{}) (int, bool) {
+	switch typed := value.(type) {
+	case int:
+		return typed, true
+	case float64:
+		integer := int(typed)
+		return integer, float64(integer) == typed
+	default:
+		return 0, false
+	}
+}
+
+func appSettingStringSlice(value interface{}) ([]string, bool) {
+	switch typed := value.(type) {
+	case []string:
+		return append([]string(nil), typed...), true
+	case []interface{}:
+		result := make([]string, 0, len(typed))
+		for _, item := range typed {
+			text, ok := item.(string)
+			if !ok {
+				return nil, false
+			}
+			result = append(result, text)
+		}
+		return result, true
+	default:
+		return nil, false
+	}
 }
 
 // SetCurrentVault sets the current vault path in app settings and re-opens the vault.

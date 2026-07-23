@@ -15,6 +15,8 @@ export default {
   'sidebar.error.contributions': 'Не удалось загрузить элементы плагинов',
   'sidebar.error.load': 'Не удалось загрузить боковую панель',
   'sidebar.error.ui': 'Ошибка интерфейса плагина',
+  'sidebar.resize': 'Изменить ширину боковой панели',
+  'sidebar.resizeReset': 'Перетащите для изменения ширины. Двойной щелчок — сброс.',
   'workspace.overview': 'Обзор',
   'workspace.search': 'Поиск в Деле',
   'workspace.tools': 'Инструменты Дела',

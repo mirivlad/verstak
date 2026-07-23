@@ -29,6 +29,42 @@ func TestLoad_DefaultCreation(t *testing.T) {
 	if cfg.Language != "system" {
 		t.Errorf("Language: got %q, want %q", cfg.Language, "system")
 	}
+	if cfg.SidebarWidth != DefaultSidebarWidth {
+		t.Errorf("SidebarWidth: got %d, want %d", cfg.SidebarWidth, DefaultSidebarWidth)
+	}
+}
+
+func TestUpdatePersistsSidebarAndExpandedFolders(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.json")
+	manager := NewManager(path)
+	if err := manager.Load(); err != nil {
+		t.Fatal(err)
+	}
+	width := 320
+	expanded := []string{"folder-a", "folder-b"}
+	if err := manager.UpdateUIState(&width, &expanded); err != nil {
+		t.Fatal(err)
+	}
+
+	reloaded := NewManager(path)
+	if err := reloaded.Load(); err != nil {
+		t.Fatal(err)
+	}
+	cfg := reloaded.Get()
+	if cfg.SidebarWidth != 320 {
+		t.Fatalf("SidebarWidth = %d, want 320", cfg.SidebarWidth)
+	}
+	if !reflect.DeepEqual(cfg.ExpandedFolderIDs, []string{"folder-a", "folder-b"}) {
+		t.Fatalf("ExpandedFolderIDs = %#v", cfg.ExpandedFolderIDs)
+	}
+
+	expanded = []string{}
+	if err := reloaded.UpdateUIState(nil, &expanded); err != nil {
+		t.Fatal(err)
+	}
+	if got := reloaded.Get().ExpandedFolderIDs; len(got) != 0 {
+		t.Fatalf("ExpandedFolderIDs after clear = %#v", got)
+	}
 }
 
 func TestLoad_MissingLanguageDefaultsToSystem(t *testing.T) {

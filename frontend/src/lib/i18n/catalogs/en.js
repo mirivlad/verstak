@@ -15,6 +15,8 @@ export default {
   'sidebar.error.contributions': 'Failed to load plugin contributions',
   'sidebar.error.load': 'Failed to load sidebar',
   'sidebar.error.ui': 'Plugin UI error',
+  'sidebar.resize': 'Resize sidebar',
+  'sidebar.resizeReset': 'Drag to resize. Double-click to reset.',
   'workspace.overview': 'Overview',
   'workspace.search': 'Search in this Deal',
   'workspace.tools': 'Deal tools',

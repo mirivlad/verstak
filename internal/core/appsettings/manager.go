@@ -17,24 +17,30 @@ import (
 
 // Config represents the application settings stored in ~/.config/verstak/config.json.
 type Config struct {
-	SchemaVersion    int                     `json:"schemaVersion"`
-	CurrentVaultPath string                  `json:"currentVaultPath"`
-	RecentVaults     []string                `json:"recentVaults"`
-	Theme            string                  `json:"theme"`
-	Language         string                  `json:"language"`
-	DevMode          bool                    `json:"devMode"`
-	UserPluginsDir   string                  `json:"userPluginsDir"`
-	Workbench        WorkbenchPreferences    `json:"workbench,omitempty"`
-	Sync             SyncSettings            `json:"sync,omitempty"`
-	BrowserReceiver  BrowserReceiverSettings `json:"browserReceiver,omitempty"`
-	WindowState      *WindowState            `json:"windowState,omitempty"`
-	LastOpenedAt     string                  `json:"lastOpenedAt"`
+	SchemaVersion     int                     `json:"schemaVersion"`
+	CurrentVaultPath  string                  `json:"currentVaultPath"`
+	RecentVaults      []string                `json:"recentVaults"`
+	Theme             string                  `json:"theme"`
+	Language          string                  `json:"language"`
+	DevMode           bool                    `json:"devMode"`
+	UserPluginsDir    string                  `json:"userPluginsDir"`
+	SidebarWidth      int                     `json:"sidebarWidth"`
+	ExpandedFolderIDs []string                `json:"expandedFolderIds"`
+	Workbench         WorkbenchPreferences    `json:"workbench,omitempty"`
+	Sync              SyncSettings            `json:"sync,omitempty"`
+	BrowserReceiver   BrowserReceiverSettings `json:"browserReceiver,omitempty"`
+	WindowState       *WindowState            `json:"windowState,omitempty"`
+	LastOpenedAt      string                  `json:"lastOpenedAt"`
 }
 
 const (
 	LanguageSystem  = "system"
 	LanguageEnglish = "en"
 	LanguageRussian = "ru"
+
+	MinSidebarWidth     = 180
+	MaxSidebarWidth     = 420
+	DefaultSidebarWidth = 220
 )
 
 func validLanguage(language string) bool {
@@ -143,6 +149,10 @@ func (m *Manager) Load() error {
 	}
 	if cfg.RecentVaults == nil {
 		cfg.RecentVaults = []string{}
+	}
+	cfg.SidebarWidth = normalizeSidebarWidth(cfg.SidebarWidth)
+	if cfg.ExpandedFolderIDs == nil {
+		cfg.ExpandedFolderIDs = []string{}
 	}
 
 	m.config = &cfg
@@ -273,6 +283,27 @@ func (m *Manager) UpdateSync(syncSettings SyncSettings) error {
 	return m.saveLocked()
 }
 
+// UpdateUIState persists shell layout state without changing unrelated settings.
+func (m *Manager) UpdateUIState(sidebarWidth *int, expandedFolderIDs *[]string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if m.config == nil {
+		m.config = defaultConfig()
+	}
+	if sidebarWidth != nil {
+		if *sidebarWidth < MinSidebarWidth || *sidebarWidth > MaxSidebarWidth {
+			return fmt.Errorf("sidebar width must be between %d and %d", MinSidebarWidth, MaxSidebarWidth)
+		}
+		m.config.SidebarWidth = *sidebarWidth
+	}
+	if expandedFolderIDs != nil {
+		m.config.ExpandedFolderIDs = append([]string(nil), (*expandedFolderIDs)...)
+	}
+	m.config.LastOpenedAt = time.Now().UTC().Format(time.RFC3339)
+	return m.saveLocked()
+}
+
 // EnsureBrowserReceiverToken returns the persisted pairing token, creating it when absent.
 func (m *Manager) EnsureBrowserReceiverToken() (string, error) {
 	m.mu.Lock()
@@ -342,34 +373,39 @@ func (m *Manager) ClearCurrentVault() error {
 
 func defaultConfig() *Config {
 	return &Config{
-		SchemaVersion:    1,
-		CurrentVaultPath: "",
-		RecentVaults:     []string{},
-		Theme:            "dark",
-		Language:         LanguageSystem,
-		DevMode:          false,
-		UserPluginsDir:   filepath.Join(os.Getenv("HOME"), ".config", "verstak", "plugins"),
-		Workbench:        WorkbenchPreferences{},
-		WindowState:      &WindowState{Width: 1200, Height: 800},
-		LastOpenedAt:     time.Now().UTC().Format(time.RFC3339),
+		SchemaVersion:     1,
+		CurrentVaultPath:  "",
+		RecentVaults:      []string{},
+		Theme:             "dark",
+		Language:          LanguageSystem,
+		DevMode:           false,
+		UserPluginsDir:    filepath.Join(os.Getenv("HOME"), ".config", "verstak", "plugins"),
+		SidebarWidth:      DefaultSidebarWidth,
+		ExpandedFolderIDs: []string{},
+		Workbench:         WorkbenchPreferences{},
+		WindowState:       &WindowState{Width: 1200, Height: 800},
+		LastOpenedAt:      time.Now().UTC().Format(time.RFC3339),
 	}
 }
 
 func copyConfig(c *Config) *Config {
 	recent := make([]string, len(c.RecentVaults))
 	copy(recent, c.RecentVaults)
+	expandedFolderIDs := append([]string(nil), c.ExpandedFolderIDs...)
 	cfg := &Config{
-		SchemaVersion:    c.SchemaVersion,
-		CurrentVaultPath: c.CurrentVaultPath,
-		RecentVaults:     recent,
-		Theme:            c.Theme,
-		Language:         c.Language,
-		DevMode:          c.DevMode,
-		UserPluginsDir:   c.UserPluginsDir,
-		Workbench:        c.Workbench,
-		Sync:             c.Sync,
-		BrowserReceiver:  c.BrowserReceiver,
-		LastOpenedAt:     c.LastOpenedAt,
+		SchemaVersion:     c.SchemaVersion,
+		CurrentVaultPath:  c.CurrentVaultPath,
+		RecentVaults:      recent,
+		Theme:             c.Theme,
+		Language:          c.Language,
+		DevMode:           c.DevMode,
+		UserPluginsDir:    c.UserPluginsDir,
+		SidebarWidth:      c.SidebarWidth,
+		ExpandedFolderIDs: expandedFolderIDs,
+		Workbench:         c.Workbench,
+		Sync:              c.Sync,
+		BrowserReceiver:   c.BrowserReceiver,
+		LastOpenedAt:      c.LastOpenedAt,
 	}
 	if c.WindowState != nil {
 		cfg.WindowState = &WindowState{
@@ -379,6 +415,19 @@ func copyConfig(c *Config) *Config {
 		}
 	}
 	return cfg
+}
+
+func normalizeSidebarWidth(width int) int {
+	if width == 0 {
+		return DefaultSidebarWidth
+	}
+	if width < MinSidebarWidth {
+		return MinSidebarWidth
+	}
+	if width > MaxSidebarWidth {
+		return MaxSidebarWidth
+	}
+	return width
 }
 
 func addRecent(list []string, path string, max int) []string {

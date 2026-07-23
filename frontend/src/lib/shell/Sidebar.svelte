@@ -19,6 +19,20 @@
   let errorMessage = '';
   let locale = i18n.getLocale();
   let unsubscribeLocale = null;
+  const MIN_SIDEBAR_WIDTH = 180;
+  const MAX_SIDEBAR_WIDTH = 420;
+  const DEFAULT_SIDEBAR_WIDTH = 220;
+  const MIN_CONTENT_WIDTH = 320;
+  let sidebarWidth = DEFAULT_SIDEBAR_WIDTH;
+  let viewportWidth = 1200;
+  let resizing = false;
+  let resizeStartX = 0;
+  let resizeStartWidth = DEFAULT_SIDEBAR_WIDTH;
+
+  $: visibleSidebarWidth = Math.min(
+    sidebarWidth,
+    Math.max(MIN_SIDEBAR_WIDTH, Math.min(MAX_SIDEBAR_WIDTH, viewportWidth - MIN_CONTENT_WIDTH)),
+  );
 
   $: tr = ((activeLocale) => (key, params, fallback) => {
     void activeLocale;
@@ -70,18 +84,23 @@
   }
 
   onMount(() => {
+    viewportWidth = window.innerWidth;
     unsubscribeLocale = i18n.subscribe((nextLocale) => {
       const changed = locale !== nextLocale;
       locale = nextLocale;
       if (changed) loadSidebar();
     });
     loadSidebar();
+    loadSidebarWidth();
     window.addEventListener('verstak:plugins-changed', loadSidebar);
+    window.addEventListener('resize', handleWindowResize);
   });
 
   onDestroy(() => {
+    stopResize();
     if (unsubscribeLocale) unsubscribeLocale();
     window.removeEventListener('verstak:plugins-changed', loadSidebar);
+    window.removeEventListener('resize', handleWindowResize);
   });
 
   function handleSidebarItem(item) {
@@ -90,9 +109,78 @@
     const viewId = item.view || item.id;
     window.dispatchEvent(new CustomEvent('verstak:open-view', { detail: { viewId, pluginId: item.pluginId } }));
   }
+
+  async function loadSidebarWidth() {
+    try {
+      const settings = await App.GetAppSettings();
+      const width = Number(settings?.sidebarWidth);
+      if (Number.isInteger(width)) {
+        sidebarWidth = clampWidth(width);
+      }
+    } catch {}
+  }
+
+  function clampWidth(width) {
+    return Math.max(MIN_SIDEBAR_WIDTH, Math.min(MAX_SIDEBAR_WIDTH, Math.round(width)));
+  }
+
+  function handleWindowResize() {
+    viewportWidth = window.innerWidth;
+  }
+
+  function startResize(event) {
+    if (window.innerWidth <= 720) return;
+    event.preventDefault();
+    resizing = true;
+    resizeStartX = event.clientX;
+    resizeStartWidth = visibleSidebarWidth;
+    event.currentTarget.setPointerCapture(event.pointerId);
+    document.body.classList.add('sidebar-resizing');
+  }
+
+  function continueResize(event) {
+    if (!resizing) return;
+    const maxWidth = Math.max(
+      MIN_SIDEBAR_WIDTH,
+      Math.min(MAX_SIDEBAR_WIDTH, viewportWidth - MIN_CONTENT_WIDTH),
+    );
+    sidebarWidth = Math.max(
+      MIN_SIDEBAR_WIDTH,
+      Math.min(maxWidth, resizeStartWidth + event.clientX - resizeStartX),
+    );
+  }
+
+  function stopResize(persist = false) {
+    if (!resizing) return;
+    resizing = false;
+    document.body.classList.remove('sidebar-resizing');
+    if (persist) persistSidebarWidth();
+  }
+
+  async function persistSidebarWidth() {
+    const err = await App.UpdateAppSettings({ sidebarWidth: Math.round(sidebarWidth) });
+    if (err) console.warn('[Sidebar] could not persist width');
+  }
+
+  function resetSidebarWidth() {
+    sidebarWidth = DEFAULT_SIDEBAR_WIDTH;
+    persistSidebarWidth();
+  }
+
+  function resizeWithKeyboard(event) {
+    let next = sidebarWidth;
+    if (event.key === 'ArrowLeft') next -= 10;
+    else if (event.key === 'ArrowRight') next += 10;
+    else if (event.key === 'Home') next = MIN_SIDEBAR_WIDTH;
+    else if (event.key === 'End') next = MAX_SIDEBAR_WIDTH;
+    else return;
+    event.preventDefault();
+    sidebarWidth = clampWidth(next);
+    persistSidebarWidth();
+  }
 </script>
 
-<aside class="sidebar">
+<aside class="sidebar" class:is-resizing={resizing} style="--sidebar-width:{visibleSidebarWidth}px">
   <div class="sidebar-header">
     <Icon name="logo" size={20} class="sidebar-logo" />
     <span class="sidebar-title">Verstak</span>
@@ -128,17 +216,57 @@
       </span>
     {/if}
   </div>
+  <button
+    type="button"
+    class="sidebar-resizer"
+    data-sidebar-resizer
+    aria-label={tr('sidebar.resize')}
+    title={tr('sidebar.resizeReset')}
+    on:pointerdown={startResize}
+    on:pointermove={continueResize}
+    on:pointerup={() => stopResize(true)}
+    on:pointercancel={() => stopResize(true)}
+    on:dblclick={resetSidebarWidth}
+    on:keydown={resizeWithKeyboard}
+  />
 </aside>
 
 <style>
   .sidebar {
-    width: 220px;
-    min-width: 220px;
+    position: relative;
+    width: var(--sidebar-width);
+    min-width: var(--sidebar-width);
     background: var(--vt-color-surface-muted);
     display: flex;
     flex-direction: column;
     border-right: 1px solid var(--vt-color-border);
     overflow: hidden;
+  }
+
+  .sidebar-resizer {
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 1;
+    width: 6px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    cursor: col-resize;
+    touch-action: none;
+  }
+  .sidebar-resizer:hover,
+  .sidebar-resizer:focus-visible,
+  .sidebar.is-resizing .sidebar-resizer {
+    background: var(--vt-color-accent);
+  }
+  .sidebar-resizer:focus-visible {
+    outline: none;
+  }
+  :global(body.sidebar-resizing) {
+    cursor: col-resize;
+    user-select: none;
   }
 
   .sidebar-header {
@@ -261,6 +389,10 @@
       max-height: 14rem;
       border-right: 0;
       border-bottom: 1px solid var(--vt-color-border);
+    }
+
+    .sidebar-resizer {
+      display: none;
     }
 
     .sidebar-header {

@@ -3269,6 +3269,24 @@ func TestAppSettingsLanguageAPI(t *testing.T) {
 	if got := app.GetAppSettings()["debug"]; got != true {
 		t.Fatalf("debug = %#v, want true", got)
 	}
+	if got := app.GetAppSettings()["sidebarWidth"]; got != appsettings.DefaultSidebarWidth {
+		t.Fatalf("sidebarWidth = %#v, want %d", got, appsettings.DefaultSidebarWidth)
+	}
+	if errStr := app.UpdateAppSettings(map[string]interface{}{
+		"sidebarWidth":      float64(320),
+		"expandedFolderIds": []interface{}{"folder-a", "folder-b"},
+	}); errStr != "" {
+		t.Fatalf("UpdateAppSettings UI state: %s", errStr)
+	}
+	if got := app.GetAppSettings(); got["sidebarWidth"] != 320 || !reflect.DeepEqual(got["expandedFolderIds"], []string{"folder-a", "folder-b"}) {
+		t.Fatalf("UI settings = %#v", got)
+	}
+	if errStr := app.UpdateAppSettings(map[string]interface{}{"sidebarWidth": float64(900)}); errStr == "" {
+		t.Fatal("UpdateAppSettings accepted an out-of-range sidebar width")
+	}
+	if got := app.GetAppSettings()["sidebarWidth"]; got != 320 {
+		t.Fatalf("sidebarWidth after rejected update = %#v, want 320", got)
+	}
 	if errStr := app.UpdateAppSettings(map[string]interface{}{"language": "ru"}); errStr != "" {
 		t.Fatalf("UpdateAppSettings language: %s", errStr)
 	}
