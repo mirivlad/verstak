@@ -3,6 +3,7 @@
   import * as App from '../../../wailsjs/go/api/App';
   import Icon from '../ui/Icon.svelte';
   import Modal from '../ui/Modal.svelte';
+  import OverlayHost from '../ui/OverlayHost.svelte';
   import Select from '../ui/Select.svelte';
   import TreeNode from './TreeNode.svelte';
   import { i18n } from '../i18n/index.js';
@@ -475,19 +476,21 @@
 
 <!-- Context Menu -->
 {#if ctxMenu}
-  <div class="vt-ctx" style="left:{ctxMenu.x}px;top:{ctxMenu.y}px" on:click|stopPropagation on:mousedown|stopPropagation on:keydown={(event) => event.key === 'Escape' && closeCtx()} role="menu" tabindex="-1">
-    {#if ctxMenu.kind === 'folder'}
-      <button class="vt-ctx-i" on:click={() => { const i = ctxMenu.id; closeCtx(); openCreateWorkspace(i); }}>{tr('workspaceTree.newDeal')}</button>
-      <button class="vt-ctx-i" on:click={() => { const i = ctxMenu.id; closeCtx(); openCreateFolder(i); }}>{tr('workspaceTree.newFolder')}</button>
-      <div class="vt-ctx-s" />
-      <button class="vt-ctx-i" on:click={() => { const {id: i, name: n} = ctxMenu; closeCtx(); openEditFolder(i, n); }}>{tr('workspaceTree.editFolder')}</button>
-      <button class="vt-ctx-i vt-ctx-d" on:click={() => { const {id: i, name: n} = ctxMenu; closeCtx(); openTrash('folder', i, n); }}>{tr('workspaceTree.trashFolder')}</button>
-    {:else}
-      <button class="vt-ctx-i" on:click={() => { const i = ctxMenu.id; closeCtx(); selectWorkspace(i); }}>{tr('workspaceTree.open')}</button>
-      <button class="vt-ctx-i" on:click={() => { const {id: i, name: n} = ctxMenu; closeCtx(); openRename('workspace', i, n); }}>{tr('workspaceTree.renameDeal')}</button>
-      <button class="vt-ctx-i vt-ctx-d" on:click={() => { const {id: i, name: n} = ctxMenu; closeCtx(); openTrash('workspace', i, n); }}>{tr('workspaceTree.trashDeal')}</button>
-    {/if}
-  </div>
+  <OverlayHost x={ctxMenu.x} y={ctxMenu.y}>
+    <div class="vt-ctx" on:click|stopPropagation on:mousedown|stopPropagation on:keydown={(event) => event.key === 'Escape' && closeCtx()} role="menu" tabindex="-1">
+      {#if ctxMenu.kind === 'folder'}
+        <button class="vt-ctx-i" on:click={() => { const i = ctxMenu.id; closeCtx(); openCreateWorkspace(i); }}>{tr('workspaceTree.newDeal')}</button>
+        <button class="vt-ctx-i" on:click={() => { const i = ctxMenu.id; closeCtx(); openCreateFolder(i); }}>{tr('workspaceTree.newFolder')}</button>
+        <div class="vt-ctx-s" />
+        <button class="vt-ctx-i" on:click={() => { const {id: i, name: n} = ctxMenu; closeCtx(); openEditFolder(i, n); }}>{tr('workspaceTree.editFolder')}</button>
+        <button class="vt-ctx-i vt-ctx-d" on:click={() => { const {id: i, name: n} = ctxMenu; closeCtx(); openTrash('folder', i, n); }}>{tr('workspaceTree.trashFolder')}</button>
+      {:else}
+        <button class="vt-ctx-i" on:click={() => { const i = ctxMenu.id; closeCtx(); selectWorkspace(i); }}>{tr('workspaceTree.open')}</button>
+        <button class="vt-ctx-i" on:click={() => { const {id: i, name: n} = ctxMenu; closeCtx(); openRename('workspace', i, n); }}>{tr('workspaceTree.renameDeal')}</button>
+        <button class="vt-ctx-i vt-ctx-d" on:click={() => { const {id: i, name: n} = ctxMenu; closeCtx(); openTrash('workspace', i, n); }}>{tr('workspaceTree.trashDeal')}</button>
+      {/if}
+    </div>
+  </OverlayHost>
 {/if}
 
 <!-- Modals -->
@@ -643,7 +646,7 @@
 
   .vt-trash-desc { color: var(--vt-color-text-secondary); font-size: 0.84rem; margin: 0; line-height: 1.5; }
 
-  .vt-ctx { position: fixed; z-index: 10001; min-width: 10rem; background: var(--vt-color-surface); border: 1px solid var(--vt-color-border-strong); border-radius: var(--vt-radius-md); box-shadow: 0 8px 24px rgba(0,0,0,0.3); padding: 0.25rem; }
+  .vt-ctx { min-width: 10rem; background: var(--vt-color-surface); border: 1px solid var(--vt-color-border-strong); border-radius: var(--vt-radius-md); box-shadow: 0 8px 24px rgba(0,0,0,0.3); padding: 0.25rem; }
   .vt-ctx-i { display: block; width: 100%; text-align: left; padding: 0.3rem 0.6rem; background: none; border: none; color: var(--vt-color-text-secondary); font-size: 0.78rem; cursor: pointer; border-radius: var(--vt-radius-sm); }
   .vt-ctx-i:hover { background: var(--vt-color-surface-hover); color: var(--vt-color-text-primary); }
   .vt-ctx-s { height: 1px; background: var(--vt-color-border); margin: 0.2rem 0.3rem; }

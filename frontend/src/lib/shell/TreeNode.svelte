@@ -62,6 +62,7 @@
   }
 
   function onCtxMenu(e) {
+    e.preventDefault();
     dispatch('contextmenu', { e, kind: node.kind, id: node.id, name: node.name });
   }
 
