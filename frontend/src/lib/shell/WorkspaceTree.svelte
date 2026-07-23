@@ -602,17 +602,17 @@
 <!-- Context Menu -->
 {#if ctxMenu}
   <OverlayHost x={ctxMenu.x} y={ctxMenu.y}>
-    <div class="vt-ctx" on:click|stopPropagation on:mousedown|stopPropagation on:keydown={(event) => event.key === 'Escape' && closeCtx()} role="menu" tabindex="-1">
+    <div class="vt-menu vt-ctx" on:click|stopPropagation on:mousedown|stopPropagation on:keydown={(event) => event.key === 'Escape' && closeCtx()} role="menu" tabindex="-1">
       {#if ctxMenu.kind === 'folder'}
-        <button class="vt-ctx-i" on:click={() => { const i = ctxMenu.id; closeCtx(); openCreateWorkspace(i); }}>{tr('workspaceTree.newDeal')}</button>
-        <button class="vt-ctx-i" on:click={() => { const i = ctxMenu.id; closeCtx(); openCreateFolder(i); }}>{tr('workspaceTree.newFolder')}</button>
-        <div class="vt-ctx-s" />
-        <button class="vt-ctx-i" on:click={() => { const {id: i, name: n} = ctxMenu; closeCtx(); openEditFolder(i, n); }}>{tr('workspaceTree.editFolder')}</button>
-        <button class="vt-ctx-i vt-ctx-d" on:click={() => { const {id: i, name: n} = ctxMenu; closeCtx(); openTrash('folder', i, n); }}>{tr('workspaceTree.trashFolder')}</button>
+        <button class="vt-menu-item vt-ctx-i" on:click={() => { const i = ctxMenu.id; closeCtx(); openCreateWorkspace(i); }}>{tr('workspaceTree.newDeal')}</button>
+        <button class="vt-menu-item vt-ctx-i" on:click={() => { const i = ctxMenu.id; closeCtx(); openCreateFolder(i); }}>{tr('workspaceTree.newFolder')}</button>
+        <div class="vt-menu-separator vt-ctx-s" />
+        <button class="vt-menu-item vt-ctx-i" on:click={() => { const {id: i, name: n} = ctxMenu; closeCtx(); openEditFolder(i, n); }}>{tr('workspaceTree.editFolder')}</button>
+        <button class="vt-menu-item danger vt-ctx-i vt-ctx-d" on:click={() => { const {id: i, name: n} = ctxMenu; closeCtx(); openTrash('folder', i, n); }}>{tr('workspaceTree.trashFolder')}</button>
       {:else}
-        <button class="vt-ctx-i" on:click={() => { const i = ctxMenu.id; closeCtx(); selectWorkspace(i); }}>{tr('workspaceTree.open')}</button>
-        <button class="vt-ctx-i" on:click={() => { const {id: i, name: n} = ctxMenu; closeCtx(); openRename('workspace', i, n); }}>{tr('workspaceTree.renameDeal')}</button>
-        <button class="vt-ctx-i vt-ctx-d" on:click={() => { const {id: i, name: n} = ctxMenu; closeCtx(); openTrash('workspace', i, n); }}>{tr('workspaceTree.trashDeal')}</button>
+        <button class="vt-menu-item vt-ctx-i" on:click={() => { const i = ctxMenu.id; closeCtx(); selectWorkspace(i); }}>{tr('workspaceTree.open')}</button>
+        <button class="vt-menu-item vt-ctx-i" on:click={() => { const {id: i, name: n} = ctxMenu; closeCtx(); openRename('workspace', i, n); }}>{tr('workspaceTree.renameDeal')}</button>
+        <button class="vt-menu-item danger vt-ctx-i vt-ctx-d" on:click={() => { const {id: i, name: n} = ctxMenu; closeCtx(); openTrash('workspace', i, n); }}>{tr('workspaceTree.trashDeal')}</button>
       {/if}
     </div>
   </OverlayHost>
@@ -640,18 +640,18 @@
         <div class="vt-color-row">
           <input type="color" bind:value={folderColor} disabled={formBusy} class="vt-color-native" />
           <input class="vt-input vt-color-hex" type="text" bind:value={folderColor} placeholder="#RRGGBB" disabled={formBusy} />
-          <button type="button" class="vt-btn" on:click={resetFolderColor} disabled={formBusy}>{tr('workspaceTree.resetColor')}</button>
+          <button type="button" class="vt-button secondary vt-btn" on:click={resetFolderColor} disabled={formBusy}>{tr('workspaceTree.resetColor')}</button>
         </div>
       </div>
     </label>
-    {#if formError}<p class="vt-ferr">{formError}</p>{/if}
+    {#if formError}<p class="vt-inline-alert error vt-ferr">{formError}</p>{/if}
   {/if}
   <svelte:fragment slot="actions">
     {#if folderEditorView === 'icon-picker'}
-      <button type="button" class="vt-btn" on:click={() => { folderEditorView = 'form'; }}>{tr('common.back')}</button>
+      <button type="button" class="vt-button secondary vt-btn" on:click={() => { folderEditorView = 'form'; }}>{tr('common.back')}</button>
     {:else}
-      <button type="button" class="vt-btn" on:click={closeModal} disabled={formBusy}>{tr('common.cancel')}</button>
-      <button class="vt-btn-p" on:click={doCreateFolder} disabled={formBusy}>{tr('common.create')}</button>
+      <button type="button" class="vt-button secondary vt-btn" on:click={closeModal} disabled={formBusy}>{tr('common.cancel')}</button>
+      <button class="vt-button primary vt-btn-p" on:click={doCreateFolder} disabled={formBusy}>{tr('common.create')}</button>
     {/if}
   </svelte:fragment>
 </Modal>
@@ -677,18 +677,18 @@
         <div class="vt-color-row">
           <input type="color" bind:value={folderColor} disabled={formBusy} class="vt-color-native" />
           <input class="vt-input vt-color-hex" type="text" bind:value={folderColor} placeholder="#RRGGBB" disabled={formBusy} />
-          <button type="button" class="vt-btn" on:click={resetFolderColor} disabled={formBusy}>{tr('workspaceTree.resetColor')}</button>
+          <button type="button" class="vt-button secondary vt-btn" on:click={resetFolderColor} disabled={formBusy}>{tr('workspaceTree.resetColor')}</button>
         </div>
       </div>
     </label>
-    {#if formError}<p class="vt-ferr">{formError}</p>{/if}
+    {#if formError}<p class="vt-inline-alert error vt-ferr">{formError}</p>{/if}
   {/if}
   <svelte:fragment slot="actions">
     {#if folderEditorView === 'icon-picker'}
-      <button type="button" class="vt-btn" on:click={() => { folderEditorView = 'form'; }}>{tr('common.back')}</button>
+      <button type="button" class="vt-button secondary vt-btn" on:click={() => { folderEditorView = 'form'; }}>{tr('common.back')}</button>
     {:else}
-      <button type="button" class="vt-btn" on:click={closeModal} disabled={formBusy}>{tr('common.cancel')}</button>
-      <button class="vt-btn-p" on:click={doEditFolder} disabled={formBusy}>{tr('common.save')}</button>
+      <button type="button" class="vt-button secondary vt-btn" on:click={closeModal} disabled={formBusy}>{tr('common.cancel')}</button>
+      <button class="vt-button primary vt-btn-p" on:click={doEditFolder} disabled={formBusy}>{tr('common.save')}</button>
     {/if}
   </svelte:fragment>
 </Modal>
@@ -716,14 +716,14 @@
       </div>
     </div>
   {/if}
-  {#if formError}<p class="vt-ferr" data-workspace-create-error>{formError}</p>{/if}
-  <svelte:fragment slot="actions"><button class="vt-btn" on:click={closeModal} disabled={formBusy}>{tr('common.cancel')}</button><button class="vt-btn-p" on:click={doCreateWorkspace} disabled={formBusy}>{tr('workspaceTree.create')}</button></svelte:fragment>
+  {#if formError}<p class="vt-inline-alert error vt-ferr" data-workspace-create-error>{formError}</p>{/if}
+  <svelte:fragment slot="actions"><button class="vt-button secondary vt-btn" on:click={closeModal} disabled={formBusy}>{tr('common.cancel')}</button><button class="vt-button primary vt-btn-p" on:click={doCreateWorkspace} disabled={formBusy}>{tr('workspaceTree.create')}</button></svelte:fragment>
 </Modal>
 
 <Modal title={tr('workspaceTree.rename')} show={modal?.type === 'rename'} on:close={closeModal}>
   <label class="vt-field"><span>{tr('workspaceTree.newName')}</span><input class="vt-input wt-rename" type="text" bind:value={formName} disabled={formBusy} on:keydown={(e) => e.key === 'Enter' && doRename()} /></label>
-  {#if formError}<p class="vt-ferr">{formError}</p>{/if}
-  <svelte:fragment slot="actions"><button class="vt-btn" on:click={closeModal} disabled={formBusy}>{tr('common.cancel')}</button><button class="vt-btn-p" title={tr('workspaceTree.saveRename')} on:click={doRename} disabled={formBusy}>{tr('common.save')}</button></svelte:fragment>
+  {#if formError}<p class="vt-inline-alert error vt-ferr">{formError}</p>{/if}
+  <svelte:fragment slot="actions"><button class="vt-button secondary vt-btn" on:click={closeModal} disabled={formBusy}>{tr('common.cancel')}</button><button class="vt-button primary vt-btn-p" title={tr('workspaceTree.saveRename')} on:click={doRename} disabled={formBusy}>{tr('common.save')}</button></svelte:fragment>
 </Modal>
 
 <Modal title={(modal?.kind === 'folder' ? tr('workspaceTree.trashFolder') : tr('workspaceTree.trashDeal')) + (modal?.name ? ' «' + modal.name + '»?' : '?')} show={modal?.type === 'trash'} on:close={closeModal}>
@@ -736,7 +736,7 @@
       {tr('workspaceTree.trashDealDesc')}
     {/if}
   </p>
-  <svelte:fragment slot="actions"><button class="vt-btn" on:click={closeModal} disabled={formBusy}>{tr('common.cancel')}</button><button class="vt-btn-d" on:click={doTrash} disabled={formBusy}>{tr('workspaceTree.toTrash')}</button></svelte:fragment>
+  <svelte:fragment slot="actions"><button class="vt-button secondary vt-btn" on:click={closeModal} disabled={formBusy}>{tr('common.cancel')}</button><button class="vt-button danger vt-btn-d" on:click={doTrash} disabled={formBusy}>{tr('workspaceTree.toTrash')}</button></svelte:fragment>
 </Modal>
 
 <style>

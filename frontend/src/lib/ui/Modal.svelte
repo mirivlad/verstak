@@ -43,24 +43,6 @@
 {/if}
 
 <style>
-  .vt-modal-overlay {
-    position: fixed; inset: 0; z-index: 10000;
-    display: flex; align-items: center; justify-content: center;
-    padding: 1rem;
-    background: rgba(4, 8, 18, 0.7);
-  }
-  .vt-modal {
-    width: min(28rem, 100%);
-    display: grid; gap: 0.85rem;
-    padding: 1rem;
-    border: 1px solid var(--vt-color-border-strong);
-    border-radius: var(--vt-radius-lg);
-    background: var(--vt-color-surface);
-    box-shadow: 0 18px 44px rgba(0, 0, 0, 0.38);
-  }
   .vt-modal-wide { width: min(36rem, 100%); }
-  .vt-modal-header { display: flex; align-items: flex-start; justify-content: space-between; }
   .vt-modal-header h2 { margin: 0; font-size: 1rem; color: var(--vt-color-text-primary); }
-  .vt-modal-body { display: grid; gap: 0.75rem; }
-  .vt-modal-actions { display: flex; gap: 0.4rem; justify-content: flex-end; }
 </style>
