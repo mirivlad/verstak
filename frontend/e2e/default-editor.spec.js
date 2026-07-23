@@ -36,6 +36,59 @@ test.describe('F: Default Editor Plugin', () => {
     await expect(textarea).toHaveValue('Buy groceries\nWrite tests');
   });
 
+  test('soft wrap defaults on, persists, and never changes saved newlines', async ({ page }) => {
+    await page.evaluate(async () => {
+      const [result, err] = await window.go.api.App.OpenWorkbenchResource('verstak.platform-test', {
+        kind: 'vault-file',
+        path: 'Docs/todo.txt',
+        extension: '.txt',
+        context: { sourceView: 'files' },
+      });
+      if (err) throw new Error(err);
+      window.dispatchEvent(new CustomEvent('verstak:workbench-opened', { detail: result }));
+    });
+
+    const editor = page.locator('[data-editor-mode="text"]');
+    const wrap = editor.locator('[data-editor-action="toggle-wrap"]');
+    const textarea = editor.locator('[data-editor-textarea]');
+    await expect(wrap).toHaveText('Wrap long lines');
+    await expect(wrap).toHaveAttribute('aria-pressed', 'true');
+    await expect(textarea).toHaveAttribute('wrap', 'soft');
+
+    const exactText = 'one long logical line that only wraps visually and must not gain a newline\nsecond logical line';
+    await textarea.fill(exactText);
+    await editor.locator('[data-editor-action="save"]').click();
+    await expect.poll(async () => page.evaluate(async () => {
+      const [content, err] = await window.go.api.App.ReadVaultTextFile('verstak.platform-test', 'Docs/todo.txt');
+      if (err) throw new Error(err);
+      return content;
+    })).toBe(exactText);
+
+    await wrap.click();
+    await expect(wrap).toHaveAttribute('aria-pressed', 'false');
+    await expect(textarea).toHaveAttribute('wrap', 'off');
+    await expect.poll(async () => page.evaluate(async () => {
+      const [settings, err] = await window.go.api.App.ReadPluginSettings('verstak.default-editor');
+      if (err) throw new Error(err);
+      return settings.wrapLongLines;
+    })).toBe(false);
+
+    await page.locator('.main-content-header .close-btn').click();
+    await page.evaluate(async () => {
+      const [result, err] = await window.go.api.App.OpenWorkbenchResource('verstak.platform-test', {
+        kind: 'vault-file',
+        path: 'Docs/todo.txt',
+        extension: '.txt',
+        context: { sourceView: 'files' },
+      });
+      if (err) throw new Error(err);
+      window.dispatchEvent(new CustomEvent('verstak:workbench-opened', { detail: result }));
+    });
+    const reopened = page.locator('[data-editor-mode="text"]');
+    await expect(reopened.locator('[data-editor-action="toggle-wrap"]')).toHaveAttribute('aria-pressed', 'false');
+    await expect(reopened.locator('[data-editor-textarea]')).toHaveAttribute('wrap', 'off');
+  });
+
   test('secret link opens its exact secret and closing it restores the note preview', async ({ page }) => {
     const notePath = 'Notes/Secret Link.md';
     const noteContent = '# Secret link\n\n[Target secret](verstak-secret://target.secret)';
