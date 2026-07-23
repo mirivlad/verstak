@@ -9,16 +9,18 @@ import (
 type TreeBuilder struct {
 	folders    map[string]ScannedFolder
 	workspaces map[string]ScannedWorkspace
+	order      OrderState
 	// children maps parent folder ID → child folder IDs and workspace IDs.
 	folderChildren    map[string][]ScannedFolder
 	workspaceChildren map[string][]ScannedWorkspace
 }
 
 // BuildTree constructs a TreeSnapshot from a ScanResult.
-func BuildTree(scan *ScanResult, currentWorkspaceID string, revision uint64) *TreeSnapshot {
+func BuildTree(scan *ScanResult, currentWorkspaceID string, revision uint64, order OrderState) *TreeSnapshot {
 	b := &TreeBuilder{
 		folders:           scan.Folders,
 		workspaces:        scan.Workspaces,
+		order:             order,
 		folderChildren:    make(map[string][]ScannedFolder),
 		workspaceChildren: make(map[string][]ScannedWorkspace),
 	}
@@ -35,14 +37,6 @@ func (b *TreeBuilder) build(currentWorkspaceID string, revision uint64, warnings
 		// A workspace's parent is the folder that physically contains it.
 		pid := b.findParentFolder(ws.RootPath)
 		b.workspaceChildren[pid] = append(b.workspaceChildren[pid], ws)
-	}
-
-	// Sort children.
-	for pid := range b.folderChildren {
-		sortFolders(b.folderChildren[pid])
-	}
-	for pid := range b.workspaceChildren {
-		sortWorkspaces(b.workspaceChildren[pid])
 	}
 
 	// Build root nodes: folders and workspaces with no parent folder.
@@ -91,15 +85,45 @@ func (b *TreeBuilder) buildChildren(parentID string) []TreeNode {
 		nodes = append(nodes, node)
 	}
 
-	// Sort: folders first, then workspaces, natural case-insensitive by name.
+	// Deterministic fallback: folders first, then workspaces, by folded name and
+	// finally stable key so equal names do not inherit map iteration order.
 	sort.SliceStable(nodes, func(i, j int) bool {
 		if nodes[i].Kind != nodes[j].Kind {
 			return nodes[i].Kind == "folder"
 		}
-		return strings.ToLower(nodes[i].Name) < strings.ToLower(nodes[j].Name)
+		leftName := strings.ToLower(nodes[i].Name)
+		rightName := strings.ToLower(nodes[j].Name)
+		if leftName != rightName {
+			return leftName < rightName
+		}
+		return nodes[i].Key < nodes[j].Key
 	})
 
-	return nodes
+	parentKey := parentID
+	if parentKey == "" {
+		parentKey = "root"
+	}
+	stored := b.order.Children[parentKey]
+	if len(stored) == 0 {
+		return nodes
+	}
+	byKey := make(map[string]TreeNode, len(nodes))
+	for _, node := range nodes {
+		byKey[node.Key] = node
+	}
+	ordered := make([]TreeNode, 0, len(nodes))
+	for _, key := range stored {
+		if node, ok := byKey[key]; ok {
+			ordered = append(ordered, node)
+			delete(byKey, key)
+		}
+	}
+	for _, node := range nodes {
+		if _, ok := byKey[node.Key]; ok {
+			ordered = append(ordered, node)
+		}
+	}
+	return ordered
 }
 
 // findParentFolder finds the folder UUID that physically contains a workspace path.
@@ -125,18 +149,6 @@ func (b *TreeBuilder) findParentFolder(workspacePath string) string {
 		parent = parentPath(parent)
 	}
 	return ""
-}
-
-func sortFolders(folders []ScannedFolder) {
-	sort.SliceStable(folders, func(i, j int) bool {
-		return strings.ToLower(folders[i].Name) < strings.ToLower(folders[j].Name)
-	})
-}
-
-func sortWorkspaces(workspaces []ScannedWorkspace) {
-	sort.SliceStable(workspaces, func(i, j int) bool {
-		return strings.ToLower(workspaces[i].Name) < strings.ToLower(workspaces[j].Name)
-	})
 }
 
 func collectWorkspaceIDs(workspaces map[string]ScannedWorkspace) map[string]bool {

@@ -259,9 +259,20 @@ func (s *Service) fullReconcile() error {
 	// Merge reconciler warnings into scan for tree building.
 	scan.Warnings = append(scan.Warnings, result.Warnings...)
 
+	order, err := ReadOrderState(s.vaultDir)
+	if err != nil {
+		scan.Warnings = append(scan.Warnings, TreeDiagnostic{
+			Level:   "warning",
+			Code:    "workspace-tree-order-invalid",
+			Message: err.Error(),
+			Path:    filepath.ToSlash(filepath.Join(".verstak", "workspace-tree", "order.json")),
+		})
+		order = emptyOrderState()
+	}
+
 	// Build tree.
 	s.revision++
-	tree := BuildTree(scan, s.currentWS, s.revision)
+	tree := BuildTree(scan, s.currentWS, s.revision, order)
 
 	// Write new snapshot.
 	if err := WriteSnapshot(s.vaultDir, &result.Snapshot); err != nil {
