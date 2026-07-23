@@ -2548,6 +2548,9 @@ func TestPluginListWorkspacesReturnsNestedDealsOnly(t *testing.T) {
 	writeMarker("Clients/Acme", "workspace.json", `{"schemaVersion":1,"workspaceId":"22222222-2222-4222-8222-222222222222"}`)
 	writeMarker("Project", "workspace.json", `{"schemaVersion":1,"workspaceId":"33333333-3333-4333-8333-333333333333"}`)
 	writeMarker("Broken", "workspace.json", `{"schemaVersion":1,"workspaceId":"44444444-4444-4444-8444-444444444444"}`)
+	if err := os.MkdirAll(filepath.Join(root, "OrdinaryFolder"), 0o755); err != nil {
+		t.Fatal(err)
+	}
 	writeMetadata("22222222-2222-4222-8222-222222222222", `{"workspaceTools":["files.plugin"]}`)
 	writeMetadata("33333333-3333-4333-8333-333333333333", `{"workspaceTools":["another.plugin"]}`)
 	writeMetadata("44444444-4444-4444-8444-444444444444", `{"workspaceTools":`)
@@ -2565,6 +2568,22 @@ func TestPluginListWorkspacesReturnsNestedDealsOnly(t *testing.T) {
 	}
 	if rows[0].RootPath != "Clients/Acme" {
 		t.Fatalf("workspaces = %#v", rows)
+	}
+	writeMetadata("22222222-2222-4222-8222-222222222222", `{"workspaceTools":["another.plugin"]}`)
+	rows, errText = app.PluginListWorkspaces("files.plugin")
+	if errText != "" {
+		t.Fatal(errText)
+	}
+	if len(rows) != 0 {
+		t.Fatalf("disabled workspace remained selectable: %#v", rows)
+	}
+	writeMetadata("22222222-2222-4222-8222-222222222222", `{"workspaceTools":["files.plugin"]}`)
+	rows, errText = app.PluginListWorkspaces("files.plugin")
+	if errText != "" {
+		t.Fatal(errText)
+	}
+	if len(rows) != 1 || rows[0].RootPath != "Clients/Acme" {
+		t.Fatalf("re-enabled workspace was not restored: %#v", rows)
 	}
 	app.plugins[0].Manifest.Permissions = nil
 	if _, errText := app.PluginListWorkspaces("files.plugin"); !strings.Contains(errText, "files.read") {

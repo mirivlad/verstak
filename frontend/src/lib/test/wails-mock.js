@@ -380,7 +380,7 @@ import importStyle from '../../../../../verstak-official-plugins/plugins/import/
   var trashPayloads = {};
   window.__wailsMockExternalOpens = [];
   var workspaceTree = makeDefaultWorkspaceTree();
-  var workspaceMetadata = {};
+  var workspaceMetadata = makeDefaultWorkspaceMetadata();
   var reloadResponseMode = 'tuple';
   var listVaultFilesResponseMode = 'tuple';
   var syncState = makeDefaultSyncState();
@@ -536,6 +536,14 @@ import importStyle from '../../../../../verstak-official-plugins/plugins/import/
       folders: folders,
       workspaceTools: template.workspaceTools.slice(),
       updatedAt: now,
+    };
+  }
+
+  function makeDefaultWorkspaceMetadata() {
+    var projectTemplate = workspaceTemplateByID('project');
+    return {
+      Project: metadataForTemplate('Project', projectTemplate),
+      Test: metadataForTemplate('Test', projectTemplate),
     };
   }
 
@@ -4129,7 +4137,11 @@ import importStyle from '../../../../../verstak-official-plugins/plugins/import/
       var out = [];
       function collect(nodes) {
         (nodes || []).forEach(function (node) {
-          if (node.kind === 'workspace') out.push({ id: node.id, name: node.name, rootPath: node.path });
+          var metadata = workspaceMetadata[node.path] || {};
+          var workspaceTools = Array.isArray(metadata.workspaceTools) ? metadata.workspaceTools : [];
+          if (node.kind === 'workspace' && workspaceTools.indexOf(pluginId) !== -1) {
+            out.push({ id: node.id, name: node.name, rootPath: node.path });
+          }
           collect(node.children);
         });
       }
@@ -4545,7 +4557,7 @@ import importStyle from '../../../../../verstak-official-plugins/plugins/import/
       trashPayloads = {};
       window.__wailsMockExternalOpens = [];
       workspaceTree = makeDefaultWorkspaceTree();
-      workspaceMetadata = {};
+      workspaceMetadata = makeDefaultWorkspaceMetadata();
       reloadResponseMode = 'tuple';
       listVaultFilesResponseMode = 'tuple';
       syncState = makeDefaultSyncState();
