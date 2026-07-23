@@ -76,6 +76,13 @@ test.describe('UX follow-up fixes', () => {
   });
 
   test('workspace Search input keeps focus while typing', async ({ page }) => {
+    await page.evaluate(async () => {
+      const metadata = await window.go.api.App.GetWorkspaceMetadata('Project');
+      await window.go.api.App.UpdateWorkspaceMetadata('Project', {
+        workspaceTools: [...metadata.workspaceTools, 'verstak.search'],
+      });
+    });
+    await page.locator('.wt-label').filter({ hasText: 'Test' }).click();
     await page.locator('.wt-label').filter({ hasText: 'Project' }).click();
     await page.getByRole('tab', { name: 'Search' }).click();
     const searchInput = page.locator('[data-search-input="query"]');
