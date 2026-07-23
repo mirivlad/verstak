@@ -2065,6 +2065,198 @@ func TestPlaceWorkspaceTreeNodeV2ReturnsBackendValidationError(t *testing.T) {
 	}
 }
 
+func TestApplyRemoteSemanticTreeMovesBeforeOrder(t *testing.T) {
+	app, root := newSyncFilesTestApp(t, []string{"files.read", "files.write", "files.delete"}, "local-device")
+	app.treeV2 = workspacetree.NewService(root, nil)
+	if err := app.treeV2.Initialize(); err != nil {
+		t.Fatal(err)
+	}
+	source, err := app.treeV2.CreateFolder("", "Source", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	target, err := app.treeV2.CreateFolder("", "Target", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	deal, err := app.treeV2.CreateWorkspace("", "Deal", "", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := app.syncSvc.RebaseSnapshot(); err != nil {
+		t.Fatal(err)
+	}
+
+	folderPayload, err := json.Marshal(syncFolderPayload{
+		FolderID:     source.ID,
+		Path:         "Target/Source",
+		PreviousPath: "Source",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := app.applyRemoteOp(syncsvc.Op{
+		DeviceID:    "remote-device",
+		EntityType:  syncsvc.EntityWorkspaceFolder,
+		EntityID:    source.ID,
+		OpType:      syncsvc.OpMove,
+		PayloadJSON: string(folderPayload),
+	}); err != nil {
+		t.Fatalf("apply remote folder move: %v", err)
+	}
+
+	workspacePayload, err := json.Marshal(syncWorkspacePayload{
+		WorkspaceID:  deal.ID,
+		Path:         "Target/Deal",
+		PreviousPath: "Deal",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := app.applyRemoteOp(syncsvc.Op{
+		DeviceID:    "remote-device",
+		EntityType:  syncsvc.EntityWorkspace,
+		EntityID:    deal.ID,
+		OpType:      syncsvc.OpRename,
+		PayloadJSON: string(workspacePayload),
+	}); err != nil {
+		t.Fatalf("apply remote workspace move: %v", err)
+	}
+
+	orderPayload, err := workspacetree.MarshalOrderState(workspacetree.OrderState{
+		Version: workspacetree.OrderVersion,
+		Children: map[string][]string{
+			"root":    {"folder:" + target.ID},
+			target.ID: {"workspace:" + deal.ID, "folder:" + source.ID},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := app.applyRemoteOp(syncsvc.Op{
+		DeviceID:    "remote-device",
+		EntityType:  syncsvc.EntityWorkspaceTreeOrder,
+		EntityID:    syncsvc.WorkspaceTreeOrderEntityID,
+		OpType:      syncsvc.OpUpdate,
+		PayloadJSON: string(orderPayload),
+	}); err != nil {
+		t.Fatalf("apply remote tree order: %v", err)
+	}
+
+	children := app.treeV2.GetTree().Roots[0].Children
+	if len(children) != 2 || children[0].Key != "workspace:"+deal.ID || children[1].Key != "folder:"+source.ID {
+		t.Fatalf("remote tree children = %#v", children)
+	}
+}
+
+func TestWorkspaceTreePlacementConvergesAcrossDevices(t *testing.T) {
+	appA, rootA := newSyncFilesTestApp(t, []string{"files.read", "files.write", "files.delete"}, "device-a")
+	appB, rootB := newSyncFilesTestApp(t, []string{"files.read", "files.write", "files.delete"}, "device-b")
+	const (
+		sourceID = "11111111-1111-4111-8111-111111111111"
+		targetID = "22222222-2222-4222-8222-222222222222"
+		dealID   = "33333333-3333-4333-8333-333333333333"
+	)
+	prepare := func(root string) {
+		t.Helper()
+		entries, err := os.ReadDir(root)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, entry := range entries {
+			if !strings.HasPrefix(entry.Name(), ".") {
+				if err := os.RemoveAll(filepath.Join(root, entry.Name())); err != nil {
+					t.Fatal(err)
+				}
+			}
+		}
+		for _, path := range []string{"Source", "Target", "Deal"} {
+			if err := os.MkdirAll(filepath.Join(root, path), 0o755); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if err := workspacetree.WriteFolderMarker(filepath.Join(root, "Source"), sourceID); err != nil {
+			t.Fatal(err)
+		}
+		if err := workspacetree.WriteFolderMarker(filepath.Join(root, "Target"), targetID); err != nil {
+			t.Fatal(err)
+		}
+		if err := workspacetree.WriteWorkspaceMarker(filepath.Join(root, "Deal"), dealID); err != nil {
+			t.Fatal(err)
+		}
+	}
+	prepare(rootA)
+	prepare(rootB)
+	for _, setup := range []struct {
+		app  *App
+		root string
+	}{
+		{appA, rootA},
+		{appB, rootB},
+	} {
+		setup.app.treeV2 = workspacetree.NewService(setup.root, nil)
+		if err := setup.app.treeV2.Initialize(); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := setup.app.syncSvc.RebaseSnapshot(); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if errText := appA.PlaceWorkspaceTreeNodeV2(workspacetree.PlacementRequest{
+		SourceKey: "workspace:" + dealID,
+		TargetKey: "folder:" + targetID,
+		Position:  workspacetree.PlacementInside,
+	}); errText != "" {
+		t.Fatalf("place Deal inside Target: %s", errText)
+	}
+	if errText := appA.PlaceWorkspaceTreeNodeV2(workspacetree.PlacementRequest{
+		SourceKey: "folder:" + sourceID,
+		TargetKey: "workspace:" + dealID,
+		Position:  workspacetree.PlacementAfter,
+	}); errText != "" {
+		t.Fatalf("place Source after Deal: %s", errText)
+	}
+	ops, err := appA.syncSvc.GetUnpushedOps()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, op := range ops {
+		if err := appB.applyRemoteOp(op); err != nil {
+			t.Fatalf("apply %s %s/%s: %v", op.OpType, op.EntityType, op.EntityID, err)
+		}
+	}
+
+	stableKeys := func(nodes []workspacetree.TreeNode) []string {
+		keys := make([]string, 0)
+		var walk func([]workspacetree.TreeNode)
+		walk = func(current []workspacetree.TreeNode) {
+			for _, node := range current {
+				keys = append(keys, node.Key)
+				walk(node.Children)
+			}
+		}
+		walk(nodes)
+		return keys
+	}
+	gotA := stableKeys(appA.treeV2.GetTree().Roots)
+	gotB := stableKeys(appB.treeV2.GetTree().Roots)
+	if !reflect.DeepEqual(gotA, gotB) {
+		t.Fatalf("tree keys did not converge:\nA: %#v\nB: %#v", gotA, gotB)
+	}
+	if _, err := appB.syncSvc.RebaseSnapshot(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := appB.scanLocalChanges(); err != nil {
+		t.Fatal(err)
+	}
+	if echoed, err := appB.syncSvc.GetUnpushedOps(); err != nil {
+		t.Fatal(err)
+	} else if len(echoed) != 0 {
+		t.Fatalf("remote tree changes echoed: %#v", echoed)
+	}
+}
+
 func TestApplyRemoteWorkspaceTreeOrderAndRebase(t *testing.T) {
 	app, root := newSyncFilesTestApp(t, []string{"files.read"}, "local-device")
 	app.treeV2 = workspacetree.NewService(root, nil)
@@ -2135,6 +2327,17 @@ func TestSyncOperationPathForWorkspaceTreeOrder(t *testing.T) {
 		EntityID:   syncsvc.WorkspaceTreeOrderEntityID,
 	})
 	if got != ".verstak/workspace-tree/order.json" {
+		t.Fatalf("syncOperationPath = %q", got)
+	}
+}
+
+func TestSyncOperationPathForWorkspaceFolder(t *testing.T) {
+	got := syncOperationPath(syncsvc.Op{
+		EntityType:  syncsvc.EntityWorkspaceFolder,
+		EntityID:    "11111111-1111-4111-8111-111111111111",
+		PayloadJSON: `{"folderId":"11111111-1111-4111-8111-111111111111","path":"Clients/Active"}`,
+	})
+	if got != "Clients/Active" {
 		t.Fatalf("syncOperationPath = %q", got)
 	}
 }

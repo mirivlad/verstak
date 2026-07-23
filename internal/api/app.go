@@ -4481,6 +4481,12 @@ func syncOperationPath(op syncsvc.Op) string {
 	if op.EntityType == syncsvc.EntityWorkspaceTreeOrder {
 		return ".verstak/workspace-tree/order.json"
 	}
+	if op.EntityType == syncsvc.EntityWorkspaceFolder {
+		if payload, err := parseSyncFolderPayload(op.PayloadJSON); err == nil && payload.Path != "" {
+			return payload.Path
+		}
+		return op.EntityID
+	}
 	if op.EntityType == syncsvc.EntityWorkspace {
 		if payload, err := parseSyncWorkspacePayload(op.PayloadJSON); err == nil && payload.Path != "" {
 			return payload.Path
@@ -4537,10 +4543,56 @@ func (a *App) applyRemoteOpWithClient(client *syncsvc.Client, op syncsvc.Op, ini
 	if op.DeviceID != "" && op.DeviceID == a.localSyncDeviceID() {
 		return nil
 	}
+	if op.EntityType == syncsvc.EntityWorkspaceFolder {
+		payload, err := parseSyncFolderPayload(op.PayloadJSON)
+		if err != nil {
+			return err
+		}
+		if payload.FolderID != op.EntityID {
+			return fmt.Errorf("workspace folder identity mismatch: entity %s payload %s", op.EntityID, payload.FolderID)
+		}
+		if a.treeV2 == nil {
+			return fmt.Errorf("workspace tree service not initialized")
+		}
+		switch op.OpType {
+		case syncsvc.OpMove, syncsvc.OpRename:
+			return a.treeV2.ApplyPathFromSync(
+				"folder:"+payload.FolderID,
+				payload.PreviousPath,
+				payload.Path,
+				func() error {
+					if a.fileWatcher != nil {
+						return a.fileWatcher.RefreshBaseline()
+					}
+					return nil
+				},
+			)
+		default:
+			return fmt.Errorf("unsupported workspace folder sync op type: %s", op.OpType)
+		}
+	}
 	if op.EntityType == syncsvc.EntityWorkspace {
 		payload, err := parseSyncWorkspacePayload(op.PayloadJSON)
 		if err != nil {
 			return err
+		}
+		if a.treeV2 != nil && op.OpType == syncsvc.OpRename {
+			if _, ok := a.treeV2.GetWorkspaceByID(payload.WorkspaceID); ok {
+				if payload.WorkspaceID != op.EntityID {
+					return fmt.Errorf("workspace identity mismatch: entity %s payload %s", op.EntityID, payload.WorkspaceID)
+				}
+				return a.treeV2.ApplyPathFromSync(
+					"workspace:"+payload.WorkspaceID,
+					payload.PreviousPath,
+					payload.Path,
+					func() error {
+						if a.fileWatcher != nil {
+							return a.fileWatcher.RefreshBaseline()
+						}
+						return nil
+					},
+				)
+			}
 		}
 		return a.applyRemoteWorkspaceOp(op, payload)
 	}
@@ -4602,6 +4654,12 @@ type syncWorkspacePayload struct {
 	Metadata     workspace.Metadata `json:"metadata"`
 }
 
+type syncFolderPayload struct {
+	FolderID     string `json:"folderId"`
+	Path         string `json:"path"`
+	PreviousPath string `json:"previousPath,omitempty"`
+}
+
 func parseSyncFilePayload(payloadJSON string) (syncFilePayload, error) {
 	if payloadJSON == "" {
 		return syncFilePayload{}, nil
@@ -4626,6 +4684,23 @@ func parseSyncWorkspacePayload(payloadJSON string) (syncWorkspacePayload, error)
 	}
 	if payload.Path == "" {
 		payload.Path = payload.Name
+	}
+	return payload, nil
+}
+
+func parseSyncFolderPayload(payloadJSON string) (syncFolderPayload, error) {
+	if payloadJSON == "" {
+		return syncFolderPayload{}, fmt.Errorf("workspace folder sync payload is empty")
+	}
+	var payload syncFolderPayload
+	if err := json.Unmarshal([]byte(payloadJSON), &payload); err != nil {
+		return syncFolderPayload{}, fmt.Errorf("invalid workspace folder sync payload: %w", err)
+	}
+	if payload.FolderID == "" {
+		return syncFolderPayload{}, fmt.Errorf("workspace folder sync payload is missing folderId")
+	}
+	if payload.Path == "" {
+		return syncFolderPayload{}, fmt.Errorf("workspace folder sync payload is missing path")
 	}
 	return payload, nil
 }
