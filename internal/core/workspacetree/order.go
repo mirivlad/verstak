@@ -95,6 +95,15 @@ func WriteOrderState(vaultDir string, state OrderState) error {
 	return nil
 }
 
+// ApplyOrderState replaces synchronized vault order metadata and immediately
+// rebuilds the public tree from the backend's current filesystem topology.
+func (s *Service) ApplyOrderState(state OrderState) error {
+	if err := WriteOrderState(s.vaultDir, state); err != nil {
+		return err
+	}
+	return s.fullReconcile()
+}
+
 func emptyOrderState() OrderState {
 	return OrderState{
 		Version:  OrderVersion,

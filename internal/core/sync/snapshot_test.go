@@ -10,7 +10,197 @@ import (
 
 	"github.com/google/uuid"
 	corefiles "github.com/verstak/verstak-desktop/internal/core/files"
+	"github.com/verstak/verstak-desktop/internal/core/workspacetree"
 )
+
+func TestScanAndRecordCapturesOnlyExactTreeOrderMetadata(t *testing.T) {
+	root := t.TempDir()
+	order := workspacetree.OrderState{
+		Version: workspacetree.OrderVersion,
+		Children: map[string][]string{
+			"root": {"workspace:22222222-2222-2222-2222-222222222222"},
+		},
+	}
+	if err := workspacetree.WriteOrderState(root, order); err != nil {
+		t.Fatal(err)
+	}
+	unrelated := filepath.Join(root, ".verstak", "workspace-tree", "private.txt")
+	if err := os.WriteFile(unrelated, []byte("private"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	service := NewService(root, "device-a")
+	if _, err := service.ScanAndRecord(); err != nil {
+		t.Fatal(err)
+	}
+
+	snapshot, err := service.LoadSnapshot()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !snapshot.TreeOrderInitialized || len(snapshot.TreeOrder) == 0 {
+		t.Fatalf("tree order snapshot = initialized:%v payload:%s", snapshot.TreeOrderInitialized, snapshot.TreeOrder)
+	}
+	if _, err := workspacetree.ParseOrderState(snapshot.TreeOrder); err != nil {
+		t.Fatalf("captured tree order is invalid: %v", err)
+	}
+	for path := range snapshot.Entries {
+		if strings.Contains(path, ".verstak") {
+			t.Fatalf("internal path leaked into ordinary entries: %s", path)
+		}
+	}
+	assertUnpushedCount(t, service, 0)
+}
+
+func TestTreeOrderBootstrapAndChangeEmitDedicatedUpdates(t *testing.T) {
+	root := t.TempDir()
+	initialOrder := workspacetree.OrderState{
+		Version: workspacetree.OrderVersion,
+		Children: map[string][]string{
+			"root": {"workspace:22222222-2222-2222-2222-222222222222"},
+		},
+	}
+	if err := workspacetree.WriteOrderState(root, initialOrder); err != nil {
+		t.Fatal(err)
+	}
+	service := NewService(root, "device-a")
+	if _, err := service.ScanAndRecord(); err != nil {
+		t.Fatal(err)
+	}
+	initial, err := service.LoadSnapshot()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := service.RecordBootstrapOps(initial); err != nil {
+		t.Fatal(err)
+	}
+	ops := unpushedOps(t, service)
+	assertTreeOrderOp(t, ops, 0)
+
+	changed := workspacetree.OrderState{
+		Version: workspacetree.OrderVersion,
+		Children: map[string][]string{
+			"root": {
+				"folder:11111111-1111-1111-1111-111111111111",
+				"workspace:22222222-2222-2222-2222-222222222222",
+			},
+		},
+	}
+	if err := workspacetree.WriteOrderState(root, changed); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.ScanAndRecord(); err != nil {
+		t.Fatal(err)
+	}
+	ops = unpushedOps(t, service)
+	assertTreeOrderOp(t, ops, 1)
+}
+
+func TestTreeOrderOperationFollowsSemanticStructure(t *testing.T) {
+	root := t.TempDir()
+	sourceID := "11111111-1111-1111-1111-111111111111"
+	targetID := "22222222-2222-2222-2222-222222222222"
+	if err := os.MkdirAll(filepath.Join(root, "Source"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeMarker(t, filepath.Join(root, "Source"), "folder", sourceID)
+	if err := os.MkdirAll(filepath.Join(root, "Target"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeMarker(t, filepath.Join(root, "Target"), "folder", targetID)
+	if err := workspacetree.WriteOrderState(root, workspacetree.OrderState{
+		Version: workspacetree.OrderVersion,
+		Children: map[string][]string{
+			"root": {"folder:" + sourceID, "folder:" + targetID},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	service := NewService(root, "device-a")
+	if _, err := service.ScanAndRecord(); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.Rename(filepath.Join(root, "Source"), filepath.Join(root, "Target", "Source")); err != nil {
+		t.Fatal(err)
+	}
+	if err := workspacetree.WriteOrderState(root, workspacetree.OrderState{
+		Version: workspacetree.OrderVersion,
+		Children: map[string][]string{
+			"root":   {"folder:" + targetID},
+			targetID: {"folder:" + sourceID},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.ScanAndRecord(); err != nil {
+		t.Fatal(err)
+	}
+	ops := unpushedOps(t, service)
+	structureIndex, orderIndex := -1, -1
+	for i, op := range ops {
+		if op.EntityType == EntityWorkspaceFolder && op.EntityID == sourceID {
+			structureIndex = i
+		}
+		if op.EntityType == EntityWorkspaceTreeOrder {
+			orderIndex = i
+		}
+	}
+	if structureIndex < 0 || orderIndex < 0 || structureIndex >= orderIndex {
+		t.Fatalf("operation order = %#v", ops)
+	}
+}
+
+func TestInvalidTreeOrderPreservesLastValidSnapshot(t *testing.T) {
+	root := t.TempDir()
+	if err := workspacetree.WriteOrderState(root, workspacetree.OrderState{
+		Version: workspacetree.OrderVersion,
+		Children: map[string][]string{
+			"root": {"workspace:22222222-2222-2222-2222-222222222222"},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	service := NewService(root, "device-a")
+	if _, err := service.ScanAndRecord(); err != nil {
+		t.Fatal(err)
+	}
+	before, err := service.LoadSnapshot()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(workspacetree.OrderMetadataPath(root), []byte(`{"version":99}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	warnings, err := service.ScanAndRecord()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(warnings) != 1 || !strings.Contains(warnings[0], "invalid-workspace-tree-order") {
+		t.Fatalf("warnings = %#v", warnings)
+	}
+	after, err := service.LoadSnapshot()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(after.TreeOrder) != string(before.TreeOrder) || after.TreeOrderInitialized != before.TreeOrderInitialized {
+		t.Fatalf("invalid order replaced valid snapshot: before=%s after=%s", before.TreeOrder, after.TreeOrder)
+	}
+	assertUnpushedCount(t, service, 0)
+}
+
+func assertTreeOrderOp(t *testing.T, ops []Op, index int) {
+	t.Helper()
+	if index >= len(ops) {
+		t.Fatalf("operations = %#v, want tree order at %d", ops, index)
+	}
+	op := ops[index]
+	if op.EntityType != EntityWorkspaceTreeOrder || op.EntityID != WorkspaceTreeOrderEntityID || op.OpType != OpUpdate {
+		t.Fatalf("tree order operation = %+v", op)
+	}
+	if _, err := workspacetree.ParseOrderState([]byte(op.PayloadJSON)); err != nil {
+		t.Fatalf("tree order payload is invalid: %v", err)
+	}
+}
 
 func TestScanAndRecordTracksExternalWorkspaceLifecycleByIdentity(t *testing.T) {
 	root := t.TempDir()

@@ -122,6 +122,8 @@ export function OpenVaultPathExternal(arg1:string,arg2:string):Promise<string>;
 
 export function OpenWorkbenchResource(arg1:string,arg2:Record<string, any>):Promise<workbench.OpenResourceResult|string>;
 
+export function PlaceWorkspaceTreeNodeV2(arg1:workspacetree.PlacementRequest):Promise<string>;
+
 export function PluginApplyImportPlan(arg1:string,arg2:string,arg3:importservice.Plan):Promise<importservice.ApplyResult|string>;
 
 export function PluginBrowserReceiverPairing(arg1:string):Promise<Record<string, string>|string>;

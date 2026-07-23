@@ -12,15 +12,18 @@ import (
 )
 
 const (
-	EntityNode            = "node"
-	EntityNote            = "note"
-	EntityFile            = "file"
-	EntityFolder          = "folder"
-	EntityWorkspaceFolder = "workspace-folder"
-	EntityWorkspace       = "workspace"
-	EntityAction          = "action"
-	EntityWorklog         = "worklog"
+	EntityNode               = "node"
+	EntityNote               = "note"
+	EntityFile               = "file"
+	EntityFolder             = "folder"
+	EntityWorkspaceFolder    = "workspace-folder"
+	EntityWorkspace          = "workspace"
+	EntityWorkspaceTreeOrder = "workspace-tree-order"
+	EntityAction             = "action"
+	EntityWorklog            = "worklog"
 )
+
+const WorkspaceTreeOrderEntityID = "tree"
 
 const (
 	OpCreate     = "create"

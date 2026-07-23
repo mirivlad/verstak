@@ -1619,6 +1619,22 @@ export namespace workspace {
 
 export namespace workspacetree {
 	
+	export class PlacementRequest {
+	    sourceKey: string;
+	    targetKey: string;
+	    position: string;
+
+	    static createFrom(source: any = {}) {
+	        return new PlacementRequest(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.sourceKey = source["sourceKey"];
+	        this.targetKey = source["targetKey"];
+	        this.position = source["position"];
+	    }
+	}
 	export class TreeDiagnostic {
 	    level: string;
 	    code: string;

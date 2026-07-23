@@ -3309,6 +3309,30 @@ func (a *App) MoveWorkspaceV2(workspaceID, targetParentFolderID string) string {
 	return ""
 }
 
+// PlaceWorkspaceTreeNodeV2 applies one backend-authoritative stable-key
+// placement and records both structural and order metadata changes for sync.
+func (a *App) PlaceWorkspaceTreeNodeV2(request workspacetree.PlacementRequest) string {
+	if a.treeV2 == nil {
+		return "not initialized"
+	}
+	_, err := a.treeV2.PlaceNode(request, func() error {
+		if a.fileWatcher != nil {
+			return a.fileWatcher.RefreshBaseline()
+		}
+		return nil
+	})
+	if err != nil {
+		return err.Error()
+	}
+	if _, err := a.scanLocalChanges(); err != nil {
+		return err.Error()
+	}
+	if a.ctx != nil {
+		emitFrontendEvent(a.ctx, "verstak:workspace-tree-changed")
+	}
+	return ""
+}
+
 func (a *App) TrashFolderV2(folderID string) map[string]interface{} {
 	if a.treeV2 == nil {
 		return map[string]interface{}{"error": "not initialized"}
@@ -4454,6 +4478,9 @@ func (a *App) pullRemoteOps(client *syncsvc.Client, cursor int, initialReconcili
 }
 
 func syncOperationPath(op syncsvc.Op) string {
+	if op.EntityType == syncsvc.EntityWorkspaceTreeOrder {
+		return ".verstak/workspace-tree/order.json"
+	}
 	if op.EntityType == syncsvc.EntityWorkspace {
 		if payload, err := parseSyncWorkspacePayload(op.PayloadJSON); err == nil && payload.Path != "" {
 			return payload.Path
@@ -4516,6 +4543,28 @@ func (a *App) applyRemoteOpWithClient(client *syncsvc.Client, op syncsvc.Op, ini
 			return err
 		}
 		return a.applyRemoteWorkspaceOp(op, payload)
+	}
+	if op.EntityType == syncsvc.EntityWorkspaceTreeOrder {
+		if a.treeV2 == nil {
+			return fmt.Errorf("workspace tree service not initialized")
+		}
+		if op.EntityID != syncsvc.WorkspaceTreeOrderEntityID {
+			return fmt.Errorf("workspace tree order identity mismatch: %s", op.EntityID)
+		}
+		if op.OpType != syncsvc.OpUpdate {
+			return fmt.Errorf("unsupported workspace tree order sync op type: %s", op.OpType)
+		}
+		state, err := workspacetree.ParseOrderState([]byte(op.PayloadJSON))
+		if err != nil {
+			return err
+		}
+		if err := a.treeV2.ApplyOrderState(state); err != nil {
+			return err
+		}
+		if a.ctx != nil {
+			emitFrontendEvent(a.ctx, "verstak:workspace-tree-changed")
+		}
+		return nil
 	}
 	if a.files == nil {
 		return fmt.Errorf("files service not initialized")

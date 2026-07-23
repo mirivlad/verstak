@@ -1,6 +1,7 @@
 package sync
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -17,6 +18,7 @@ import (
 
 	"github.com/google/uuid"
 	corefiles "github.com/verstak/verstak-desktop/internal/core/files"
+	"github.com/verstak/verstak-desktop/internal/core/workspacetree"
 )
 
 const snapshotVersion = 2
@@ -41,6 +43,8 @@ type Snapshot struct {
 	Folders               map[string]FolderSnapshot    `json:"folders,omitempty"`
 	TrashedFolders        map[string]FolderSnapshot    `json:"trashedFolders,omitempty"`
 	WorkspacesInitialized bool                         `json:"workspacesInitialized,omitempty"`
+	TreeOrder             json.RawMessage              `json:"treeOrder,omitempty"`
+	TreeOrderInitialized  bool                         `json:"treeOrderInitialized,omitempty"`
 	Unresolved            map[string]string            `json:"unresolved,omitempty"`
 }
 
@@ -93,10 +97,13 @@ type scanJournal struct {
 }
 
 type scannedVault struct {
-	Entries    map[string]SnapshotEntry
-	Workspaces map[string]WorkspaceSnapshot
-	Folders    map[string]FolderSnapshot
-	Unresolved map[string]string
+	Entries              map[string]SnapshotEntry
+	Workspaces           map[string]WorkspaceSnapshot
+	Folders              map[string]FolderSnapshot
+	TreeOrder            json.RawMessage
+	TreeOrderInitialized bool
+	TreeOrderInvalid     bool
+	Unresolved           map[string]string
 }
 
 // LoadSnapshot returns the current durable scanner snapshot. A missing
@@ -419,8 +426,37 @@ func scanVault(root string, previous Snapshot) (scannedVault, []string, error) {
 			removeEntriesUnder(result.Entries, path)
 		}
 	}
+	treeOrder, initialized, warning, err := scanWorkspaceTreeOrder(root)
+	if err != nil {
+		return scannedVault{}, nil, err
+	}
+	result.TreeOrder = treeOrder
+	result.TreeOrderInitialized = initialized
+	if warning != "" {
+		result.TreeOrderInvalid = true
+		warnings = append(warnings, warning)
+	}
 	sort.Strings(warnings)
 	return result, warnings, nil
+}
+
+func scanWorkspaceTreeOrder(root string) (json.RawMessage, bool, string, error) {
+	data, err := os.ReadFile(workspacetree.OrderMetadataPath(root))
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, false, "", nil
+		}
+		return nil, false, "", fmt.Errorf("read workspace tree order: %w", err)
+	}
+	state, err := workspacetree.ParseOrderState(data)
+	if err != nil {
+		return nil, false, "invalid-workspace-tree-order: " + err.Error(), nil
+	}
+	canonical, err := workspacetree.MarshalOrderState(state)
+	if err != nil {
+		return nil, false, "", err
+	}
+	return json.RawMessage(canonical), true, "", nil
 }
 
 func scanTreeSnapshots(root string, preferredWS map[string]WorkspaceSnapshot, preferredF map[string]FolderSnapshot) (map[string]WorkspaceSnapshot, map[string]FolderSnapshot, []string, error) {
@@ -585,6 +621,13 @@ func snapshotFromScan(current scannedVault, previous Snapshot, previousExists bo
 		folder.Workspaces = make(map[string]WorkspaceIdentitySnapshot)
 		next.Folders[folderID] = folder
 	}
+	if current.TreeOrderInvalid && previousExists {
+		next.TreeOrder = append(json.RawMessage(nil), previous.TreeOrder...)
+		next.TreeOrderInitialized = previous.TreeOrderInitialized
+	} else {
+		next.TreeOrder = append(json.RawMessage(nil), current.TreeOrder...)
+		next.TreeOrderInitialized = current.TreeOrderInitialized
+	}
 	// Populate nested identity maps: each folder contains all folders/workspaces
 	// whose paths are prefixed by this folder's path.
 	for folderID, folder := range next.Folders {
@@ -643,6 +686,10 @@ func diffSnapshots(previous, next Snapshot, deviceID, vaultRoot string) ([]Op, S
 		return nil, next, err
 	}
 	semanticOps := append(folderOps, workspaceOps...)
+	orderOps, err := diffWorkspaceTreeOrder(previous, next, deviceID)
+	if err != nil {
+		return nil, next, err
+	}
 
 	// Collect paths owned by trashed folders (subtree owners).
 	trashedPaths := make(map[string]bool)
@@ -713,7 +760,45 @@ func diffSnapshots(previous, next Snapshot, deviceID, vaultRoot string) ([]Op, S
 		}
 		return left.EntityID < right.EntityID
 	})
-	return append(semanticOps, append(createsOrUpdates, deletes...)...), next, nil
+	ops := append(semanticOps, orderOps...)
+	ops = append(ops, createsOrUpdates...)
+	ops = append(ops, deletes...)
+	return ops, next, nil
+}
+
+func diffWorkspaceTreeOrder(previous, next Snapshot, deviceID string) ([]Op, error) {
+	if !previous.TreeOrderInitialized && !next.TreeOrderInitialized {
+		return nil, nil
+	}
+	if previous.TreeOrderInitialized == next.TreeOrderInitialized && equalJSON(previous.TreeOrder, next.TreeOrder) {
+		return nil, nil
+	}
+	payload := next.TreeOrder
+	if !next.TreeOrderInitialized {
+		empty, err := workspacetree.MarshalOrderState(workspacetree.OrderState{
+			Version:  workspacetree.OrderVersion,
+			Children: map[string][]string{},
+		})
+		if err != nil {
+			return nil, err
+		}
+		payload = json.RawMessage(empty)
+	}
+	return []Op{newSnapshotOp(
+		deviceID,
+		EntityWorkspaceTreeOrder,
+		WorkspaceTreeOrderEntityID,
+		OpUpdate,
+		payload,
+	)}, nil
+}
+
+func equalJSON(left, right []byte) bool {
+	var compactLeft, compactRight bytes.Buffer
+	if json.Compact(&compactLeft, left) != nil || json.Compact(&compactRight, right) != nil {
+		return bytes.Equal(left, right)
+	}
+	return bytes.Equal(compactLeft.Bytes(), compactRight.Bytes())
 }
 
 func diffFolderSnapshots(previous, next *Snapshot, deviceID string) ([]Op, error) {

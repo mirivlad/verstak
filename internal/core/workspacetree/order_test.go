@@ -116,3 +116,33 @@ func TestOrderStateAllowsSyntacticallyValidMissingIDs(t *testing.T) {
 		t.Fatalf("root order = %#v", got)
 	}
 }
+
+func TestApplyOrderStateWritesAndReconcilesTree(t *testing.T) {
+	vault := t.TempDir()
+	svc := NewService(vault, nil)
+	if err := svc.Initialize(); err != nil {
+		t.Fatal(err)
+	}
+	folder, _ := svc.CreateFolder("", "Folder", noopRefresh)
+	deal, _ := svc.CreateWorkspace("", "Deal", "", noopRefresh)
+	state := OrderState{
+		Version: OrderVersion,
+		Children: map[string][]string{
+			"root": {"workspace:" + deal.ID, "folder:" + folder.ID},
+		},
+	}
+
+	if err := svc.ApplyOrderState(state); err != nil {
+		t.Fatal(err)
+	}
+	if got := nodeKeys(svc.GetTree().Roots); strings.Join(got, ",") != strings.Join(state.Children["root"], ",") {
+		t.Fatalf("tree order = %#v, want %#v", got, state.Children["root"])
+	}
+	persisted, err := ReadOrderState(vault)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Join(persisted.Children["root"], ",") != strings.Join(state.Children["root"], ",") {
+		t.Fatalf("persisted order = %#v", persisted.Children["root"])
+	}
+}

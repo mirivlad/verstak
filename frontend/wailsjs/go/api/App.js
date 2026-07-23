@@ -222,6 +222,10 @@ export function OpenWorkbenchResource(arg1, arg2) {
   return window['go']['api']['App']['OpenWorkbenchResource'](arg1, arg2);
 }
 
+export function PlaceWorkspaceTreeNodeV2(arg1) {
+  return window['go']['api']['App']['PlaceWorkspaceTreeNodeV2'](arg1);
+}
+
 export function PluginApplyImportPlan(arg1, arg2, arg3) {
   return window['go']['api']['App']['PluginApplyImportPlan'](arg1, arg2, arg3);
 }

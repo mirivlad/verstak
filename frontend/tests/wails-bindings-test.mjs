@@ -14,6 +14,7 @@ for (const method of [
   'PluginApplyImportPlan',
   'PluginCancelImport',
   'PluginCloseImportSource',
+  'PlaceWorkspaceTreeNodeV2',
 ]) {
   if (!bindings.includes(`export function ${method}(`)) {
     throw new Error(`Wails binding does not export ${method}`);

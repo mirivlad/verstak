@@ -1999,6 +1999,146 @@ func TestApplyRemoteWorkspaceLifecyclePreservesDurableIdentity(t *testing.T) {
 	}
 }
 
+func TestPlaceWorkspaceTreeNodeV2RecordsStructureBeforeOrder(t *testing.T) {
+	app, root := newSyncFilesTestApp(t, []string{"files.read", "files.write", "files.delete"}, "local-device")
+	app.treeV2 = workspacetree.NewService(root, nil)
+	if err := app.treeV2.Initialize(); err != nil {
+		t.Fatal(err)
+	}
+	folder, err := app.treeV2.CreateFolder("", "Folder", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	deal, err := app.treeV2.CreateWorkspace("", "Deal", "", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := app.scanLocalChanges(); err != nil {
+		t.Fatal(err)
+	}
+	before, err := app.syncSvc.GetUnpushedOps()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	errText := app.PlaceWorkspaceTreeNodeV2(workspacetree.PlacementRequest{
+		SourceKey: "workspace:" + deal.ID,
+		TargetKey: "folder:" + folder.ID,
+		Position:  workspacetree.PlacementInside,
+	})
+	if errText != "" {
+		t.Fatalf("PlaceWorkspaceTreeNodeV2: %s", errText)
+	}
+	ops, err := app.syncSvc.GetUnpushedOps()
+	if err != nil {
+		t.Fatal(err)
+	}
+	added := ops[len(before):]
+	structureIndex, orderIndex := -1, -1
+	for i, op := range added {
+		if op.EntityType == syncsvc.EntityWorkspace && op.EntityID == deal.ID {
+			structureIndex = i
+		}
+		if op.EntityType == syncsvc.EntityWorkspaceTreeOrder {
+			orderIndex = i
+		}
+	}
+	if structureIndex < 0 || orderIndex < 0 || structureIndex >= orderIndex {
+		t.Fatalf("placement operations = %#v", added)
+	}
+	if got := app.treeV2.GetTree().Roots[0].Children; len(got) != 1 || got[0].Key != "workspace:"+deal.ID {
+		t.Fatalf("placed tree = %#v", app.treeV2.GetTree().Roots)
+	}
+}
+
+func TestPlaceWorkspaceTreeNodeV2ReturnsBackendValidationError(t *testing.T) {
+	app, root := newFilesTestApp(t, nil)
+	app.treeV2 = workspacetree.NewService(root, nil)
+	if err := app.treeV2.Initialize(); err != nil {
+		t.Fatal(err)
+	}
+	if errText := app.PlaceWorkspaceTreeNodeV2(workspacetree.PlacementRequest{
+		SourceKey: "workspace:99999999-9999-9999-9999-999999999999",
+		Position:  workspacetree.PlacementRoot,
+	}); !strings.Contains(errText, "not found") {
+		t.Fatalf("error = %q, want backend validation error", errText)
+	}
+}
+
+func TestApplyRemoteWorkspaceTreeOrderAndRebase(t *testing.T) {
+	app, root := newSyncFilesTestApp(t, []string{"files.read"}, "local-device")
+	app.treeV2 = workspacetree.NewService(root, nil)
+	if err := app.treeV2.Initialize(); err != nil {
+		t.Fatal(err)
+	}
+	folder, _ := app.treeV2.CreateFolder("", "Folder", nil)
+	deal, _ := app.treeV2.CreateWorkspace("", "Deal", "", nil)
+	if _, err := app.syncSvc.RebaseSnapshot(); err != nil {
+		t.Fatal(err)
+	}
+	state := workspacetree.OrderState{
+		Version: workspacetree.OrderVersion,
+		Children: map[string][]string{
+			"root": {"workspace:" + deal.ID, "folder:" + folder.ID},
+		},
+	}
+	payload, err := workspacetree.MarshalOrderState(state)
+	if err != nil {
+		t.Fatal(err)
+	}
+	op := syncsvc.Op{
+		OpID:        "remote-tree-order",
+		DeviceID:    "remote-device",
+		EntityType:  syncsvc.EntityWorkspaceTreeOrder,
+		EntityID:    syncsvc.WorkspaceTreeOrderEntityID,
+		OpType:      syncsvc.OpUpdate,
+		PayloadJSON: string(payload),
+	}
+	if err := app.applyRemoteOp(op); err != nil {
+		t.Fatalf("apply remote tree order: %v", err)
+	}
+	if got := app.treeV2.GetTree().Roots; len(got) < 2 || got[0].Key != "workspace:"+deal.ID || got[1].Key != "folder:"+folder.ID {
+		t.Fatalf("remote tree order = %#v", got)
+	}
+	before, err := os.ReadFile(workspacetree.OrderMetadataPath(root))
+	if err != nil {
+		t.Fatal(err)
+	}
+	op.PayloadJSON = `{"version":99,"children":{}}`
+	if err := app.applyRemoteOp(op); err == nil {
+		t.Fatal("expected invalid remote order error")
+	}
+	after, err := os.ReadFile(workspacetree.OrderMetadataPath(root))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(after) != string(before) {
+		t.Fatal("invalid remote payload changed persisted order")
+	}
+
+	if _, err := app.syncSvc.RebaseSnapshot(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := app.scanLocalChanges(); err != nil {
+		t.Fatal(err)
+	}
+	if ops, err := app.syncSvc.GetUnpushedOps(); err != nil {
+		t.Fatal(err)
+	} else if len(ops) != 0 {
+		t.Fatalf("remote order echoed as local operations: %#v", ops)
+	}
+}
+
+func TestSyncOperationPathForWorkspaceTreeOrder(t *testing.T) {
+	got := syncOperationPath(syncsvc.Op{
+		EntityType: syncsvc.EntityWorkspaceTreeOrder,
+		EntityID:   syncsvc.WorkspaceTreeOrderEntityID,
+	})
+	if got != ".verstak/workspace-tree/order.json" {
+		t.Fatalf("syncOperationPath = %q", got)
+	}
+}
+
 func TestFileBridgeRecordsSyncOps(t *testing.T) {
 	app, _ := newSyncFilesTestApp(t, []string{"files.read", "files.write", "files.delete"}, "local-device")
 
