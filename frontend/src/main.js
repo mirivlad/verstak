@@ -1,6 +1,7 @@
 import App from './App.svelte';
 import * as Backend from '../wailsjs/go/api/App';
 import { i18n } from './lib/i18n/index.js';
+import './lib/ui/design-system.css';
 
 function unpack(result) {
   if (Array.isArray(result) && result.length === 2 && (typeof result[1] === 'string' || result[1] == null)) {
