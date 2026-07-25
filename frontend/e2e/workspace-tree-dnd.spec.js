@@ -207,6 +207,59 @@ test.describe('Workspace tree precision drag and drop', () => {
     await expect(notice).toHaveCount(0);
   });
 
+  test('hover expansion is temporary and does not survive the drag', async ({ page }) => {
+    const folderKey = `folder:${IDS.folder}`;
+    const looseKey = `workspace:${IDS.deal}`;
+    const folder = page.locator(`[data-tree-key="${folderKey}"]`);
+
+    // Collapsed to begin with.
+    await expect(folder).toHaveAttribute('aria-expanded', 'false');
+
+    // Hover over the folder long enough for it to open, then drop elsewhere.
+    await startTreeDrag(page, looseKey);
+    await dispatchDragAt(page, folder, 'dragover', 0.5);
+    await expect(folder).toHaveAttribute('aria-expanded', 'true');
+
+    const middle = page.locator(`[data-tree-key="workspace:${IDS.middle}"]`);
+    await dispatchDragAt(page, middle, 'dragover', 0.05);
+    await dispatchDragAt(page, middle, 'drop', 0.05);
+
+    // The look must not become a decision.
+    await expect(folder).toHaveAttribute('aria-expanded', 'false');
+  });
+
+  test('a folder the item is dropped into stays open', async ({ page }) => {
+    const folderKey = `folder:${IDS.folder}`;
+    const looseKey = `workspace:${IDS.deal}`;
+    const folder = page.locator(`[data-tree-key="${folderKey}"]`);
+
+    await startTreeDrag(page, looseKey);
+    await dispatchDragAt(page, folder, 'dragover', 0.5);
+    await expect(folder).toHaveAttribute('aria-expanded', 'true');
+    await dispatchDragAt(page, folder, 'drop', 0.5);
+
+    await expect(folder).toHaveAttribute('aria-expanded', 'true');
+    await expect.poll(() => requests(page)).toEqual([
+      { sourceKey: looseKey, targetKey: folderKey, position: 'inside' },
+    ]);
+  });
+
+  test('the folder drop zone covers the row except a thin reorder strip', async ({ page }) => {
+    const folder = page.locator(`[data-tree-key="folder:${IDS.folder}"]`);
+    const box = await folder.boundingBox();
+    const rowHeight = box.height;
+
+    // A few pixels in from either edge must already mean "inside", otherwise
+    // holding a drag steady inside a folder is a test of hand stability.
+    for (const fraction of [0.3, 0.5, 0.7]) {
+      await startTreeDrag(page, `workspace:${IDS.deal}`);
+      await dispatchDragAt(page, folder, 'dragover', fraction);
+      await expect(folder).toHaveAttribute('data-drop-position', 'inside');
+      await page.keyboard.press('Escape');
+    }
+    expect(rowHeight).toBeGreaterThan(20);
+  });
+
   test('edge drag autoscrolls and dragend stops and clears state', async ({ page }) => {
     const roots = [];
     for (let index = 0; index < 36; index += 1) {
