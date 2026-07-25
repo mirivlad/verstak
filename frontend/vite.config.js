@@ -7,6 +7,12 @@ export default defineConfig(({ mode }) => {
 
   return {
     plugins: [svelte()],
+    define: {
+      // Statically false outside `--mode test`, so Rollup eliminates the
+      // branch that imports the Wails mock and the mock never reaches a
+      // shipped bundle.
+      __VERSTAK_TEST_MOCK__: JSON.stringify(isTest),
+    },
     build: {
       outDir: 'dist',
       emptyOutDir: true,
