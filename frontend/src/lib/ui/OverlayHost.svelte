@@ -1,3 +1,9 @@
+<script context="module">
+  // Several overlays can be open at once; the attribute lifts only when the
+  // last one goes.
+  let overlayDepth = 0;
+</script>
+
 <script>
   import { onMount, tick } from 'svelte';
 
@@ -39,6 +45,15 @@
   }
 
   onMount(() => {
+    // WebKitGTK draws a scroll container's scrollbar in a layer that lands
+    // above a portalled overlay, so the sidebar scrollbar was painted across
+    // the context menu. Compositing hints did not move it. Rather than keep
+    // guessing at paint order, the scroll containers that can sit under an
+    // overlay hide their scrollbar while one is open: overlays are transient
+    // and any click dismisses them.
+    overlayDepth += 1;
+    document.documentElement.setAttribute('data-vt-overlay', 'open');
+
     window.addEventListener('resize', place);
     if (typeof ResizeObserver !== 'undefined') {
       resizeObserver = new ResizeObserver(place);
@@ -46,6 +61,8 @@
     }
     place();
     return () => {
+      overlayDepth = Math.max(0, overlayDepth - 1);
+      if (overlayDepth === 0) document.documentElement.removeAttribute('data-vt-overlay');
       cancelAnimationFrame(frame);
       resizeObserver?.disconnect();
       window.removeEventListener('resize', place);

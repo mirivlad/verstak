@@ -15,7 +15,7 @@ if ! command -v ldd >/dev/null || ! command -v file >/dev/null; then
   exit 1
 fi
 
-"$ROOT/scripts/build-linux-bundle.sh"
+VERSTAK_VERSION="$VERSION" "$ROOT/scripts/build-linux-bundle.sh"
 
 APPIMAGETOOL="${APPIMAGETOOL_BIN:-$ROOT/build/tools/appimagetool-x86_64.AppImage}"
 if [[ ! -x "$APPIMAGETOOL" ]]; then

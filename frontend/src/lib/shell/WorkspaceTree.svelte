@@ -642,7 +642,7 @@
     </div>
   {/if}
 
-  <div class="wt-list" role="tree" aria-label={tr('workspaceTree.title')} tabindex="0" bind:this={treeListElement}
+  <div class="wt-list vt-scroll-under-overlay" role="tree" aria-label={tr('workspaceTree.title')} tabindex="0" bind:this={treeListElement}
     on:dragover={onRootDragOver} on:dragleave={onRootDragLeave} on:drop={onRootDrop}
     on:dragend={resetDragState}
   >

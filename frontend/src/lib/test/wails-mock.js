@@ -3512,6 +3512,14 @@ import importStyle from '../../../../../verstak-official-plugins/plugins/import/
     GetContributions: function () { return Promise.resolve(allContributions()); },
     GetVaultStatus: function () { return Promise.resolve(vaultStatus); },
     GetVaultPluginState: function () { return Promise.resolve(vaultPluginState); },
+    GetBuildInfo: function () {
+      return Promise.resolve({
+        version: 'test',
+        commit: 'testing',
+        buildDate: '2026-01-01T00:00:00Z',
+        display: 'test (testing)',
+      });
+    },
     GetAppSettings: function () { return Promise.resolve(appSettings); },
     GetPluginFrontendInfo: function (pluginId) {
       var s = pluginStates[pluginId];

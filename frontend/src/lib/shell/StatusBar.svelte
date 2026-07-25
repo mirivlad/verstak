@@ -8,6 +8,7 @@
   let items = [];
   let settingsPanels = [];
   let vaultStatus = { status: 'unknown', path: '', vaultId: '' };
+  let build = { version: '', commit: '', buildDate: '', display: '' };
   let settingsOpen = false;
   let locale = i18n.getLocale();
   let selectedLanguage = i18n.getLanguagePreference();
@@ -26,6 +27,20 @@
   $: vaultLabel = tr('vault.label', { status: vaultStatusLabel });
 
   const inactiveStatuses = new Set(['disabled', 'failed', 'incompatible', 'missing-required-capability']);
+
+  $: buildTooltip = [
+    tr('build.label', { version: build.version || '' }),
+    build.commit ? tr('build.commit', { commit: build.commit }) : '',
+    build.buildDate ? tr('build.date', { date: build.buildDate }) : '',
+  ].filter(Boolean).join('\n');
+
+  async function loadBuildInfo() {
+    try {
+      build = await App.GetBuildInfo() || build;
+    } catch {
+      // A build that cannot report itself is not worth an error in the UI.
+    }
+  }
 
   async function loadStatusBar() {
     const [rawPlugins, rawContributions, vault] = await Promise.all([
@@ -99,6 +114,7 @@
       if (changed) loadStatusBar();
     });
     loadStatusBar();
+    loadBuildInfo();
     window.addEventListener('verstak:plugins-changed', loadStatusBar);
     window.addEventListener('verstak:vault-opened', loadStatusBar);
     window.addEventListener('click', closeSettings);
@@ -157,6 +173,16 @@
         {#if item.handler}<CompactPluginHost pluginId={item.pluginId} handler={item.handler} label={item.label || item.id} />{:else}{item.label || item.id}{/if}
       </span>
     {/each}
+    <!-- Which build is running. Without it a fix that did not land and a
+         package that was never installed look exactly the same. -->
+    {#if build.display}
+      <span
+        class="status-bar-item build-version"
+        data-build-version={build.version}
+        title={buildTooltip}
+      >{build.display}</span>
+    {/if}
+
     <div class="settings-menu-wrap">
       <button
         class="settings-button"
@@ -299,6 +325,12 @@
   :global(.status-icon) {
     flex-shrink: 0;
     color: currentColor;
+  }
+
+  .build-version {
+    color: var(--vt-color-text-muted);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
   }
 
   .settings-menu-wrap {

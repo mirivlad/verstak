@@ -130,8 +130,23 @@ if [ -z "$WAILS" ]; then
   exit 1
 fi
 
+# Stamp the binary so the running application can say which build it is.
+# VERSTAK_VERSION is set by the packaging scripts; a plain build.sh run is
+# labelled from git, or "dev" outside a checkout.
+BUILDINFO_PKG="github.com/verstak/verstak-desktop/internal/core/buildinfo"
+BUILD_VERSION="${VERSTAK_VERSION:-}"
+BUILD_COMMIT="$(git -C "$ROOT" rev-parse --short HEAD 2>/dev/null || true)"
+BUILD_DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+if [ -z "$BUILD_VERSION" ]; then
+  BUILD_VERSION="$(git -C "$ROOT" describe --tags --always --dirty 2>/dev/null || echo dev)"
+fi
+LDFLAGS="-X $BUILDINFO_PKG.version=$BUILD_VERSION"
+LDFLAGS="$LDFLAGS -X $BUILDINFO_PKG.commit=$BUILD_COMMIT"
+LDFLAGS="$LDFLAGS -X $BUILDINFO_PKG.buildDate=$BUILD_DATE"
+echo "  🏷  version: $BUILD_VERSION ($BUILD_COMMIT)"
+
 echo "  🔨 wails build..."
-(cd "$ROOT" && GOFLAGS="${GOFLAGS:+$GOFLAGS }-buildvcs=false" "$WAILS" build -clean $WAILS_TAGS)
+(cd "$ROOT" && GOFLAGS="${GOFLAGS:+$GOFLAGS }-buildvcs=false" "$WAILS" build -clean $WAILS_TAGS -ldflags "$LDFLAGS")
 echo "  ✅ wails build"
 
 # Copy plugins/ to build/bin/ so the binary can find them at runtime

@@ -20,7 +20,7 @@ if [[ ! "$PACKAGE_VERSION" =~ ^[0-9] ]]; then
   exit 2
 fi
 
-"$ROOT/scripts/build-linux-bundle.sh"
+VERSTAK_VERSION="$VERSION" "$ROOT/scripts/build-linux-bundle.sh"
 
 BUNDLE="${VERSTAK_LINUX_BUNDLE_DIR:-$ROOT/build/linux-amd64}"
 STAGING="$ROOT/build/deb/verstak_$PACKAGE_VERSION"
