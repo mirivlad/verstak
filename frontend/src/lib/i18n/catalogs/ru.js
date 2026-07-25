@@ -167,6 +167,7 @@ export default {
   'workspaceTree.templatesError': 'Не удалось загрузить шаблоны Дел. Повторите попытку.',
   'workspaceTree.loadError': 'Не удалось загрузить Дела. Повторите попытку.',
   'workspaceTree.selectError': 'Не удалось выбрать это Дело. Повторите попытку.',
+  'workspaceTree.placeError': 'Не удалось переместить. Проверьте, нет ли в целевой папке элемента с таким же названием.',
   'workspaceTree.createError': 'Не удалось создать Дело. Повторите попытку.',
   'workspaceTree.renameError': 'Не удалось переименовать Дело. Повторите попытку.',
   'workspaceTree.trashError': 'Не удалось переместить Дело в корзину. Повторите попытку.',

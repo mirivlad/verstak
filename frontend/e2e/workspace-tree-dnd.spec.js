@@ -4,6 +4,7 @@ import { waitForAppReady, setupConsoleCollector } from './helpers.js';
 const IDS = {
   folder: '11111111-1111-1111-1111-111111111111',
   child: '22222222-2222-2222-2222-222222222222',
+  middle: '44444444-4444-4444-4444-444444444444',
   deal: '33333333-3333-3333-3333-333333333333',
 };
 
@@ -18,12 +19,16 @@ function node(kind, id, name, children = []) {
   };
 }
 
+// Three roots, so that "before"/"after" placements have somewhere to land:
+// with only two siblings almost every relative drop resolves to the position
+// the node already holds, which the shell now refuses to send.
 function basicTree() {
   return {
     roots: [
       node('folder', IDS.folder, 'Clients', [
         node('workspace', IDS.child, 'Nested Deal'),
       ]),
+      node('workspace', IDS.middle, 'Middle Deal'),
       node('workspace', IDS.deal, 'Loose Deal'),
     ],
     currentWorkspaceId: '',
@@ -122,6 +127,35 @@ test.describe('Workspace tree precision drag and drop', () => {
     ]);
   });
 
+  test('a drop that does not change the placement never reaches the backend', async ({ page }) => {
+    const nestedKey = `workspace:${IDS.child}`;
+    const folderKey = `folder:${IDS.folder}`;
+    const looseKey = `workspace:${IDS.deal}`;
+    const middleKey = `workspace:${IDS.middle}`;
+
+    // Dropping a Deal into the folder that already holds it.
+    await page.locator(`[data-tree-key="${folderKey}"]`).click();
+    await expect(page.locator(`[data-tree-key="${nestedKey}"]`)).toBeVisible();
+    await startTreeDrag(page, nestedKey);
+    await dispatchDragAt(page, page.locator(`[data-tree-key="${folderKey}"]`), 'dragover', 0.5);
+    await dispatchDragAt(page, page.locator(`[data-tree-key="${folderKey}"]`), 'drop', 0.5);
+
+    // Dropping a root Deal onto the free root area it already sits in.
+    const rootArea = page.locator('[data-tree-drop-root]');
+    await startTreeDrag(page, looseKey);
+    await dispatchDragAt(page, rootArea, 'dragover');
+    await dispatchDragAt(page, rootArea, 'drop');
+
+    // Dropping a Deal directly after the sibling it already follows.
+    await startTreeDrag(page, looseKey);
+    await dispatchDragAt(page, page.locator(`[data-tree-key="${middleKey}"]`), 'dragover', 0.9);
+    await dispatchDragAt(page, page.locator(`[data-tree-key="${middleKey}"]`), 'drop', 0.9);
+
+    await expect(page.locator(`[data-tree-key="${folderKey}"]`)).toBeVisible();
+    await expect(page.locator('[data-workspace-tree-notice]')).toHaveCount(0);
+    expect(await requests(page)).toEqual([]);
+  });
+
   test('hover expansion uses one stable-key timer and exposes a free child-list target', async ({ page }) => {
     const sourceKey = `workspace:${IDS.deal}`;
     const targetKey = `folder:${IDS.folder}`;
@@ -142,9 +176,12 @@ test.describe('Workspace tree precision drag and drop', () => {
     ]);
   });
 
-  test('free root area sends root and backend rejection clears every drag artifact', async ({ page }) => {
-    const sourceKey = `workspace:${IDS.deal}`;
+  test('free root area sends root and backend rejection keeps the tree usable', async ({ page }) => {
+    // A nested Deal: moving it to the root actually changes its placement.
+    const sourceKey = `workspace:${IDS.child}`;
     const rootArea = page.locator('[data-tree-drop-root]');
+    await page.locator(`[data-tree-key="folder:${IDS.folder}"]`).click();
+    await expect(page.locator(`[data-tree-key="${sourceKey}"]`)).toBeVisible();
     await page.evaluate(() => window.__wailsMock.setTreePlacementError('placement rejected'));
 
     await startTreeDrag(page, sourceKey);
@@ -155,9 +192,19 @@ test.describe('Workspace tree precision drag and drop', () => {
     await expect.poll(() => requests(page)).toEqual([
       { sourceKey, targetKey: '', position: 'root' },
     ]);
-    await expect(page.locator('.wt-error')).toContainText('placement rejected');
+
+    // The rejection is a dismissible notice, never a replacement for the tree,
+    // and it must not leak the backend string to the user.
+    const notice = page.locator('[data-workspace-tree-notice]');
+    await expect(notice).toBeVisible();
+    await expect(notice).not.toContainText('placement rejected');
+    await expect(page.locator(`[data-tree-key="folder:${IDS.folder}"]`)).toBeVisible();
+    await expect(page.locator('[data-workspace-tree-load-error]')).toHaveCount(0);
     await expect(page.locator('[data-drop-active]')).toHaveCount(0);
     await expect(page.locator('[data-drop-position]')).toHaveCount(0);
+
+    await notice.getByRole('button').click();
+    await expect(notice).toHaveCount(0);
   });
 
   test('edge drag autoscrolls and dragend stops and clears state', async ({ page }) => {
