@@ -543,21 +543,62 @@ button:disabled,
   font-weight: 650;
 }
 
-/* Scroll containers that can sit beneath a portalled overlay. WebKitGTK
-   paints their scrollbar above the overlay regardless of z-index or
-   compositing hints, so while an overlay is open the scrollbar steps aside.
-   scrollbar-gutter keeps the reserved space so nothing shifts. */
-.vt-scroll-under-overlay {
-  scrollbar-gutter: stable;
+/* A scroll container whose scrollbar is drawn in the DOM instead of by the
+   toolkit. WebKitGTK paints a native scrollbar above everything, including a
+   portalled overlay, and it does not re-evaluate scrollbar-width once the
+   scroller exists — so neither z-index nor toggling the property can move it.
+   Drawing our own keeps it in normal painting order. */
+.vt-scroller {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
 }
 
-:root[data-vt-overlay="open"] .vt-scroll-under-overlay {
+.vt-scroller-viewport {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
   scrollbar-width: none;
 }
 
-:root[data-vt-overlay="open"] .vt-scroll-under-overlay::-webkit-scrollbar {
+.vt-scroller-viewport::-webkit-scrollbar {
   width: 0;
   height: 0;
+}
+
+.vt-scroller-track {
+  position: absolute;
+  top: 2px;
+  /* Clear of the 6px sidebar resize handle, which sits at the very edge. */
+  right: 8px;
+  bottom: 2px;
+  width: 8px;
+  border-radius: 999px;
+  opacity: 0;
+  transition: opacity var(--vt-transition-fast);
+  pointer-events: none;
+}
+
+.vt-scroller:hover .vt-scroller-track,
+.vt-scroller-track.is-active {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.vt-scroller-thumb {
+  position: absolute;
+  right: 0;
+  width: 8px;
+  min-height: 24px;
+  border-radius: 999px;
+  background: var(--vt-color-border-strong);
+  cursor: default;
+}
+
+.vt-scroller-thumb:hover,
+.vt-scroller-track.is-active .vt-scroller-thumb {
+  background: var(--vt-color-text-muted);
 }
 
 .scroll-surface {

@@ -50,19 +50,4 @@ test.describe('Workspace tree overlay', () => {
     await expect(menu).toHaveCount(0);
   });
 
-  test('an open overlay stands down the sidebar scrollbar', async ({ page }) => {
-    const list = page.locator('.wt-list');
-    await expect(list).toHaveClass(/vt-scroll-under-overlay/);
-    await expect(page.locator('html')).not.toHaveAttribute('data-vt-overlay', 'open');
-
-    await page.locator('.trow').first().click({ button: 'right' });
-    await expect(page.locator('.vt-overlay-host')).toBeVisible();
-    // WebKitGTK paints the scrollbar above the menu no matter the z-index, so
-    // the scrollbar steps aside for as long as an overlay is open.
-    await expect(page.locator('html')).toHaveAttribute('data-vt-overlay', 'open');
-
-    await page.keyboard.press('Escape');
-    await expect(page.locator('.vt-overlay-host')).toHaveCount(0);
-    await expect(page.locator('html')).not.toHaveAttribute('data-vt-overlay', 'open');
-  });
 });

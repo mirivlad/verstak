@@ -8,3 +8,4 @@ plugins/
 vendor/
 frontend/e2e-results/
 release/
+build/gui-probe/
