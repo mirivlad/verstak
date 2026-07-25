@@ -3,6 +3,42 @@ import * as Backend from '../wailsjs/go/api/App';
 import { i18n } from './lib/i18n/index.js';
 import './lib/ui/design-system.css';
 
+// Replaced with a literal by Vite; false outside `--mode test`, so the mock
+// import below is removed from the bundle rather than shipped and skipped.
+/* global __VERSTAK_TEST_MOCK__ */
+const TEST_MOCK_ENABLED = __VERSTAK_TEST_MOCK__;
+
+function backendAvailable() {
+  return Boolean(window.go && window.go.api);
+}
+
+// Without the Wails runtime there is no vault, no plugins and no settings.
+// Booting anyway used to fall through to the test mock, which answers every
+// call with plausible fixtures — the user would be shown a vault that does not
+// exist. Say so instead.
+function renderRuntimeMissing() {
+  const target = document.getElementById('app');
+  if (!target) return;
+  target.innerHTML = '';
+  const box = document.createElement('div');
+  box.className = 'startup-failure';
+  box.setAttribute('role', 'alert');
+  box.setAttribute('data-startup-failure', 'runtime-missing');
+
+  const title = document.createElement('p');
+  title.className = 'startup-failure-title';
+  title.textContent = 'Verstak could not start';
+
+  const detail = document.createElement('p');
+  detail.textContent =
+    'The application backend did not load, so no vault can be opened. '
+    + 'Please restart Verstak. If it keeps happening, run it with --debug and '
+    + 'share the log from ~/.local/share/verstak/debug/.';
+
+  box.append(title, detail);
+  target.appendChild(box);
+}
+
 function unpack(result) {
   if (Array.isArray(result) && result.length === 2 && (typeof result[1] === 'string' || result[1] == null)) {
     if (result[1]) throw new Error(result[1]);
@@ -16,6 +52,15 @@ i18n.configure({
 });
 
 async function start() {
+  if (TEST_MOCK_ENABLED && !backendAvailable()) {
+    await import('./lib/test/wails-mock.js');
+  }
+
+  if (!backendAvailable()) {
+    renderRuntimeMissing();
+    return null;
+  }
+
   try {
     const settings = await Backend.GetAppSettings();
     await i18n.initialize(settings?.language || 'system');
