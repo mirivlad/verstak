@@ -1,5 +1,6 @@
 import * as App from '../../../wailsjs/go/api/App';
 import { i18n } from '../i18n/index.js';
+import { matchesShortcut } from '../ui/shortcuts.js';
 
 window.__VERSTAK_PLUGIN_REGISTRY__ = window.__VERSTAK_PLUGIN_REGISTRY__ || {};
 window.__VERSTAK_EVENT_HANDLERS__ = window.__VERSTAK_EVENT_HANDLERS__ || {};
@@ -259,6 +260,16 @@ export function createPluginAPI(pluginId) {
 
   return {
     pluginId: pluginId,
+
+    // Shortcut matching is a host service on purpose. Left to plugins it gets
+    // reimplemented with event.key, which silently stops working on any
+    // non-Latin keyboard layout.
+    keys: {
+      matches: function(event, spec) {
+        assertActive('keys.matches');
+        return matchesShortcut(event, spec);
+      },
+    },
 
     i18n: {
       getLocale: function() {
