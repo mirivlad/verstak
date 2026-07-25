@@ -43,17 +43,22 @@ BRAND_ICONS_STATUS=0
 (cd "$ROOT" && ./scripts/test-brand-icons.sh) || BRAND_ICONS_STATUS=$?
 report "desktop brand icon generation" "$BRAND_ICONS_STATUS"
 
-WAILS_BINDINGS_STATUS=0
-(cd "$ROOT" && node frontend/tests/wails-bindings-test.mjs) || WAILS_BINDINGS_STATUS=$?
-report "Wails notification bindings" "$WAILS_BINDINGS_STATUS"
-
-DEBUG_MODE_STATUS=0
-(cd "$ROOT" && node --experimental-vm-modules frontend/tests/debug-mode-test.mjs) || DEBUG_MODE_STATUS=$?
-report "session-only debug mode" "$DEBUG_MODE_STATUS"
-
-SELECT_STYLE_STATUS=0
-(cd "$ROOT" && node frontend/tests/select-styles-test.mjs) || SELECT_STYLE_STATUS=$?
-report "workspace select styles" "$SELECT_STYLE_STATUS"
+# ── Frontend contract tests ──
+# Every file in frontend/tests/ runs. Adding a test file is enough to enrol it;
+# nothing here may be skipped selectively.
+echo "[contract tests]"
+CONTRACT_FOUND=0
+for test_file in "$ROOT"/frontend/tests/*.mjs "$ROOT"/frontend/tests/*.cjs; do
+  [ -f "$test_file" ] || continue
+  CONTRACT_FOUND=$((CONTRACT_FOUND + 1))
+  CONTRACT_STATUS=0
+  (cd "$ROOT" && node --experimental-vm-modules "$test_file") || CONTRACT_STATUS=$?
+  report "$(basename "$test_file")" "$CONTRACT_STATUS"
+done
+if [ "$CONTRACT_FOUND" -eq 0 ]; then
+  echo "  ❌ no contract tests found in frontend/tests/"
+  FAILED=1
+fi
 
 # ── Frontend tests ──
 echo "[frontend]"
