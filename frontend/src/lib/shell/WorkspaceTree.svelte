@@ -558,9 +558,20 @@
     return to === from || to === from + 1;
   }
 
+  // The folder that will actually hold the node after this placement. Dropping
+  // "inside" a folder is only one way to land in it: dropping before or after
+  // one of its children puts the node in that folder too, and from the user's
+  // side both are "I moved it into this folder".
+  function destinationParentKey({ targetKey, position }) {
+    if (position === 'root') return '';
+    if (position === 'inside') return targetKey;
+    return parentKeyOf(tree.roots || [], targetKey) || '';
+  }
+
   async function placeTreeNode(request) {
-    // An accepted drop into a folder confirms that folder should stay open.
-    resetDragState(request.position === 'inside' ? request.targetKey : '');
+    // An accepted drop confirms that the receiving folder should stay open, so
+    // the user can see where the node landed.
+    resetDragState(destinationParentKey(request));
     if (isNoOpPlacement(request)) return;
     actionError = '';
     try {
@@ -570,9 +581,8 @@
       actionError = tr('workspaceTree.placeError');
     } finally {
       // The tree is reloaded on failure too, otherwise the sidebar keeps
-      // showing a stale layout the user can no longer act on. Wait for any
-      // expansion write first, or the reload reads settings that predate it
-      // and the folder closes again.
+      // showing a stale layout the user can no longer act on. The expansion
+      // write is awaited first, or the reload reads settings that predate it.
       await pendingExpandedWrite;
       await loadTree();
       resetDragState();

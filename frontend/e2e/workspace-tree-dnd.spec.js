@@ -244,6 +244,30 @@ test.describe('Workspace tree precision drag and drop', () => {
     ]);
   });
 
+  test('a folder stays open when the drop lands next to one of its children', async ({ page }) => {
+    // The common gesture: hover a collapsed folder until it opens, then release
+    // over the children that just appeared. The node lands in that folder, so
+    // the folder must stay open — dropping "inside" the row is not the only
+    // way to put something in a folder.
+    const folderKey = `folder:${IDS.folder}`;
+    const looseKey = `workspace:${IDS.deal}`;
+    const folder = page.locator(`[data-tree-key="${folderKey}"]`);
+
+    await startTreeDrag(page, looseKey);
+    await dispatchDragAt(page, folder, 'dragover', 0.5);
+    await expect(folder).toHaveAttribute('aria-expanded', 'true');
+
+    // Release over the child Deal, not over the folder row.
+    const child = page.locator(`[data-tree-key="workspace:${IDS.child}"]`);
+    await dispatchDragAt(page, child, 'dragover', 0.8);
+    await dispatchDragAt(page, child, 'drop', 0.8);
+
+    await expect.poll(() => requests(page)).toEqual([
+      { sourceKey: looseKey, targetKey: `workspace:${IDS.child}`, position: 'after' },
+    ]);
+    await expect(folder).toHaveAttribute('aria-expanded', 'true');
+  });
+
   test('the folder drop zone covers the row except a thin reorder strip', async ({ page }) => {
     const folder = page.locator(`[data-tree-key="folder:${IDS.folder}"]`);
     const box = await folder.boundingBox();
