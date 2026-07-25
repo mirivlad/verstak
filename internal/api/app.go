@@ -23,6 +23,7 @@ import (
 
 	"github.com/verstak/verstak-desktop/internal/core/appsettings"
 	"github.com/verstak/verstak-desktop/internal/core/browserreceiver"
+	"github.com/verstak/verstak-desktop/internal/core/buildinfo"
 	"github.com/verstak/verstak-desktop/internal/core/capability"
 	"github.com/verstak/verstak-desktop/internal/core/contribution"
 	"github.com/verstak/verstak-desktop/internal/core/events"
@@ -2342,6 +2343,14 @@ func (a *App) SubscribePluginEvent(pluginID, eventName string) string {
 		})
 	}
 	return ""
+}
+
+// GetBuildInfo reports which build of Verstak is running.
+//
+// Surfaced in the status bar so a tester can tell at a glance whether the
+// package they just installed is the one they are looking at.
+func (a *App) GetBuildInfo() buildinfo.Info {
+	return buildinfo.Get()
 }
 
 // ─── App Settings API ──────────────────────────────────────

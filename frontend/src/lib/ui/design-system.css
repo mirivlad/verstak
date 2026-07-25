@@ -543,6 +543,23 @@ button:disabled,
   font-weight: 650;
 }
 
+/* Scroll containers that can sit beneath a portalled overlay. WebKitGTK
+   paints their scrollbar above the overlay regardless of z-index or
+   compositing hints, so while an overlay is open the scrollbar steps aside.
+   scrollbar-gutter keeps the reserved space so nothing shifts. */
+.vt-scroll-under-overlay {
+  scrollbar-gutter: stable;
+}
+
+:root[data-vt-overlay="open"] .vt-scroll-under-overlay {
+  scrollbar-width: none;
+}
+
+:root[data-vt-overlay="open"] .vt-scroll-under-overlay::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+
 .scroll-surface {
   min-width: 0;
   min-height: 0;
