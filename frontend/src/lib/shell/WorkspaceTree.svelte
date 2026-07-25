@@ -1,5 +1,5 @@
 <script>
-  import { onDestroy, onMount } from 'svelte';
+  import { onDestroy, onMount, tick } from 'svelte';
   import * as App from '../../../wailsjs/go/api/App';
   import Icon from '../ui/Icon.svelte';
   import Modal from '../ui/Modal.svelte';
@@ -38,6 +38,14 @@
   let hoverExpandedKeys = new Set();
   const HOVER_EXPAND_DELAY = 450;
   let autoscrollFrame = null;
+  // Own scrollbar geometry. See .vt-scroller in design-system.css for why the
+  // toolkit's own scrollbar cannot be used here.
+  let thumbTop = 0;
+  let thumbHeight = 0;
+  let thumbVisible = false;
+  let thumbDragging = false;
+  let thumbGrabOffset = 0;
+  let scrollObserver = null;
   let dragPointerY = 0;
   let treeListElement;
 
@@ -47,6 +55,11 @@
     window.addEventListener('verstak:workspace-active-changed', handleActiveWorkspace);
     window.addEventListener('keydown', handleDragKeyDown);
     await loadTree(); await loadTemplates();
+    if (typeof ResizeObserver !== 'undefined' && treeListElement) {
+      scrollObserver = new ResizeObserver(measureThumb);
+      scrollObserver.observe(treeListElement);
+    }
+    measureThumb();
     // Also listen via Wails runtime events (Go EventsEmit).
     if (window.runtime?.EventsOn) {
       window.runtime.EventsOn('verstak:workspace-tree-changed', loadTree);
@@ -57,6 +70,7 @@
     window.removeEventListener('verstak:workspace-tree-changed', loadTree);
     window.removeEventListener('verstak:workspace-active-changed', handleActiveWorkspace);
     window.removeEventListener('keydown', handleDragKeyDown);
+    scrollObserver?.disconnect();
     resetDragState();
   });
 
@@ -426,6 +440,51 @@
     }
   }
 
+  function measureThumb() {
+    const el = treeListElement;
+    if (!el) return;
+    const trackHeight = el.clientHeight - 4;
+    const ratio = el.clientHeight / el.scrollHeight;
+    thumbVisible = el.scrollHeight > el.clientHeight + 1;
+    if (!thumbVisible) return;
+    thumbHeight = Math.max(24, Math.round(trackHeight * ratio));
+    const scrollable = el.scrollHeight - el.clientHeight;
+    const travel = trackHeight - thumbHeight;
+    thumbTop = scrollable > 0 ? Math.round((el.scrollTop / scrollable) * travel) : 0;
+  }
+
+  function onThumbPointerDown(event) {
+    if (!treeListElement) return;
+    event.preventDefault();
+    thumbDragging = true;
+    thumbGrabOffset = event.clientY - event.currentTarget.getBoundingClientRect().top;
+    event.currentTarget.setPointerCapture(event.pointerId);
+  }
+
+  function onThumbPointerMove(event) {
+    if (!thumbDragging || !treeListElement) return;
+    const el = treeListElement;
+    const trackTop = el.getBoundingClientRect().top + 2;
+    const trackHeight = el.clientHeight - 4;
+    const travel = trackHeight - thumbHeight;
+    if (travel <= 0) return;
+    const offset = Math.min(travel, Math.max(0, event.clientY - trackTop - thumbGrabOffset));
+    el.scrollTop = (offset / travel) * (el.scrollHeight - el.clientHeight);
+  }
+
+  function onThumbPointerUp(event) {
+    thumbDragging = false;
+    event.currentTarget.releasePointerCapture?.(event.pointerId);
+  }
+
+  // Clicking the empty part of the track pages towards the pointer.
+  function onTrackPointerDown(event) {
+    if (!treeListElement || event.target !== event.currentTarget) return;
+    const el = treeListElement;
+    const local = event.clientY - el.getBoundingClientRect().top;
+    el.scrollTop += local < thumbTop ? -el.clientHeight : el.clientHeight;
+  }
+
   function stopAutoscroll() {
     if (autoscrollFrame != null) window.cancelAnimationFrame(autoscrollFrame);
     autoscrollFrame = null;
@@ -563,6 +622,7 @@
   function descendantIds(node) { const ids = new Set(); function walk(n) { for (const c of n.children || []) { ids.add(c.id); walk(c); } } walk(node); return ids; }
   function moveExcludedIds() { if (!modal?.id) return new Set(); const n = findNode(tree.roots, modal.id); return n ? descendantIds(n) : new Set(); }
   $: moveExcluded = moveExcludedIds();
+  $: if (tree || expandedIds) tick().then(measureThumb);
 
   function subtreeCounts(id) { let folders = 0, wss = 0; const n = findNode(tree.roots || [], id); if (n) count(n); return { folders, workspaces: wss };
     function count(nd) { for (const c of nd.children || []) { if (c.kind === 'folder') { folders++; count(c); } else wss++; } } }
@@ -647,9 +707,11 @@
     </div>
   {/if}
 
-  <div class="wt-list vt-scroll-under-overlay" role="tree" aria-label={tr('workspaceTree.title')} tabindex="0" bind:this={treeListElement}
+  <div class="wt-scroller vt-scroller">
+  <div class="wt-list vt-scroller-viewport" role="tree" aria-label={tr('workspaceTree.title')} tabindex="0" bind:this={treeListElement}
+    on:scroll={measureThumb}
     on:dragover={onRootDragOver} on:dragleave={onRootDragLeave} on:drop={onRootDrop}
-    on:dragend={resetDragState}
+    on:dragend={() => resetDragState()}
   >
     {#if loading}
       <div class="wt-status">{tr('common.loading')}</div>
@@ -692,6 +754,26 @@
       data-tree-drop-root
       data-drop-active={dragTarget?.position === 'root' ? 'root' : undefined}
     >{dragTarget?.position === 'root' ? tr('workspaceTree.root') : ''}</div>
+  </div>
+
+  {#if thumbVisible}
+    <div
+      class="vt-scroller-track"
+      class:is-active={thumbDragging}
+      data-tree-scrollbar
+      on:pointerdown={onTrackPointerDown}
+    >
+      <div
+        class="vt-scroller-thumb"
+        data-tree-scrollbar-thumb
+        style="top:{thumbTop}px;height:{thumbHeight}px"
+        on:pointerdown={onThumbPointerDown}
+        on:pointermove={onThumbPointerMove}
+        on:pointerup={onThumbPointerUp}
+        on:pointercancel={onThumbPointerUp}
+      ></div>
+    </div>
+  {/if}
   </div>
 </div>
 
@@ -846,7 +928,8 @@
      6px handle sat on top of 6 of the scrollbar's 8 pixels — the scrollbar
      could not be grabbed and a right-click there hit the handle instead of a
      tree row. */
-  .wt-list { min-height: 0; overflow-y: auto; padding: 0.2rem 0.4rem; margin-right: 6px; flex: 1; position: relative; }
+  .wt-scroller { flex: 1; min-height: 0; }
+  .wt-list { padding: 0.2rem 1.2rem 0.2rem 0.4rem; position: relative; }
   .wt-status { padding: 0.5rem; font-size: 0.78rem; color: var(--vt-color-text-muted); }
   .wt-error { display: grid; gap: var(--vt-space-2); justify-items: start; color: var(--vt-color-danger); }
 

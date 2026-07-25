@@ -311,11 +311,11 @@ export namespace api {
 	    id: string;
 	    name: string;
 	    rootPath: string;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new PluginWorkspaceDTO(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.id = source["id"];
@@ -339,11 +339,11 @@ export namespace api {
 	    lastError: string;
 	    lastWarning: string;
 	    statusLabel: string;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new SyncStatusDTO(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.configured = source["configured"];
@@ -366,18 +366,41 @@ export namespace api {
 
 }
 
-export namespace capability {
+export namespace buildinfo {
+	
+	export class Info {
+	    version: string;
+	    commit: string;
+	    buildDate: string;
+	    display: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new Info(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.version = source["version"];
+	        this.commit = source["commit"];
+	        this.buildDate = source["buildDate"];
+	        this.display = source["display"];
+	    }
+	}
 
+}
+
+export namespace capability {
+	
 	export class Entry {
 	    name: string;
 	    description?: string;
 	    pluginId: string;
 	    status: string;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new Entry(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.name = source["name"];
@@ -390,17 +413,29 @@ export namespace capability {
 }
 
 export namespace files {
-
+	
+	export class CopyOptions {
+	    overwrite: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new CopyOptions(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.overwrite = source["overwrite"];
+	    }
+	}
 	export class FileBytes {
 	    relativePath: string;
 	    size: number;
 	    mimeHint: string;
 	    dataBase64: string;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new FileBytes(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.relativePath = source["relativePath"];
@@ -420,11 +455,11 @@ export namespace files {
 	    isReserved: boolean;
 	    canRead: boolean;
 	    canWrite: boolean;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new FileEntry(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.name = source["name"];
@@ -452,11 +487,11 @@ export namespace files {
 	    isReserved: boolean;
 	    canRead: boolean;
 	    canWrite: boolean;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new FileMetadata(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.relativePath = source["relativePath"];
@@ -473,25 +508,13 @@ export namespace files {
 	        this.canWrite = source["canWrite"];
 	    }
 	}
-	export class CopyOptions {
-	    overwrite: boolean;
-
-	    static createFrom(source: any = {}) {
-	        return new CopyOptions(source);
-	    }
-
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.overwrite = source["overwrite"];
-	    }
-	}
 	export class MoveOptions {
 	    overwrite: boolean;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new MoveOptions(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.overwrite = source["overwrite"];
@@ -500,11 +523,11 @@ export namespace files {
 	export class RestoreOptions {
 	    targetPath?: string;
 	    overwrite: boolean;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new RestoreOptions(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.targetPath = source["targetPath"];
@@ -519,11 +542,11 @@ export namespace files {
 	    originalType: string;
 	    basename: string;
 	    size: number;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new TrashEntry(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.originalPath = source["originalPath"];
@@ -541,11 +564,11 @@ export namespace files {
 	    trashId: string;
 	    deletedAt: string;
 	    size: number;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new TrashResult(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.originalPath = source["originalPath"];
@@ -558,11 +581,11 @@ export namespace files {
 	export class WriteOptions {
 	    createIfMissing: boolean;
 	    overwrite: boolean;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new WriteOptions(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.createIfMissing = source["createIfMissing"];
@@ -573,7 +596,7 @@ export namespace files {
 }
 
 export namespace importservice {
-
+	
 	export class ApplyResult {
 	    runPath: string;
 	    folders: number;
@@ -582,11 +605,11 @@ export namespace importservice {
 	    files: number;
 	    skipped: number;
 	    warnings: string[];
-
+	
 	    static createFrom(source: any = {}) {
 	        return new ApplyResult(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.runPath = source["runPath"];
@@ -605,11 +628,11 @@ export namespace importservice {
 	    size: number;
 	    modifiedAt: string;
 	    mediaHint: string;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new Entry(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.id = source["id"];
@@ -624,18 +647,18 @@ export namespace importservice {
 	    entries: Entry[];
 	    nextCursor: string;
 	    fingerprint: string;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new EntryPage(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.entries = this.convertValues(source["entries"], Entry);
 	        this.nextCursor = source["nextCursor"];
 	        this.fingerprint = source["fingerprint"];
 	    }
-
+	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -665,11 +688,11 @@ export namespace importservice {
 	    sourceEntryId?: string;
 	    sourcePath?: string;
 	    modifiedAt?: string;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new PlanNode(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.id = source["id"];
@@ -690,11 +713,11 @@ export namespace importservice {
 	    sourceFingerprint: string;
 	    runName: string;
 	    nodes: PlanNode[];
-
+	
 	    static createFrom(source: any = {}) {
 	        return new Plan(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.schemaVersion = source["schemaVersion"];
@@ -703,7 +726,7 @@ export namespace importservice {
 	        this.runName = source["runName"];
 	        this.nodes = this.convertValues(source["nodes"], PlanNode);
 	    }
-
+	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -722,7 +745,7 @@ export namespace importservice {
 		    return a;
 		}
 	}
-
+	
 	export class SourceSession {
 	    sourceHandle: string;
 	    kind: string;
@@ -731,11 +754,11 @@ export namespace importservice {
 	    fingerprint: string;
 	    entryCount: number;
 	    totalBytes: number;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new SourceSession(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.sourceHandle = source["sourceHandle"];
@@ -751,13 +774,13 @@ export namespace importservice {
 }
 
 export namespace notifications {
-
+	
 	export class Request {
 	    id: string;
 	    dueAt: string;
 	    title: string;
 	    body?: string;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new Request(source);
 	    }
@@ -1623,11 +1646,11 @@ export namespace workspacetree {
 	    sourceKey: string;
 	    targetKey: string;
 	    position: string;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new PlacementRequest(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.sourceKey = source["sourceKey"];
@@ -1657,3 +1680,4 @@ export namespace workspacetree {
 	}
 
 }
+

@@ -74,6 +74,10 @@ export function GetAppSettings() {
   return window['go']['api']['App']['GetAppSettings']();
 }
 
+export function GetBuildInfo() {
+  return window['go']['api']['App']['GetBuildInfo']();
+}
+
 export function GetCapabilities() {
   return window['go']['api']['App']['GetCapabilities']();
 }
