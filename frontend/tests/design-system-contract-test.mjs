@@ -10,6 +10,14 @@ const app = readFileSync(new URL('../src/App.svelte', import.meta.url), 'utf8');
 const modal = readFileSync(new URL('../src/lib/ui/Modal.svelte', import.meta.url), 'utf8');
 const select = readFileSync(new URL('../src/lib/ui/Select.svelte', import.meta.url), 'utf8');
 const tree = readFileSync(new URL('../src/lib/shell/WorkspaceTree.svelte', import.meta.url), 'utf8');
+const pluginManager = readFileSync(
+  new URL('../src/lib/plugin-manager/PluginManager.svelte', import.meta.url),
+  'utf8',
+);
+const pluginCard = readFileSync(
+  new URL('../src/lib/plugin-manager/PluginCard.svelte', import.meta.url),
+  'utf8',
+);
 
 assert.match(main, /import ['"]\.\/lib\/ui\/design-system\.css['"]/);
 
@@ -77,5 +85,10 @@ assert.match(select, /class="vt-select"/);
 assert.doesNotMatch(select, /background:\s*#0f1424/);
 assert.match(tree, /class="vt-button secondary vt-btn"/);
 assert.match(tree, /class="vt-menu vt-ctx"/);
+assert.match(pluginManager, /class="[^"]*vt-toolbar/);
+assert.match(pluginManager, /class="[^"]*vt-empty-state/);
+assert.match(pluginManager, /class="[^"]*vt-inline-alert/);
+assert.match(pluginCard, /class="[^"]*vt-card/);
+assert.doesNotMatch(pluginManager, /background:\s*#16213e/);
 
 console.log('design system contract: ok');
