@@ -36,7 +36,7 @@ test.describe('C: Reload updates UI state', () => {
     await page.waitForTimeout(200);
 
     // Click Reload button in Plugin Manager header
-    const reloadBtn = page.locator('button.reload-btn');
+    const reloadBtn = page.locator('[data-plugin-manager-reload]');
     await expect(reloadBtn).toBeVisible();
     await reloadBtn.click();
 
@@ -60,7 +60,7 @@ test.describe('C: Reload updates UI state', () => {
     // Disable in mock, reload
     await setPluginStatus(page, 'verstak.platform-test', 'disabled', false);
     await page.waitForTimeout(200);
-    await page.locator('button.reload-btn').click();
+    await page.locator('[data-plugin-manager-reload]').click();
     await page.waitForTimeout(1000);
 
     // Verify disabled
@@ -72,7 +72,7 @@ test.describe('C: Reload updates UI state', () => {
     await page.waitForTimeout(200);
 
     // Reload again
-    await page.locator('button.reload-btn').click();
+    await page.locator('[data-plugin-manager-reload]').click();
     await page.waitForTimeout(1000);
 
     // After reload: should be loaded again
@@ -85,7 +85,7 @@ test.describe('C: Reload updates UI state', () => {
   });
 
   test('Reload button is not disabled during normal operation', async ({ page }) => {
-    const reloadBtn = page.locator('button.reload-btn');
+    const reloadBtn = page.locator('[data-plugin-manager-reload]');
     await expect(reloadBtn).toBeVisible();
     await expect(reloadBtn).not.toBeDisabled();
   });
@@ -93,7 +93,7 @@ test.describe('C: Reload updates UI state', () => {
   test('Reload handles raw Wails count result without falling into error state', async ({ page }) => {
     await page.evaluate(() => window.__wailsMock.setReloadResponseMode('raw-count'));
 
-    const reloadBtn = page.locator('button.reload-btn');
+    const reloadBtn = page.locator('[data-plugin-manager-reload]');
     await reloadBtn.click();
 
     await expect(page.locator('.error-state')).toHaveCount(0);

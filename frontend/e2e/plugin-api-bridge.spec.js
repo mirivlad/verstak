@@ -29,7 +29,7 @@ test.describe('D: Plugin API bridge', () => {
     await openPluginManager(page);
     await expect.poll(() => page.evaluate(() => Object.keys(window.__VERSTAK_COMMAND_HANDLERS__ || {}).length)).toBe(0);
     await expect.poll(() => page.evaluate(() => (window.__VERSTAK_EVENT_HANDLERS__?.['verstak.platform-test.echo'] || []).length)).toBe(0);
-    await page.locator('button.reload-btn').click();
+    await page.locator('[data-plugin-manager-reload]').click();
     await expect(page.locator('.plugin-card').filter({ hasText: 'verstak.platform-test' }).locator('.status-badge')).toHaveText('loaded', { timeout: 10000 });
 
     await page.locator('.sidebar .plugin-item').filter({ hasText: 'Platform Test' }).click();
