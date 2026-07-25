@@ -83,7 +83,12 @@
   }
   let pendingExpandedWrite = Promise.resolve();
   function saveExpanded() {
-    const ids = Object.keys(expandedIds).filter(k => k.startsWith('folder:')).map(k => k.slice(7));
+    // Folders opened by hovering during a drag are excluded: otherwise any
+    // unrelated save while a drag is in flight — toggling another folder,
+    // creating one — would quietly make those temporary expansions permanent.
+    const ids = Object.keys(expandedIds)
+      .filter(k => k.startsWith('folder:') && !hoverExpandedKeys.has(k))
+      .map(k => k.slice(7));
     pendingExpandedWrite = App.UpdateAppSettings({ expandedFolderIds: ids }).catch(() => {});
     return pendingExpandedWrite;
   }
