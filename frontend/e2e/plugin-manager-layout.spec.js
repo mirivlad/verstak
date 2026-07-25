@@ -192,14 +192,19 @@ test.describe('E: Plugin Manager layout', () => {
     await expect(page.locator('.wt-label').filter({ hasText: 'ClientB' })).toHaveCount(0);
   });
 
-  test('shell icons render through bundled Lucide SVG components', async ({ page }) => {
+  test('shell icons render synchronously from the compiled core set', async ({ page }) => {
     const logo = page.locator('.sidebar-logo');
     await expect(logo).toBeVisible();
-    await expect(logo).toHaveClass(/lucide/);
+    await expect(logo).toHaveClass(/vt-icon/);
+    // The Verstak mark, not a lucide fallback.
+    await expect(logo).toHaveAttribute('data-icon', 'logo');
+    await expect(logo.locator('rect')).toHaveCount(1);
 
     await page.locator('.wt-label').filter({ hasText: 'Project' }).click();
     const workspaceIcon = page.locator('.wt-node-icon').first();
     await expect(workspaceIcon).toBeVisible();
-    await expect(workspaceIcon).toHaveClass(/lucide/);
+    await expect(workspaceIcon).toHaveClass(/vt-icon/);
+    // Core icons must be drawn on first paint, never as the dashed placeholder.
+    await expect(workspaceIcon.locator('[stroke-dasharray]')).toHaveCount(0);
   });
 });
