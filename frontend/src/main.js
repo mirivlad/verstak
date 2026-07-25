@@ -69,9 +69,19 @@ async function start() {
     await i18n.initialize('system');
   }
 
+  // Keep the document language in step with the selected application
+  // language: screen readers, spell checking and hyphenation all read it, and
+  // a hardcoded value is wrong for every user who switches.
+  syncDocumentLanguage();
+  i18n.subscribe(syncDocumentLanguage);
+
   return new App({
     target: document.getElementById('app'),
   });
+}
+
+function syncDocumentLanguage() {
+  document.documentElement.lang = i18n.getLocale() || 'en';
 }
 
 const app = start();

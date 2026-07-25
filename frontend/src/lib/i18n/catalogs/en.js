@@ -132,6 +132,7 @@ export default {
   'vaultSelection.open': 'Open existing',
   'vaultSelection.recent': 'Recent vaults',
   'common.cancel': 'Cancel',
+  'compactHost.unavailable': '"{name}" is unavailable right now',
   'common.close': 'Close',
   'common.create': 'Create',
   'workspaceTree.title': 'Deals',
