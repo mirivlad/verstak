@@ -133,6 +133,7 @@ export default {
   'vaultSelection.open': 'Открыть',
   'vaultSelection.recent': 'Недавние хранилища',
   'common.cancel': 'Отмена',
+  'compactHost.unavailable': '«{name}» сейчас недоступен',
   'common.close': 'Закрыть',
   'workspaceTree.title': 'Дела',
   'workspaceTree.new': 'Новое Дело',

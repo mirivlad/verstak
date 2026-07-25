@@ -128,7 +128,7 @@
         class:status-bar-warning={item.handler}
         class="status-bar-item"
         data-status-item-id={item.id}
-        title={item.pluginId}
+        title={item.label || item.id}
       >
         {#if item.handler}<CompactPluginHost pluginId={item.pluginId} handler={item.handler} label={item.label || item.id} />{:else}{item.label || item.id}{/if}
       </span>
@@ -140,7 +140,7 @@
         class:status-bar-warning={item.handler}
         class="status-bar-item"
         data-status-item-id={item.id}
-        title={item.pluginId}
+        title={item.label || item.id}
       >
         {#if item.handler}<CompactPluginHost pluginId={item.pluginId} handler={item.handler} label={item.label || item.id} />{:else}{item.label || item.id}{/if}
       </span>
@@ -152,7 +152,7 @@
         class:status-bar-warning={item.handler}
         class="status-bar-item"
         data-status-item-id={item.id}
-        title={item.pluginId}
+        title={item.label || item.id}
       >
         {#if item.handler}<CompactPluginHost pluginId={item.pluginId} handler={item.handler} label={item.label || item.id} />{:else}{item.label || item.id}{/if}
       </span>
@@ -207,7 +207,7 @@
                 type="button"
                 role="menuitem"
                 data-settings-panel-id={panel.id}
-                title={panel.pluginId}
+                title={panel.title || panel.id}
                 on:click={() => openSettingsPanel(panel)}
               >
                 <Icon name={panel.icon || 'settings'} size={14} class="settings-menu-icon" />

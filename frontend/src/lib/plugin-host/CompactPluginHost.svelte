@@ -1,15 +1,25 @@
 <script>
-  import { onDestroy } from 'svelte';
+  import { onDestroy, onMount } from 'svelte';
   import * as App from '../../../wailsjs/go/api/App';
   import { acquirePluginStyle, createPluginAPI } from './VerstakPluginAPI.js';
+  import { i18n } from '../i18n/index.js';
 
   export let pluginId;
   export let handler;
   export let label = '';
 
+  let locale = i18n.getLocale();
+  let unsubscribeLocale = null;
+  $: tr = ((activeLocale) => (key, params, fallback) => {
+    void activeLocale;
+    return i18n.t(key, params, fallback);
+  })(locale);
+  onMount(() => {
+    unsubscribeLocale = i18n.subscribe((next) => { locale = next; });
+  });
+
   let container;
   let state = 'loading';
-  let errorText = '';
   let current = null;
   let sequence = 0;
 
@@ -17,6 +27,7 @@
 
   onDestroy(() => {
     sequence += 1;
+    unsubscribeLocale?.();
     cleanup();
   });
 
@@ -39,7 +50,7 @@
     const run = ++sequence;
     cleanup();
     state = 'loading';
-    errorText = '';
+
     let releaseStyle = null;
     try {
       const info = await App.GetPluginFrontendInfo(nextPluginId);
@@ -67,15 +78,16 @@
       releaseStyle?.();
       if (run !== sequence) return;
       state = 'error';
-      errorText = error?.message || String(error);
+      console.warn(`[CompactPluginHost] ${nextPluginId}/${nextHandler}:`, error);
+      App.WriteFrontendLog('CompactPluginHost', `${nextPluginId}/${nextHandler}: ${error?.message || String(error)}`).catch(() => {});
     }
   }
 </script>
 
-<span class="compact-plugin-host" data-plugin-status-handler={handler} title={state === 'error' ? `${pluginId}: ${errorText}` : pluginId}>
+<span class="compact-plugin-host" data-plugin-status-handler={handler} title={state === 'error' ? tr('compactHost.unavailable', { name: label || pluginId }) : (label || pluginId)}>
   <span bind:this={container} class:hidden={state !== 'loaded'}></span>
-  {#if state === 'loading'}<span class="compact-state" aria-label="Loading">…</span>{/if}
-  {#if state === 'error'}<span class="compact-state compact-error" aria-label={errorText}>⚠ {label}</span>{/if}
+  {#if state === 'loading'}<span class="compact-state" aria-label={tr('common.loading')}>…</span>{/if}
+  {#if state === 'error'}<span class="compact-state compact-error" aria-label={tr('compactHost.unavailable', { name: label || pluginId })}>⚠ {label}</span>{/if}
 </span>
 
 <style>
