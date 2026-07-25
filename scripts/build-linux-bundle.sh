@@ -26,7 +26,6 @@ rm -rf "$OUTPUT"
 mkdir -p "$OUTPUT"
 install -m 755 "$BINARY" "$OUTPUT/verstak-desktop"
 install -m 644 "$ROOT/README.md" "$ROOT/LICENSE" "$OUTPUT/"
-cp -R "$ROOT/plugins" "$OUTPUT/plugins"
-chmod -R a+rX "$OUTPUT/plugins"
+"$ROOT/scripts/stage-shipping-plugins.sh" "$ROOT/plugins" "$OUTPUT/plugins"
 
 echo "Linux bundle: $OUTPUT"

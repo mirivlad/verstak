@@ -70,9 +70,9 @@ if [[ ! -f "$WINDOWS_BINARY" ]]; then
 fi
 
 rm -rf "$WINDOWS_OUTPUT"
-mkdir -p "$WINDOWS_OUTPUT/plugins"
+mkdir -p "$WINDOWS_OUTPUT"
 cp "$WINDOWS_BINARY" "$WINDOWS_OUTPUT/verstak-desktop.exe"
-cp -R "$WINDOWS_PLUGIN_DIST/." "$WINDOWS_OUTPUT/plugins/"
+"$ROOT/scripts/stage-shipping-plugins.sh" "$WINDOWS_PLUGIN_DIST" "$WINDOWS_OUTPUT/plugins"
 
 echo "Windows test bundle: $WINDOWS_OUTPUT"
 echo "Copy this directory to Windows and run verstak-desktop.exe."
