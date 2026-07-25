@@ -46,8 +46,12 @@ const sourcePath = path.resolve('frontend/src/lib/plugin-host/VerstakPluginAPI.j
 const source = fs.readFileSync(sourcePath, 'utf8')
   .replace("import * as App from '../../../wailsjs/go/api/App';", 'const App = globalThis.__mockApp;')
   .replace("import { i18n } from '../i18n/index.js';", 'const i18n = globalThis.__mockI18n;');
-const tempPath = path.resolve('/tmp/verstak-plugin-api-files-test.mjs');
+// The rewritten copy stays beside the original so that every relative
+// import inside it still resolves. Copying it to /tmp broke as soon as
+// VerstakPluginAPI imported a second local module.
+const tempPath = path.join(path.dirname(sourcePath), '.verstak-plugin-api-files-test.mjs');
 fs.writeFileSync(tempPath, source);
+process.on('exit', () => { try { fs.unlinkSync(tempPath); } catch {} });
 
 const apiModule = await import(pathToFileURL(tempPath).href + '?t=' + Date.now());
 const api = apiModule.createPluginAPI('verstak.files');
