@@ -445,7 +445,13 @@ import importStyle from '../../../../../verstak-official-plugins/plugins/import/
     return { roots: roots, currentWorkspaceId: current ? current.id : '', revision: 1, warnings: [] };
   }
 
-  function cloneJson(value) {
+  function applyAppSettingsPatch(patch) {
+  appSettings = Object.assign({}, appSettings, patch || {});
+  if (patch && patch.language) localStorage.setItem('verstak-test-language', patch.language);
+  if (patch && patch.sidebarWidth) localStorage.setItem('verstak-test-sidebar-width', String(patch.sidebarWidth));
+}
+
+function cloneJson(value) {
     return JSON.parse(JSON.stringify(value));
   }
 
@@ -4280,6 +4286,14 @@ import importStyle from '../../../../../verstak-official-plugins/plugins/import/
     MoveFolderV2: function (folderID, targetParentFolderID) { return Promise.resolve(''); },
     PlaceWorkspaceTreeNodeV2: function (request) {
       treePlacementRequests.push(cloneJson(request || {}));
+      // The real backend emits this from the placement itself, which makes the
+      // sidebar reload the tree a second time, concurrently with the reload
+      // the caller does. Without it here the mock hid a race.
+      if (!treePlacementError) {
+        setTimeout(function () {
+          window.dispatchEvent(new CustomEvent('verstak:workspace-tree-changed'));
+        }, 0);
+      }
       return Promise.resolve(treePlacementError);
     },
     TrashWorkspaceV2: function (workspaceID) {
@@ -4296,10 +4310,16 @@ import importStyle from '../../../../../verstak-official-plugins/plugins/import/
     CloseVault: function () { return Promise.resolve(null); },
     SetCurrentVault: function () { return Promise.resolve(''); },
     UpdateAppSettings: function (patch) {
-      appSettings = Object.assign({}, appSettings, patch || {});
-      if (patch && patch.language) localStorage.setItem('verstak-test-language', patch.language);
-      if (patch && patch.sidebarWidth) localStorage.setItem('verstak-test-sidebar-width', String(patch.sidebarWidth));
-      return Promise.resolve('');
+      // The real call crosses the Wails bridge and writes a file, so a read
+      // that starts before it completes still sees the old value. Applying the
+      // patch synchronously here hid a race where a concurrent tree reload
+      // restored settings from before the write.
+      return new Promise(function (resolve) {
+        setTimeout(function () {
+          applyAppSettingsPatch(patch);
+          resolve('');
+        }, 0);
+      });
     },
     RecordDesiredPlugin: function () { return Promise.resolve(''); },
     WriteFrontendLog: function () { return Promise.resolve(); },
