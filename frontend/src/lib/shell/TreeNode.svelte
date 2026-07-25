@@ -14,6 +14,8 @@
 
   const dispatch = createEventDispatcher();
   const INDENT = 1.15; // rem
+  // Height of the reorder strip at the top and bottom edge of a folder row.
+  const REORDER_EDGE = 6; // px
   let fileDragOver = false;
 
   $: isFolder = node.kind === 'folder';
@@ -87,12 +89,17 @@
     e.stopPropagation();
     e.dataTransfer.dropEffect = 'move';
     const rect = e.currentTarget.getBoundingClientRect();
-    const ratio = rect.height > 0 ? (e.clientY - rect.top) / rect.height : 0.5;
+    const offsetY = e.clientY - rect.top;
     let position;
     if (isFolder) {
-      position = ratio < 1 / 3 ? 'before' : ratio > 2 / 3 ? 'after' : 'inside';
+      // "Inside" is the default for a folder, with a fixed reorder strip at
+      // each edge. Splitting the row into thirds left roughly ten pixels for
+      // "inside" on a 30px row, so a hand that moved a pixel or two kept
+      // knocking the drop out of the folder and restarting the hover timer.
+      const edge = Math.min(REORDER_EDGE, rect.height / 3);
+      position = offsetY < edge ? 'before' : offsetY > rect.height - edge ? 'after' : 'inside';
     } else {
-      position = ratio < 0.5 ? 'before' : 'after';
+      position = offsetY < rect.height / 2 ? 'before' : 'after';
     }
     dispatch('dragtarget', { targetKey: node.key, position, clientY: e.clientY });
   }

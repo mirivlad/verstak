@@ -33,6 +33,10 @@
   let dragTarget = null;
   let hoverExpandTimer = null;
   let hoverExpandKey = '';
+  // Folders opened by hovering during a drag, so they can be closed again if
+  // the drop does not land in them.
+  let hoverExpandedKeys = new Set();
+  const HOVER_EXPAND_DELAY = 450;
   let autoscrollFrame = null;
   let dragPointerY = 0;
   let treeListElement;
@@ -77,9 +81,11 @@
       if (settings?.expandedFolderIds) expandedIds = Object.fromEntries(settings.expandedFolderIds.map(id => ['folder:' + id, true]));
     } catch {}
   }
-  async function saveExpanded() {
+  let pendingExpandedWrite = Promise.resolve();
+  function saveExpanded() {
     const ids = Object.keys(expandedIds).filter(k => k.startsWith('folder:')).map(k => k.slice(7));
-    try { await App.UpdateAppSettings({ expandedFolderIds: ids }); } catch {}
+    pendingExpandedWrite = App.UpdateAppSettings({ expandedFolderIds: ids }).catch(() => {});
+    return pendingExpandedWrite;
   }
 
   async function loadTemplates() {
@@ -314,10 +320,11 @@
     }
   }
 
-  function resetDragState() {
+  function resetDragState(keepExpandedKey = '') {
     dragSourceKey = '';
     dragTarget = null;
     clearHoverExpand();
+    settleHoverExpansions(keepExpandedKey);
     stopAutoscroll();
   }
 
@@ -357,9 +364,32 @@
       if (dragTarget?.targetKey !== node.key || dragTarget?.position !== 'inside') return;
       expandedIds[node.key] = true;
       expandedIds = expandedIds;
-      saveExpanded();
+      // Deliberately not persisted. Opening a folder to see where you are
+      // dropping is a look, not a decision — saving it meant every folder the
+      // pointer crossed stayed open forever, and after a few drags the whole
+      // tree was expanded with no way back short of collapsing by hand.
+      hoverExpandedKeys.add(node.key);
       hoverExpandTimer = null;
-    }, 700);
+    }, HOVER_EXPAND_DELAY);
+  }
+
+  // Undo hover expansions that the drop did not confirm. A folder the item was
+  // actually dropped into stays open, and so does anything the user opened
+  // themselves before the drag.
+  function settleHoverExpansions(keepKey = '') {
+    if (hoverExpandedKeys.size === 0) return;
+    let changed = false;
+    for (const key of hoverExpandedKeys) {
+      if (key === keepKey) continue;
+      if (expandedIds[key]) {
+        delete expandedIds[key];
+        changed = true;
+      }
+    }
+    const confirmed = Boolean(keepKey) && hoverExpandedKeys.has(keepKey);
+    hoverExpandedKeys = new Set();
+    if (confirmed) saveExpanded();
+    if (changed) expandedIds = expandedIds;
   }
 
   function clearHoverExpand() {
@@ -444,7 +474,8 @@
   }
 
   async function placeTreeNode(request) {
-    resetDragState();
+    // An accepted drop into a folder confirms that folder should stay open.
+    resetDragState(request.position === 'inside' ? request.targetKey : '');
     if (isNoOpPlacement(request)) return;
     actionError = '';
     try {
@@ -454,7 +485,10 @@
       actionError = tr('workspaceTree.placeError');
     } finally {
       // The tree is reloaded on failure too, otherwise the sidebar keeps
-      // showing a stale layout the user can no longer act on.
+      // showing a stale layout the user can no longer act on. Wait for any
+      // expansion write first, or the reload reads settings that predate it
+      // and the folder closes again.
+      await pendingExpandedWrite;
       await loadTree();
       resetDragState();
     }
@@ -802,7 +836,12 @@
   .wt-template-warning { display: grid; gap: 0.2rem; margin: 0.45rem 0.55rem 0; padding: 0.55rem; border: 1px solid var(--vt-color-warning); border-radius: var(--vt-radius-sm); color: var(--vt-color-warning); font-size: 0.72rem; }
   .wt-title { color: var(--vt-color-text-muted); font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600; }
   .wt-header-actions { display: flex; gap: 0.2rem; }
-  .wt-list { min-height: 0; overflow-y: auto; padding: 0.2rem 0.4rem; flex: 1; position: relative; }
+  /* margin-right clears the sidebar resize handle. A scrollbar sits between
+     the padding box and the border box, so padding cannot move it, and the
+     6px handle sat on top of 6 of the scrollbar's 8 pixels — the scrollbar
+     could not be grabbed and a right-click there hit the handle instead of a
+     tree row. */
+  .wt-list { min-height: 0; overflow-y: auto; padding: 0.2rem 0.4rem; margin-right: 6px; flex: 1; position: relative; }
   .wt-status { padding: 0.5rem; font-size: 0.78rem; color: var(--vt-color-text-muted); }
   .wt-error { display: grid; gap: var(--vt-space-2); justify-items: start; color: var(--vt-color-danger); }
 

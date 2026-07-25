@@ -65,6 +65,13 @@
 <style>
   .vt-overlay-host {
     position: fixed;
-    z-index: 10000;
+    z-index: var(--vt-overlay-z-index, 10000);
+    /* WebKitGTK paints a styled scrollbar into its own composited layer, which
+       ends up above a fixed element that has no layer of its own — the sidebar
+       scrollbar was drawn across the context menu. Promoting the overlay to
+       its own layer puts it back on top. Chromium never showed this, so it
+       cannot be caught by the Playwright suite. */
+    transform: translateZ(0);
+    will-change: transform;
   }
 </style>
