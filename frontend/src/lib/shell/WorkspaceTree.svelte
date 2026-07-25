@@ -9,7 +9,10 @@
   import { i18n } from '../i18n/index.js';
 
   let tree = { roots: [], currentWorkspaceId: '', revision: 0 };
-  let loading = true; let error = '';
+  let loading = true;
+  // loadError replaces the list only when there is no tree to show at all.
+  // actionError is a dismissible notice: the tree stays usable behind it.
+  let loadError = ''; let actionError = '';
   let expandedIds = {}; let activeWid = '';
   let focusedKey = '';
   let locale = i18n.getLocale();
@@ -54,16 +57,16 @@
   });
 
   async function loadTree() {
-    loading = true; error = '';
+    loading = true; loadError = '';
     try {
       const raw = await App.GetWorkspaceTreeV2();
-      if (raw?.error) { error = raw.error; return; }
+      if (raw?.error) { loadError = tr('workspaceTree.loadError'); return; }
       tree = raw || { roots: [], currentWorkspaceId: '', revision: 0 };
       activeWid = tree.currentWorkspaceId || '';
       await loadExpanded();
       if (activeWid) ensureExpandedToWorkspace(activeWid);
       if (!focusedKey && tree.roots?.length) focusedKey = tree.roots[0].key;
-    } catch (e) { error = tr('workspaceTree.loadError'); }
+    } catch (e) { loadError = tr('workspaceTree.loadError'); }
     loading = false;
     await loadAppearanceMap();
   }
@@ -119,7 +122,8 @@
 
   async function selectWorkspace(wid) {
     const err = await App.SetCurrentWorkspaceV2(wid);
-    if (err) { error = err; return; }
+    if (err) { actionError = tr('workspaceTree.selectError'); return; }
+    actionError = '';
     activeWid = wid;
     focusedKey = 'workspace:' + wid;
     const ws = await App.GetWorkspaceByID(wid);
@@ -402,19 +406,56 @@
     }
   }
 
+  // Parent stable key of a node, '' for a root node, null when not found.
+  function parentKeyOf(nodes, key, parentKey = '') {
+    for (const node of nodes || []) {
+      if (node.key === key) return parentKey;
+      const found = parentKeyOf(node.children || [], key, node.key);
+      if (found !== null) return found;
+    }
+    return null;
+  }
+
+  function siblingsOf(parentKey) {
+    if (!parentKey) return tree.roots || [];
+    return findNodeByKey(tree.roots || [], parentKey)?.children || [];
+  }
+
+  // A drop that resolves to the position the node already occupies must not
+  // reach the backend: it comes back as a name conflict and reads as a failure.
+  function isNoOpPlacement({ sourceKey, targetKey, position }) {
+    if (!sourceKey) return true;
+    if (sourceKey === targetKey) return true;
+    const currentParent = parentKeyOf(tree.roots || [], sourceKey);
+    if (currentParent === null) return false;
+
+    if (position === 'root') return currentParent === '';
+    if (position === 'inside') return currentParent === targetKey;
+
+    const destinationParent = parentKeyOf(tree.roots || [], targetKey);
+    if (destinationParent === null || destinationParent !== currentParent) return false;
+
+    const siblings = siblingsOf(currentParent);
+    const from = siblings.findIndex((node) => node.key === sourceKey);
+    const anchor = siblings.findIndex((node) => node.key === targetKey);
+    if (from < 0 || anchor < 0) return false;
+    const to = position === 'before' ? anchor : anchor + 1;
+    return to === from || to === from + 1;
+  }
+
   async function placeTreeNode(request) {
     resetDragState();
-    error = '';
+    if (isNoOpPlacement(request)) return;
+    actionError = '';
     try {
       const err = await App.PlaceWorkspaceTreeNodeV2(request);
-      if (err) {
-        error = err;
-        return;
-      }
-      await loadTree();
+      if (err) actionError = tr('workspaceTree.placeError');
     } catch (e) {
-      error = tr('workspaceTree.loadError');
+      actionError = tr('workspaceTree.placeError');
     } finally {
+      // The tree is reloaded on failure too, otherwise the sidebar keeps
+      // showing a stale layout the user can no longer act on.
+      await loadTree();
       resetDragState();
     }
   }
@@ -444,7 +485,7 @@
   }
   async function onFileDrop(e) {
     resetDragState();
-    error = '';
+    actionError = '';
     try {
       const { payload, targetId } = e.detail || {};
       const paths = Array.isArray(payload?.paths) ? payload.paths.filter(Boolean) : [];
@@ -453,14 +494,14 @@
       const workspaces = await api.workspaces.list();
       const target = (workspaces || []).find((workspace) => workspace.id === targetId);
       if (!target?.rootPath) {
-        error = tr('workspaceTree.filesDropUnavailable');
+        actionError = tr('workspaceTree.filesDropUnavailable');
         return;
       }
       const targetDir = target.rootPath + '/Files';
       try {
         await api.files.list(targetDir);
       } catch {
-        error = tr('workspaceTree.filesDropUnavailable');
+        actionError = tr('workspaceTree.filesDropUnavailable');
         return;
       }
       for (const sourcePath of paths) {
@@ -474,7 +515,7 @@
         }
       }
     } catch {
-      error = tr('workspaceTree.filesDropError');
+      actionError = tr('workspaceTree.filesDropError');
     }
   }
 
@@ -554,14 +595,30 @@
     </div>
   {/if}
 
+  {#if actionError}
+    <div class="wt-notice" role="alert" data-workspace-tree-notice>
+      <span class="wt-notice-text">{actionError}</span>
+      <button
+        type="button"
+        class="ti-btn"
+        title={tr('common.close')}
+        aria-label={tr('common.close')}
+        on:click={() => { actionError = ''; }}
+      ><Icon name="x" size={12} /></button>
+    </div>
+  {/if}
+
   <div class="wt-list" role="tree" aria-label={tr('workspaceTree.title')} tabindex="0" bind:this={treeListElement}
     on:dragover={onRootDragOver} on:dragleave={onRootDragLeave} on:drop={onRootDrop}
     on:dragend={resetDragState}
   >
     {#if loading}
       <div class="wt-status">{tr('common.loading')}</div>
-    {:else if error}
-      <div class="wt-status wt-error">{error}</div>
+    {:else if loadError}
+      <div class="wt-status wt-error" data-workspace-tree-load-error>
+        <p>{loadError}</p>
+        <button type="button" class="vt-button secondary vt-btn" on:click={loadTree}>{tr('common.retry')}</button>
+      </div>
     {:else if !tree.roots || tree.roots.length === 0}
       <div class="wt-empty">
         <p>{tr('workspaceTree.emptyTitle')}</p>
@@ -747,7 +804,16 @@
   .wt-header-actions { display: flex; gap: 0.2rem; }
   .wt-list { min-height: 0; overflow-y: auto; padding: 0.2rem 0.4rem; flex: 1; position: relative; }
   .wt-status { padding: 0.5rem; font-size: 0.78rem; color: var(--vt-color-text-muted); }
-  .wt-error { color: var(--vt-color-danger); }
+  .wt-error { display: grid; gap: var(--vt-space-2); justify-items: start; color: var(--vt-color-danger); }
+
+  .wt-notice {
+    display: flex; align-items: flex-start; gap: var(--vt-space-2);
+    flex-shrink: 0; margin: 0.35rem 0.55rem 0; padding: 0.4rem 0.5rem;
+    border: 1px solid rgba(233, 69, 96, 0.55); border-radius: var(--vt-radius-sm);
+    background: var(--vt-color-danger-muted); color: var(--vt-color-danger-foreground);
+    font-size: 0.72rem; line-height: 1.35;
+  }
+  .wt-notice-text { flex: 1; min-width: 0; }
   .wt-empty { padding: 1rem 0.5rem; text-align: center; color: var(--vt-color-text-muted); font-size: 0.8rem; }
   .wt-empty-hint { font-size: 0.72rem; opacity: 0.7; }
 

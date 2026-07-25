@@ -167,6 +167,7 @@ export default {
   'workspaceTree.templatesError': 'Could not load Deal templates. Please try again.',
   'workspaceTree.loadError': 'Could not load Deals. Please try again.',
   'workspaceTree.selectError': 'Could not select this Deal. Please try again.',
+  'workspaceTree.placeError': 'Could not move it. Check whether the destination already contains an item with the same name.',
   'workspaceTree.createError': 'Could not create the Deal. Please try again.',
   'workspaceTree.renameError': 'Could not rename the Deal. Please try again.',
   'workspaceTree.trashError': 'Could not move the Deal to trash. Please try again.',
