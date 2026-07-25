@@ -46,6 +46,7 @@
   let thumbDragging = false;
   let thumbGrabOffset = 0;
   let scrollObserver = null;
+  let hasLoadedTree = false;
   let dragPointerY = 0;
   let treeListElement;
 
@@ -75,7 +76,13 @@
   });
 
   async function loadTree() {
-    loading = true; loadError = '';
+    // Only the very first load swaps the list for a placeholder. A refresh
+    // after a drop or an external change updates in place: destroying the rows
+    // resets scrollTop, which threw the user back to the top of the tree every
+    // time they moved something.
+    if (!hasLoadedTree) loading = true;
+    const restoreScrollTop = treeListElement?.scrollTop || 0;
+    loadError = '';
     try {
       const raw = await App.GetWorkspaceTreeV2();
       if (raw?.error) { loadError = tr('workspaceTree.loadError'); return; }
@@ -86,6 +93,14 @@
       if (!focusedKey && tree.roots?.length) focusedKey = tree.roots[0].key;
     } catch (e) { loadError = tr('workspaceTree.loadError'); }
     loading = false;
+    hasLoadedTree = true;
+    if (restoreScrollTop) {
+      await tick();
+      if (treeListElement) {
+        treeListElement.scrollTop = restoreScrollTop;
+        measureThumb();
+      }
+    }
     await loadAppearanceMap();
   }
 
@@ -100,9 +115,11 @@
     // Folders opened by hovering during a drag are excluded: otherwise any
     // unrelated save while a drag is in flight — toggling another folder,
     // creating one — would quietly make those temporary expansions permanent.
-    const ids = Object.keys(expandedIds)
-      .filter(k => k.startsWith('folder:') && !hoverExpandedKeys.has(k))
-      .map(k => k.slice(7));
+    // Filter on the value, not just on the key being present: the stored list
+    // means "these folders are open", so a falsy entry must never reach it.
+    const ids = Object.entries(expandedIds)
+      .filter(([key, open]) => open && key.startsWith('folder:') && !hoverExpandedKeys.has(key))
+      .map(([key]) => key.slice(7));
     pendingExpandedWrite = App.UpdateAppSettings({ expandedFolderIds: ids }).catch(() => {});
     return pendingExpandedWrite;
   }
@@ -139,7 +156,11 @@
   }
 
   function toggleExpand(key) {
-    expandedIds[key] = !expandedIds[key];
+    // Collapsing removes the key rather than setting it to false. A key left
+    // behind with a false value still counts as "present" when the map is
+    // serialised, and every persisted id is read back as expanded.
+    if (expandedIds[key]) delete expandedIds[key];
+    else expandedIds[key] = true;
     expandedIds = expandedIds;
     focusedKey = key;
     saveExpanded();

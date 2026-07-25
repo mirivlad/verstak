@@ -260,6 +260,35 @@ test.describe('Workspace tree precision drag and drop', () => {
     expect(rowHeight).toBeGreaterThan(20);
   });
 
+  test('a collapsed folder is not reopened by the next tree reload', async ({ page }) => {
+    const folderKey = `folder:${IDS.folder}`;
+    const folder = page.locator(`[data-tree-key="${folderKey}"]`);
+
+    // Open it, then close it again — the state a user leaves behind constantly.
+    await folder.click();
+    await expect(folder).toHaveAttribute('aria-expanded', 'true');
+    await folder.click();
+    await expect(folder).toHaveAttribute('aria-expanded', 'false');
+
+    // What gets persisted is the whole contract here: a folder that is closed
+    // must not appear in the list of open folders. It used to, because the map
+    // kept the key with a false value and only the key was checked.
+    await expect.poll(async () => page.evaluate(
+      async () => (await window.go.api.App.GetAppSettings()).expandedFolderIds || [],
+    )).not.toContain(IDS.folder);
+
+    // Any reload re-reads that list. A drop is only the most visible trigger;
+    // an external file change or a restart does the same.
+    const looseKey = `workspace:${IDS.deal}`;
+    const middle = page.locator(`[data-tree-key="workspace:${IDS.middle}"]`);
+    await startTreeDrag(page, looseKey);
+    await dispatchDragAt(page, middle, 'dragover', 0.05);
+    await dispatchDragAt(page, middle, 'drop', 0.05);
+
+    await expect.poll(() => requests(page)).toHaveLength(1);
+    await expect(folder).toHaveAttribute('aria-expanded', 'false');
+  });
+
   test('edge drag autoscrolls and dragend stops and clears state', async ({ page }) => {
     const roots = [];
     for (let index = 0; index < 36; index += 1) {
