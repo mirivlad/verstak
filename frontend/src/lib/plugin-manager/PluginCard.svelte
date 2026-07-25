@@ -26,15 +26,15 @@
   $: hasCommandsPermission = (m.permissions || []).includes('commands.register');
 
   $: statusColor = ({
-    loaded: '#4ecca3',
-    degraded: '#ffc857',
-    disabled: '#a0a0b8',
-    failed: '#e94560',
-    incompatible: '#e94560',
-    'missing-required-capability': '#e94560',
-    loading: '#ffc857',
-    discovered: '#a0a0b8',
-  }[p.status] || '#a0a0b8');
+    loaded: 'var(--vt-color-accent)',
+    degraded: 'var(--vt-color-warning)',
+    disabled: 'var(--vt-color-text-muted)',
+    failed: 'var(--vt-color-danger)',
+    incompatible: 'var(--vt-color-danger)',
+    'missing-required-capability': 'var(--vt-color-danger)',
+    loading: 'var(--vt-color-warning)',
+    discovered: 'var(--vt-color-text-muted)',
+  }[p.status] || 'var(--vt-color-text-muted)');
 
   $: contribCounts = {
     views: (contributions.views || []).filter(v => v.pluginId === pluginId).length,
@@ -83,7 +83,7 @@
   $: busyAction = actionFeedback[pluginId] || null;
 </script>
 
-<div class="plugin-card" class:disabled={isDisabled} class:failed={p.status === 'failed'}>
+<div class="vt-card plugin-card" class:disabled={isDisabled} class:failed={p.status === 'failed'}>
   <div class="card-header">
     <div class="plugin-id">
       <span class="status-dot" style="background: {statusColor}"></span>
@@ -226,8 +226,8 @@
 
 <style>
   .plugin-card {
-    background: #16213e;
-    border: 1px solid #0f3460;
+    background: var(--vt-color-surface);
+    border: 1px solid var(--vt-color-border-strong);
     border-radius: 8px;
     padding: 1rem;
     min-width: 0;
@@ -238,7 +238,7 @@
   }
 
   .plugin-card.failed {
-    border-color: #e94560;
+    border-color: var(--vt-color-danger);
   }
 
   .card-header {
@@ -270,7 +270,7 @@
   }
 
   .version {
-    color: #a0a0b8;
+    color: var(--vt-color-text-muted);
     font-size: 0.8rem;
   }
 
@@ -282,13 +282,13 @@
   }
 
   .description {
-    color: #a0a0b8;
+    color: var(--vt-color-text-muted);
     font-size: 0.85rem;
     margin-bottom: 0.75rem;
   }
 
   .degraded-text {
-    color: #ffc857;
+    color: var(--vt-color-warning);
     font-size: 0.8rem;
     margin-bottom: 0.5rem;
     font-style: italic;
@@ -315,7 +315,7 @@
 
   .plugin-details summary {
     cursor: pointer;
-    color: #8b8ba8;
+    color: var(--vt-color-text-muted);
     font-size: 0.78rem;
     font-weight: 600;
   }
@@ -327,14 +327,14 @@
   }
 
   .label {
-    color: #a0a0b8;
+    color: var(--vt-color-text-muted);
     min-width: 80px;
   }
 
   .path {
     font-family: monospace;
     font-size: 0.75rem;
-    color: #a0a0b8;
+    color: var(--vt-color-text-muted);
     min-width: 0;
     overflow-wrap: anywhere;
   }
@@ -346,7 +346,7 @@
   .section-title {
     display: block;
     font-size: 0.75rem;
-    color: #a0a0b8;
+    color: var(--vt-color-text-muted);
     text-transform: uppercase;
     letter-spacing: 0.05em;
     margin-bottom: 0.3rem;
@@ -359,66 +359,66 @@
   }
 
   .tag {
-    background: #0f3460;
+    background: var(--vt-color-border-strong);
     padding: 0.15rem 0.5rem;
     border-radius: 4px;
     font-size: 0.75rem;
     font-family: monospace;
-    color: #e0e0e0;
+    color: var(--vt-color-text-primary);
     max-width: 100%;
     overflow-wrap: anywhere;
   }
 
   .tag.provides {
-    background: #1a3a5c;
-    border: 1px solid #533483;
+    background: var(--vt-color-surface-hover);
+    border: 1px solid var(--vt-color-border-strong);
   }
 
   .tag.required-ok {
-    border: 1px solid #4ecca3;
+    border: 1px solid var(--vt-color-accent);
   }
 
   .tag.required-missing {
-    border: 1px solid #e94560;
-    color: #e94560;
+    border: 1px solid var(--vt-color-danger);
+    color: var(--vt-color-danger);
   }
 
   .tag.optional-ok {
-    border: 1px solid #4ecca3;
+    border: 1px solid var(--vt-color-accent);
   }
 
   .tag.optional-missing {
-    border: 1px solid #ffc857;
-    color: #ffc857;
+    border: 1px solid var(--vt-color-warning);
+    color: var(--vt-color-warning);
   }
 
   .tag.dangerous {
-    border: 1px solid #e94560;
+    border: 1px solid var(--vt-color-danger);
   }
 
-  .check { color: #4ecca3; margin-left: 2px; }
-  :global(.danger-icon) { color: #e94560; margin-left: 2px; vertical-align: middle; }
+  .check { color: var(--vt-color-accent); margin-left: 2px; }
+  :global(.danger-icon) { color: var(--vt-color-danger); margin-left: 2px; vertical-align: middle; }
 
   .info {
-    color: #ffc857;
+    color: var(--vt-color-warning);
     font-size: 0.8rem;
     margin-top: 0.3rem;
   }
 
   .warning {
-    color: #ffc857;
+    color: var(--vt-color-warning);
     font-size: 0.8rem;
     margin-top: 0.3rem;
   }
 
   .error-box {
     background: rgba(233, 69, 96, 0.1);
-    border: 1px solid #e94560;
+    border: 1px solid var(--vt-color-danger);
     border-radius: 4px;
     padding: 0.5rem;
     margin-top: 0.5rem;
     font-size: 0.8rem;
-    color: #e94560;
+    color: var(--vt-color-danger);
     font-family: monospace;
   }
 
@@ -429,16 +429,16 @@
     flex-wrap: wrap;
     margin-top: 0.75rem;
     padding-top: 0.5rem;
-    border-top: 1px solid #0f3460;
+    border-top: 1px solid var(--vt-color-border-strong);
   }
 
   .btn-settings {
     display: inline-flex;
     align-items: center;
     gap: 0.3rem;
-    background: #0f3460;
-    border: 1px solid #1a3a5c;
-    color: #e0e0f0;
+    background: var(--vt-color-border-strong);
+    border: 1px solid var(--vt-color-surface-hover);
+    color: var(--vt-color-text-primary);
     padding: 0.3rem 0.75rem;
     border-radius: 4px;
     cursor: pointer;
@@ -446,12 +446,12 @@
   }
 
   .btn-settings:hover {
-    background: #1a3a5c;
+    background: var(--vt-color-surface-hover);
   }
 
   .btn-enable {
-    background: #4ecca3;
-    color: #1a1a2e;
+    background: var(--vt-color-accent);
+    color: var(--vt-color-background);
     border: none;
     padding: 0.3rem 0.75rem;
     border-radius: 4px;
@@ -461,12 +461,12 @@
   }
 
   .btn-enable:hover {
-    background: #3dbb92;
+    background: var(--vt-color-accent);
   }
 
   .btn-disable {
-    background: #533483;
-    color: #e0e0f0;
+    background: var(--vt-color-border-strong);
+    color: var(--vt-color-text-primary);
     border: none;
     padding: 0.3rem 0.75rem;
     border-radius: 4px;
@@ -476,7 +476,7 @@
   }
 
   .btn-disable:hover {
-    background: #6b44a0;
+    background: var(--vt-color-border-strong);
   }
 
   .vault-hint {

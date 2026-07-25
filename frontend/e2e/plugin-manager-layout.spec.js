@@ -19,7 +19,7 @@ test.describe('E: Plugin Manager layout', () => {
     await openPluginManager(page);
     const basePluginCount = await page.locator('.plugin-card').count();
     await page.evaluate(() => window.__wailsMock.addSyntheticPlugins(18));
-    await page.locator('button.reload-btn').click();
+    await page.locator('[data-plugin-manager-reload]').click();
     await expect(page.locator('.plugin-card')).toHaveCount(basePluginCount + 18, { timeout: 10000 });
 
     const manager = page.locator('.plugin-manager');
@@ -105,7 +105,7 @@ test.describe('E: Plugin Manager layout', () => {
     await page.locator('[data-plugin-filter="status"]').selectOption('disabled');
     await expect(page.locator('.plugin-card')).toHaveCount(1);
     await expect(page.locator('.plugin-card')).toContainText('Todos');
-    await page.locator('button.reload-btn').click();
+    await page.locator('[data-plugin-manager-reload]').click();
     await expect(page.locator('[data-plugin-filter="status"]')).toHaveValue('disabled');
     await expect(page.locator('.plugin-card')).toHaveCount(1);
 

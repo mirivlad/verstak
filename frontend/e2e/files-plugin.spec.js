@@ -138,7 +138,9 @@ test.describe('G: Files Plugin', () => {
     const target = page.locator('.wt-node').filter({ hasText: 'Test' });
     await source.dragTo(target);
 
-    await expect(page.locator('.wt-error')).toContainText('does not have an available Files folder');
+    // The failure is a notice above the tree; the tree itself stays usable.
+    await expect(page.locator('[data-workspace-tree-notice]')).toContainText('does not have an available Files folder');
+    await expect(page.locator('.wt-node').filter({ hasText: 'Test' })).toBeVisible();
     await expect.poll(async () => page.evaluate(
       () => window.go.api.App.GetVaultFileMetadata('verstak.files', 'Test/Files'),
     )).toEqual([{}, 'not-found: Test/Files']);
