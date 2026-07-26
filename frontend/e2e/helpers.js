@@ -11,10 +11,11 @@ export async function waitForAppReady(page) {
   await page.waitForTimeout(1000);
 }
 
-/** Open the secondary Plugin Manager route from the status-bar settings menu. */
+/** Open the Plugin Manager the way a user does: gear, then its section. */
 export async function openPluginManager(page) {
   await page.locator('[data-settings-menu-button]').click();
-  await page.locator('[data-settings-action="plugin-manager"]').click();
+  await page.locator('[data-settings-section="plugins"]').click();
+  await page.locator('[data-settings-open-plugin-manager]').click();
   await page.waitForSelector('.plugin-manager', { state: 'visible', timeout: 10000 });
 }
 

@@ -42,7 +42,7 @@ func TestUpdatePersistsSidebarAndExpandedFolders(t *testing.T) {
 	}
 	width := 320
 	expanded := []string{"folder-a", "folder-b"}
-	if err := manager.UpdateUIState(&width, &expanded); err != nil {
+	if err := manager.UpdateUIState(&width, &expanded, nil); err != nil {
 		t.Fatal(err)
 	}
 
@@ -59,7 +59,7 @@ func TestUpdatePersistsSidebarAndExpandedFolders(t *testing.T) {
 	}
 
 	expanded = []string{}
-	if err := reloaded.UpdateUIState(nil, &expanded); err != nil {
+	if err := reloaded.UpdateUIState(nil, &expanded, nil); err != nil {
 		t.Fatal(err)
 	}
 	if got := reloaded.Get().ExpandedFolderIDs; len(got) != 0 {

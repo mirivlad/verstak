@@ -23,22 +23,25 @@ test.describe('Status Bar host', () => {
     const sync = statusBar.locator('[data-plugin-status-handler="SyncStatusBar"]');
     await expect(sync.locator('.mock-sync-status')).toContainText('Synced');
     await sync.locator('.mock-sync-status').click();
-    await expect(page.locator('.modal[aria-label="Plugin Settings"]')).toBeVisible();
+    await expect(page.locator('[data-settings-window]')).toBeVisible();
     const statusBox = await statusBar.boundingBox();
     expect(statusBox.height).toBeLessThanOrEqual(36);
   });
 
-  test('opens settings menu with plugin manager and plugin settings', async ({ page }) => {
+  test('the gear opens the settings window, and the Plugin Manager from it', async ({ page }) => {
     await page.locator('[data-settings-menu-button]').click();
 
-    await expect(page.locator('[data-settings-action="plugin-manager"]')).toBeVisible();
-    await expect(page.locator('[data-settings-panel-id="verstak.sync.settings"]')).toBeVisible();
+    // The gear used to open a dropdown that grew an entry per installed
+    // plugin; it now opens one window with those as sections.
+    await expect(page.locator('[data-settings-section="plugins"]')).toBeVisible();
+    await expect(page.locator('[data-settings-section="plugin:verstak.sync:verstak.sync.settings"]')).toBeVisible();
 
     await page.locator('.sidebar .plugin-item').filter({ hasText: 'Platform Test' }).click();
     await expect(page.locator('[data-main-content-header] .main-content-title-text')).toHaveText('Platform Diagnostics');
 
     await page.locator('[data-settings-menu-button]').click();
-    await page.locator('[data-settings-action="plugin-manager"]').click();
+    await page.locator('[data-settings-section="plugins"]').click();
+    await page.locator('[data-settings-open-plugin-manager]').click();
     await expect(page.locator('.plugin-manager')).toBeVisible();
   });
 

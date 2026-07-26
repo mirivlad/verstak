@@ -6,12 +6,9 @@
   import { i18n } from '../i18n/index.js';
 
   let items = [];
-  let settingsPanels = [];
   let vaultStatus = { status: 'unknown', path: '', vaultId: '' };
   let build = { version: '', commit: '', buildDate: '', display: '' };
-  let settingsOpen = false;
   let locale = i18n.getLocale();
-  let selectedLanguage = i18n.getLanguagePreference();
   let unsubscribeLocale = null;
 
   $: tr = ((activeLocale) => (key, params, fallback) => {
@@ -65,66 +62,32 @@
         ...item,
         position: item.position || 'left',
       }));
-    settingsPanels = (contributions.settingsPanels || [])
-      .filter((panel) => {
-        const plugin = pluginById.get(panel.pluginId);
-        if (!plugin) return false;
-        return !inactiveStatuses.has(plugin.status);
-      })
-      .sort((a, b) => String(a.title || a.id).localeCompare(String(b.title || b.id)));
   }
 
-  function openPluginManager() {
-    settingsOpen = false;
-    window.dispatchEvent(new CustomEvent('verstak:close-settings'));
-    window.dispatchEvent(new CustomEvent('verstak:nav', { detail: { viewId: 'plugin-manager' } }));
-  }
-
-  function openSettingsPanel(panel) {
-    settingsOpen = false;
-    window.dispatchEvent(new CustomEvent('verstak:open-settings', {
-      detail: { pluginId: panel.pluginId, panelId: panel.id }
-    }));
-  }
-
-  async function selectLanguage(language) {
-    const err = await App.UpdateAppSettings({ language });
-    if (err) {
-      throw new Error(err);
-    }
-    await i18n.setLanguagePreference(language);
-    selectedLanguage = language;
-    settingsOpen = false;
-  }
-
-  function toggleSettings(event) {
-    event.stopPropagation();
-    settingsOpen = !settingsOpen;
-  }
-
-  function closeSettings() {
-    settingsOpen = false;
+  // The gear opens the settings window. It used to open a dropdown holding
+  // the language choice, a link to the Plugin Manager and one entry per plugin
+  // settings panel -- a menu that grew with every plugin installed and had
+  // nowhere to put anything that was not a single choice.
+  function openSettingsWindow() {
+    window.dispatchEvent(new CustomEvent('verstak:open-settings', { detail: {} }));
   }
 
   onMount(() => {
     unsubscribeLocale = i18n.subscribe((nextLocale) => {
       const changed = locale !== nextLocale;
       locale = nextLocale;
-      selectedLanguage = i18n.getLanguagePreference();
       if (changed) loadStatusBar();
     });
     loadStatusBar();
     loadBuildInfo();
     window.addEventListener('verstak:plugins-changed', loadStatusBar);
     window.addEventListener('verstak:vault-opened', loadStatusBar);
-    window.addEventListener('click', closeSettings);
   });
 
   onDestroy(() => {
     if (unsubscribeLocale) unsubscribeLocale();
     window.removeEventListener('verstak:plugins-changed', loadStatusBar);
     window.removeEventListener('verstak:vault-opened', loadStatusBar);
-    window.removeEventListener('click', closeSettings);
   });
 </script>
 
@@ -183,67 +146,16 @@
       >{build.display}</span>
     {/if}
 
-    <div class="settings-menu-wrap">
-      <button
-        class="settings-button"
-        class:active={settingsOpen}
-        type="button"
-        title={tr('settings.title')}
-        aria-haspopup="menu"
-        aria-expanded={settingsOpen}
-        data-settings-menu-button
-        on:click={toggleSettings}
-      >
-        <Icon name="settings" size={14} class="settings-icon" />
-        <Icon name="chevronDown" size={12} class="settings-chevron" />
-      </button>
-      {#if settingsOpen}
-        <div class="settings-menu" role="menu">
-          <div class="settings-menu-heading">{tr('settings.language')}</div>
-          {#each ['system', 'en', 'ru'] as language}
-            <button
-              class="settings-menu-item language-item"
-              class:active-language={selectedLanguage === language}
-              type="button"
-              role="menuitemradio"
-              aria-checked={selectedLanguage === language}
-              data-settings-language={language}
-              on:click={() => selectLanguage(language)}
-            >
-              <span class="language-check" aria-hidden="true">{selectedLanguage === language ? '✓' : ''}</span>
-              <span>{tr(`settings.language.${language}`)}</span>
-            </button>
-          {/each}
-          <div class="settings-menu-separator"></div>
-          <button
-            class="settings-menu-item"
-            type="button"
-            role="menuitem"
-            data-settings-action="plugin-manager"
-            on:click={openPluginManager}
-          >
-            <Icon name="puzzle" size={14} class="settings-menu-icon" />
-            <span>{tr('settings.pluginManager')}</span>
-          </button>
-          {#if settingsPanels.length > 0}
-            <div class="settings-menu-separator"></div>
-            {#each settingsPanels as panel}
-              <button
-                class="settings-menu-item"
-                type="button"
-                role="menuitem"
-                data-settings-panel-id={panel.id}
-                title={panel.title || panel.id}
-                on:click={() => openSettingsPanel(panel)}
-              >
-                <Icon name={panel.icon || 'settings'} size={14} class="settings-menu-icon" />
-                <span>{panel.title || panel.id}</span>
-              </button>
-            {/each}
-          {/if}
-        </div>
-      {/if}
-    </div>
+    <button
+      class="settings-button"
+      type="button"
+      title={tr('settings.title')}
+      aria-label={tr('settings.title')}
+      data-settings-menu-button
+      on:click={openSettingsWindow}
+    >
+      <Icon name="settings" size={14} class="settings-icon" />
+    </button>
   </div>
 </footer>
 
@@ -333,12 +245,6 @@
     white-space: nowrap;
   }
 
-  .settings-menu-wrap {
-    position: relative;
-    display: inline-flex;
-    align-items: center;
-    flex-shrink: 0;
-  }
 
   .settings-button {
     min-height: 1.35rem;
@@ -352,11 +258,6 @@
   }
 
   .settings-button:hover,
-  .settings-button.active {
-    border-color: #1a3a5c;
-    background: #16213e;
-    color: #e0e0f0;
-  }
 
   :global(.settings-icon),
   :global(.settings-chevron),
@@ -365,61 +266,10 @@
     color: currentColor;
   }
 
-  .settings-menu {
-    position: fixed;
-    right: 0.65rem;
-    bottom: 2rem;
-    z-index: 10000;
-    min-width: 13rem;
-    padding: 0.3rem;
-    border: 1px solid #1a3a5c;
-    border-radius: 6px;
-    background: #12122a;
-    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
-  }
 
-  .settings-menu-item {
-    width: 100%;
-    min-height: 1.8rem;
-    justify-content: flex-start;
-    gap: 0.45rem;
-    padding: 0.3rem 0.45rem;
-    border: none;
-    border-radius: 4px;
-    background: transparent;
-    color: #cfd8e3;
-    font-size: 0.78rem;
-    font-weight: 500;
-    text-align: left;
-  }
 
-  .settings-menu-item:hover {
-    background: #0f3460;
-    color: #ffffff;
-  }
 
-  .settings-menu-heading {
-    padding: 0.25rem 0.45rem 0.2rem;
-    color: #7f8aa3;
-    font-size: 0.68rem;
-    font-weight: 700;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
-  }
 
-  .language-check {
-    width: 0.9rem;
-    color: #4ecca3;
-    text-align: center;
-  }
 
-  .active-language {
-    background: rgba(78, 204, 163, 0.1);
-  }
 
-  .settings-menu-separator {
-    height: 1px;
-    margin: 0.25rem 0.2rem;
-    background: #1a3a5c;
-  }
 </style>
