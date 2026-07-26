@@ -306,8 +306,70 @@ func TestReceiverAcceptsDomainActivityBatchAfterDurablePersistence(t *testing.T)
 	if !ok || len(entries) != 1 || entries[0]["hostname"] != "xn--e1afmkfd.xn--p1ai" {
 		t.Fatalf("event entries = %+v, want one canonical hostname", payload["entries"])
 	}
-	if _, ok := payload["url"]; ok {
-		t.Fatalf("activity payload must not contain URL: %+v", payload)
+	// This batch carried no address, and one must not be invented for it.
+	if _, ok := entries[0]["url"]; ok {
+		t.Fatalf("activity entry must not gain a URL it was never sent: %+v", entries[0])
+	}
+}
+
+// The address of a page, minus anything after '#'. A domain alone cannot tell
+// configuring a site in its dashboard from reading its public pages.
+func TestReceiverKeepsThePageAddressWithoutItsFragment(t *testing.T) {
+	bus := events.NewBus()
+	received := make(chan events.Event, 1)
+	bus.Subscribe("browser.activity.batch", func(event events.Event) { received <- event })
+	receiver := NewWithOptions(bus, Options{
+		ActivityAvailable: func() bool { return true },
+		PersistActivity:   func(events.Event) error { return nil },
+	})
+	body := `{
+		"schemaVersion": 1,
+		"batchId": "batch-page",
+		"createdAt": "2026-07-12T10:05:00.000Z",
+		"source": "verstak-browser-extension",
+		"entries": [{
+			"hostname": "example.com",
+			"url": "https://example.com/admin/settings?tab=billing#note-to-self",
+			"startedAt": "2026-07-12T10:00:00.000Z",
+			"endedAt": "2026-07-12T10:05:00.000Z",
+			"durationSeconds": 300
+		}]
+	}`
+	rec := httptest.NewRecorder()
+	receiver.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/browser-activity/v1/batches", bytes.NewBufferString(body)))
+	if rec.Code != http.StatusAccepted {
+		t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusAccepted, rec.Body.String())
+	}
+	event := <-received
+	payload := event.Payload.(map[string]interface{})
+	entries := payload["entries"].([]map[string]interface{})
+	want := "https://example.com/admin/settings?tab=billing"
+	if entries[0]["url"] != want {
+		t.Fatalf("entry url = %v, want %q", entries[0]["url"], want)
+	}
+}
+
+func TestReceiverRejectsAnActivityURLThatContradictsItsHostname(t *testing.T) {
+	receiver := NewWithOptions(events.NewBus(), Options{
+		ActivityAvailable: func() bool { return true },
+		PersistActivity:   func(events.Event) error { return nil },
+	})
+	for _, tc := range []struct {
+		name string
+		url  string
+	}{
+		{name: "different site", url: "https://elsewhere.test/page"},
+		{name: "not an http address", url: "ftp://example.com/page"},
+		{name: "not an address at all", url: "example.com/page"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			body := `{"schemaVersion":1,"batchId":"batch-bad","createdAt":"2026-07-12T10:05:00Z","source":"verstak-browser-extension","entries":[{"hostname":"example.com","url":"` + tc.url + `","startedAt":"2026-07-12T10:00:00Z","endedAt":"2026-07-12T10:05:00Z","durationSeconds":300}]}`
+			rec := httptest.NewRecorder()
+			receiver.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/browser-activity/v1/batches", strings.NewReader(body)))
+			if rec.Code != http.StatusBadRequest {
+				t.Fatalf("status = %d, want %d; body=%s", rec.Code, http.StatusBadRequest, rec.Body.String())
+			}
+		})
 	}
 }
 

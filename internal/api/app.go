@@ -387,11 +387,22 @@ func (a *App) recordBrowserActivityBatch(event events.Event) error {
 				durationSeconds = int64(number)
 			}
 		}
-		records = append(records, map[string]interface{}{
-			"activityId":        fmt.Sprintf("browser-domain:%s:%d", batchID, index),
-			"type":              "browser.activity.domain",
-			"title":             hostname,
-			"summary":           fmt.Sprintf("%d min browser activity", durationSeconds/60),
+		pageURL := firstPayloadText(entry, "url")
+		// The address is what the user recognises; a batch from an older
+		// extension has only the site, and then the site is the best title
+		// there is.
+		title := hostname
+		if pageURL != "" {
+			title = pageURL
+		}
+		record := map[string]interface{}{
+			"activityId": fmt.Sprintf("browser-domain:%s:%d", batchID, index),
+			"type":       "browser.activity.domain",
+			"title":      title,
+			// No summary: the duration is on the record as a number, and
+			// whoever displays it says it in the reader's language. Writing
+			// "18 min browser activity" here put untranslated English in front
+			// of the user.
 			"occurredAt":        endedAt,
 			"receivedAt":        receivedAt,
 			"sourcePluginId":    "verstak-browser-extension",
@@ -407,7 +418,12 @@ func (a *App) recordBrowserActivityBatch(event events.Event) error {
 				"endedAt":         endedAt,
 				"durationSeconds": durationSeconds,
 			},
-		})
+		}
+		if pageURL != "" {
+			record["url"] = pageURL
+			record["payload"].(map[string]interface{})["url"] = pageURL
+		}
+		records = append(records, record)
 	}
 	_, err := a.storage.AppendPluginDataNDJSON(activityPluginID, activityRawDataName, records, storage.NDJSONRetention{
 		TimestampField:   "occurredAt",

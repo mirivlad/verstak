@@ -2,33 +2,156 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://raw.githubusercontent.com/mirivlad/verstak-sdk/main/schemas/hostname-normalization-v1.json",
   "title": "Verstak canonical hostname normalization v1 test vectors",
-  "description": "Canonical hostnames are lowercase ASCII A-labels without a port or trailing DNS dot. Bare hostnames accept DNS names, IPv4, bracketed IPv6, localhost, and internal single-label names. URL inputs accept only HTTP(S). Invalid or excessively long input normalizes to an empty string.",
+  "description": "Canonical hostnames are lowercase ASCII A-labels without a port or trailing DNS dot. Bare hostnames accept DNS names, IPv4, bracketed IPv6, localhost, and internal single-label names. URL inputs accept only HTTP(S). Invalid or excessively long input normalizes to an empty string. A page address keeps its path, query, port and nothing after '#'; credentials and a default port are dropped.",
   "version": 1,
   "bare": [
-    { "input": "example.com", "output": "example.com" },
-    { "input": " Example.COM. ", "output": "example.com" },
-    { "input": "пример.рф", "output": "xn--e1afmkfd.xn--p1ai" },
-    { "input": "bücher.example", "output": "xn--bcher-kva.example" },
-    { "input": "127.0.0.1", "output": "127.0.0.1" },
-    { "input": "[2001:db8::1]", "output": "2001:db8::1" },
-    { "input": "localhost", "output": "localhost" },
-    { "input": "intranet", "output": "intranet" },
-    { "input": "", "output": "" },
-    { "input": "https://example.com", "output": "" },
-    { "input": "example.com:443", "output": "" },
-    { "input": "user@example.com", "output": "" },
-    { "input": "bad host", "output": "" },
-    { "input": "example..com", "output": "" },
-    { "input": "example.com..", "output": "" },
-    { "input": "127.000.000.001", "output": "" },
-    { "input": "[2001:db8::1]:443", "output": "" },
-    { "input": "a...............................................................example", "output": "" }
+    {
+      "input": "example.com",
+      "output": "example.com"
+    },
+    {
+      "input": " Example.COM. ",
+      "output": "example.com"
+    },
+    {
+      "input": "пример.рф",
+      "output": "xn--e1afmkfd.xn--p1ai"
+    },
+    {
+      "input": "bücher.example",
+      "output": "xn--bcher-kva.example"
+    },
+    {
+      "input": "127.0.0.1",
+      "output": "127.0.0.1"
+    },
+    {
+      "input": "[2001:db8::1]",
+      "output": "2001:db8::1"
+    },
+    {
+      "input": "localhost",
+      "output": "localhost"
+    },
+    {
+      "input": "intranet",
+      "output": "intranet"
+    },
+    {
+      "input": "",
+      "output": ""
+    },
+    {
+      "input": "https://example.com",
+      "output": ""
+    },
+    {
+      "input": "example.com:443",
+      "output": ""
+    },
+    {
+      "input": "user@example.com",
+      "output": ""
+    },
+    {
+      "input": "bad host",
+      "output": ""
+    },
+    {
+      "input": "example..com",
+      "output": ""
+    },
+    {
+      "input": "example.com..",
+      "output": ""
+    },
+    {
+      "input": "127.000.000.001",
+      "output": ""
+    },
+    {
+      "input": "[2001:db8::1]:443",
+      "output": ""
+    },
+    {
+      "input": "a...............................................................example",
+      "output": ""
+    }
   ],
   "url": [
-    { "input": "https://пример.рф/path", "output": "xn--e1afmkfd.xn--p1ai" },
-    { "input": "http://Example.COM.:8080/path", "output": "example.com" },
-    { "input": "https://[2001:db8::1]/", "output": "2001:db8::1" },
-    { "input": "ftp://example.com/path", "output": "" },
-    { "input": "not a URL", "output": "" }
+    {
+      "input": "https://пример.рф/path",
+      "output": "xn--e1afmkfd.xn--p1ai"
+    },
+    {
+      "input": "http://Example.COM.:8080/path",
+      "output": "example.com"
+    },
+    {
+      "input": "https://[2001:db8::1]/",
+      "output": "2001:db8::1"
+    },
+    {
+      "input": "ftp://example.com/path",
+      "output": ""
+    },
+    {
+      "input": "not a URL",
+      "output": ""
+    }
+  ],
+  "page": [
+    {
+      "input": "https://example.com/dashboard?tab=1#section",
+      "output": "https://example.com/dashboard?tab=1"
+    },
+    {
+      "input": "https://example.com/#only-a-fragment",
+      "output": "https://example.com/"
+    },
+    {
+      "input": "https://example.com",
+      "output": "https://example.com/"
+    },
+    {
+      "input": "https://example.com:443/x",
+      "output": "https://example.com/x"
+    },
+    {
+      "input": "http://example.com:80/x",
+      "output": "http://example.com/x"
+    },
+    {
+      "input": "http://Example.COM.:8080/Path",
+      "output": "http://example.com:8080/Path"
+    },
+    {
+      "input": "https://user:pass@example.com/x",
+      "output": "https://example.com/x"
+    },
+    {
+      "input": "https://пример.рф/путь?q=да#frag",
+      "output": "https://xn--e1afmkfd.xn--p1ai/%D0%BF%D1%83%D1%82%D1%8C?q=%D0%B4%D0%B0"
+    },
+    {
+      "input": "https://[2001:db8::1]/x",
+      "output": "https://[2001:db8::1]/x"
+    },
+    {
+      "input": "ftp://example.com/x",
+      "output": ""
+    },
+    {
+      "input": "not a URL",
+      "output": ""
+    },
+    {
+      "input": "",
+      "output": ""
+    },
+    {
+      "input": "https://example..com/x",
+      "output": ""
+    }
   ]
 }

@@ -1,6 +1,7 @@
 package hostname
 
 import (
+	"fmt"
 	"net/netip"
 	"net/url"
 	"strings"
@@ -12,6 +13,7 @@ import (
 const (
 	maxDNSHostnameLength = 253
 	maxDNSLabelLength    = 63
+	maxPageURLLength     = 2048
 )
 
 // NormalizeHostnameV1 returns the canonical A-label hostname used by domain
@@ -62,6 +64,84 @@ func NormalizeURLHostnameV1(input string) string {
 		return address.String()
 	}
 	return NormalizeHostnameV1(host)
+}
+
+// NormalizePageURLV1 returns the canonical address of a page with whatever
+// follows '#' removed. A fragment is the reader's position inside one page, not
+// a different page, and it is the one part of an address that is routinely a
+// private note to the browser. Credentials and a default port are dropped; the
+// path and the query are kept, because a domain alone cannot tell configuring a
+// site in its dashboard from reading its public pages.
+//
+// The result matches what the extension produces byte for byte, so a recorded
+// address is the one that was sent.
+func NormalizePageURLV1(input string) string {
+	value := strings.TrimSpace(input)
+	if value == "" {
+		return ""
+	}
+	// Cut the fragment off the text, not off the parse: url.ParseRequestURI
+	// leaves '#' and everything after it inside the query. A '#' that is part
+	// of a query is percent-encoded by the time an address is written down.
+	if index := strings.IndexByte(value, '#'); index >= 0 {
+		value = value[:index]
+	}
+	parsed, err := url.ParseRequestURI(value)
+	if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") {
+		return ""
+	}
+	host := NormalizeURLHostnameV1(value)
+	if host == "" {
+		return ""
+	}
+	authority := host
+	if strings.Contains(host, ":") {
+		authority = "[" + host + "]"
+	}
+	if port := parsed.Port(); port != "" && port != defaultPort(parsed.Scheme) {
+		authority += ":" + port
+	}
+	origin := parsed.Scheme + "://" + authority
+	path := parsed.EscapedPath()
+	if path == "" {
+		path = "/"
+	}
+	full := origin + path
+	if query := escapeQueryV1(parsed.RawQuery); query != "" {
+		full += "?" + query
+	}
+	if len(full) <= maxPageURLLength {
+		return full
+	}
+	// Too long to keep whole. A truncated address would name a page that does
+	// not exist, so what is dropped is dropped entirely.
+	withoutQuery := origin + path
+	if len(withoutQuery) <= maxPageURLLength {
+		return withoutQuery
+	}
+	return origin + "/"
+}
+
+func defaultPort(scheme string) string {
+	if scheme == "https" {
+		return "443"
+	}
+	return "80"
+}
+
+// escapeQueryV1 applies the percent-encoding a browser applies to the query of
+// an http(s) URL, so both ends of the contract spell the same address.
+func escapeQueryV1(raw string) string {
+	var out strings.Builder
+	for i := 0; i < len(raw); i++ {
+		c := raw[i]
+		if c <= 0x20 || c > 0x7e || c == '"' || c == '#' || c == '<' || c == '>' || c == '\'' {
+			out.WriteString(fmt.Sprintf("%%%02X", c))
+			continue
+		}
+		out.WriteByte(c)
+	}
+	return out.String()
 }
 
 func normalizeIPv4(value string) string {

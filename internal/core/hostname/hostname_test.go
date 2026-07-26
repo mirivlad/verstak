@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -15,6 +16,7 @@ type normalizationVector struct {
 type normalizationVectors struct {
 	Bare []normalizationVector `json:"bare"`
 	URL  []normalizationVector `json:"url"`
+	Page []normalizationVector `json:"page"`
 }
 
 func TestNormalizeHostnameV1Vectors(t *testing.T) {
@@ -32,6 +34,31 @@ func TestNormalizeURLHostnameV1Vectors(t *testing.T) {
 		if got := NormalizeURLHostnameV1(vector.Input); got != vector.Output {
 			t.Errorf("NormalizeURLHostnameV1(%q) = %q, want %q", vector.Input, got, vector.Output)
 		}
+	}
+}
+
+func TestNormalizePageURLV1Vectors(t *testing.T) {
+	vectors := loadVectors(t)
+	if len(vectors.Page) == 0 {
+		t.Fatal("page vectors are missing")
+	}
+	for _, vector := range vectors.Page {
+		if got := NormalizePageURLV1(vector.Input); got != vector.Output {
+			t.Errorf("NormalizePageURLV1(%q) = %q, want %q", vector.Input, got, vector.Output)
+		}
+	}
+}
+
+// An address longer than the limit loses its query rather than being cut in the
+// middle, because a cut address names a page that does not exist.
+func TestNormalizePageURLV1DropsAnOversizedQuery(t *testing.T) {
+	long := "https://example.com/report?data=" + strings.Repeat("a", maxPageURLLength)
+	if got := NormalizePageURLV1(long); got != "https://example.com/report" {
+		t.Errorf("NormalizePageURLV1(oversized) = %q, want %q", got, "https://example.com/report")
+	}
+	longPath := "https://example.com/" + strings.Repeat("b", maxPageURLLength)
+	if got := NormalizePageURLV1(longPath); got != "https://example.com/" {
+		t.Errorf("NormalizePageURLV1(oversized path) = %q, want %q", got, "https://example.com/")
 	}
 }
 
