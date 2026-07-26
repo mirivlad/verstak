@@ -43,6 +43,14 @@ jobs:
       - run: npm ci --no-audit --no-fund
         working-directory: frontend
 
+      # main.go embeds frontend/dist, which is not committed. Without this the
+      # Go steps fail before running anything with "pattern frontend/dist: no
+      # matching files found" -- which reads like a missing file rather than a
+      # missing build step.
+      - name: Build the frontend
+        run: npm run build
+        working-directory: frontend
+
       - name: Static checks
         run: bash scripts/check.sh
 
