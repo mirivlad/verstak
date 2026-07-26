@@ -174,9 +174,15 @@ type ContributionOpenProvider struct {
 
 // ContributionWorkspaceItem represents a workspace tool contribution.
 type ContributionWorkspaceItem struct {
-	ID        string `json:"id"`
-	Title     string `json:"title"`
-	Icon      string `json:"icon,omitempty"`
+	ID    string `json:"id"`
+	Title string `json:"title"`
+	Icon  string `json:"icon,omitempty"`
+	// Order places this tool among the tabs of a Deal. Lower comes first;
+	// items without one sort after those with one, then by title. The shell
+	// used to carry a hardcoded table of plugin names to decide this, which
+	// meant a third-party tool could only ever land at the end and reordering
+	// the official ones meant editing the core.
+	Order     int    `json:"order,omitempty"`
 	Component string `json:"component"`
 }
 

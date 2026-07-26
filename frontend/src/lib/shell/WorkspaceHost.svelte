@@ -30,16 +30,11 @@
   // TODO: Rename TodaySurface.svelte to OverviewSurface.svelte in a refactor-only follow-up.
   $: overviewTool = { id: '__overview', title: tr('workspace.overview'), pluginId: 'verstak.shell', component: 'TodaySurface', shell: true };
 
-  const toolOrder = new Map([
-    ['notes', 10],
-    ['files', 20],
-    ['todo', 30],
-    ['activity', 40],
-    ['browser', 50],
-    ['inbox', 50],
-    ['secrets', 60],
-    ['search', 90],
-  ]);
+  // Where a tool sits among a Deal's tabs comes from its own manifest. The
+  // shell used to hold a table matching substrings of plugin names to ranks,
+  // which quietly meant every third-party tool landed at the end and the order
+  // of the official ones could only be changed by editing the core.
+  const UNRANKED = Number.MAX_SAFE_INTEGER;
 
   // Resolve workspace: try flat nodes first, then UUID-based lookup.
   $: selectedWorkspace = nodes.find(n => n.id === selectedWorkspaceName || n.name === selectedWorkspaceName || n.rootPath === selectedWorkspaceName) || null;
@@ -104,11 +99,8 @@
   }
 
   function toolRank(tool) {
-    const text = `${tool?.title || ''} ${tool?.id || ''} ${tool?.pluginId || ''}`.toLowerCase();
-    for (const [needle, rank] of toolOrder.entries()) {
-      if (text.includes(needle)) return rank;
-    }
-    return 1000;
+    const order = Number(tool?.order);
+    return Number.isFinite(order) && order !== 0 ? order : UNRANKED;
   }
 
   function sortWorkspaceTools(tools) {
