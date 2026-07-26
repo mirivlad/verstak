@@ -366,7 +366,8 @@ import importStyle from '../../../../../verstak-official-plugins/plugins/import/
     recentVaults: [],
     language: localStorage.getItem('verstak-test-language') || 'system',
     sidebarWidth: Number(localStorage.getItem('verstak-test-sidebar-width') || 220),
-    expandedFolderIds: []
+    expandedFolderIds: [],
+    settingsSection: ''
   };
   var workbenchPreferences = {};
   var openedResources = [];
@@ -4736,7 +4737,7 @@ function cloneJson(value) {
       vaultPluginState.desiredPlugins.push({ id: 'verstak.import', version: '0.1.0', source: 'official' });
       localStorage.removeItem('verstak-test-language');
       localStorage.removeItem('verstak-test-sidebar-width');
-      appSettings = { currentVaultPath: '/tmp/verstak-test/vault', recentVaults: [], language: 'system', sidebarWidth: 220, expandedFolderIds: [] };
+      appSettings = { currentVaultPath: '/tmp/verstak-test/vault', recentVaults: [], language: 'system', sidebarWidth: 220, expandedFolderIds: [], settingsSection: '' };
       workbenchPreferences = {};
       openedResources = [];
       pluginSettings = { 'verstak.platform-test': { savedText: 'initial value' } };

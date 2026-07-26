@@ -2514,6 +2514,7 @@ func (a *App) GetAppSettings() map[string]interface{} {
 		"userPluginsDir":    cfg.UserPluginsDir,
 		"sidebarWidth":      cfg.SidebarWidth,
 		"expandedFolderIds": cfg.ExpandedFolderIDs,
+		"settingsSection":   cfg.SettingsSection,
 		"lastOpenedAt":      cfg.LastOpenedAt,
 	}
 }
@@ -2528,6 +2529,7 @@ func (a *App) UpdateAppSettings(patch map[string]interface{}) string {
 	hasConfigPatch := false
 	var sidebarWidth *int
 	var expandedFolderIDs *[]string
+	var settingsSection *string
 	if value, exists := patch["sidebarWidth"]; exists {
 		width, ok := appSettingInt(value)
 		if !ok {
@@ -2544,6 +2546,13 @@ func (a *App) UpdateAppSettings(patch map[string]interface{}) string {
 			return "expandedFolderIds must be an array of strings"
 		}
 		expandedFolderIDs = &ids
+	}
+	if value, exists := patch["settingsSection"]; exists {
+		section, ok := value.(string)
+		if !ok {
+			return "settingsSection must be a string"
+		}
+		settingsSection = &section
 	}
 	if v, ok := patch["theme"].(string); ok && v != "" {
 		cfg.Theme = v
@@ -2572,8 +2581,8 @@ func (a *App) UpdateAppSettings(patch map[string]interface{}) string {
 			return err.Error()
 		}
 	}
-	if sidebarWidth != nil || expandedFolderIDs != nil {
-		if err := a.appSettings.UpdateUIState(sidebarWidth, expandedFolderIDs); err != nil {
+	if sidebarWidth != nil || expandedFolderIDs != nil || settingsSection != nil {
+		if err := a.appSettings.UpdateUIState(sidebarWidth, expandedFolderIDs, settingsSection); err != nil {
 			return err.Error()
 		}
 	}

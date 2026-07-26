@@ -26,6 +26,9 @@ type Config struct {
 	UserPluginsDir    string                  `json:"userPluginsDir"`
 	SidebarWidth      int                     `json:"sidebarWidth"`
 	ExpandedFolderIDs []string                `json:"expandedFolderIds"`
+	// SettingsSection is the section the settings window was last left on, so
+	// reopening it returns where the user was rather than to the top.
+	SettingsSection string `json:"settingsSection,omitempty"`
 	Workbench         WorkbenchPreferences    `json:"workbench,omitempty"`
 	Sync              SyncSettings            `json:"sync,omitempty"`
 	BrowserReceiver   BrowserReceiverSettings `json:"browserReceiver,omitempty"`
@@ -284,7 +287,7 @@ func (m *Manager) UpdateSync(syncSettings SyncSettings) error {
 }
 
 // UpdateUIState persists shell layout state without changing unrelated settings.
-func (m *Manager) UpdateUIState(sidebarWidth *int, expandedFolderIDs *[]string) error {
+func (m *Manager) UpdateUIState(sidebarWidth *int, expandedFolderIDs *[]string, settingsSection *string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -299,6 +302,9 @@ func (m *Manager) UpdateUIState(sidebarWidth *int, expandedFolderIDs *[]string) 
 	}
 	if expandedFolderIDs != nil {
 		m.config.ExpandedFolderIDs = append([]string(nil), (*expandedFolderIDs)...)
+	}
+	if settingsSection != nil {
+		m.config.SettingsSection = *settingsSection
 	}
 	m.config.LastOpenedAt = time.Now().UTC().Format(time.RFC3339)
 	return m.saveLocked()
@@ -402,6 +408,7 @@ func copyConfig(c *Config) *Config {
 		UserPluginsDir:    c.UserPluginsDir,
 		SidebarWidth:      c.SidebarWidth,
 		ExpandedFolderIDs: expandedFolderIDs,
+		SettingsSection:   c.SettingsSection,
 		Workbench:         c.Workbench,
 		Sync:              c.Sync,
 		BrowserReceiver:   c.BrowserReceiver,

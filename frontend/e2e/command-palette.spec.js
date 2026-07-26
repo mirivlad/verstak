@@ -120,9 +120,11 @@ test.describe('Command Palette', () => {
     await expect(palette.locator('[data-command-id="verstak.shell.open-sync-settings"]')).toBeVisible();
     await page.keyboard.press('Enter');
 
-    await expect(page.locator('.plugin-manager')).toBeVisible({ timeout: 10000 });
-    await expect(page.locator('.modal[aria-label="Plugin Settings"]')).toBeVisible({ timeout: 10000 });
-    await expect(page.locator('.modal-header h3')).toContainText('Sync');
+    // Plugin settings now open in the settings window at that plugin's own
+    // section, rather than as a modal inside the Plugin Manager.
+    await expect(page.locator('[data-settings-window]')).toBeVisible({ timeout: 10000 });
+    await expect(page.locator('[data-settings-section^="plugin:verstak.sync:"]'))
+      .toHaveAttribute('aria-selected', 'true');
   });
 
   test('keeps technical command failures out of the palette status', async ({ page }) => {

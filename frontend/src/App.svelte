@@ -9,6 +9,7 @@
   import VaultSelection from './lib/shell/VaultSelection.svelte';
   import WorkbenchHost from './lib/shell/WorkbenchHost.svelte';
   import WorkspaceHost from './lib/shell/WorkspaceHost.svelte';
+  import SettingsWindow from './lib/settings/SettingsWindow.svelte';
   import { offerNavigation } from './lib/shell/navigation-handlers.js';
   import * as App from '../wailsjs/go/api/App';
   import { debug } from './lib/log/debug.js';
@@ -34,6 +35,7 @@
   let activeView = null;
   let activeViewPluginId = '';
   let activeSettingsPluginId = '';
+  let requestedSettingsSection = '';
   let activeSettingsPanelId = '';
   let openedResource = null;
 
@@ -288,13 +290,35 @@
     pushNavigation();
   }
 
+  // A plugin asking to show its settings, and the gear in the status bar, land
+  // in the same place. Plugin settings used to open as a modal inside the
+  // Plugin Manager, which is a page about installing plugins, not configuring
+  // them.
   function onOpenSettings(e) {
-    debug.log('[App] onOpenSettings:', e.detail.pluginId, e.detail.panelId);
-    activeSettingsPluginId = e.detail.pluginId;
-    activeSettingsPanelId = e.detail.panelId || '';
-    currentView = 'plugin-manager';
+    debug.log('[App] onOpenSettings:', e.detail?.pluginId, e.detail?.panelId);
+    const pluginId = e.detail?.pluginId || '';
+    const panelId = e.detail?.panelId || '';
+    activeSettingsPluginId = pluginId;
+    activeSettingsPanelId = panelId;
+    requestedSettingsSection = pluginId ? sectionIdForPanel(pluginId, panelId) : '';
+    currentView = 'settings';
     clearWorkspaceSelection();
     pushNavigation();
+  }
+
+  // A section id has to be derivable without the contribution list, because the
+  // request arrives before the settings window has loaded one.
+  function sectionIdForPanel(pluginId, panelId) {
+    return panelId ? `plugin:${pluginId}:${panelId}` : `plugin:${pluginId}:`;
+  }
+
+  function onCloseSettingsWindow() {
+    if (currentView !== 'settings') return;
+    requestedSettingsSection = '';
+    if (!navigateBack()) {
+      currentView = selectedWorkspaceName ? 'workspace' : 'plugin-view';
+      pushNavigation();
+    }
   }
 
   function onWorkbenchOpened(e) {
@@ -391,6 +415,7 @@
     ['verstak:open-view', onOpenView, false],
     ['verstak:open-settings', onOpenSettings, false],
     ['verstak:close-settings', onCloseSettings, false],
+    ['verstak:close-settings-window', onCloseSettingsWindow, false],
     ['verstak:workbench-opened', onWorkbenchOpened, false],
     ['verstak:workspace-selected', onWorkspaceSelected, false],
     ['verstak:workspace-tool-selected', onWorkspaceToolSelected, false],
@@ -455,7 +480,9 @@
         </div>
       </header>
       <section class="content scroll-surface">
-        {#if currentView === 'plugin-manager'}
+        {#if currentView === 'settings'}
+          <SettingsWindow requestedSection={requestedSettingsSection} />
+        {:else if currentView === 'plugin-manager'}
           <PluginManager {activeSettingsPluginId} {activeSettingsPanelId} />
         {:else if currentView === 'workbench'}
           <WorkbenchHost {openedResource} />

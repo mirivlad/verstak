@@ -197,7 +197,7 @@ Icon fields use shell icon names rendered through the bundled Lucide SVG wrapper
 |---|---|---|---|
 | Боковая панель | `sidebarItems` | Элементы в sidebar слева | ✅ Sidebar.svelte (из ContributionRegistry) |
 | Основные панели | `views` | Полноценные страницы/панели | ✅ ViewContainer.svelte (PluginBundleHost — real frontend bundle) |
-| Панели настроек | `settingsPanels` | Панели в Plugin Manager | ✅ PluginManager.svelte (кнопка Settings, открывает modal) |
+| Панели настроек | `settingsPanels` | Разделы в окне настроек | ✅ SettingsWindow.svelte (плюс modal в Plugin Manager) |
 | Команды | `commands` | Команды для command palette | ✅ ContributionRegistry + CommandPalette UI |
 | Open/edit providers | `openProviders` | Провайдеры viewer/editor для Workbench routing | ✅ ContributionRegistry + минимальный Workbench host |
 | Действия над файлами | `fileActions` | Provider actions for Files surface | ✅ Files plugin context menu |
@@ -207,6 +207,26 @@ Icon fields use shell icon names rendered through the bundled Lucide SVG wrapper
 | Провайдеры активности | `activityProviders` | Activity event subscriptions | ✅ Backend activity recorder |
 | Элементы status bar | `statusBarItems` | Status bar labels/actions | ✅ StatusBar.svelte host |
 | Инструменты Дела | `workspaceItems` | Вкладки внутри Дела | ✅ WorkspaceHost.svelte |
+
+### Окно настроек
+
+`settingsPanels` — это разделы окна настроек. Оно открывается шестерёнкой в
+строке состояния и вызовом `api.ui.openSettings(panelId)`; во втором случае
+сразу на разделе плагина.
+
+Встроенные разделы — «Основное» (язык) и «Плагины» (переход в Plugin Manager),
+дальше по одному на каждую панель настроек включённого плагина. Поиск
+фильтрует список разделов и по названиям самих настроек: «language» находит
+«Основное», хотя такого раздела нет. Список разделов — вертикальный tablist:
+стрелки перемещают, Home и End прыгают к краям, Escape закрывает окно.
+Открытый раздел запоминается в `settingsSection` настроек приложения.
+
+Панель по-прежнему монтируется через `PluginBundleHost` тем же компонентом,
+что и раньше, — контракт самой панели не изменился.
+
+Раньше настройки плагина открывались модальным окном внутри Plugin Manager,
+то есть страницы про установку плагинов, а язык жил в выпадающем меню строки
+состояния, которое росло на пункт с каждым установленным плагином.
 
 ### Порядок вкладок Дела
 
