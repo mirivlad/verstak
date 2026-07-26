@@ -1,9 +1,8 @@
 <script>
   import Icon from '../ui/Icon.svelte';
   import PluginCard from './PluginCard.svelte';
-  import PluginBundleHost from '../plugin-host/PluginBundleHost.svelte';
   import { onDestroy, onMount, tick } from 'svelte';
-  import { GetPlugins, GetCapabilities, GetPermissions, GetContributions, ReloadPlugins, GetVaultStatus, GetVaultPluginState, EnablePlugin, DisablePlugin, ReadPluginSettings, WritePluginSettings, GetPluginFrontendInfo, WriteFrontendLog } from '../../../wailsjs/go/api/App';
+  import { GetPlugins, GetCapabilities, GetPermissions, GetContributions, ReloadPlugins, GetVaultStatus, GetVaultPluginState, EnablePlugin, DisablePlugin, WriteFrontendLog } from '../../../wailsjs/go/api/App';
   import { debug } from '../log/debug.js';
   import { i18n } from '../i18n/index.js';
 
@@ -15,13 +14,6 @@
   let error = '';
   let vaultStatus = { status: 'unknown', path: '', vaultId: '' };
   let vaultPluginState = { enabledPlugins: [], disabledPlugins: [], desiredPlugins: [] };
-  let settingsPanel = null;
-  let settingsData = {};
-  let settingsPluginId = '';
-  let settingsHost = null;
-  let settingsError = null;
-  let settingsPluginInfo = null;
-  let lastOpenedKey = '';
   let locale = i18n.getLocale();
   let unsubscribeLocale = null;
   $: tr = ((activeLocale) => (key, params, fallback) => {
@@ -39,21 +31,6 @@
   let capabilityFilters = [];
   let settingsFilter = 'all';
   let sourceFilter = 'all';
-
-  export let activeSettingsPluginId = '';
-  export let activeSettingsPanelId = '';
-
-  $: {
-    if (activeSettingsPluginId) {
-      const settingsPanelCount = (contributions.settingsPanels || []).length;
-      const key = `${activeSettingsPluginId}:${activeSettingsPanelId || '*'}`;
-      if (key !== lastOpenedKey || settingsPanelCount === 0) {
-        openSettingsFromProps(activeSettingsPluginId, activeSettingsPanelId);
-      }
-    } else {
-      lastOpenedKey = '';
-    }
-  }
 
   function showToast(msg, type = 'success') {
     toastMessage = msg;
@@ -91,30 +68,6 @@
     return { count, summary: `Reloaded ${count} plugin(s).` };
   }
 
-  async function openSettingsFromProps(pluginId, panelId) {
-    const panel = (contributions.settingsPanels || []).find(sp => sp.pluginId === pluginId && (!panelId || sp.id === panelId));
-    if (panel) {
-      lastOpenedKey = `${pluginId}:${panelId || '*'}`;
-      settingsPanel = panel;
-      settingsPluginId = pluginId;
-      settingsError = null;
-      try {
-        const info = await GetPluginFrontendInfo(pluginId);
-        settingsPluginInfo = info;
-      } catch { settingsPluginInfo = null; }
-      ReadPluginSettings(pluginId).then(result => {
-        const unpacked = unpackBackendResult(result);
-        if (unpacked.error) {
-          settingsError = reportError('pluginManager.settingsLoadError', 'Could not load plugin settings. Please try again.', unpacked.error);
-          settingsData = {};
-          return;
-        }
-        settingsData = unpacked.value || {};
-      }).catch(() => { settingsData = {}; });
-    } else {
-      settingsError = tr('pluginManager.settingsUnavailable', undefined, 'Plugin settings are unavailable.');
-    }
-  }
 
   $: vaultOpen = vaultStatus.status === 'open';
   $: missingInstalled = computeMissingInstalled();
@@ -360,20 +313,6 @@
     sourceFilter = 'all';
   }
 
-  function closeSettings() {
-    settingsHost?.dispose?.();
-    settingsHost = null;
-    settingsPanel = null;
-    settingsPluginId = '';
-    settingsError = null;
-    window.dispatchEvent(new CustomEvent('verstak:close-settings'));
-  }
-
-  function saveSettings() {
-    WritePluginSettings(settingsPluginId, settingsData).then(err => {
-      if (err) console.error('WritePluginSettings:', err);
-    }).catch(e => console.error('WritePluginSettings:', e));
-  }
 </script>
 
 <div class="plugin-manager">
@@ -572,46 +511,6 @@
     {/if}
   {/if}
 
-  <!-- Settings Panel Modal -->
-  {#key `settings-${settingsPluginId}`}
-  {#if settingsError}
-  <div class="modal-overlay" on:click|self={closeSettings} on:keydown|self={(e) => e.key === 'Escape' && closeSettings()} role="presentation">
-  <div class="modal" role="dialog" aria-modal="true" aria-label={tr('pluginManager.settingsError')}>
-    <div class="modal-header">
-      <h3>{tr('pluginManager.settingsError')}</h3>
-      <button class="modal-close" on:click={closeSettings} type="button">✕</button>
-    </div>
-    <div class="modal-body">
-      <p class="error" style="color: var(--vt-color-danger);">{settingsError}</p>
-    </div>
-  </div>
-  </div>
-  {:else if settingsPanel}
-  <div class="modal-overlay" on:click|self={closeSettings} on:keydown|self={(e) => e.key === 'Escape' && closeSettings()} role="presentation">
-  <div class="modal" role="dialog" aria-modal="true" aria-label={tr('pluginManager.pluginSettings')}>
-    <div class="modal-header">
-      <h3>{settingsPanel.title}</h3>
-      <button class="modal-close" on:click={closeSettings} type="button">✕</button>
-    </div>
-    <div class="modal-body settings-modal-body">
-      <div class="plugin-settings-surface">
-        <p class="settings-hint">{tr('common.plugin')}: <code>{settingsPluginId}</code></p>
-        {#if settingsPluginInfo && settingsPluginInfo.entry}
-          <PluginBundleHost
-            bind:this={settingsHost}
-            pluginId={settingsPluginId}
-            componentId={settingsPanel.component || settingsPanel.id}
-          />
-        {:else}
-          <p class="settings-hint">{tr('common.component')}: <code>{settingsPanel.component}</code></p>
-          <p class="placeholder">{tr('pluginManager.settingsBundleUnavailable')}</p>
-        {/if}
-      </div>
-    </div>
-  </div>
-  </div>
-  {/if}
-  {/key}
 </div>
 
 <style>
@@ -861,39 +760,6 @@
   .source-plugin { background: var(--vt-color-border-strong); color: var(--vt-color-text-muted); border: 1px solid var(--vt-color-border-strong); }
 
   /* Modal */
-  .modal-overlay {
-    position: fixed; inset: 0;
-    background: rgba(0, 0, 0, 0.6);
-    display: flex; align-items: center; justify-content: center;
-    z-index: 1000;
-  }
-  .modal {
-    background: var(--vt-color-surface); border: 1px solid var(--vt-color-border-strong); border-radius: 8px;
-    width: min(880px, calc(100vw - 4rem)); max-width: calc(100vw - 4rem); height: min(680px, calc(100vh - 4rem)); max-height: calc(100vh - 4rem); display: flex; flex-direction: column;
-  }
-  .modal-header {
-    display: flex; align-items: center; justify-content: space-between;
-    padding: 1rem; border-bottom: 1px solid var(--vt-color-border-strong);
-  }
-  .modal-header h3 { margin: 0; color: var(--vt-color-text-primary); font-size: 1.1rem; }
-  .modal-close { background: none; border: none; color: var(--vt-color-text-muted); font-size: 1.2rem; cursor: pointer; padding: 0.2rem 0.5rem; }
-  .modal-close:hover { color: var(--vt-color-danger); }
-  .modal-body { padding: 1rem; overflow: auto; min-height: 0; flex: 1; display: flex; flex-direction: column; }
-  .settings-modal-body { padding: 0; }
-  .plugin-settings-surface {
-    --verstak-plugin-surface: var(--vt-color-surface);
-    --verstak-plugin-border: var(--vt-color-border-strong);
-    --verstak-plugin-text: var(--vt-color-text-primary);
-    --verstak-plugin-text-muted: var(--vt-color-text-muted);
-    --verstak-plugin-accent: var(--vt-color-accent);
-    --verstak-plugin-danger: var(--vt-color-danger);
-    --verstak-plugin-radius: 8px;
-    --verstak-plugin-control-height: 2.25rem;
-    width: 90%; min-height: 100%; margin: 0 auto; box-sizing: border-box; display: flex; flex-direction: column; padding: clamp(0.75rem, 1.5vw, 1.25rem);
-  }
-  .plugin-settings-surface :global(.plugin-bundle-host) { flex: 1; min-height: 0; display: flex; flex-direction: column; }
-  .settings-hint { color: #666; font-size: 0.8rem; margin: 0.25rem 0; }
-  .settings-hint code { color: var(--vt-color-accent); }
 
   @media (max-width: 760px) {
     .plugin-manager {
@@ -926,10 +792,5 @@
       flex: 1 1 10rem;
     }
 
-    .modal {
-      width: min(880px, calc(100vw - 2rem));
-      height: min(680px, calc(100vh - 2rem));
-      max-height: calc(100vh - 2rem);
-    }
   }
 </style>

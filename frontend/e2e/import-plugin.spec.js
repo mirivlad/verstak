@@ -69,7 +69,7 @@ test.describe('Official import plugin', () => {
   test('closes source sessions before disable and re-enable', async ({ page }) => {
     const card = await openImportSettings(page);
     await page.locator('[data-import-select-archive]').click();
-    await page.locator('.modal[aria-label="Plugin Settings"] .modal-close').click();
+    await page.locator('[data-settings-window-close]').click();
     await expect.poll(() => page.evaluate(() => window.__wailsMock.getOpenImportSessionCount())).toBe(0);
 
     await card.locator('button.btn-disable').click();

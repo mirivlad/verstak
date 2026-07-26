@@ -112,19 +112,22 @@ test.describe('UX follow-up fixes', () => {
     expect(hasHorizontalOverflow).toBe(false);
   });
 
-  test('plugin settings modal gives complex panels enough space', async ({ page }) => {
+  test('a complex plugin settings panel gets room to work in', async ({ page }) => {
     await openPluginManager(page);
     await page.locator('.plugin-card').filter({ hasText: 'verstak.platform-test' }).getByRole('button', { name: 'Settings' }).click();
 
-    const modal = page.locator('.modal[aria-label="Plugin Settings"]');
-    await expect(modal).toBeVisible({ timeout: 10000 });
-    const box = await modal.boundingBox();
-    expect(box.width).toBeGreaterThanOrEqual(760);
-    expect(box.height).toBeGreaterThanOrEqual(560);
-    const bodyBox = await modal.locator('.modal-body').boundingBox();
-    const surfaceBox = await modal.locator('.plugin-settings-surface').boundingBox();
-    expect(surfaceBox.width / bodyBox.width).toBeGreaterThanOrEqual(0.88);
-    expect(surfaceBox.width / bodyBox.width).toBeLessThanOrEqual(0.92);
-    expect(Math.abs((surfaceBox.x - bodyBox.x) - (bodyBox.width - surfaceBox.width) / 2)).toBeLessThanOrEqual(2);
+    // The panel used to be a modal that had to be sized explicitly. It now
+    // fills the settings window's content area, so what matters is that the
+    // area is genuinely large and the panel actually occupies it.
+    const content = page.locator('[data-settings-content]');
+    await expect(content).toBeVisible({ timeout: 10000 });
+    const contentBox = await content.boundingBox();
+    expect(contentBox.width).toBeGreaterThanOrEqual(500);
+    expect(contentBox.height).toBeGreaterThanOrEqual(400);
+
+    const host = content.locator('.plugin-bundle-host');
+    await expect(host).toBeVisible();
+    const hostBox = await host.boundingBox();
+    expect(hostBox.width / contentBox.width).toBeGreaterThanOrEqual(0.85);
   });
 });
