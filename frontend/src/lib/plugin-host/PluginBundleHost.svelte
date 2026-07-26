@@ -1,10 +1,9 @@
 <script>
   import { onMount, onDestroy } from 'svelte';
-  import * as App from '../../../wailsjs/go/api/App';
   import Icon from '../ui/Icon.svelte';
   import { i18n } from '../i18n/index.js';
 
-  import { acquirePluginStyle, createPluginAPI } from './VerstakPluginAPI.js';
+  import { acquirePluginStyle, createPluginAPI, loadPluginBundle } from './VerstakPluginAPI.js';
 
   export let pluginId = null;
   export let componentId = null;
@@ -85,16 +84,24 @@
     cleanup();
   }
 
-  function unpackBackendResult(result) {
-    if (Array.isArray(result) && result.length === 2 && (typeof result[1] === 'string' || result[1] == null)) {
-      return { value: result[0], error: result[1] || '' };
-    }
-    return { value: result, error: '' };
-  }
-
   function reportError(key, fallback, details) {
     console.warn('[PluginBundleHost] ' + key + ':', details);
     return tr(key, undefined, fallback);
+  }
+
+  function bundleErrorText(error) {
+    switch (error && error.code) {
+      case 'no-frontend':
+        return tr('bundle.noFrontend');
+      case 'not-found':
+        return tr('bundle.notFound');
+      case 'registration':
+        return tr('bundle.registrationMissing');
+      case 'execution':
+        return reportError('bundle.executionError', 'Could not start the plugin interface. Please try again.', error);
+      default:
+        return reportError('bundle.loadFailed', 'Could not load the plugin interface. Please try again.', error);
+    }
   }
 
   async function loadAndMount(pId, compId, nextPropsKey) {
@@ -113,17 +120,17 @@
     currentPropsKey = nextPropsKey;
 
     try {
-      // Get plugin frontend info
-      const info = await App.GetPluginFrontendInfo(pId);
-      pluginInfo = info;
-
-      if (!info || info.status === 'no-frontend' || info.status === 'not-found') {
+      let loaded;
+      try {
+        loaded = await loadPluginBundle(pId);
+      } catch (bundleError) {
+        pluginInfo = bundleError && bundleError.info ? bundleError.info : null;
         loadState = 'error';
-        errorText = info.status === 'no-frontend'
-          ? tr('bundle.noFrontend')
-          : tr('bundle.notFound');
+        errorText = bundleErrorText(bundleError);
         return;
       }
+      const info = loaded.info;
+      pluginInfo = info;
 
       try {
         await i18n.loadPlugin(pId, info.localization);
@@ -140,39 +147,8 @@
         releaseCurrentStyle = releaseStyle;
       }
 
-      // Check if bundle already loaded for this plugin
-      const reg = window.__VERSTAK_PLUGIN_REGISTRY__ || {};
-      if (!reg[pId]) {
-        // Load the bundle JS content via backend API
-        const assetResult = unpackBackendResult(await App.GetPluginAssetContent(pId, info.entry));
-        const content = assetResult.value;
-        if (assetResult.error || !content) {
-          loadState = 'error';
-          errorText = reportError('bundle.loadFailed', 'Could not load the plugin interface. Please try again.', assetResult.error || tr('bundle.emptyContent'));
-          return;
-        }
-
-        // Execute bundle via Function constructor (safe: no access to outer scope)
-        // This is equivalent to eval but more explicit
-        try {
-          const fn = new Function(content);
-          fn();
-        } catch (e) {
-          loadState = 'error';
-          errorText = reportError('bundle.executionError', 'Could not start the plugin interface. Please try again.', e);
-          return;
-        }
-
-        // Verify registration happened
-        if (!window.__VERSTAK_PLUGIN_REGISTRY__[pId]) {
-          loadState = 'error';
-          errorText = tr('bundle.registrationMissing');
-          return;
-        }
-      }
-
       // Find the component
-      const components = window.__VERSTAK_PLUGIN_REGISTRY__[pId];
+      const components = loaded.components || {};
       const comp = components[compId];
       if (!comp || !comp.mount) {
         loadState = 'error';

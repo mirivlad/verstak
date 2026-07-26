@@ -39,6 +39,22 @@ globalThis.window = {
           pluginData[pluginId][name] = Object.assign({}, data || {});
           return Promise.resolve('');
         },
+        GetPluginFrontendInfo: (pluginId) => Promise.resolve(
+          pluginId === 'background.plugin'
+            ? { pluginId, entry: 'frontend/dist/index.js' }
+            : { status: 'not-found' },
+        ),
+        GetPluginAssetContent: (pluginId, assetPath) => Promise.resolve([
+          pluginId === 'background.plugin' && assetPath === 'frontend/dist/index.js'
+            ? `window.VerstakPluginRegister('background.plugin', {
+                 components: { BackgroundView: { mount() {}, unmount() {} } },
+                 activate(api) {
+                   return api.commands.register('background.command', (args) => ({ answered: args.question }));
+                 },
+               });`
+            : '',
+          '',
+        ]),
         ReplacePluginNotifications: (pluginId, items) => {
           scheduledNotifications.push({ pluginId, items });
           return Promise.resolve(items[0]?.id === 'rejected' ? 'notification permission denied' : '');
@@ -149,6 +165,20 @@ try {
 }
 if (!rejected) {
   throw new Error('notification backend errors must be plugin-scoped rejections');
+}
+
+// A command declared by a plugin nothing is showing must still run: the shell
+// activates the plugin rather than calling the command unhandled. This is the
+// Journal asking Activity for possible entries while the Journal is on screen.
+if (window.__VERSTAK_PLUGIN_REGISTRY__['background.plugin']) {
+  throw new Error('the background plugin bundle was loaded before anything asked for it');
+}
+const background = await api.commands.executeFor('background.plugin', 'background.command', { question: 'any proposals?' });
+if (background.status !== 'handled' || background.result.answered !== 'any proposals?') {
+  throw new Error(`unmounted plugin did not answer: ${JSON.stringify(background)}`);
+}
+if (!window.__VERSTAK_COMMAND_HANDLERS__['background.plugin:background.command']) {
+  throw new Error('activation did not leave the command handler registered');
 }
 
 api.dispose();

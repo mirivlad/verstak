@@ -74,6 +74,7 @@ type Contributions struct {
 	ContextMenuEntries []ContributionContextMenuEntry `json:"contextMenuEntries,omitempty"`
 	SearchProviders    []ContributionSearchProvider   `json:"searchProviders,omitempty"`
 	ActivityProviders  []ContributionActivityProvider `json:"activityProviders,omitempty"`
+	WorklogProviders   []ContributionWorklogProvider  `json:"worklogProviders,omitempty"`
 	StatusBarItems     []ContributionStatusBarItem    `json:"statusBarItems,omitempty"`
 	OpenProviders      []ContributionOpenProvider     `json:"openProviders,omitempty"`
 	WorkspaceItems     []ContributionWorkspaceItem    `json:"workspaceItems,omitempty"`
@@ -144,6 +145,15 @@ type ContributionActivityProvider struct {
 	ID      string   `json:"id"`
 	Events  []string `json:"events,omitempty"`
 	Handler string   `json:"handler"`
+}
+
+// ContributionWorklogProvider represents a plugin that can propose journal
+// entries. The Journal asks every one of them for its proposals, so a plugin
+// other than Activity can suggest entries without the Journal knowing it.
+type ContributionWorklogProvider struct {
+	ID      string `json:"id"`
+	Label   string `json:"label"`
+	Handler string `json:"handler"`
 }
 
 // ContributionStatusBarItem represents a status bar item.

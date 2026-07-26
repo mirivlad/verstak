@@ -203,9 +203,11 @@ import importStyle from '../../../../../verstak-official-plugins/plugins/import/
         source: 'official',
         icon: 'activity',
         provides: ['activity.log', 'activity.provider', 'activity.reconstruction'],
-        permissions: ['events.subscribe', 'storage.namespace', 'ui.register'],
+        permissions: ['events.subscribe', 'storage.namespace', 'ui.register', 'commands.register'],
         frontend: { entry: 'frontend/dist/index.js' },
         contributes: {
+          commands: [{ id: 'verstak.activity.suggestWorklog', title: 'List Possible Journal Entries', handler: 'verstak.activity.suggestWorklog' }],
+          worklogProviders: [{ id: 'verstak.activity.worklog', label: 'Activity', handler: 'verstak.activity.suggestWorklog' }],
           views: [{ id: 'verstak.activity.view', title: 'Activity', icon: 'activity', component: 'ActivityView' }],
           sidebarItems: [{ id: 'verstak.activity.sidebar', title: 'Activity', icon: 'activity', view: 'verstak.activity.view', position: 20 }],
           workspaceItems: [{ id: 'verstak.activity.workspace', title: 'Activity', icon: 'activity', order: 40, component: 'ActivityView' }]
@@ -338,7 +340,7 @@ import importStyle from '../../../../../verstak-official-plugins/plugins/import/
     var contributionFields = {
       views: 'title', commands: 'title', settingsPanels: 'title', sidebarItems: 'title',
       fileActions: 'label', noteActions: 'label', contextMenuEntries: 'label',
-      searchProviders: 'label', statusBarItems: 'label', openProviders: 'title', workspaceItems: 'title'
+      searchProviders: 'label', worklogProviders: 'label', statusBarItems: 'label', openProviders: 'title', workspaceItems: 'title'
     };
     Object.keys(contributionFields).forEach(function (point) {
       var field = contributionFields[point];
@@ -967,13 +969,14 @@ function cloneJson(value) {
   }
 
   function allContributions() {
-    var views = [], commands = [], searchProviders = [], sidebarItems = [], statusBarItems = [], settingsPanels = [], openProviders = [], workspaceItems = [];
+    var views = [], commands = [], searchProviders = [], worklogProviders = [], sidebarItems = [], statusBarItems = [], settingsPanels = [], openProviders = [], workspaceItems = [];
     for (var id in pluginStates) {
       var s = pluginStates[id];
       var c = (s.manifest && s.manifest.contributes) || {};
       if (c.views) c.views.forEach(function (v) { views.push(Object.assign({}, v, { pluginId: id })); });
       if (c.commands) c.commands.forEach(function (cmd) { commands.push(Object.assign({}, cmd, { pluginId: id })); });
       if (c.searchProviders) c.searchProviders.forEach(function (sp) { searchProviders.push(Object.assign({}, sp, { pluginId: id })); });
+      if (c.worklogProviders) c.worklogProviders.forEach(function (wp) { worklogProviders.push(Object.assign({}, wp, { pluginId: id })); });
       if (c.sidebarItems) c.sidebarItems.forEach(function (sb) { sidebarItems.push(Object.assign({}, sb, { pluginId: id })); });
       if (c.statusBarItems) c.statusBarItems.forEach(function (st) { statusBarItems.push(Object.assign({}, st, { pluginId: id })); });
       if (c.settingsPanels) c.settingsPanels.forEach(function (sp) { settingsPanels.push(Object.assign({}, sp, { pluginId: id })); });
@@ -989,7 +992,7 @@ function cloneJson(value) {
         workspaceItems.push(item);
       });
     }
-    return { views: views, commands: commands, searchProviders: searchProviders, sidebarItems: sidebarItems, statusBarItems: statusBarItems, settingsPanels: settingsPanels, openProviders: openProviders, workspaceItems: workspaceItems };
+    return { views: views, commands: commands, searchProviders: searchProviders, worklogProviders: worklogProviders, sidebarItems: sidebarItems, statusBarItems: statusBarItems, settingsPanels: settingsPanels, openProviders: openProviders, workspaceItems: workspaceItems };
   }
 
   function requestExtension(request) {
@@ -4637,9 +4640,11 @@ function cloneJson(value) {
             source: 'official',
             icon: 'activity',
             provides: ['activity.log', 'activity.provider', 'activity.reconstruction'],
-            permissions: ['events.subscribe', 'storage.namespace', 'ui.register'],
+            permissions: ['events.subscribe', 'storage.namespace', 'ui.register', 'commands.register'],
             frontend: { entry: 'frontend/dist/index.js' },
             contributes: {
+              commands: [{ id: 'verstak.activity.suggestWorklog', title: 'List Possible Journal Entries', handler: 'verstak.activity.suggestWorklog' }],
+              worklogProviders: [{ id: 'verstak.activity.worklog', label: 'Activity', handler: 'verstak.activity.suggestWorklog' }],
               views: [{ id: 'verstak.activity.view', title: 'Activity', icon: 'activity', component: 'ActivityView' }],
               sidebarItems: [{ id: 'verstak.activity.sidebar', title: 'Activity', icon: 'activity', view: 'verstak.activity.view', position: 20 }],
               workspaceItems: [{ id: 'verstak.activity.workspace', title: 'Activity', icon: 'activity', order: 40, component: 'ActivityView' }]
