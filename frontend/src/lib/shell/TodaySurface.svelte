@@ -1140,13 +1140,13 @@
     font-size: 0.8rem;
   }
 
-  @media (max-width: 1120px) {
+  @container vt-content (max-width: 1120px) {
     .today-summary {
       grid-template-columns: repeat(3, minmax(0, 1fr));
     }
   }
 
-  @media (max-width: 980px) {
+  @container vt-content (max-width: 980px) {
     .overview-layout {
       grid-template-columns: 1fr;
     }
@@ -1175,7 +1175,7 @@
     }
   }
 
-  @media (max-width: 620px) {
+  @container vt-content (max-width: 620px) {
     .today-summary {
       grid-template-columns: repeat(2, minmax(0, 1fr));
     }

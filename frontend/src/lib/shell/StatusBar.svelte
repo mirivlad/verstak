@@ -20,8 +20,23 @@
   $: centerItems = items.filter((item) => item.position === 'center');
   $: rightItems = items.filter((item) => item.position === 'right');
   $: vaultOpen = vaultStatus.status === 'open';
-  $: vaultStatusLabel = tr(`vault.status.${vaultStatus.status || 'unknown'}`, undefined, vaultStatus.status || 'unknown');
-  $: vaultLabel = tr('vault.label', { status: vaultStatusLabel });
+  // "Vault: open" told the user the state of a thing they can already see is
+  // working, and not the one fact worth a permanent slot in the status bar:
+  // which vault they are in. The full path stays in the tooltip.
+  $: vaultName = vaultDisplayName(vaultStatus.path);
+  $: vaultLabel = vaultOpen
+    ? (vaultName || tr('vault.unnamed', undefined, 'Vault'))
+    : tr('vault.none', undefined, 'No vault open');
+  $: vaultTooltip = vaultOpen
+    ? tr('vault.tooltip', { path: vaultStatus.path || vaultStatus.vaultId || '' }, vaultStatus.path || '')
+    : tr('vault.noneHint', undefined, 'Open or create a vault to start working');
+
+  function vaultDisplayName(vaultPath) {
+    const trimmed = String(vaultPath || '').replace(/[\\/]+$/, '');
+    if (!trimmed) return '';
+    const parts = trimmed.split(/[\\/]/);
+    return parts[parts.length - 1] || '';
+  }
 
   const inactiveStatuses = new Set(['disabled', 'failed', 'incompatible', 'missing-required-capability']);
 
@@ -97,7 +112,8 @@
       class="vault-status"
       class:vault-open={vaultOpen}
       class:vault-closed={!vaultOpen}
-      title={vaultStatus.path || vaultStatus.vaultId || vaultLabel}
+      title={vaultTooltip}
+      data-vault-name={vaultName}
     >
       <Icon name="vault" size={13} class="status-icon" />
       {vaultLabel}

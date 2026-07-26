@@ -431,7 +431,7 @@
     color: var(--vt-color-text-secondary);
   }
 
-  @media (max-width: 720px) {
+  @container vt-content (max-width: 720px) {
     .settings-window-body {
       flex-direction: column;
     }

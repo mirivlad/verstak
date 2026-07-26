@@ -4,6 +4,7 @@
   import * as App from '../../../wailsjs/go/api/App';
   import { onDestroy, onMount } from 'svelte';
   import { i18n } from '../i18n/index.js';
+  import Icon from '../ui/Icon.svelte';
 
   export let selectedWorkspaceName = '';
   export let nodes = [];
@@ -93,6 +94,16 @@
     window.removeEventListener('verstak:workspace-open-tool', handleWorkspaceOpenTool);
     window.removeEventListener('verstak:plugins-changed', handlePluginsChanged);
   });
+
+  // An empty state that only describes the emptiness leaves the user to work
+  // out where the action lives. These do the step for them.
+  function requestCreateDeal() {
+    window.dispatchEvent(new CustomEvent('verstak:create-workspace-requested'));
+  }
+
+  function openPluginManager() {
+    window.dispatchEvent(new CustomEvent('verstak:nav', { detail: { viewId: 'plugin-manager' } }));
+  }
 
   function toolKey(tool) {
     return `${tool?.pluginId || ''}:${tool?.id || ''}`;
@@ -274,15 +285,23 @@
         {/if}
       </div>
     {:else}
-      <div class="workspace-empty vt-empty-state">
+      <div class="workspace-empty vt-empty-state" data-workspace-no-tools>
+        <Icon name="puzzle" size={28} />
         <p class="vt-empty-title">{tr('workspace.emptyTools')}</p>
         <p class="workspace-hint">{tr('workspace.emptyToolsHint')}</p>
+        <button class="vt-button" type="button" data-workspace-open-plugins on:click={openPluginManager}>
+          {tr('settings.openPluginManager', undefined, 'Open Plugin Manager')}
+        </button>
       </div>
     {/if}
   {:else}
-    <div class="workspace-empty vt-empty-state">
+    <div class="workspace-empty vt-empty-state" data-workspace-empty>
+      <Icon name="layout-grid" size={28} />
       <p class="vt-empty-title">{tr('workspace.select')}</p>
       <p class="workspace-hint">{tr('workspace.selectHint')}</p>
+      <button class="vt-button" type="button" data-workspace-create on:click={requestCreateDeal}>
+        {tr('workspace.createFirst', undefined, 'Create a Deal')}
+      </button>
     </div>
   {/if}
 </div>

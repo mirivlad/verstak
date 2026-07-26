@@ -590,6 +590,14 @@
     display: flex;
     flex-direction: column;
     padding: 0;
+    /* Panels inside here get whatever the sidebar leaves them, which on the
+       smallest supported window (800x600) and a wide sidebar is under 400px.
+       They used to lay themselves out from viewport media queries, so their
+       narrow rules only fired when the whole window was narrow -- which the
+       window minimum makes impossible. They now measure the space they
+       actually have. */
+    container-type: inline-size;
+    container-name: vt-content;
   }
 
   @media (max-width: 720px) {

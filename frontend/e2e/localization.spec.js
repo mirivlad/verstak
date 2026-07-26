@@ -21,7 +21,8 @@ test.describe('Desktop localization', () => {
     await page.locator('[data-settings-language="ru"]').click();
 
     await expect(page.locator('[data-settings-menu-button]')).toHaveAttribute('title', 'Настройки');
-    await expect(page.locator('.vault-status')).toContainText('Хранилище: открыто');
+    // The status bar names the vault rather than reporting that it is open.
+    await expect(page.locator('.vault-status')).toContainText('vault');
     await expect(page.locator('.sidebar .plugin-item').filter({ hasText: 'Тест платформы' })).toBeVisible();
     await expect(page.locator('[data-status-item-id="verstak.platform-test.status"]')).toContainText('Все тесты пройдены');
 
@@ -59,6 +60,6 @@ test.describe('Desktop localization', () => {
     await page.locator('[data-settings-language="en"]').click();
 
     await expect(page.locator('[data-settings-menu-button]')).toHaveAttribute('title', 'Settings');
-    await expect(page.locator('.vault-status')).toContainText('Vault: open');
+    await expect(page.locator('.vault-status')).toContainText('vault');
   });
 });

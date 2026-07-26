@@ -761,7 +761,7 @@
 
   /* Modal */
 
-  @media (max-width: 760px) {
+  @container vt-content (max-width: 760px) {
     .plugin-manager {
       width: 100%;
       padding-right: 0;
