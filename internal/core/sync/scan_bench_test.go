@@ -159,21 +159,46 @@ func TestRecordCostOnSyntheticVault(t *testing.T) {
 		t.Skip("no markdown file in the vault to touch")
 	}
 
-	const rounds = 5
-	var total time.Duration
-	for i := 0; i < rounds; i++ {
-		if err := os.WriteFile(target, []byte(fmt.Sprintf("# round %d\n", i)), 0o600); err != nil {
-			t.Fatal(err)
+	relative, err := filepath.Rel(root, target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	relative = filepath.ToSlash(relative)
+
+	measure := func(record func(round int) error) time.Duration {
+		const rounds = 5
+		var total time.Duration
+		for i := 0; i < rounds; i++ {
+			if err := os.WriteFile(target, []byte(fmt.Sprintf("# round %d\n", i)), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			start := time.Now()
+			if err := record(i); err != nil {
+				t.Fatal(err)
+			}
+			total += time.Since(start)
 		}
-		start := time.Now()
-		if _, err := service.ScanAndRecord(); err != nil {
-			t.Fatal(err)
-		}
-		total += time.Since(start)
+		return total / rounds
 	}
 
-	perChange := total / rounds
+	full := measure(func(int) error {
+		_, err := service.ScanAndRecord()
+		return err
+	})
+	scoped := measure(func(int) error {
+		_, err := service.ScanPathsAndRecord([]string{relative})
+		return err
+	})
+	// What pasting into one destination folder now costs: the files are written
+	// first, then a single scan covers all of them.
+	batch := measure(func(int) error {
+		_, err := service.ScanPathsAndRecord([]string{filepath.ToSlash(filepath.Dir(relative))})
+		return err
+	})
+
 	t.Logf("vault: %s (%d files)", root, fileCount)
-	t.Logf("one recorded file change: %v", perChange)
-	t.Logf("pasting 200 files would cost about %v of backend work", perChange*200)
+	t.Logf("one file change, full scan:     %v", full)
+	t.Logf("one file change, scoped scan:   %v", scoped)
+	t.Logf("pasting 200 files, one per scan: %v", scoped*200)
+	t.Logf("pasting 200 files, one batch:    %v", batch)
 }

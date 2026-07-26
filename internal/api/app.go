@@ -1533,10 +1533,7 @@ func (a *App) WriteVaultTextFile(pluginID, relativePath string, content string, 
 	if err := a.files.WriteVaultTextFile(relativePath, content, options); err != nil {
 		return err.Error()
 	}
-	if err := a.recordFileSyncOp(syncsvc.EntityFile, relativePath, opType, map[string]string{
-		"path":    relativePath,
-		"content": content,
-	}); err != nil {
+	if err := a.recordFileSyncPaths(relativePath); err != nil {
 		return err.Error()
 	}
 	a.publishFileActivity("file.changed", pluginID, relativePath, map[string]interface{}{
@@ -1564,10 +1561,7 @@ func (a *App) WriteVaultFileBytes(pluginID, relativePath string, dataBase64 stri
 	if err := a.files.WriteVaultFileBytes(relativePath, dataBase64, options); err != nil {
 		return err.Error()
 	}
-	if err := a.recordFileSyncOp(syncsvc.EntityFile, relativePath, opType, map[string]string{
-		"path":       relativePath,
-		"dataBase64": dataBase64,
-	}); err != nil {
+	if err := a.recordFileSyncPaths(relativePath); err != nil {
 		return err.Error()
 	}
 	a.publishFileActivity("file.changed", pluginID, relativePath, map[string]interface{}{
@@ -1587,9 +1581,7 @@ func (a *App) CreateVaultFolder(pluginID, relativePath string) string {
 	if err := a.files.CreateVaultFolder(relativePath); err != nil {
 		return err.Error()
 	}
-	if err := a.recordFileSyncOp(syncsvc.EntityFolder, relativePath, syncsvc.OpCreate, map[string]string{
-		"path": relativePath,
-	}); err != nil {
+	if err := a.recordFileSyncPaths(relativePath); err != nil {
 		return err.Error()
 	}
 	a.publishFileActivity("file.changed", pluginID, relativePath, map[string]interface{}{
@@ -1614,10 +1606,8 @@ func (a *App) MoveVaultPath(pluginID, fromRelativePath string, toRelativePath st
 	if err := a.files.MoveVaultPath(fromRelativePath, toRelativePath, options); err != nil {
 		return err.Error()
 	}
-	if err := a.recordFileSyncOp(syncEntityTypeForFileType(meta.Type), fromRelativePath, syncsvc.OpMove, map[string]string{
-		"fromPath": fromRelativePath,
-		"toPath":   toRelativePath,
-	}); err != nil {
+	// Both ends changed: one lost the entry, the other gained it.
+	if err := a.recordFileSyncPaths(fromRelativePath, toRelativePath); err != nil {
 		return err.Error()
 	}
 	a.publishFileActivity("file.changed", pluginID, fromRelativePath, map[string]interface{}{
@@ -1651,10 +1641,7 @@ func (a *App) CopyVaultPath(pluginID, fromRelativePath string, toRelativePath st
 	if err := a.files.CopyVaultPath(fromRelativePath, toRelativePath, options); err != nil {
 		return err.Error()
 	}
-	if err := a.recordFileSyncOp(syncEntityTypeForFileType(meta.Type), toRelativePath, syncsvc.OpCreate, map[string]string{
-		"path":       toRelativePath,
-		"copiedFrom": fromRelativePath,
-	}); err != nil {
+	if err := a.recordFileSyncPaths(toRelativePath); err != nil {
 		return err.Error()
 	}
 	a.publishFileActivity("file.changed", pluginID, toRelativePath, map[string]interface{}{
@@ -1681,9 +1668,7 @@ func (a *App) TrashVaultPath(pluginID, relativePath string) (corefiles.TrashResu
 	if err != nil {
 		return corefiles.TrashResult{}, err.Error()
 	}
-	if err := a.recordFileSyncOp(syncEntityTypeForFileType(meta.Type), relativePath, syncsvc.OpDelete, map[string]string{
-		"path": relativePath,
-	}); err != nil {
+	if err := a.recordFileSyncPaths(relativePath); err != nil {
 		return corefiles.TrashResult{}, err.Error()
 	}
 	a.publishFileActivity("file.changed", pluginID, relativePath, map[string]interface{}{
@@ -1769,9 +1754,7 @@ func (a *App) RestoreVaultTrash(pluginID, trashID string, options corefiles.Rest
 	if err != nil {
 		return "", err.Error()
 	}
-	if err := a.recordFileSyncOp(syncEntityTypeForFileType(entry.OriginalType), restoredPath, syncsvc.OpCreate, map[string]string{
-		"path": restoredPath,
-	}); err != nil {
+	if err := a.recordFileSyncPaths(restoredPath); err != nil {
 		return "", err.Error()
 	}
 	a.publishFileActivity("file.changed", pluginID, restoredPath, map[string]interface{}{
@@ -1873,8 +1856,21 @@ func (a *App) externalOpenService() externalOpenService {
 	return externalopen.NewService()
 }
 
-func (a *App) recordFileSyncOp(entityType, entityID, opType string, payload interface{}) error {
-	_, err := a.scanLocalChanges()
+// recordFileSyncPaths records the sync consequences of a file operation this
+// process just performed, given the vault-relative paths it touched.
+//
+// It used to take the entity type, id, operation and payload and ignore all
+// four, rescanning the whole vault to rediscover what the caller already knew.
+// The scanner still derives the operations from the filesystem — that is what
+// keeps the snapshot and the operation log in agreement — but it is now told
+// where to look.
+func (a *App) recordFileSyncPaths(paths ...string) error {
+	if a == nil {
+		return nil
+	}
+	a.syncRunMu.Lock()
+	defer a.syncRunMu.Unlock()
+	_, err := a.recordSyncPathsLocked(paths)
 	return err
 }
 
@@ -1957,13 +1953,6 @@ func (a *App) publishWorkspaceLifecycleEvent(eventName string, payload map[strin
 		Timestamp: time.Now().UTC().Format(time.RFC3339Nano),
 		Payload:   payload,
 	})
-}
-
-func syncEntityTypeForFileType(fileType corefiles.FileType) string {
-	if fileType == corefiles.FileTypeFolder {
-		return syncsvc.EntityFolder
-	}
-	return syncsvc.EntityFile
 }
 
 func (a *App) activeOpenProviders() []contribution.ContributionOpenProvider {
@@ -2702,10 +2691,17 @@ func (a *App) scanLocalChanges() ([]string, error) {
 }
 
 func (a *App) scanLocalChangesLocked() ([]string, error) {
+	return a.recordSyncPathsLocked(nil)
+}
+
+// recordSyncPathsLocked records local changes, limited to the given
+// vault-relative paths when the caller knows them and covering the whole vault
+// when it does not.
+func (a *App) recordSyncPathsLocked(paths []string) ([]string, error) {
 	if a.syncSvc == nil {
 		return nil, nil
 	}
-	warnings, err := a.syncSvc.ScanAndRecord()
+	warnings, err := a.syncSvc.ScanPathsAndRecord(paths)
 	if err != nil {
 		if a.appSettings != nil {
 			_ = a.updateSyncError("snapshot scan: " + err.Error())
