@@ -51,6 +51,7 @@ export namespace api {
 	    id: string;
 	    title: string;
 	    icon?: string;
+	    order?: number;
 	    component: string;
 	
 	    static createFrom(source: any = {}) {
@@ -63,6 +64,7 @@ export namespace api {
 	        this.id = source["id"];
 	        this.title = source["title"];
 	        this.icon = source["icon"];
+	        this.order = source["order"];
 	        this.component = source["component"];
 	    }
 	}
@@ -1166,6 +1168,7 @@ export namespace plugin {
 	    id: string;
 	    title: string;
 	    icon?: string;
+	    order?: number;
 	    component: string;
 	
 	    static createFrom(source: any = {}) {
@@ -1177,6 +1180,7 @@ export namespace plugin {
 	        this.id = source["id"];
 	        this.title = source["title"];
 	        this.icon = source["icon"];
+	        this.order = source["order"];
 	        this.component = source["component"];
 	    }
 	}

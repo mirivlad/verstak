@@ -316,6 +316,9 @@ test.describe('UX Overview workspace flow', () => {
     });
     await page.locator('[data-settings-menu-button]').click();
     await page.locator('[data-settings-language="ru"]').click();
+    // Settings are a window now, not a dropdown over the current view, so
+    // getting back to the Overview is a step.
+    await page.keyboard.press('Escape');
 
     const overview = page.locator('[data-overview-root]');
     await overview.locator('[data-overview-action="refresh"]').click();

@@ -241,7 +241,9 @@
           {tr('settings.openPluginManager', undefined, 'Open Plugin Manager')}
         </button>
       {:else if activeSectionData?.panel}
-        <h3>{activeSectionData.title}</h3>
+        <!-- No heading of our own: the panel is the section, and most panels
+             title themselves. The tabpanel's aria-label carries the section
+             name for anyone who cannot see which nav item is selected. -->
         {#key activeSectionData.id}
           {#if pluginInfo[activeSectionData.panel.pluginId]?.entry}
             <PluginBundleHost
@@ -288,6 +290,10 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
+    /* The global button rule adds horizontal padding and a minimum height,
+       which on a square icon button leaves no room for the icon at all. */
+    padding: 0;
+    min-height: 0;
     width: 1.9rem;
     height: 1.9rem;
     border: 1px solid var(--vt-color-border-strong);
@@ -334,8 +340,12 @@
   .settings-section-item {
     display: flex;
     align-items: center;
+    /* Buttons are centred by default in the design system; a list of sections
+       reads as a list only when its rows start at the same edge. */
+    justify-content: flex-start;
     gap: 0.5rem;
     width: 100%;
+    min-height: 0;
     padding: 0.4rem 0.55rem;
     border: 1px solid transparent;
     border-radius: var(--vt-radius-md);
