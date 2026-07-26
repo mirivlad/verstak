@@ -372,6 +372,13 @@ func (s *Service) publishFileChange(path, operation string, kind EntryKind, reso
 		"operation": operation,
 		"type":      string(kind),
 		"external":  true,
+		// A change Verstak did not make. Bulk writers -- import publishing a
+		// run, sync applying a pull -- land here too, and one import turned
+		// into 497 recorded events in a single minute across 44 Deals. That is
+		// a record of files appearing, not of work done, so it is marked
+		// service activity: never counted towards work sessions or journal
+		// proposals, and only listed on request.
+		"service": true,
 	}
 	// Resolve workspace context.
 	if resolve != nil {

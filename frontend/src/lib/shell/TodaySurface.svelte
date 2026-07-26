@@ -165,6 +165,17 @@
   //
   // The event id also has to be there and be unique, because that is what the
   // Activity tool keys its list on and it drops the rest.
+  // Activity Verstak recorded because files moved rather than because anybody
+  // worked: an import publishing a run, sync applying a pull, a change the
+  // watcher noticed on disk. One import produced 497 of these in a minute; the
+  // Activity tool hides them and the Overview must not count what the tool does
+  // not show.
+  function isServiceActivity(item) {
+    const payload = (item && item.payload) || {};
+    if (payload.service === true || item.service === true || payload.external === true) return true;
+    return String(payload.operation || '').startsWith('external.');
+  }
+
   function activityRowsForWorkspace(records, workspace) {
     const target = String(workspace || '').trim();
     if (!target) return [];
@@ -172,6 +183,7 @@
     return normalizeRows(records).filter(item => {
       const id = String(item.activityId || '').trim();
       if (!id || seen.has(id)) return false;
+      if (isServiceActivity(item)) return false;
       const tagged = String(item.workspaceRootPath || item.workspaceName || item.workspaceNodeId || '').trim();
       if (tagged !== target) return false;
       seen.add(id);
