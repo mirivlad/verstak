@@ -46,7 +46,7 @@ func TestSyncNestedFolderCreate(t *testing.T) {
 	os.MkdirAll(filepath.Join(vault, "Clients", "Active"), 0o755)
 	writeMarker(t, filepath.Join(vault, "Clients", "Active"), "folder", f2ID)
 
-	scan, warnings, err := scanVault(vault, newSnapshot())
+	scan, warnings, err := scanVault(vault, newSnapshot(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -70,7 +70,7 @@ func TestSyncNestedWorkspaceCreate(t *testing.T) {
 	writeMarker(t, filepath.Join(vault, "Clients"), "folder", fID)
 	writeMarker(t, filepath.Join(vault, "Clients", "Client1"), "workspace", wsID)
 
-	scan, _, _ := scanVault(vault, newSnapshot())
+	scan, _, _ := scanVault(vault, newSnapshot(), nil)
 	if len(scan.Folders) != 1 {
 		t.Fatalf("expected 1 folder, got %d", len(scan.Folders))
 	}
@@ -90,7 +90,7 @@ func TestSyncGenericFolderAndWorkspaceFolderAreDistinct(t *testing.T) {
 	writeMarker(t, filepath.Join(vault, "Clients", "Client1"), "workspace", wsID)
 	os.WriteFile(filepath.Join(vault, "Clients", "Client1", "Notes", "doc.md"), []byte("# Doc"), 0o644)
 
-	scan, _, _ := scanVault(vault, newSnapshot())
+	scan, _, _ := scanVault(vault, newSnapshot(), nil)
 	// Workspace folder is in Folders map.
 	if scan.Folders[fID].FolderID != fID {
 		t.Fatal("folder should be in Folders")
@@ -114,7 +114,7 @@ func TestSyncFolderRename(t *testing.T) {
 	os.MkdirAll(filepath.Join(vault, "OldName"), 0o755)
 	writeMarker(t, filepath.Join(vault, "OldName"), "folder", fID)
 
-	prevScan, _, _ := scanVault(vault, newSnapshot())
+	prevScan, _, _ := scanVault(vault, newSnapshot(), nil)
 	prev := snapshotFromScan(prevScan, newSnapshot(), false)
 	s := NewService(vault, "dev")
 	s.saveSnapshot(prev)
@@ -123,7 +123,7 @@ func TestSyncFolderRename(t *testing.T) {
 	os.Rename(filepath.Join(vault, "OldName"), filepath.Join(vault, "NewName"))
 	writeMarker(t, filepath.Join(vault, "NewName"), "folder", fID)
 
-	curScan, _, _ := scanVault(vault, prev)
+	curScan, _, _ := scanVault(vault, prev, nil)
 	cur := snapshotFromScan(curScan, prev, true)
 
 	ops, _, err := diffSnapshots(prev, cur, "dev", vault)
@@ -151,14 +151,14 @@ func TestSyncFolderMove(t *testing.T) {
 	os.MkdirAll(filepath.Join(vault, "B"), 0o755)
 	writeMarker(t, filepath.Join(vault, "B"), "folder", f2ID)
 
-	prevScan, _, _ := scanVault(vault, newSnapshot())
+	prevScan, _, _ := scanVault(vault, newSnapshot(), nil)
 	prev := snapshotFromScan(prevScan, newSnapshot(), false)
 
 	// Move A into B.
 	os.Rename(filepath.Join(vault, "A"), filepath.Join(vault, "B", "A"))
 	writeMarker(t, filepath.Join(vault, "B", "A"), "folder", f1ID)
 
-	curScan, _, _ := scanVault(vault, prev)
+	curScan, _, _ := scanVault(vault, prev, nil)
 	cur := snapshotFromScan(curScan, prev, true)
 
 	ops, _, err := diffSnapshots(prev, cur, "dev", vault)
@@ -197,7 +197,7 @@ func TestSyncSubtreeTrash(t *testing.T) {
 	writeMarker(t, filepath.Join(vault, "Clients"), "folder", fID)
 	writeMarker(t, filepath.Join(vault, "Clients", "Client1"), "workspace", wsID)
 
-	prevScan, _, _ := scanVault(vault, newSnapshot())
+	prevScan, _, _ := scanVault(vault, newSnapshot(), nil)
 	prev := snapshotFromScan(prevScan, newSnapshot(), false)
 
 	// Trash folder subtree.
@@ -205,7 +205,7 @@ func TestSyncSubtreeTrash(t *testing.T) {
 	os.MkdirAll(filepath.Join(trashDir, "content"), 0o755)
 	os.Rename(filepath.Join(vault, "Clients"), filepath.Join(trashDir, "content", "Clients"))
 
-	curScan, _, _ := scanVault(vault, prev)
+	curScan, _, _ := scanVault(vault, prev, nil)
 	cur := snapshotFromScan(curScan, prev, true)
 
 	if _, active := cur.Folders[fID]; active {
@@ -222,13 +222,13 @@ func TestSyncWorkspaceMove(t *testing.T) {
 	writeMarker(t, filepath.Join(vault, "Clients"), "folder", fID)
 	writeMarker(t, filepath.Join(vault, "Clients", "Client1"), "workspace", wsID)
 
-	prevScan, _, _ := scanVault(vault, newSnapshot())
+	prevScan, _, _ := scanVault(vault, newSnapshot(), nil)
 	prev := snapshotFromScan(prevScan, newSnapshot(), false)
 
 	os.Rename(filepath.Join(vault, "Clients", "Client1"), filepath.Join(vault, "Client1"))
 	writeMarker(t, filepath.Join(vault, "Client1"), "workspace", wsID)
 
-	curScan, _, _ := scanVault(vault, prev)
+	curScan, _, _ := scanVault(vault, prev, nil)
 	cur := snapshotFromScan(curScan, prev, true)
 
 	ops, _, err := diffSnapshots(prev, cur, "dev", vault)
@@ -255,7 +255,7 @@ func TestSyncDuplicateFolderID(t *testing.T) {
 	os.MkdirAll(filepath.Join(vault, "B"), 0o755)
 	writeMarker(t, filepath.Join(vault, "B"), "folder", fID)
 
-	scan, warnings, _ := scanVault(vault, newSnapshot())
+	scan, warnings, _ := scanVault(vault, newSnapshot(), nil)
 	if len(scan.Folders) != 1 {
 		t.Fatalf("duplicate folder ID: expected 1, got %d", len(scan.Folders))
 	}
@@ -279,7 +279,7 @@ func TestSyncDuplicateWorkspaceID(t *testing.T) {
 	os.MkdirAll(filepath.Join(vault, "B"), 0o755)
 	writeMarker(t, filepath.Join(vault, "B"), "workspace", wsID)
 
-	scan, warnings, _ := scanVault(vault, newSnapshot())
+	scan, warnings, _ := scanVault(vault, newSnapshot(), nil)
 	if len(scan.Workspaces) != 1 {
 		t.Fatalf("duplicate WS ID: expected 1, got %d", len(scan.Workspaces))
 	}
@@ -307,7 +307,7 @@ func TestSyncOperationOrdering(t *testing.T) {
 	writeMarker(t, filepath.Join(vault, "Clients", "Active", "Client1"), "workspace", wsID)
 	os.WriteFile(filepath.Join(vault, "Clients", "Active", "Client1", "Notes", "doc.md"), []byte("x"), 0o644)
 
-	scan, _, _ := scanVault(vault, newSnapshot())
+	scan, _, _ := scanVault(vault, newSnapshot(), nil)
 	emptyPrev := newSnapshot()
 	emptyPrev.WorkspacesInitialized = true
 	cur := snapshotFromScan(scan, emptyPrev, true)

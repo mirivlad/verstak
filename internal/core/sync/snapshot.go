@@ -46,6 +46,13 @@ type Snapshot struct {
 	TreeOrder             json.RawMessage              `json:"treeOrder,omitempty"`
 	TreeOrderInitialized  bool                         `json:"treeOrderInitialized,omitempty"`
 	Unresolved            map[string]string            `json:"unresolved,omitempty"`
+	// ScannedAt is the moment the scan that produced this snapshot began. It is
+	// what makes the scanner's stat cache safe: a recorded hash may only be
+	// reused for a file whose modification time is strictly older than this,
+	// because a file touched during or after the scan could carry a
+	// modification time the scan already saw. Empty means "trust nothing",
+	// which is what a snapshot written before this field existed gets.
+	ScannedAt string `json:"scannedAt,omitempty"`
 }
 
 // SnapshotEntry stores only stable filesystem facts needed for reconciliation.
@@ -97,6 +104,7 @@ type scanJournal struct {
 }
 
 type scannedVault struct {
+	ScannedAt            time.Time
 	Entries              map[string]SnapshotEntry
 	Workspaces           map[string]WorkspaceSnapshot
 	Folders              map[string]FolderSnapshot
@@ -123,7 +131,36 @@ func (s *Service) LoadSnapshot() (Snapshot, error) {
 // ScanAndRecord scans the whole synchronizable vault and records exactly the
 // detected local changes. On its first run it writes a baseline and deliberately
 // produces no operations; bootstrap decides what can safely be published.
+//
+// This is the general entry point: it makes no assumption about what changed,
+// so it is what startup and external-change recovery need. Callers that just
+// performed a known write should use ScanPathsAndRecord instead.
 func (s *Service) ScanAndRecord() ([]string, error) {
+	return s.scanAndRecord(nil)
+}
+
+// ScanPathsAndRecord records local changes under the given vault-relative paths
+// and their subtrees, leaving the rest of the snapshot untouched.
+//
+// The application knows which paths it just wrote, so rediscovering that by
+// walking every file in the vault is pure waste — and waste that grows with the
+// vault. Everything outside the given subtrees is carried over from the
+// previous snapshot verbatim.
+//
+// The result must be indistinguishable from a full scan for any change that
+// actually happened inside those paths; TestScopedScanMatchesFullScan holds
+// that line. When the caller gives nothing usable to scope by, or when there is
+// no previous snapshot to carry forward, this falls back to a full scan rather
+// than guessing.
+func (s *Service) ScanPathsAndRecord(paths []string) ([]string, error) {
+	scope := newScanScope(paths)
+	if len(scope) == 0 {
+		return s.ScanAndRecord()
+	}
+	return s.scanAndRecord(scope)
+}
+
+func (s *Service) scanAndRecord(scope scanScope) ([]string, error) {
 	if err := s.recoverScanJournal(); err != nil {
 		return nil, err
 	}
@@ -131,7 +168,12 @@ func (s *Service) ScanAndRecord() ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	current, warnings, err := scanVault(s.vaultRoot, previous)
+	if !exists && len(scope) > 0 {
+		// Nothing to carry the unscanned remainder over from; the baseline
+		// scan has to see everything.
+		scope = nil
+	}
+	current, warnings, err := scanVault(s.vaultRoot, previous, scope)
 	if err != nil {
 		return nil, err
 	}
@@ -213,7 +255,7 @@ func (s *Service) RebaseSnapshot() ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	current, warnings, err := scanVault(s.vaultRoot, previous)
+	current, warnings, err := scanVault(s.vaultRoot, previous, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -275,7 +317,11 @@ func (s *Service) loadSnapshot() (Snapshot, bool, error) {
 }
 
 func (s *Service) saveSnapshot(snapshot Snapshot) error {
-	data, err := json.MarshalIndent(snapshot, "", "  ")
+	// Deliberately not indented. This file holds one record per file in the
+	// vault and is rewritten after every change; on a vault of any size the
+	// indentation costs measurable time and disk on every save, and nobody
+	// reads it by hand at that length.
+	data, err := json.Marshal(snapshot)
 	if err != nil {
 		return fmt.Errorf("marshal snapshot: %w", err)
 	}
@@ -339,26 +385,145 @@ func (s *Service) commitScanTransaction(snapshot Snapshot, ops []Op) error {
 	return nil
 }
 
-func scanVault(root string, previous Snapshot) (scannedVault, []string, error) {
+// scanScope limits the file walk to a set of vault-relative subtrees. A nil or
+// empty scope means the whole vault.
+type scanScope []string
+
+// newScanScope normalises caller-supplied paths and returns an empty scope for
+// anything it cannot scope by safely, which the callers read as "scan
+// everything". Being conservative here is cheap; being wrong is not.
+func newScanScope(paths []string) scanScope {
+	var scope scanScope
+	for _, raw := range paths {
+		// A leading slash means the vault root here, as it does everywhere else
+		// paths cross the plugin boundary.
+		rel := strings.Trim(filepath.ToSlash(strings.TrimSpace(raw)), "/")
+		if rel == "" || rel == "." {
+			return nil
+		}
+		rel = filepath.ToSlash(filepath.Clean(rel))
+		if rel == "." || rel == ".." || strings.HasPrefix(rel, "../") || filepath.IsAbs(filepath.FromSlash(rel)) {
+			return nil
+		}
+		if excludedFromSync(rel) {
+			// Never part of the snapshot, so it contributes no change. Drop it
+			// rather than widening the scan.
+			continue
+		}
+		scope = append(scope, rel)
+	}
+	if len(scope) == 0 {
+		return nil
+	}
+	// Drop paths already covered by another, so no subtree is walked twice.
+	sort.Strings(scope)
+	deduped := scope[:0]
+	for _, rel := range scope {
+		if len(deduped) > 0 && isPathPrefix(deduped[len(deduped)-1], rel) {
+			continue
+		}
+		deduped = append(deduped, rel)
+	}
+	return deduped
+}
+
+// filesystemNow reads the clock the filesystem itself stamps files with, by
+// creating one and asking what time it thinks that was.
+//
+// time.Now cannot be used for this. Filesystems commonly stamp modification
+// times from a coarse clock that lags the wall clock and only advances every
+// few milliseconds, so a file written moments ago carries a timestamp *earlier*
+// than a wall-clock reading taken after it. Comparing the two would declare a
+// file safely in the past when it is in fact still inside the current tick —
+// which is precisely the window where a same-length rewrite hides.
+//
+// A zero time means the probe failed; callers read that as "trust no cached
+// hash", so a filesystem that will not cooperate merely costs speed.
+func filesystemNow(root string) time.Time {
+	dir := filepath.Join(root, ".verstak", "sync")
+	if err := os.MkdirAll(dir, 0o750); err != nil {
+		return time.Time{}
+	}
+	probe, err := os.CreateTemp(dir, ".scan-clock-*")
+	if err != nil {
+		return time.Time{}
+	}
+	name := probe.Name()
+	defer func() { _ = os.Remove(name) }()
+	if err := probe.Close(); err != nil {
+		return time.Time{}
+	}
+	info, err := os.Stat(name)
+	if err != nil {
+		return time.Time{}
+	}
+	return info.ModTime().UTC()
+}
+
+func (s scanScope) covers(path string) bool {
+	for _, root := range s {
+		if isPathPrefix(root, path) {
+			return true
+		}
+	}
+	return false
+}
+
+func scanVault(root string, previous Snapshot, scope scanScope) (scannedVault, []string, error) {
 	result := scannedVault{
+		// Taken before the walk, never after: anything modified while the walk
+		// is in progress must be re-read next time rather than trusted.
+		ScannedAt:  filesystemNow(root),
 		Entries:    make(map[string]SnapshotEntry),
 		Workspaces: make(map[string]WorkspaceSnapshot),
 		Folders:    make(map[string]FolderSnapshot),
 		Unresolved: make(map[string]string),
 	}
 	var warnings []string
-	err := filepath.WalkDir(root, func(path string, entry fs.DirEntry, walkErr error) error {
+
+	// A hash may only be reused for a file whose modification time predates the
+	// previous scan. Without a recorded scan time — an older snapshot — nothing
+	// is reusable and every file is read.
+	cacheHorizon, cacheUsable := time.Time{}, false
+	if previous.ScannedAt != "" && !result.ScannedAt.IsZero() {
+		if parsed, err := time.Parse(time.RFC3339Nano, previous.ScannedAt); err == nil {
+			cacheHorizon, cacheUsable = parsed, true
+		}
+	}
+
+	// A scoped scan carries everything outside the scope over untouched: it was
+	// not written, so re-reading it could only reproduce what is already known.
+	walkRoots := []string{root}
+	if len(scope) > 0 {
+		for path, entry := range previous.Entries {
+			if !scope.covers(path) {
+				result.Entries[path] = entry
+			}
+		}
+		for path, message := range previous.Unresolved {
+			if !scope.covers(path) {
+				result.Unresolved[path] = message
+				warnings = append(warnings, message)
+			}
+		}
+		walkRoots = walkRoots[:0]
+		for _, rel := range scope {
+			walkRoots = append(walkRoots, filepath.Join(root, filepath.FromSlash(rel)))
+		}
+	}
+
+	visit := func(path string, entry fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
-		}
-		if path == root {
-			return nil
 		}
 		rel, err := filepath.Rel(root, path)
 		if err != nil {
 			return err
 		}
 		rel = filepath.ToSlash(rel)
+		if rel == "." {
+			return nil
+		}
 		if excludedFromSync(rel) {
 			if entry.IsDir() {
 				return filepath.SkipDir
@@ -392,6 +557,31 @@ func scanVault(root string, previous Snapshot) (scannedVault, []string, error) {
 			warnings = append(warnings, message)
 			return nil
 		}
+		modified := info.ModTime().UTC()
+		modifiedAt := modified.Format(time.RFC3339Nano)
+		// Re-hashing a file whose size and modification time are both unchanged
+		// costs a full read and can only confirm what the snapshot already
+		// says. Skipping it is what turns a scan from "read every file in the
+		// vault" into "stat every file in the vault".
+		//
+		// The horizon check is what makes this safe rather than merely fast. A
+		// file rewritten to the same length within the same modification-time
+		// tick as the scan that recorded it looks untouched to stat alone; by
+		// only trusting entries older than the previous scan, that window is
+		// closed and such a file is read again. The remaining exposure is an
+		// external tool that both restores the original timestamp and keeps the
+		// byte count identical, which no ordinary edit does.
+		if cached, known := previous.Entries[rel]; known &&
+			cacheUsable &&
+			cached.Type == EntityFile &&
+			cached.Hash != "" &&
+			cached.Size == info.Size() &&
+			cached.ModifiedAt == modifiedAt &&
+			modified.Before(cacheHorizon) {
+			cached.Path = rel
+			result.Entries[rel] = cached
+			return nil
+		}
 		hash, err := sha256File(path)
 		if err != nil {
 			return fmt.Errorf("hash %s: %w", rel, err)
@@ -400,13 +590,21 @@ func scanVault(root string, previous Snapshot) (scannedVault, []string, error) {
 			Path:       rel,
 			Type:       EntityFile,
 			Size:       info.Size(),
-			ModifiedAt: info.ModTime().UTC().Format(time.RFC3339Nano),
+			ModifiedAt: modifiedAt,
 			Hash:       hash,
 		}
 		return nil
-	})
-	if err != nil {
-		return scannedVault{}, nil, err
+	}
+
+	for _, walkRoot := range walkRoots {
+		if err := filepath.WalkDir(walkRoot, visit); err != nil {
+			// A scoped path that no longer exists is the ordinary shape of a
+			// delete: its absence is exactly the change being recorded.
+			if os.IsNotExist(err) && walkRoot != root {
+				continue
+			}
+			return scannedVault{}, nil, err
+		}
 	}
 	workspaces, folders, workspaceWarnings, err := scanTreeSnapshots(root, previous.Workspaces, previous.Folders)
 	if err != nil {
@@ -610,6 +808,9 @@ func sha256File(path string) (string, error) {
 
 func snapshotFromScan(current scannedVault, previous Snapshot, previousExists bool) Snapshot {
 	next := newSnapshot()
+	if !current.ScannedAt.IsZero() {
+		next.ScannedAt = current.ScannedAt.Format(time.RFC3339Nano)
+	}
 	for path, entry := range current.Entries {
 		next.Entries[path] = entry
 	}
