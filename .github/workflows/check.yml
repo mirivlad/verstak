@@ -62,6 +62,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # The Wails mock loads the real official plugin bundles from the sibling
+      # repository, which is what makes these tests exercise the actual plugins
+      # instead of stand-ins. A production build no longer needs it; the e2e
+      # build does, and should fail rather than quietly test nothing.
+      - name: Check out the official plugins
+        uses: actions/checkout@v4
+        with:
+          repository: mirivlad/verstak-official-plugins
+          ref: refactor/design-system
+          path: verstak-official-plugins
+
+      - name: Put the plugins where the mock expects them
+        run: mv verstak-official-plugins ../verstak-official-plugins
+
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
