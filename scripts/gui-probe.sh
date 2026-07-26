@@ -59,7 +59,20 @@ cleanup() {
 # ── A vault with enough shape to reproduce tree problems ────────────────────
 # Folders deep enough that the sidebar must scroll, which is the only way the
 # scrollbar is on screen at all.
-mkdir -p "$VAULT/.verstak"
+# The application only opens a directory it recognises as a vault, which means
+# the .verstak layout has to exist before the config points at it. Without this
+# the probe just photographs the vault-selection screen.
+mkdir -p "$VAULT"/.verstak/{plugin-data,plugin-settings,plugin-cache,trash,logs}
+NOW="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+cat > "$VAULT/.verstak/vault.json" <<VAULTJSON
+{
+  "schemaVersion": 1,
+  "vaultId": "00000000-0000-4000-8000-0000000000aa",
+  "createdAt": "$NOW",
+  "updatedAt": "$NOW",
+  "app": "verstak"
+}
+VAULTJSON
 make_deal() {
   local path="$1"
   mkdir -p "$VAULT/$path/Notes" "$VAULT/$path/Files"
