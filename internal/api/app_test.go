@@ -1169,8 +1169,69 @@ func TestBrowserActivityBatchPersistsWithoutMountedViewAndDeduplicates(t *testin
 	if records[0]["type"] != "browser.activity.domain" || records[0]["hostname"] != "example.com" {
 		t.Fatalf("record = %+v, want domain-only activity", records[0])
 	}
+	// A batch an older extension accumulated knows only the site, and an
+	// address must not be invented for it.
 	if _, ok := records[0]["url"]; ok {
-		t.Fatalf("record must not contain URL: %+v", records[0])
+		t.Fatalf("record must not contain a URL it was never sent: %+v", records[0])
+	}
+	if records[0]["title"] != "example.com" {
+		t.Fatalf("record title = %v, want the site it knows", records[0]["title"])
+	}
+}
+
+// The address is what the user recognises afterwards: a domain alone cannot
+// tell configuring a site in its dashboard from reading its public pages.
+func TestBrowserActivityBatchKeepsThePageAddress(t *testing.T) {
+	v := vault.NewVault(nil)
+	if err := v.CreateVault(t.TempDir()); err != nil {
+		t.Fatalf("CreateVault: %v", err)
+	}
+	app := &App{
+		eventBus: events.NewBus(),
+		storage:  storage.New(v),
+		vault:    v,
+		plugins: []plugin.Plugin{{
+			Manifest: plugin.Manifest{ID: activityPluginID, Permissions: []string{"storage.namespace"}},
+			Status:   plugin.StatusLoaded,
+			Enabled:  true,
+		}},
+	}
+	if err := app.recordBrowserActivityBatch(events.Event{
+		Name:      "browser.activity.batch",
+		Timestamp: "2026-07-12T10:05:01Z",
+		Payload: map[string]interface{}{
+			"batchId": "batch-activity-page",
+			"entries": []map[string]interface{}{{
+				"hostname":        "example.com",
+				"url":             "https://example.com/admin/settings?tab=billing",
+				"startedAt":       "2026-07-12T10:00:00Z",
+				"endedAt":         "2026-07-12T10:05:00Z",
+				"durationSeconds": int64(300),
+			}},
+		},
+	}); err != nil {
+		t.Fatalf("recordBrowserActivityBatch: %v", err)
+	}
+	records, err := app.storage.ReadPluginDataNDJSON(activityPluginID, activityRawDataName)
+	if err != nil {
+		t.Fatalf("ReadPluginDataNDJSON: %v", err)
+	}
+	if len(records) != 1 {
+		t.Fatalf("records = %+v, want one", records)
+	}
+	want := "https://example.com/admin/settings?tab=billing"
+	if records[0]["url"] != want {
+		t.Fatalf("record url = %v, want %q", records[0]["url"], want)
+	}
+	if records[0]["title"] != want {
+		t.Fatalf("record title = %v, want the address", records[0]["title"])
+	}
+	payload, ok := records[0]["payload"].(map[string]interface{})
+	if !ok || payload["url"] != want {
+		t.Fatalf("record payload = %+v, want the address inside it too", records[0]["payload"])
+	}
+	if records[0]["hostname"] != "example.com" {
+		t.Fatalf("record hostname = %v, want the site kept beside the address", records[0]["hostname"])
 	}
 }
 

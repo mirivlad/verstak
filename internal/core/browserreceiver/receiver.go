@@ -114,8 +114,15 @@ type CaptureBrowser struct {
 	Name string `json:"name"`
 }
 
-// ActivityBatchPayload contains only domain-level time accounting. It never
-// accepts or emits page URLs, titles, content, or navigation history.
+// ActivityBatchPayload contains time accounting for pages the user looked at:
+// which address, for how long, and nothing else. Titles, page content, and
+// navigation history are still never accepted or emitted.
+//
+// It carried only the domain until the user asked for the address, on the
+// grounds that a domain cannot tell configuring a site in its dashboard from
+// reading its public pages -- and that recording this at all is something they
+// switch on for themselves, warned, to turn their own work into journal
+// entries.
 type ActivityBatchPayload struct {
 	SchemaVersion int             `json:"schemaVersion"`
 	BatchID       string          `json:"batchId"`
@@ -125,7 +132,10 @@ type ActivityBatchPayload struct {
 }
 
 type ActivityEntry struct {
-	Hostname        string `json:"hostname"`
+	Hostname string `json:"hostname"`
+	// The page address without whatever follows '#'. Empty for a batch an
+	// older extension accumulated, which knew only the site.
+	URL             string `json:"url,omitempty"`
 	StartedAt       string `json:"startedAt"`
 	EndedAt         string `json:"endedAt"`
 	DurationSeconds int64  `json:"durationSeconds"`
@@ -515,6 +525,18 @@ func (p *ActivityBatchPayload) NormalizeAndValidate() error {
 		if entry.DurationSeconds <= 0 || entry.DurationSeconds > int64(maxActivityDuration/time.Second) || time.Duration(entry.DurationSeconds)*time.Second > interval {
 			return fmt.Errorf("entries[%d].durationSeconds is invalid", index)
 		}
+		if raw := strings.TrimSpace(entry.URL); raw != "" {
+			page := hostname.NormalizePageURLV1(raw)
+			if page == "" {
+				return fmt.Errorf("entries[%d].url is invalid", index)
+			}
+			// An address whose host is not the host being reported would make
+			// the two fields describe different things.
+			if hostname.NormalizeURLHostnameV1(page) != canonical {
+				return fmt.Errorf("entries[%d].url does not belong to the reported hostname", index)
+			}
+			entry.URL = page
+		}
 		entry.Hostname = canonical
 	}
 	return nil
@@ -523,12 +545,16 @@ func (p *ActivityBatchPayload) NormalizeAndValidate() error {
 func (p ActivityBatchPayload) EventPayload() map[string]interface{} {
 	entries := make([]map[string]interface{}, 0, len(p.Entries))
 	for _, entry := range p.Entries {
-		entries = append(entries, map[string]interface{}{
+		item := map[string]interface{}{
 			"hostname":        entry.Hostname,
 			"startedAt":       entry.StartedAt,
 			"endedAt":         entry.EndedAt,
 			"durationSeconds": entry.DurationSeconds,
-		})
+		}
+		if entry.URL != "" {
+			item["url"] = entry.URL
+		}
+		entries = append(entries, item)
 	}
 	return map[string]interface{}{
 		"batchId":   strings.TrimSpace(p.BatchID),
