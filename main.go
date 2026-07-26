@@ -258,9 +258,9 @@ func main() {
 
 	// ─── Wails App ───────────────────────────────────────────
 	appOptions := &options.App{
-		Title:            "Verstak",
-		Width:            1200,
-		Height:           800,
+		Title:  "Verstak",
+		Width:  1200,
+		Height: 800,
 		// The smallest window the interface is designed to work in. At this
 		// size a sidebar at its maximum still leaves the content area roughly
 		// 380px, which is the width the panels lay themselves out against.

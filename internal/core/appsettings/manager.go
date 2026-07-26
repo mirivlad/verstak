@@ -17,23 +17,23 @@ import (
 
 // Config represents the application settings stored in ~/.config/verstak/config.json.
 type Config struct {
-	SchemaVersion     int                     `json:"schemaVersion"`
-	CurrentVaultPath  string                  `json:"currentVaultPath"`
-	RecentVaults      []string                `json:"recentVaults"`
-	Theme             string                  `json:"theme"`
-	Language          string                  `json:"language"`
-	DevMode           bool                    `json:"devMode"`
-	UserPluginsDir    string                  `json:"userPluginsDir"`
-	SidebarWidth      int                     `json:"sidebarWidth"`
-	ExpandedFolderIDs []string                `json:"expandedFolderIds"`
+	SchemaVersion     int      `json:"schemaVersion"`
+	CurrentVaultPath  string   `json:"currentVaultPath"`
+	RecentVaults      []string `json:"recentVaults"`
+	Theme             string   `json:"theme"`
+	Language          string   `json:"language"`
+	DevMode           bool     `json:"devMode"`
+	UserPluginsDir    string   `json:"userPluginsDir"`
+	SidebarWidth      int      `json:"sidebarWidth"`
+	ExpandedFolderIDs []string `json:"expandedFolderIds"`
 	// SettingsSection is the section the settings window was last left on, so
 	// reopening it returns where the user was rather than to the top.
-	SettingsSection string `json:"settingsSection,omitempty"`
-	Workbench         WorkbenchPreferences    `json:"workbench,omitempty"`
-	Sync              SyncSettings            `json:"sync,omitempty"`
-	BrowserReceiver   BrowserReceiverSettings `json:"browserReceiver,omitempty"`
-	WindowState       *WindowState            `json:"windowState,omitempty"`
-	LastOpenedAt      string                  `json:"lastOpenedAt"`
+	SettingsSection string                  `json:"settingsSection,omitempty"`
+	Workbench       WorkbenchPreferences    `json:"workbench,omitempty"`
+	Sync            SyncSettings            `json:"sync,omitempty"`
+	BrowserReceiver BrowserReceiverSettings `json:"browserReceiver,omitempty"`
+	WindowState     *WindowState            `json:"windowState,omitempty"`
+	LastOpenedAt    string                  `json:"lastOpenedAt"`
 }
 
 const (
