@@ -301,6 +301,71 @@ test.describe('UX Overview workspace flow', () => {
     await expect(recent).not.toContainText('Changed file "draft.md"');
   });
 
+  // The Activity card claimed a number the Activity tool would never show,
+  // because it counted globally scoped events -- browser domain activity, of
+  // which a real vault had 180 -- into every Deal. 184 on the card, 4 in the
+  // list.
+  test('the Activity card counts this Deal, not global browser activity', async ({ page }) => {
+    await page.evaluate(async () => {
+      await window.go.api.App.WritePluginSettings('verstak.activity', {
+        'events:workspace:Project': [
+          {
+            activityId: 'in-this-deal-1',
+            occurredAt: '2026-06-30T08:10:00.000Z',
+            type: 'note.saved',
+            title: 'One',
+            workspaceRootPath: 'Project',
+          },
+          {
+            activityId: 'in-this-deal-2',
+            occurredAt: '2026-06-30T08:11:00.000Z',
+            type: 'note.saved',
+            title: 'Two',
+            workspaceRootPath: 'Project',
+          },
+          // Same event twice: the Activity tool keys its list on the id.
+          {
+            activityId: 'in-this-deal-2',
+            occurredAt: '2026-06-30T08:11:00.000Z',
+            type: 'note.saved',
+            title: 'Two',
+            workspaceRootPath: 'Project',
+          },
+          // Belongs to another Deal.
+          {
+            activityId: 'other-deal',
+            occurredAt: '2026-06-30T08:12:00.000Z',
+            type: 'note.saved',
+            title: 'Elsewhere',
+            workspaceRootPath: 'SomewhereElse',
+          },
+          // Global: a visited domain belongs to no Deal.
+          {
+            activityId: 'global-domain-1',
+            occurredAt: '2026-06-30T08:13:00.000Z',
+            type: 'browser.activity.domain',
+            title: 'github.com',
+          },
+          {
+            activityId: 'global-domain-2',
+            occurredAt: '2026-06-30T08:14:00.000Z',
+            type: 'browser.activity.domain',
+            title: 'example.com',
+          },
+        ],
+      });
+    });
+
+    const overview = page.locator('[data-overview-root]');
+    await overview.locator('[data-overview-action="refresh"]').click();
+    await expect(overview.locator('[data-overview-summary="activity"]')).toContainText('2 recorded events');
+
+    // And the card agrees with what clicking it shows.
+    await overview.locator('[data-overview-summary="activity"]').click();
+    await expect(page.getByRole('tab', { name: 'Activity' })).toHaveAttribute('aria-selected', 'true');
+    await expect(page.locator('.activity-root .activity-row')).toHaveCount(2);
+  });
+
   test('Overview localizes activity labels without exposing internal event names', async ({ page }) => {
     await page.evaluate(async () => {
       await window.go.api.App.WritePluginSettings('verstak.activity', {
