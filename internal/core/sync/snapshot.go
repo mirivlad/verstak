@@ -596,6 +596,25 @@ func scanVault(root string, previous Snapshot, scope scanScope) (scannedVault, [
 		return nil
 	}
 
+	// A scoped path may have arrived inside directories that did not exist at
+	// the previous scan — pasting into a folder the caller just created, for
+	// one. Those directories sit above the walk and would otherwise go
+	// unrecorded until some later full scan noticed them. Stat-ing each
+	// ancestor costs one call per level and descends into nothing.
+	for _, rel := range scope {
+		for parent := pathParent(rel); parent != ""; parent = pathParent(parent) {
+			info, err := os.Stat(filepath.Join(root, filepath.FromSlash(parent)))
+			if err != nil || !info.IsDir() || excludedFromSync(parent) {
+				break
+			}
+			result.Entries[parent] = SnapshotEntry{
+				Path:       parent,
+				Type:       EntityFolder,
+				ModifiedAt: info.ModTime().UTC().Format(time.RFC3339Nano),
+			}
+		}
+	}
+
 	for _, walkRoot := range walkRoots {
 		if err := filepath.WalkDir(walkRoot, visit); err != nil {
 			// A scoped path that no longer exists is the ordinary shape of a
@@ -1342,6 +1361,16 @@ func isPathPrefix(prefix, target string) bool {
 		return true
 	}
 	return len(target) > len(prefix) && target[:len(prefix)] == prefix && target[len(prefix)] == '/'
+}
+
+// pathParent returns the containing directory of a vault-relative path, or an
+// empty string when the path already sits at the vault root.
+func pathParent(path string) string {
+	index := strings.LastIndex(path, "/")
+	if index <= 0 {
+		return ""
+	}
+	return path[:index]
 }
 
 func pathDepth(path string) int {

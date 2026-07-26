@@ -189,6 +189,16 @@ func TestScopedScanMatchesFullScan(t *testing.T) {
 			},
 		},
 		{
+			// The scope names only the files. The directory holding them is new
+			// too, and has to be recorded even though nothing pointed at it.
+			name:   "files pasted into a folder created by the same operation",
+			scoped: []string{"Clients/Deal-B/Notes/New/a.md", "Clients/Deal-B/Notes/New/b.md"},
+			mutate: func(root string) {
+				write(at(root, "Clients/Deal-B/Notes/New/a.md"), "a")
+				write(at(root, "Clients/Deal-B/Notes/New/b.md"), "b")
+			},
+		},
+		{
 			name:   "many files pasted at once",
 			scoped: []string{"Clients/Deal-B/Notes"},
 			mutate: func(root string) {
