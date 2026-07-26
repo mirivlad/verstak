@@ -206,7 +206,7 @@ import importStyle from '../../../../../verstak-official-plugins/plugins/import/
         permissions: ['events.subscribe', 'storage.namespace', 'ui.register', 'commands.register'],
         frontend: { entry: 'frontend/dist/index.js' },
         contributes: {
-          commands: [{ id: 'verstak.activity.suggestWorklog', title: 'List Possible Journal Entries', handler: 'verstak.activity.suggestWorklog' }],
+          commands: [{ id: 'verstak.activity.suggestWorklog', title: 'List Possible Journal Entries', handler: 'verstak.activity.suggestWorklog' }, { id: 'verstak.activity.listBrowserActivity', title: 'List Browser Activity', handler: 'verstak.activity.listBrowserActivity' }, { id: 'verstak.activity.assignBrowserActivity', title: 'Attach Browser Activity to a Deal', handler: 'verstak.activity.assignBrowserActivity' }],
           worklogProviders: [{ id: 'verstak.activity.worklog', label: 'Activity', handler: 'verstak.activity.suggestWorklog' }],
           views: [{ id: 'verstak.activity.view', title: 'Activity', icon: 'activity', component: 'ActivityView' }],
           sidebarItems: [{ id: 'verstak.activity.sidebar', title: 'Activity', icon: 'activity', view: 'verstak.activity.view', position: 20 }],
@@ -4643,7 +4643,7 @@ function cloneJson(value) {
             permissions: ['events.subscribe', 'storage.namespace', 'ui.register', 'commands.register'],
             frontend: { entry: 'frontend/dist/index.js' },
             contributes: {
-              commands: [{ id: 'verstak.activity.suggestWorklog', title: 'List Possible Journal Entries', handler: 'verstak.activity.suggestWorklog' }],
+              commands: [{ id: 'verstak.activity.suggestWorklog', title: 'List Possible Journal Entries', handler: 'verstak.activity.suggestWorklog' }, { id: 'verstak.activity.listBrowserActivity', title: 'List Browser Activity', handler: 'verstak.activity.listBrowserActivity' }, { id: 'verstak.activity.assignBrowserActivity', title: 'Attach Browser Activity to a Deal', handler: 'verstak.activity.assignBrowserActivity' }],
               worklogProviders: [{ id: 'verstak.activity.worklog', label: 'Activity', handler: 'verstak.activity.suggestWorklog' }],
               views: [{ id: 'verstak.activity.view', title: 'Activity', icon: 'activity', component: 'ActivityView' }],
               sidebarItems: [{ id: 'verstak.activity.sidebar', title: 'Activity', icon: 'activity', view: 'verstak.activity.view', position: 20 }],
