@@ -4,6 +4,7 @@ import { matchesShortcut } from '../ui/shortcuts.js';
 import { registerNavigationHandler } from '../shell/navigation-handlers.js';
 
 window.__VERSTAK_PLUGIN_REGISTRY__ = window.__VERSTAK_PLUGIN_REGISTRY__ || {};
+window.__VERSTAK_PLUGIN_BUNDLES__ = window.__VERSTAK_PLUGIN_BUNDLES__ || {};
 window.__VERSTAK_EVENT_HANDLERS__ = window.__VERSTAK_EVENT_HANDLERS__ || {};
 window.__VERSTAK_COMMAND_HANDLERS__ = window.__VERSTAK_COMMAND_HANDLERS__ || {};
 
@@ -15,6 +16,9 @@ if (!window.VerstakPluginRegister) {
     }
     console.log('[VerstakPluginRegister] registered:', pluginId, Object.keys(bundle.components));
     window.__VERSTAK_PLUGIN_REGISTRY__[pluginId] = bundle.components;
+    // The whole bundle is kept, not just its components: activate() lives
+    // beside them and has to survive the moment of registration.
+    window.__VERSTAK_PLUGIN_BUNDLES__[pluginId] = bundle;
   };
 }
 
@@ -234,6 +238,105 @@ export async function acquirePluginStyle(pluginId, stylePath) {
   };
 }
 
+window.__VERSTAK_PLUGIN_BUNDLE_LOADS__ = window.__VERSTAK_PLUGIN_BUNDLE_LOADS__ || {};
+window.__VERSTAK_PLUGIN_ACTIVATIONS__ = window.__VERSTAK_PLUGIN_ACTIVATIONS__ || {};
+
+function bundleFailure(code, message, info) {
+  const error = new Error(message);
+  error.code = code;
+  if (info) error.info = info;
+  return error;
+}
+
+async function executePluginBundle(pluginId, entry) {
+  const [content, assetError] = unpack(await App.GetPluginAssetContent(pluginId, entry));
+  if (assetError || !content) {
+    throw bundleFailure('asset', assetError || 'plugin bundle is empty');
+  }
+  try {
+    // Executed through the Function constructor rather than eval: the bundle
+    // gets the global scope and nothing of ours.
+    const fn = new Function(content);
+    fn();
+  } catch (e) {
+    throw bundleFailure('execution', e && e.message ? e.message : String(e));
+  }
+  if (!window.__VERSTAK_PLUGIN_REGISTRY__[pluginId]) {
+    throw bundleFailure('registration', 'plugin bundle registered no components');
+  }
+}
+
+// Loads and runs a plugin's frontend bundle once, whatever asked for it first.
+// Two views of the same plugin can open at the same moment, and a command can
+// arrive while a view is still loading -- all of them wait on one execution.
+export async function loadPluginBundle(pluginId) {
+  if (!pluginId) {
+    throw bundleFailure('invalid', 'loadPluginBundle requires pluginId');
+  }
+  const info = await App.GetPluginFrontendInfo(pluginId);
+  if (!info || info.status === 'no-frontend' || info.status === 'not-found' || !info.entry) {
+    const code = info && info.status === 'not-found' ? 'not-found' : 'no-frontend';
+    throw bundleFailure(code, 'plugin has no frontend to load');
+  }
+  if (!window.__VERSTAK_PLUGIN_REGISTRY__[pluginId]) {
+    const loads = window.__VERSTAK_PLUGIN_BUNDLE_LOADS__;
+    if (!loads[pluginId]) {
+      loads[pluginId] = executePluginBundle(pluginId, info.entry);
+      loads[pluginId].catch(function() {
+        // A failed load must not be remembered as done: reopening the view is
+        // how a user retries.
+        delete loads[pluginId];
+      });
+    }
+    try {
+      await loads[pluginId];
+    } catch (error) {
+      if (error && !error.info) error.info = info;
+      throw error;
+    }
+  }
+  return {
+    info: info,
+    components: window.__VERSTAK_PLUGIN_REGISTRY__[pluginId],
+    bundle: window.__VERSTAK_PLUGIN_BUNDLES__[pluginId] || null
+  };
+}
+
+// A plugin can be asked for something with none of its views on screen: the
+// Journal asks Activity for possible entries while the user is looking at the
+// Journal. Handlers registered from mount() exist only while that view is
+// mounted, so a bundle may declare activate(api), which runs once and stays for
+// as long as the app does.
+export function activatePlugin(pluginId) {
+  const activations = window.__VERSTAK_PLUGIN_ACTIVATIONS__;
+  if (activations[pluginId]) return activations[pluginId];
+  const activation = loadPluginBundle(pluginId).then(function(loaded) {
+    const bundle = loaded && loaded.bundle;
+    if (!bundle || typeof bundle.activate !== 'function') return null;
+    const api = createPluginAPI(pluginId);
+    return Promise.resolve(bundle.activate(api)).then(function() {
+      return api;
+    });
+  });
+  activations[pluginId] = activation;
+  activation.catch(function() {
+    if (activations[pluginId] === activation) delete activations[pluginId];
+  });
+  return activation;
+}
+
+// Drops every background activation. Used when the plugin set itself changes.
+export function deactivatePlugins() {
+  const activations = window.__VERSTAK_PLUGIN_ACTIVATIONS__;
+  Object.keys(activations).forEach(function(pluginId) {
+    const activation = activations[pluginId];
+    delete activations[pluginId];
+    Promise.resolve(activation).then(function(api) {
+      if (api && typeof api.dispose === 'function') api.dispose();
+    }).catch(function() {});
+  });
+}
+
 function commandKey(pluginId, commandId) {
   return pluginId + ':' + commandId;
 }
@@ -248,7 +351,18 @@ export async function executePluginCommand(pluginId, cmdId, args) {
   const declared = await callBackend(pluginId, 'commands.execute(' + cmdId + ')', function() {
     return App.ExecutePluginCommand(pluginId, cmdId, args || {});
   });
-  const handler = window.__VERSTAK_COMMAND_HANDLERS__[commandKey(pluginId, cmdId)];
+  const key = commandKey(pluginId, cmdId);
+  let handler = window.__VERSTAK_COMMAND_HANDLERS__[key];
+  if (!handler) {
+    // The command is declared, so the plugin providing it may simply not be on
+    // screen. Give it its chance to register before calling it unhandled.
+    try {
+      await activatePlugin(pluginId);
+    } catch (e) {
+      console.warn('[VerstakPluginAPI] activation for ' + pluginId + ' failed:', e);
+    }
+    handler = window.__VERSTAK_COMMAND_HANDLERS__[key];
+  }
   if (!handler) {
     throw new Error('[plugin:' + pluginId + '] commands.execute(' + cmdId + ') failed: declared-but-unhandled');
   }
@@ -852,9 +966,15 @@ export function createPluginAPI(pluginId) {
     contributions: {
       list: async function(point) {
         assertActive('contributions.list');
-        const summary = await callBackend(pluginId, 'contributions.list', function() {
+        const raw = await callBackend(pluginId, 'contributions.list', function() {
           return App.GetContributions();
         });
+        // A plugin showing another plugin's contribution shows its label to the
+        // user, so it has to arrive in the user's language -- the shell does
+        // this for its own menus and the same has to hold here.
+        const summary = typeof i18n.localizeContributionSummary === 'function'
+          ? i18n.localizeContributionSummary(raw)
+          : raw;
         if (!point) {
           return summary || {};
         }

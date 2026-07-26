@@ -21,6 +21,7 @@ type Registry struct {
 	contextMenus      []ContributionContextMenuEntry
 	searchProviders   []ContributionSearchProvider
 	activityProviders []ContributionActivityProvider
+	worklogProviders  []ContributionWorklogProvider
 	statusBarItems    []ContributionStatusBarItem
 	openProviders     []ContributionOpenProvider
 	workspaceItems    []ContributionWorkspaceItem
@@ -39,6 +40,7 @@ const (
 	PointContextMenus    ContributionPointType = "contextMenus"
 	PointSearchProviders ContributionPointType = "searchProviders"
 	PointActivity        ContributionPointType = "activityProviders"
+	PointWorklog         ContributionPointType = "worklogProviders"
 	PointStatusBar       ContributionPointType = "statusBarItems"
 	PointOpenProviders   ContributionPointType = "openProviders"
 	PointWorkspaceItems  ContributionPointType = "workspaceItems"
@@ -85,6 +87,10 @@ func (r *Registry) ListByPoint(point ContributionPointType) []interface{} {
 		}
 	case PointActivity:
 		for _, v := range r.activityProviders {
+			result = append(result, v)
+		}
+	case PointWorklog:
+		for _, v := range r.worklogProviders {
 			result = append(result, v)
 		}
 	case PointStatusBar:
@@ -143,6 +149,11 @@ type ContributionActivityProvider struct {
 	Item     plugin.ContributionActivityProvider `json:"item"`
 }
 
+type ContributionWorklogProvider struct {
+	PluginID string                             `json:"pluginId"`
+	Item     plugin.ContributionWorklogProvider `json:"item"`
+}
+
 type ContributionStatusBarItem struct {
 	PluginID string                           `json:"pluginId"`
 	Item     plugin.ContributionStatusBarItem `json:"item"`
@@ -181,6 +192,7 @@ func (r *Registry) Register(pluginID string, c *plugin.Contributions) {
 	r.contextMenus = removeContextMenus(r.contextMenus, pluginID)
 	r.searchProviders = removeSearchProviders(r.searchProviders, pluginID)
 	r.activityProviders = removeActivityProviders(r.activityProviders, pluginID)
+	r.worklogProviders = removeWorklogProviders(r.worklogProviders, pluginID)
 	r.statusBarItems = removeStatusBarItems(r.statusBarItems, pluginID)
 	r.openProviders = removeOpenProviders(r.openProviders, pluginID)
 	r.workspaceItems = removeWorkspaceItems(r.workspaceItems, pluginID)
@@ -212,6 +224,9 @@ func (r *Registry) Register(pluginID string, c *plugin.Contributions) {
 	for _, item := range c.ActivityProviders {
 		r.activityProviders = append(r.activityProviders, ContributionActivityProvider{PluginID: pluginID, Item: item})
 	}
+	for _, item := range c.WorklogProviders {
+		r.worklogProviders = append(r.worklogProviders, ContributionWorklogProvider{PluginID: pluginID, Item: item})
+	}
 	for _, item := range c.StatusBarItems {
 		r.statusBarItems = append(r.statusBarItems, ContributionStatusBarItem{PluginID: pluginID, Item: item})
 	}
@@ -237,6 +252,7 @@ func (r *Registry) Unregister(pluginID string) {
 	r.contextMenus = removeContextMenus(r.contextMenus, pluginID)
 	r.searchProviders = removeSearchProviders(r.searchProviders, pluginID)
 	r.activityProviders = removeActivityProviders(r.activityProviders, pluginID)
+	r.worklogProviders = removeWorklogProviders(r.worklogProviders, pluginID)
 	r.statusBarItems = removeStatusBarItems(r.statusBarItems, pluginID)
 	r.openProviders = removeOpenProviders(r.openProviders, pluginID)
 	r.workspaceItems = removeWorkspaceItems(r.workspaceItems, pluginID)
@@ -339,6 +355,20 @@ func (r *Registry) ActivityProviders() []ContributionActivityProvider {
 	return result
 }
 
+func (r *Registry) WorklogProviders() []ContributionWorklogProvider {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	result := make([]ContributionWorklogProvider, len(r.worklogProviders))
+	copy(result, r.worklogProviders)
+	sort.Slice(result, func(i, j int) bool {
+		if result[i].PluginID != result[j].PluginID {
+			return result[i].PluginID < result[j].PluginID
+		}
+		return result[i].Item.ID < result[j].Item.ID
+	})
+	return result
+}
+
 func (r *Registry) OpenProviders() []ContributionOpenProvider {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -431,6 +461,16 @@ func removeContextMenus(items []ContributionContextMenuEntry, pluginID string) [
 
 func removeSearchProviders(items []ContributionSearchProvider, pluginID string) []ContributionSearchProvider {
 	var result []ContributionSearchProvider
+	for _, item := range items {
+		if item.PluginID != pluginID {
+			result = append(result, item)
+		}
+	}
+	return result
+}
+
+func removeWorklogProviders(items []ContributionWorklogProvider, pluginID string) []ContributionWorklogProvider {
+	var result []ContributionWorklogProvider
 	for _, item := range items {
 		if item.PluginID != pluginID {
 			result = append(result, item)

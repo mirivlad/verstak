@@ -948,6 +948,14 @@ type FlatSearchProvider struct {
 	Handler  string `json:"handler"`
 }
 
+// FlatWorklogProvider is a plugin that can propose journal entries.
+type FlatWorklogProvider struct {
+	PluginID string `json:"pluginId"`
+	ID       string `json:"id"`
+	Label    string `json:"label"`
+	Handler  string `json:"handler"`
+}
+
 type FlatStatusBarItem struct {
 	PluginID string `json:"pluginId"`
 	ID       string `json:"id"`
@@ -1006,6 +1014,7 @@ type ContributionSummary struct {
 	Views              []FlatView             `json:"views"`
 	Commands           []FlatCommand          `json:"commands"`
 	SearchProviders    []FlatSearchProvider   `json:"searchProviders"`
+	WorklogProviders   []FlatWorklogProvider  `json:"worklogProviders"`
 	SettingsPanels     []FlatSettingsPanel    `json:"settingsPanels"`
 	SidebarItems       []FlatSidebarItem      `json:"sidebarItems"`
 	StatusBarItems     []FlatStatusBarItem    `json:"statusBarItems"`
@@ -1024,6 +1033,7 @@ func buildContributionSummary(r *contribution.Registry) ContributionSummary {
 	regViews := r.Views()
 	regCmds := r.Commands()
 	regSearchProviders := r.SearchProviders()
+	regWorklogProviders := r.WorklogProviders()
 	regPanels := r.SettingsPanels()
 	regSidebar := r.SidebarItems()
 	regStatusBar := r.StatusBarItems()
@@ -1044,6 +1054,10 @@ func buildContributionSummary(r *contribution.Registry) ContributionSummary {
 	searchProviders := make([]FlatSearchProvider, len(regSearchProviders))
 	for i, v := range regSearchProviders {
 		searchProviders[i] = FlatSearchProvider{PluginID: v.PluginID, ID: v.Item.ID, Label: v.Item.Label, Handler: v.Item.Handler}
+	}
+	worklogProviders := make([]FlatWorklogProvider, len(regWorklogProviders))
+	for i, v := range regWorklogProviders {
+		worklogProviders[i] = FlatWorklogProvider{PluginID: v.PluginID, ID: v.Item.ID, Label: v.Item.Label, Handler: v.Item.Handler}
 	}
 	panels := make([]FlatSettingsPanel, len(regPanels))
 	for i, v := range regPanels {
@@ -1088,7 +1102,7 @@ func buildContributionSummary(r *contribution.Registry) ContributionSummary {
 	for i, v := range regContextMenus {
 		contextMenus[i] = FlatContextMenuEntry{PluginID: v.PluginID, ID: v.Item.ID, Label: v.Item.Label, Context: v.Item.Context, Group: v.Item.Group, Capability: v.Item.Capability, Handler: v.Item.Handler}
 	}
-	return ContributionSummary{Views: views, Commands: cmds, SearchProviders: searchProviders, SettingsPanels: panels, SidebarItems: sidebar, StatusBarItems: statusBarItems, OpenProviders: openProviders, WorkspaceItems: workspaceItems, FileActions: fileActions, NoteActions: noteActions, ContextMenuEntries: contextMenus}
+	return ContributionSummary{Views: views, Commands: cmds, SearchProviders: searchProviders, WorklogProviders: worklogProviders, SettingsPanels: panels, SidebarItems: sidebar, StatusBarItems: statusBarItems, OpenProviders: openProviders, WorkspaceItems: workspaceItems, FileActions: fileActions, NoteActions: noteActions, ContextMenuEntries: contextMenus}
 }
 
 // GetContributions returns all registered contributions flattened for the frontend.

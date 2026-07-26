@@ -183,6 +183,7 @@ func TestListByPoint(t *testing.T) {
 		ContextMenuEntries: []plugin.ContributionContextMenuEntry{{ID: "cm1", Label: "CM1", Context: "file"}},
 		SearchProviders:    []plugin.ContributionSearchProvider{{ID: "sp1", Label: "SP1", Handler: "h"}},
 		ActivityProviders:  []plugin.ContributionActivityProvider{{ID: "ap1", Events: []string{"test"}, Handler: "h"}},
+		WorklogProviders:   []plugin.ContributionWorklogProvider{{ID: "wp1", Label: "WP1", Handler: "h"}},
 		StatusBarItems:     []plugin.ContributionStatusBarItem{{ID: "sb1", Label: "SB1"}},
 		OpenProviders: []plugin.ContributionOpenProvider{{
 			ID:        "op1",
@@ -212,6 +213,7 @@ func TestListByPoint(t *testing.T) {
 		{PointContextMenus, 1},
 		{PointSearchProviders, 1},
 		{PointActivity, 1},
+		{PointWorklog, 1},
 		{PointStatusBar, 1},
 		{PointOpenProviders, 1},
 	}

@@ -1,7 +1,7 @@
 <script>
   import { onDestroy, onMount } from 'svelte';
   import * as App from '../../../wailsjs/go/api/App';
-  import { acquirePluginStyle, createPluginAPI } from './VerstakPluginAPI.js';
+  import { acquirePluginStyle, createPluginAPI, loadPluginBundle } from './VerstakPluginAPI.js';
   import { i18n } from '../i18n/index.js';
 
   export let pluginId;
@@ -31,11 +31,6 @@
     cleanup();
   });
 
-  function unpack(result) {
-    if (Array.isArray(result) && result.length === 2) return { value: result[0], error: result[1] || '' };
-    return { value: result, error: '' };
-  }
-
   function cleanup() {
     if (!current) return;
     try { current.component?.unmount?.(container); } catch (_) {}
@@ -53,17 +48,9 @@
 
     let releaseStyle = null;
     try {
-      const info = await App.GetPluginFrontendInfo(nextPluginId);
-      if (!info?.entry) throw new Error('plugin frontend is unavailable');
-      releaseStyle = await acquirePluginStyle(nextPluginId, info.style);
-      let registry = window.__VERSTAK_PLUGIN_REGISTRY__ || {};
-      if (!registry[nextPluginId]) {
-        const asset = unpack(await App.GetPluginAssetContent(nextPluginId, info.entry));
-        if (asset.error || !asset.value) throw new Error(asset.error || 'plugin bundle is empty');
-        new Function(asset.value)();
-        registry = window.__VERSTAK_PLUGIN_REGISTRY__ || {};
-      }
-      const component = registry[nextPluginId]?.[nextHandler];
+      const loaded = await loadPluginBundle(nextPluginId);
+      releaseStyle = await acquirePluginStyle(nextPluginId, loaded.info.style);
+      const component = loaded.components?.[nextHandler];
       if (!component?.mount) throw new Error(`component ${nextHandler} is unavailable`);
       if (run !== sequence) {
         releaseStyle();
