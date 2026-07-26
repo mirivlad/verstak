@@ -206,6 +206,47 @@ Icon fields use shell icon names rendered through the bundled Lucide SVG wrapper
 | Провайдеры поиска | `searchProviders` | Search provider discovery | ✅ Contribution summary + Search plugin |
 | Провайдеры активности | `activityProviders` | Activity event subscriptions | ✅ Backend activity recorder |
 | Элементы status bar | `statusBarItems` | Status bar labels/actions | ✅ StatusBar.svelte host |
+| Инструменты Дела | `workspaceItems` | Вкладки внутри Дела | ✅ WorkspaceHost.svelte |
+
+### Порядок вкладок Дела
+
+`workspaceItems[].order` — целое число, задающее место инструмента среди вкладок
+Дела. Меньшее идёт раньше; инструмент без `order` встаёт после тех, у кого он
+есть, затем по названию. Вкладка Overview принадлежит оболочке и всегда первая.
+
+Раньше порядок задавала таблица в `WorkspaceHost.svelte`, сопоставлявшая
+подстроки имён плагинов с рангами. Это означало, что любой сторонний
+инструмент попадал в конец, а изменение порядка официальных требовало правки
+ядра. Порядок принадлежит инструменту, а не оболочке.
+
+Значения официальных плагинов: Notes 10, Files 20, Todo 30, Activity 40,
+Browser inbox 50, Secrets 60, Journal 70, Search 90. Промежутки оставлены
+намеренно, чтобы вставить инструмент между двумя существующими не требовало
+трогать остальные.
+
+### Навигация назад и вперёд
+
+Инструмент, у которого есть собственная история — файловый менеджер, ходящий
+по папкам, — регистрирует обработчик:
+
+```js
+const unregister = api.navigation.registerHandler({
+  canGoBack: () => Boolean(currentFolder),
+  goBack: () => goUp(),
+  canGoForward: () => historyIndex < history.length - 1,
+  goForward: () => goForward(),
+});
+```
+
+Оболочка предлагает запрос инструменту, который сейчас на экране. Если
+`canGo*` вернёт ложь или обработчик не зарегистрирован, оболочка двигает
+собственную историю видов. Обработчик, бросивший исключение, считается
+отказавшимся: сломанный плагин не должен ломать навигацию приложения.
+
+До этого оболочка искала кнопки конкретного плагина в DOM
+(`document.querySelector('[data-files-action="up"]')`). Переименование
+атрибута молча ломало навигацию, и ни один другой плагин не мог в ней
+участвовать.
 
 ### Планируемые contribution points
 

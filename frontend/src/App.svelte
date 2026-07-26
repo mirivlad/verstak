@@ -9,6 +9,7 @@
   import VaultSelection from './lib/shell/VaultSelection.svelte';
   import WorkbenchHost from './lib/shell/WorkbenchHost.svelte';
   import WorkspaceHost from './lib/shell/WorkspaceHost.svelte';
+  import { offerNavigation } from './lib/shell/navigation-handlers.js';
   import * as App from '../wailsjs/go/api/App';
   import { debug } from './lib/log/debug.js';
   import { onDestroy, onMount, tick } from 'svelte';
@@ -45,6 +46,7 @@
   let selectedWorkspaceName = '';
   let selectedWorkspaceId = '';
   let activeWorkspaceToolKey = '';
+  let activeWorkspaceToolPluginId = '';
   let navigationStack = [];
   let navigationIndex = -1;
   let applyingNavigation = false;
@@ -305,6 +307,7 @@
 
   function onWorkspaceToolSelected(e) {
     activeWorkspaceToolKey = e.detail?.toolKey || '';
+    activeWorkspaceToolPluginId = e.detail?.pluginId || '';
     if (currentView === 'workspace') pushNavigation();
   }
 
@@ -333,28 +336,23 @@
     activeSettingsPanelId = '';
   }
 
+  // The tool on screen gets first refusal on back and forward: inside a file
+  // browser they mean the folder history, not the shell's view history. Only
+  // when it declines does the shell move its own history.
   function onNavigateBack(e) {
     if (currentView === 'workbench') return;
-    if (currentView === 'workspace') {
-      const upBtn = document.querySelector('[data-files-action="up"]');
-      if (upBtn && !upBtn.disabled) {
-        upBtn.click();
-        e?.preventDefault?.();
-        return;
-      }
+    if (currentView === 'workspace' && offerNavigation(activeWorkspaceToolPluginId, 'back')) {
+      e?.preventDefault?.();
+      return;
     }
     if (navigateBack()) e?.preventDefault?.();
   }
 
   function onNavigateForward(e) {
     if (currentView === 'workbench') return;
-    if (currentView === 'workspace') {
-      const fwdBtn = document.querySelector('[data-files-action="forward"]');
-      if (fwdBtn && !fwdBtn.disabled) {
-        fwdBtn.click();
-        e?.preventDefault?.();
-        return;
-      }
+    if (currentView === 'workspace' && offerNavigation(activeWorkspaceToolPluginId, 'forward')) {
+      e?.preventDefault?.();
+      return;
     }
     if (navigateForward()) e?.preventDefault?.();
   }
@@ -382,33 +380,46 @@
     contentTitleIcon = e.detail?.icon || '';
   }
 
-  // Listen for events
-  if (typeof window !== 'undefined') {
-    window.addEventListener('verstak:vault-opened', onVaultOpened);
-    window.addEventListener('verstak:nav', onNav);
-    window.addEventListener('verstak:open-view', onOpenView);
-    window.addEventListener('verstak:open-settings', onOpenSettings);
-    window.addEventListener('verstak:close-settings', onCloseSettings);
-    window.addEventListener('verstak:workbench-opened', onWorkbenchOpened);
-    window.addEventListener('verstak:workspace-selected', onWorkspaceSelected);
-    window.addEventListener('verstak:workspace-tool-selected', onWorkspaceToolSelected);
-    window.addEventListener('verstak:navigate-back', onNavigateBack);
-    window.addEventListener('verstak:navigate-forward', onNavigateForward);
-    window.addEventListener('verstak:close-workbench', onCloseWorkbench);
-    window.addEventListener('verstak:content-title-changed', onContentTitleChanged);
-    window.addEventListener('keydown', onGlobalKeydown);
-    window.addEventListener('pointerdown', onGlobalMouse, true);
-    window.addEventListener('mousedown', onGlobalMouse, true);
-    window.addEventListener('mouseup', onGlobalMouse, true);
-    window.addEventListener('auxclick', onGlobalMouse, true);
-  }
+  // Registered on mount and removed on destroy, as a pair. They used to be
+  // added during component initialisation with no matching removal: harmless
+  // while the shell is the only App there will ever be, but it meant every test
+  // that mounted App left another live copy of these handlers behind, so one
+  // keystroke ran the shell's navigation several times over.
+  const windowListeners = [
+    ['verstak:vault-opened', onVaultOpened, false],
+    ['verstak:nav', onNav, false],
+    ['verstak:open-view', onOpenView, false],
+    ['verstak:open-settings', onOpenSettings, false],
+    ['verstak:close-settings', onCloseSettings, false],
+    ['verstak:workbench-opened', onWorkbenchOpened, false],
+    ['verstak:workspace-selected', onWorkspaceSelected, false],
+    ['verstak:workspace-tool-selected', onWorkspaceToolSelected, false],
+    ['verstak:navigate-back', onNavigateBack, false],
+    ['verstak:navigate-forward', onNavigateForward, false],
+    ['verstak:close-workbench', onCloseWorkbench, false],
+    ['verstak:content-title-changed', onContentTitleChanged, false],
+    ['keydown', onGlobalKeydown, false],
+    ['pointerdown', onGlobalMouse, true],
+    ['mousedown', onGlobalMouse, true],
+    ['mouseup', onGlobalMouse, true],
+    ['auxclick', onGlobalMouse, true],
+  ];
 
   onMount(async () => {
+    for (const [name, handler, capture] of windowListeners) {
+      window.addEventListener(name, handler, capture);
+    }
     await checkVault();
     pushNavigation();
   });
 
-  onDestroy(unsubscribeLocale);
+  onDestroy(() => {
+    unsubscribeLocale();
+    if (typeof window === 'undefined') return;
+    for (const [name, handler, capture] of windowListeners) {
+      window.removeEventListener(name, handler, capture);
+    }
+  });
 </script>
 
 {#if loading}

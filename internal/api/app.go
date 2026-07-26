@@ -978,6 +978,7 @@ type FlatWorkspaceItem struct {
 	ID        string `json:"id"`
 	Title     string `json:"title"`
 	Icon      string `json:"icon,omitempty"`
+	Order     int    `json:"order,omitempty"`
 	Component string `json:"component"`
 }
 
@@ -1073,7 +1074,7 @@ func buildContributionSummary(r *contribution.Registry) ContributionSummary {
 	}
 	workspaceItems := make([]FlatWorkspaceItem, len(regWorkspaceItems))
 	for i, v := range regWorkspaceItems {
-		workspaceItems[i] = FlatWorkspaceItem{PluginID: v.PluginID, ID: v.Item.ID, Title: v.Item.Title, Icon: v.Item.Icon, Component: v.Item.Component}
+		workspaceItems[i] = FlatWorkspaceItem{PluginID: v.PluginID, ID: v.Item.ID, Title: v.Item.Title, Icon: v.Item.Icon, Order: v.Item.Order, Component: v.Item.Component}
 	}
 	fileActions := make([]FlatAction, len(regFileActions))
 	for i, v := range regFileActions {

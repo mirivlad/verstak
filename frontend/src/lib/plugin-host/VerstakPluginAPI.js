@@ -1,6 +1,7 @@
 import * as App from '../../../wailsjs/go/api/App';
 import { i18n } from '../i18n/index.js';
 import { matchesShortcut } from '../ui/shortcuts.js';
+import { registerNavigationHandler } from '../shell/navigation-handlers.js';
 
 window.__VERSTAK_PLUGIN_REGISTRY__ = window.__VERSTAK_PLUGIN_REGISTRY__ || {};
 window.__VERSTAK_EVENT_HANDLERS__ = window.__VERSTAK_EVENT_HANDLERS__ || {};
@@ -340,6 +341,16 @@ export function createPluginAPI(pluginId) {
           throw new Error('i18n.onDidChangeLocale requires a listener function');
         }
         return trackCleanup(i18n.subscribe(listener));
+      }
+    },
+
+    navigation: {
+      // Back and forward reach whatever is on screen first. A plugin that keeps
+      // its own history — a file browser walking folders — says so here instead
+      // of the shell hunting for its buttons in the DOM.
+      registerHandler: function(handler) {
+        assertActive('navigation.registerHandler');
+        return trackCleanup(registerNavigationHandler(pluginId, handler));
       }
     },
 

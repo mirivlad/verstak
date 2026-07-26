@@ -136,7 +136,7 @@ import importStyle from '../../../../../verstak-official-plugins/plugins/import/
         frontend: { entry: 'frontend/dist/index.js' },
     contributes: {
       views: [{ id: 'verstak.files.view', title: 'Files', icon: 'folder', component: 'FilesView' }],
-      workspaceItems: [{ id: 'verstak.files.workspace', title: 'Files', icon: 'folder', component: 'FilesView' }]
+      workspaceItems: [{ id: 'verstak.files.workspace', title: 'Files', icon: 'folder', order: 20, component: 'FilesView' }]
     }
       },
       rootPath: '/tmp/verstak-test/plugins/files',
@@ -160,7 +160,7 @@ import importStyle from '../../../../../verstak-official-plugins/plugins/import/
         permissions: ['files.read', 'files.write', 'files.delete', 'events.subscribe', 'workbench.open', 'ui.register'],
         frontend: { entry: 'frontend/dist/index.js' },
         contributes: {
-          workspaceItems: [{ id: 'verstak.notes.workspace', title: 'Notes', icon: 'edit', component: 'NotesView' }]
+          workspaceItems: [{ id: 'verstak.notes.workspace', title: 'Notes', icon: 'edit', order: 10, component: 'NotesView' }]
         }
       },
       rootPath: '/tmp/verstak-test/plugins/notes',
@@ -208,7 +208,7 @@ import importStyle from '../../../../../verstak-official-plugins/plugins/import/
         contributes: {
           views: [{ id: 'verstak.activity.view', title: 'Activity', icon: 'activity', component: 'ActivityView' }],
           sidebarItems: [{ id: 'verstak.activity.sidebar', title: 'Activity', icon: 'activity', view: 'verstak.activity.view', position: 20 }],
-          workspaceItems: [{ id: 'verstak.activity.workspace', title: 'Activity', icon: 'activity', component: 'ActivityView' }]
+          workspaceItems: [{ id: 'verstak.activity.workspace', title: 'Activity', icon: 'activity', order: 40, component: 'ActivityView' }]
         }
       },
       rootPath: '/tmp/verstak-test/plugins/activity',
@@ -232,7 +232,7 @@ import importStyle from '../../../../../verstak-official-plugins/plugins/import/
         contributes: {
           views: [{ id: 'verstak.journal.view', title: 'Journal', icon: 'book-open', component: 'JournalView' }],
           sidebarItems: [{ id: 'verstak.journal.sidebar', title: 'Journal', icon: 'book-open', view: 'verstak.journal.view', position: 30 }],
-          workspaceItems: [{ id: 'verstak.journal.workspace', title: 'Journal', icon: 'book-open', component: 'JournalView' }]
+          workspaceItems: [{ id: 'verstak.journal.workspace', title: 'Journal', icon: 'book-open', order: 70, component: 'JournalView' }]
         }
       },
       rootPath: '/tmp/verstak-test/plugins/journal',
@@ -256,7 +256,7 @@ import importStyle from '../../../../../verstak-official-plugins/plugins/import/
         contributes: {
           views: [{ id: 'verstak.browser-inbox.view', title: 'Browser', icon: 'inbox', component: 'BrowserInboxView' }],
           sidebarItems: [{ id: 'verstak.browser-inbox.sidebar', title: 'Browser', icon: 'inbox', view: 'verstak.browser-inbox.view', position: 30 }],
-          workspaceItems: [{ id: 'verstak.browser-inbox.workspace', title: 'Browser', icon: 'inbox', component: 'BrowserInboxView' }]
+          workspaceItems: [{ id: 'verstak.browser-inbox.workspace', title: 'Browser', icon: 'inbox', order: 50, component: 'BrowserInboxView' }]
         }
       },
       rootPath: '/tmp/verstak-test/plugins/browser-inbox',
@@ -282,7 +282,7 @@ import importStyle from '../../../../../verstak-official-plugins/plugins/import/
         permissions: ['files.read', 'workbench.open', 'storage.namespace', 'ui.register', 'events.subscribe', 'commands.register'],
         frontend: { entry: 'frontend/dist/index.js' },
         contributes: {
-          workspaceItems: [{ id: 'verstak.search.workspace', title: 'Search', icon: 'search', component: 'SearchView' }],
+          workspaceItems: [{ id: 'verstak.search.workspace', title: 'Search', icon: 'search', order: 90, component: 'SearchView' }],
           commands: [{ id: 'verstak.search.searchVaultText', title: 'Search Vault Text', handler: 'verstak.search.searchVaultText' }],
           searchProviders: [{ id: 'verstak.search.vault-text', label: 'Vault Text Search', handler: 'verstak.search.searchVaultText' }]
         }
@@ -631,7 +631,7 @@ function cloneJson(value) {
         contributes: {
           views: [{ id: 'verstak.todo.view', title: 'Todos', icon: 'list-todo', component: 'TodoView' }],
           sidebarItems: [{ id: 'verstak.todo.sidebar', title: 'Todos', icon: 'list-todo', view: 'verstak.todo.view', position: 35 }],
-          workspaceItems: [{ id: 'verstak.todo.workspace', title: 'Todos', icon: 'list-todo', component: 'TodoView' }]
+          workspaceItems: [{ id: 'verstak.todo.workspace', title: 'Todos', icon: 'list-todo', order: 30, component: 'TodoView' }]
         }
       },
       rootPath: '/tmp/verstak-test/plugins/todo',
@@ -665,7 +665,7 @@ function cloneJson(value) {
             component: 'SecretsView',
             supports: [{ kind: 'secret', modes: ['view'] }]
           }],
-          workspaceItems: [{ id: 'verstak.secrets.workspace', title: 'Secrets', icon: 'key-round', component: 'SecretsView' }]
+          workspaceItems: [{ id: 'verstak.secrets.workspace', title: 'Secrets', icon: 'key-round', order: 60, component: 'SecretsView' }]
         }
       },
       rootPath: '/tmp/verstak-test/plugins/secrets',
@@ -977,7 +977,16 @@ function cloneJson(value) {
       if (c.statusBarItems) c.statusBarItems.forEach(function (st) { statusBarItems.push(Object.assign({}, st, { pluginId: id })); });
       if (c.settingsPanels) c.settingsPanels.forEach(function (sp) { settingsPanels.push(Object.assign({}, sp, { pluginId: id })); });
       if (c.openProviders) c.openProviders.forEach(function (op) { openProviders.push(Object.assign({}, op, { pluginId: id })); });
-      if (c.workspaceItems) c.workspaceItems.forEach(function (wi) { workspaceItems.push(Object.assign({}, wi, { pluginId: id })); });
+      if (c.workspaceItems) c.workspaceItems.forEach(function (wi) {
+        var item = Object.assign({}, wi, { pluginId: id });
+        // Test seam: lets a spec change a plugin's declared tab order without
+        // rewriting the manifest fixtures.
+        var overrides = window.__VERSTAK_MOCK_TOOL_ORDER__;
+        if (overrides && Object.prototype.hasOwnProperty.call(overrides, id)) {
+          item.order = overrides[id];
+        }
+        workspaceItems.push(item);
+      });
     }
     return { views: views, commands: commands, searchProviders: searchProviders, sidebarItems: sidebarItems, statusBarItems: statusBarItems, settingsPanels: settingsPanels, openProviders: openProviders, workspaceItems: workspaceItems };
   }
@@ -4560,7 +4569,7 @@ function cloneJson(value) {
             frontend: { entry: 'frontend/dist/index.js' },
             contributes: {
               views: [{ id: 'verstak.files.view', title: 'Files', icon: 'folder', component: 'FilesView' }],
-              workspaceItems: [{ id: 'verstak.files.workspace', title: 'Files', icon: 'folder', component: 'FilesView' }]
+              workspaceItems: [{ id: 'verstak.files.workspace', title: 'Files', icon: 'folder', order: 20, component: 'FilesView' }]
             }
           },
           rootPath: '/tmp/verstak-test/plugins/files',
@@ -4584,7 +4593,7 @@ function cloneJson(value) {
             permissions: ['files.read', 'files.write', 'files.delete', 'events.subscribe', 'workbench.open', 'ui.register'],
             frontend: { entry: 'frontend/dist/index.js' },
             contributes: {
-              workspaceItems: [{ id: 'verstak.notes.workspace', title: 'Notes', icon: 'edit', component: 'NotesView' }]
+              workspaceItems: [{ id: 'verstak.notes.workspace', title: 'Notes', icon: 'edit', order: 10, component: 'NotesView' }]
             }
           },
           rootPath: '/tmp/verstak-test/plugins/notes',
@@ -4632,7 +4641,7 @@ function cloneJson(value) {
             contributes: {
               views: [{ id: 'verstak.activity.view', title: 'Activity', icon: 'activity', component: 'ActivityView' }],
               sidebarItems: [{ id: 'verstak.activity.sidebar', title: 'Activity', icon: 'activity', view: 'verstak.activity.view', position: 20 }],
-              workspaceItems: [{ id: 'verstak.activity.workspace', title: 'Activity', icon: 'activity', component: 'ActivityView' }]
+              workspaceItems: [{ id: 'verstak.activity.workspace', title: 'Activity', icon: 'activity', order: 40, component: 'ActivityView' }]
             }
           },
           rootPath: '/tmp/verstak-test/plugins/activity',
@@ -4656,7 +4665,7 @@ function cloneJson(value) {
             contributes: {
               views: [{ id: 'verstak.journal.view', title: 'Journal', icon: 'book-open', component: 'JournalView' }],
               sidebarItems: [{ id: 'verstak.journal.sidebar', title: 'Journal', icon: 'book-open', view: 'verstak.journal.view', position: 30 }],
-              workspaceItems: [{ id: 'verstak.journal.workspace', title: 'Journal', icon: 'book-open', component: 'JournalView' }]
+              workspaceItems: [{ id: 'verstak.journal.workspace', title: 'Journal', icon: 'book-open', order: 70, component: 'JournalView' }]
             }
           },
           rootPath: '/tmp/verstak-test/plugins/journal',
@@ -4680,7 +4689,7 @@ function cloneJson(value) {
             contributes: {
               views: [{ id: 'verstak.browser-inbox.view', title: 'Browser', icon: 'inbox', component: 'BrowserInboxView' }],
               sidebarItems: [{ id: 'verstak.browser-inbox.sidebar', title: 'Browser', icon: 'inbox', view: 'verstak.browser-inbox.view', position: 30 }],
-              workspaceItems: [{ id: 'verstak.browser-inbox.workspace', title: 'Browser', icon: 'inbox', component: 'BrowserInboxView' }]
+              workspaceItems: [{ id: 'verstak.browser-inbox.workspace', title: 'Browser', icon: 'inbox', order: 50, component: 'BrowserInboxView' }]
             }
           },
           rootPath: '/tmp/verstak-test/plugins/browser-inbox',
@@ -4706,7 +4715,7 @@ function cloneJson(value) {
             permissions: ['files.read', 'workbench.open', 'storage.namespace', 'ui.register', 'events.subscribe', 'commands.register'],
             frontend: { entry: 'frontend/dist/index.js' },
             contributes: {
-              workspaceItems: [{ id: 'verstak.search.workspace', title: 'Search', icon: 'search', component: 'SearchView' }],
+              workspaceItems: [{ id: 'verstak.search.workspace', title: 'Search', icon: 'search', order: 90, component: 'SearchView' }],
               commands: [{ id: 'verstak.search.searchVaultText', title: 'Search Vault Text', handler: 'verstak.search.searchVaultText' }],
               searchProviders: [{ id: 'verstak.search.vault-text', label: 'Vault Text Search', handler: 'verstak.search.searchVaultText' }]
             }

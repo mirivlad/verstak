@@ -13,6 +13,12 @@ function assertIncludes(source, needle, message) {
   }
 }
 
+function assertExcludes(source, needle, message) {
+  if (source.includes(needle)) {
+    throw new Error(message);
+  }
+}
+
 const workspaceHost = read('frontend/src/lib/shell/WorkspaceHost.svelte');
 const app = read('frontend/src/App.svelte');
 const statusBar = read('frontend/src/lib/shell/StatusBar.svelte');
@@ -27,13 +33,34 @@ assertIncludes(
 );
 assertIncludes(
   workspaceHost,
-  'toolOrder',
-  'WorkspaceHost should define usage-based workspace tool ordering'
+  'sortWorkspaceTools',
+  'WorkspaceHost should sort the workspace tool tabs'
 );
+// Where a tool sits belongs to the tool. A table of plugin names in the shell
+// makes third-party tools second-class and forces a core edit to reorder.
 assertIncludes(
   workspaceHost,
-  'sortWorkspaceTools',
-  'WorkspaceHost should sort workspace tools by expected usage'
+  'tool?.order',
+  'WorkspaceHost should take workspace tool order from each plugin manifest'
+);
+for (const pluginId of ['verstak.notes', 'verstak.todo', 'verstak.activity', 'verstak.secrets']) {
+  assertExcludes(
+    workspaceHost.slice(0, workspaceHost.indexOf('function filterWorkspaceTools')),
+    pluginId,
+    `WorkspaceHost should not rank workspace tools by hardcoded plugin id (${pluginId})`
+  );
+}
+// Back and forward are offered to the plugin on screen through the navigation
+// registry, not by finding its toolbar buttons in the DOM.
+assertIncludes(
+  app,
+  'offerNavigation(',
+  'App should route navigation requests through the navigation handler registry'
+);
+assertExcludes(
+  app,
+  'data-files-action',
+  'App should not reach into a specific plugin\'s DOM to navigate'
 );
 
 assertIncludes(
