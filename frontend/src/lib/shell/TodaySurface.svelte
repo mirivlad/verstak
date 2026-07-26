@@ -154,6 +154,31 @@
     });
   }
 
+  // Activity events belonging to this Deal, counted the way the Activity tool
+  // lists them.
+  //
+  // This used to also accept events with no Deal at all. Every globally scoped
+  // event — browser domain activity, of which there can be hundreds — was then
+  // counted into every Deal, so the Overview card claimed a number the Activity
+  // tool would never show: 184 against a list of 4, in one real vault. A visited
+  // domain is not activity in a Deal.
+  //
+  // The event id also has to be there and be unique, because that is what the
+  // Activity tool keys its list on and it drops the rest.
+  function activityRowsForWorkspace(records, workspace) {
+    const target = String(workspace || '').trim();
+    if (!target) return [];
+    const seen = new Set();
+    return normalizeRows(records).filter(item => {
+      const id = String(item.activityId || '').trim();
+      if (!id || seen.has(id)) return false;
+      const tagged = String(item.workspaceRootPath || item.workspaceName || item.workspaceNodeId || '').trim();
+      if (tagged !== target) return false;
+      seen.add(id);
+      return true;
+    });
+  }
+
   function browserCaptureRowsForWorkspace(settings) {
     const workspace = String(workspaceRootPath || '').trim();
     if (!workspace) return [];
@@ -564,10 +589,7 @@
     if (workspaceAtStart !== String(workspaceRootPath || '').trim() || toolKeyAtStart !== overviewToolKey) return;
 
     captures = toolState.browserInbox ? browserCaptureRowsForWorkspace(browserSettings) : [];
-    activityEvents = toolState.activity ? normalizeRows(activityRecords).filter(item => {
-      const tagged = String(item.workspaceRootPath || item.workspaceName || item.workspaceNodeId || '').trim();
-      return !tagged || tagged === workspaceAtStart;
-    }) : [];
+    activityEvents = toolState.activity ? activityRowsForWorkspace(activityRecords, workspaceAtStart) : [];
     journalEntries = toolState.journal ? rowsFor(journalSettings, [
       workspaceKey('worklog:workspace:'),
       'worklog',
