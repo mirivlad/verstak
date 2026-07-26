@@ -261,6 +261,12 @@ func main() {
 		Title:            "Verstak",
 		Width:            1200,
 		Height:           800,
+		// The smallest window the interface is designed to work in. At this
+		// size a sidebar at its maximum still leaves the content area roughly
+		// 380px, which is the width the panels lay themselves out against.
+		// Panels use container queries rather than viewport ones for exactly
+		// this reason: what matters to them is the space they were given, not
+		// how wide the window is.
 		MinWidth:         800,
 		MinHeight:        600,
 		WindowStartState: options.Normal,

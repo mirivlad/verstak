@@ -485,7 +485,7 @@
     font-style: italic;
   }
 
-  @media (max-width: 760px) {
+  @container vt-content (max-width: 760px) {
     .card-meta {
       grid-template-columns: 1fr;
     }

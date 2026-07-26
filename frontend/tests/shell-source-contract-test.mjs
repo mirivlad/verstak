@@ -52,6 +52,28 @@ for (const pluginId of ['verstak.notes', 'verstak.todo', 'verstak.activity', 've
 }
 // Back and forward are offered to the plugin on screen through the navigation
 // registry, not by finding its toolbar buttons in the DOM.
+// The window cannot be narrower than 800px, so a viewport media query below
+// that never fires in the application. Panels sit inside the content area,
+// which is narrower still once the sidebar takes its share, and must respond
+// to that rather than to the window.
+assertIncludes(
+  app,
+  'container-name: vt-content',
+  'App should make the content area a size container for the panels inside it'
+);
+for (const panel of [
+  'frontend/src/lib/plugin-manager/PluginManager.svelte',
+  'frontend/src/lib/plugin-manager/PluginCard.svelte',
+  'frontend/src/lib/settings/SettingsWindow.svelte',
+  'frontend/src/lib/shell/TodaySurface.svelte',
+]) {
+  assertExcludes(
+    read(panel),
+    '@media (max-width',
+    `${panel} should lay itself out from the space it has, not the window width`
+  );
+}
+
 assertIncludes(
   app,
   'offerNavigation(',

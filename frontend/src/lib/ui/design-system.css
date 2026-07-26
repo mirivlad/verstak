@@ -13,9 +13,17 @@
   --vt-color-control: #1b2440;
   --vt-color-control-hover: #203050;
   --vt-color-input: #0f1424;
-  --vt-color-placeholder: #69758f;
+  /* Placeholder text is read, so it is held to the 4.5:1 text threshold
+     against the input background rather than the 3:1 a decoration would get.
+     #69758f measured 3.96 and failed it. */
+  --vt-color-placeholder: #7c88a2;
+  /* Separators and dividers. Decorative, so no contrast floor applies. */
   --vt-color-border: #202b46;
-  --vt-color-border-strong: #2c456a;
+  /* The visible boundary of controls -- inputs, buttons, the tree scrollbar
+     thumb. Where that boundary is the only thing identifying the control,
+     WCAG asks for 3:1; #2c456a measured 1.94 against every surface it sits
+     on. #4a6b9e clears it on the background, on surfaces and on inputs. */
+  --vt-color-border-strong: #4a6b9e;
   --vt-color-text-primary: #f4f7fb;
   --vt-color-text-secondary: #b7c0d4;
   --vt-color-text-muted: #7f8aa3;

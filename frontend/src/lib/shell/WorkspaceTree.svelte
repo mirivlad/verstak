@@ -54,6 +54,8 @@
     unsubscribeLocale = i18n.subscribe((l) => { locale = l; });
     window.addEventListener('verstak:workspace-tree-changed', loadTree);
     window.addEventListener('verstak:workspace-active-changed', handleActiveWorkspace);
+    // The empty Deal view offers a Create button; the dialog lives here.
+    window.addEventListener('verstak:create-workspace-requested', handleCreateWorkspaceRequest);
     window.addEventListener('keydown', handleDragKeyDown);
     await loadTree(); await loadTemplates();
     if (typeof ResizeObserver !== 'undefined' && treeListElement) {
@@ -70,6 +72,7 @@
     if (unsubscribeLocale) unsubscribeLocale();
     window.removeEventListener('verstak:workspace-tree-changed', loadTree);
     window.removeEventListener('verstak:workspace-active-changed', handleActiveWorkspace);
+    window.removeEventListener('verstak:create-workspace-requested', handleCreateWorkspaceRequest);
     window.removeEventListener('keydown', handleDragKeyDown);
     scrollObserver?.disconnect();
     resetDragState();
@@ -215,6 +218,10 @@
 
   // ── Create/Rename/Move/Trash modals ────────────────────────────────────────
   function openCreateFolder(pid) { modal = { type: 'create-folder', parentId: pid }; formName = ''; formParentId = pid || ''; formError = ''; formBusy = false; folderIconId = ''; folderColor = ''; folderEditorView = 'form'; }
+  function handleCreateWorkspaceRequest() {
+    openCreateWorkspace('');
+  }
+
   async function openCreateWorkspace(pid) { await loadTemplates(); modal = { type: 'create-workspace', parentId: pid }; formName = ''; formParentId = pid || ''; formTemplateId = templates[0]?.id || 'default'; resetTemplateTools(); formError = ''; formBusy = false; }
   function openRename(kind, id, name) { modal = { type: 'rename', kind, id }; formName = name; formError = ''; formBusy = false; }
   function openTrash(kind, id, name) { modal = { type: 'trash', kind, id, name }; formBusy = false; }
