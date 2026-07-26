@@ -206,9 +206,11 @@ test.describe('D: Plugin API bridge', () => {
     const pluginCard = page.locator('.plugin-card').filter({ hasText: 'verstak.platform-test' });
     await pluginCard.locator('button.btn-settings').click();
 
-    const modal = page.locator('.modal[aria-label="Plugin Settings"]');
-    await expect(modal).toBeVisible();
-    await expect(modal).toContainText('Platform Test Settings');
-    await expect(modal.locator('.host-state.error')).toHaveCount(0);
+    // The card is a short path into the settings window, not a second place
+    // where plugin settings live.
+    const content = page.locator('[data-settings-content]');
+    await expect(content).toBeVisible();
+    await expect(content).toContainText('Platform Test Settings');
+    await expect(content.locator('.host-state.error')).toHaveCount(0);
   });
 });
