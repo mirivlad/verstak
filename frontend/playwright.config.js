@@ -24,6 +24,10 @@ export default defineConfig({
   fullyParallel: false,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
+  // One worker, 30s per test and two retries means a broadly broken run can
+  // burn hours before reporting -- one did. Fail the run instead: a suite that
+  // needs more than twenty minutes is not going to pass.
+  globalTimeout: process.env.CI ? 20 * 60 * 1000 : undefined,
   workers: 1,
   reporter: [
     ['list'],
