@@ -114,7 +114,7 @@ test.describe('Activity workflow', () => {
     await expect(candidate.locator('[data-work-session-action="dismiss"]')).toBeVisible();
   });
 
-  test('Review opens an empty Journal form with selectable candidate activities', async ({ page }) => {
+  test('Review opens a Journal form saying what the time went on, with selectable activities', async ({ page }) => {
     await page.evaluate(async () => {
       await window.go.api.App.WritePluginSettings('verstak.activity', {
         'events:workspace:Project': [
@@ -144,8 +144,11 @@ test.describe('Activity workflow', () => {
     await expect(journal).toBeVisible({ timeout: 10000 });
     await expect(journal.locator('[data-journal-candidate]')).toContainText('Deal: Project');
     await expect(journal.locator('[data-journal-candidate]')).toContainText('Estimated duration: 15 min');
+    // Only the user knows what the work was for, so the title stays theirs to
+    // write. The body arrives with what the time actually went on.
     await expect(journal.locator('[data-journal-input="title"]')).toHaveValue('');
-    await expect(journal.locator('[data-journal-input="summary"]')).toHaveValue('');
+    await expect(journal.locator('[data-journal-input="summary"]')).toHaveValue(/notes \(1\)/);
+    await expect(journal.locator('[data-journal-input="summary"]')).toHaveValue(/15 min in total/);
     await expect(journal.locator('[data-journal-input="minutes"]')).toHaveValue('15');
 
     const activityInputs = journal.locator('[data-journal-candidate-activity]');
