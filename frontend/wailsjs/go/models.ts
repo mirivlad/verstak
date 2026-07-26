@@ -520,6 +520,20 @@ export namespace files {
 	        this.overwrite = source["overwrite"];
 	    }
 	}
+	export class PathTransfer {
+	    from: string;
+	    to: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new PathTransfer(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.from = source["from"];
+	        this.to = source["to"];
+	    }
+	}
 	export class RestoreOptions {
 	    targetPath?: string;
 	    overwrite: boolean;
@@ -534,6 +548,61 @@ export namespace files {
 	        this.overwrite = source["overwrite"];
 	    }
 	}
+	export class TransferResult {
+	    from: string;
+	    to: string;
+	    error?: string;
+	    skipped?: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new TransferResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.from = source["from"];
+	        this.to = source["to"];
+	        this.error = source["error"];
+	        this.skipped = source["skipped"];
+	    }
+	}
+	export class TransferOutcome {
+	    results: TransferResult[];
+	    succeeded: number;
+	    failed: number;
+	    cancelled: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new TransferOutcome(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.results = this.convertValues(source["results"], TransferResult);
+	        this.succeeded = source["succeeded"];
+	        this.failed = source["failed"];
+	        this.cancelled = source["cancelled"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	
 	export class TrashEntry {
 	    originalPath: string;
 	    trashPath: string;

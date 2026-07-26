@@ -15,11 +15,15 @@ import {notifications} from '../models';
 
 export function ArchiveWorkspaceNode(arg1:string):Promise<string>;
 
+export function CancelVaultTransfer(arg1:string,arg2:string):Promise<string>;
+
 export function ClearPluginNotifications(arg1:string):Promise<string>;
 
 export function CloseVault():Promise<void>;
 
 export function CopyVaultPath(arg1:string,arg2:string,arg3:string,arg4:files.CopyOptions):Promise<string>;
+
+export function CopyVaultPaths(arg1:string,arg2:string,arg3:Array<files.PathTransfer>,arg4:files.CopyOptions):Promise<files.TransferOutcome|string>;
 
 export function CreateFolderV2(arg1:string,arg2:string):Promise<Record<string, any>>;
 
@@ -112,6 +116,8 @@ export function ListWorkspaces():Promise<Array<workspace.Workspace>|string>;
 export function MoveFolderV2(arg1:string,arg2:string):Promise<string>;
 
 export function MoveVaultPath(arg1:string,arg2:string,arg3:string,arg4:files.MoveOptions):Promise<string>;
+
+export function MoveVaultPaths(arg1:string,arg2:string,arg3:Array<files.PathTransfer>,arg4:files.MoveOptions):Promise<files.TransferOutcome|string>;
 
 export function MoveWorkspaceNode(arg1:string,arg2:string):Promise<string>;
 

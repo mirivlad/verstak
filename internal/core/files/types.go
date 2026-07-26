@@ -71,6 +71,34 @@ type RestoreOptions struct {
 	Overwrite  bool   `json:"overwrite"`
 }
 
+// PathTransfer is one source-to-destination pair in a bulk move or copy.
+type PathTransfer struct {
+	From string `json:"from"`
+	To   string `json:"to"`
+}
+
+// TransferResult reports what became of a single item in a bulk transfer. An
+// empty Error means it succeeded; Skipped marks an item the batch never reached
+// because it was cancelled.
+type TransferResult struct {
+	From    string `json:"from"`
+	To      string `json:"to"`
+	Error   string `json:"error,omitempty"`
+	Skipped bool   `json:"skipped,omitempty"`
+}
+
+// TransferOutcome is the whole result of a bulk transfer.
+//
+// One bad item does not abandon the rest: somebody pasting two hundred files
+// should not lose a hundred and ninety-nine of them to a single name clash. The
+// caller gets a per-item verdict and can report exactly what did not land.
+type TransferOutcome struct {
+	Results   []TransferResult `json:"results"`
+	Succeeded int              `json:"succeeded"`
+	Failed    int              `json:"failed"`
+	Cancelled bool             `json:"cancelled"`
+}
+
 type TrashResult struct {
 	OriginalPath string `json:"originalPath"`
 	TrashPath    string `json:"trashPath"`

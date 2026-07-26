@@ -139,6 +139,60 @@ if (!window.__VERSTAK_IMPORT_PROGRESS_BRIDGE__ && window.runtime && typeof windo
   window.__VERSTAK_IMPORT_PROGRESS_BRIDGE__ = window.runtime.EventsOnMultiple('verstak:import-progress', dispatchImportProgress, -1);
 }
 
+// Bulk file transfers report progress per item. A plugin only ever hears about
+// its own transfers.
+window.__VERSTAK_TRANSFER_PROGRESS_HANDLERS__ = window.__VERSTAK_TRANSFER_PROGRESS_HANDLERS__ || {};
+
+function dispatchTransferProgress(progress) {
+  if (!progress || !progress.pluginId) return;
+  const handlers = (window.__VERSTAK_TRANSFER_PROGRESS_HANDLERS__[progress.pluginId] || []).slice();
+  handlers.forEach(function(handler) {
+    try {
+      handler(progress);
+    } catch (e) {
+      console.error('[VerstakPluginAPI] transfer progress handler error:', e);
+    }
+  });
+}
+
+function trackTransferProgress(pluginId, listener) {
+  const handlers = window.__VERSTAK_TRANSFER_PROGRESS_HANDLERS__[pluginId] || [];
+  handlers.push(listener);
+  window.__VERSTAK_TRANSFER_PROGRESS_HANDLERS__[pluginId] = handlers;
+  let active = true;
+  return function unsubscribeTransferProgress() {
+    if (!active) return;
+    active = false;
+    const current = window.__VERSTAK_TRANSFER_PROGRESS_HANDLERS__[pluginId] || [];
+    const remaining = current.filter(function(item) { return item !== listener; });
+    if (remaining.length > 0) {
+      window.__VERSTAK_TRANSFER_PROGRESS_HANDLERS__[pluginId] = remaining;
+    } else {
+      delete window.__VERSTAK_TRANSFER_PROGRESS_HANDLERS__[pluginId];
+    }
+  };
+}
+
+window.__VERSTAK_DISPATCH_TRANSFER_PROGRESS__ = dispatchTransferProgress;
+
+if (!window.__VERSTAK_TRANSFER_PROGRESS_BRIDGE__ && window.runtime && typeof window.runtime.EventsOnMultiple === 'function') {
+  window.__VERSTAK_TRANSFER_PROGRESS_BRIDGE__ = window.runtime.EventsOnMultiple('verstak:files-transfer-progress', dispatchTransferProgress, -1);
+}
+
+function normalizeTransfers(transfers) {
+  if (!Array.isArray(transfers)) {
+    throw new Error('a bulk transfer requires an array of { from, to } pairs');
+  }
+  return transfers.map(function(transfer, index) {
+    const from = transfer && transfer.from;
+    const to = transfer && transfer.to;
+    if (!from || !to) {
+      throw new Error('transfer ' + index + ' needs both a from and a to path');
+    }
+    return { from: String(from), to: String(to) };
+  });
+}
+
 window.__VERSTAK_PLUGIN_STYLE_RECORDS__ = window.__VERSTAK_PLUGIN_STYLE_RECORDS__ || {};
 
 export async function acquirePluginStyle(pluginId, stylePath) {
@@ -587,6 +641,35 @@ export function createPluginAPI(pluginId) {
         return callBackendErrorString(pluginId, 'files.copy(' + fromRelativePath + ')', function() {
           return App.CopyVaultPath(pluginId, fromRelativePath, toRelativePath, options || {});
         });
+      },
+      // One call for many paths. A loop over files.move costs the host one sync
+      // recording per file, which is what made large pastes appear to hang.
+      moveMany: function(transfers, options) {
+        assertActive('files.moveMany');
+        const settings = options || {};
+        return callBackend(pluginId, 'files.moveMany', function() {
+          return App.MoveVaultPaths(pluginId, settings.transferId || '', normalizeTransfers(transfers), settings);
+        });
+      },
+      copyMany: function(transfers, options) {
+        assertActive('files.copyMany');
+        const settings = options || {};
+        return callBackend(pluginId, 'files.copyMany', function() {
+          return App.CopyVaultPaths(pluginId, settings.transferId || '', normalizeTransfers(transfers), settings);
+        });
+      },
+      cancelTransfer: function(transferId) {
+        assertActive('files.cancelTransfer');
+        return callBackendErrorString(pluginId, 'files.cancelTransfer', function() {
+          return App.CancelVaultTransfer(pluginId, String(transferId == null ? '' : transferId));
+        });
+      },
+      onTransferProgress: function(listener) {
+        assertActive('files.onTransferProgress');
+        if (typeof listener !== 'function') {
+          throw new Error('files.onTransferProgress requires a listener function');
+        }
+        return trackCleanup(trackTransferProgress(pluginId, listener));
       },
       trash: function(relativePath) {
         assertActive('files.trash(' + relativePath + ')');

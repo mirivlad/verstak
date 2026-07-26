@@ -795,6 +795,55 @@ function cloneJson(value) {
     return idx === -1 ? '' : path.slice(0, idx);
   }
 
+  var cancelledTransfers = {};
+
+  function emptyTransferOutcome() {
+    return { results: [], succeeded: 0, failed: 0, cancelled: false };
+  }
+
+  // Mirrors the host: one failing item does not abandon the batch, cancellation
+  // stops it without undoing what already landed, and progress is emitted after
+  // every item.
+  function runMockTransfers(pluginId, transferId, transfers, operation, apply) {
+    var outcome = emptyTransferOutcome();
+    var list = Array.isArray(transfers) ? transfers : [];
+    var chain = Promise.resolve();
+    list.forEach(function (transfer, index) {
+      chain = chain.then(function () {
+        if (outcome.cancelled) return null;
+        if (transferId && cancelledTransfers[transferId]) {
+          outcome.cancelled = true;
+          list.slice(index).forEach(function (remaining) {
+            outcome.results.push({ from: remaining.from, to: remaining.to, skipped: true });
+          });
+          return null;
+        }
+        return apply(transfer).then(function (error) {
+          if (error) {
+            outcome.failed += 1;
+            outcome.results.push({ from: transfer.from, to: transfer.to, error: error });
+          } else {
+            outcome.succeeded += 1;
+            outcome.results.push({ from: transfer.from, to: transfer.to });
+          }
+          window.__VERSTAK_DISPATCH_TRANSFER_PROGRESS__?.({
+            transferId: transferId,
+            pluginId: pluginId,
+            completed: index + 1,
+            total: list.length,
+            path: transfer.to,
+            succeeded: outcome.succeeded,
+            failed: outcome.failed
+          });
+        });
+      });
+    });
+    return chain.then(function () {
+      delete cancelledTransfers[transferId];
+      return [outcome, ''];
+    });
+  }
+
   function baseName(path) {
     var idx = path.lastIndexOf('/');
     return idx === -1 ? path : path.slice(idx + 1);
@@ -3987,6 +4036,29 @@ function cloneJson(value) {
         var suffix = path.slice(from.path.length);
         vaultFiles[to.path + suffix] = Object.assign({}, vaultFiles[path], { modifiedAt: new Date().toISOString() });
       });
+      return Promise.resolve('');
+    },
+    MoveVaultPaths: function (pluginId, transferId, transfers, options) {
+      var err = requirePluginPermission(pluginId, 'files.write');
+      if (err) return Promise.resolve([emptyTransferOutcome(), err]);
+      return runMockTransfers(pluginId, transferId, transfers, 'move', function (transfer) {
+        return mock.MoveVaultPath(pluginId, transfer.from, transfer.to, options);
+      });
+    },
+    CopyVaultPaths: function (pluginId, transferId, transfers, options) {
+      var readErr = requirePluginPermission(pluginId, 'files.read');
+      if (readErr) return Promise.resolve([emptyTransferOutcome(), readErr]);
+      var writeErr = requirePluginPermission(pluginId, 'files.write');
+      if (writeErr) return Promise.resolve([emptyTransferOutcome(), writeErr]);
+      return runMockTransfers(pluginId, transferId, transfers, 'create', function (transfer) {
+        return mock.CopyVaultPath(pluginId, transfer.from, transfer.to, options);
+      });
+    },
+    CancelVaultTransfer: function (pluginId, transferId) {
+      var err = requirePluginPermission(pluginId, 'files.write');
+      if (err) return Promise.resolve(err);
+      if (!transferId) return Promise.resolve('cancel requires a transfer id');
+      cancelledTransfers[transferId] = true;
       return Promise.resolve('');
     },
     TrashVaultPath: function (pluginId, relativePath) {

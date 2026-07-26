@@ -6,6 +6,10 @@ export function ArchiveWorkspaceNode(arg1) {
   return window['go']['api']['App']['ArchiveWorkspaceNode'](arg1);
 }
 
+export function CancelVaultTransfer(arg1, arg2) {
+  return window['go']['api']['App']['CancelVaultTransfer'](arg1, arg2);
+}
+
 export function ClearPluginNotifications(arg1) {
   return window['go']['api']['App']['ClearPluginNotifications'](arg1);
 }
@@ -16,6 +20,10 @@ export function CloseVault() {
 
 export function CopyVaultPath(arg1, arg2, arg3, arg4) {
   return window['go']['api']['App']['CopyVaultPath'](arg1, arg2, arg3, arg4);
+}
+
+export function CopyVaultPaths(arg1, arg2, arg3, arg4) {
+  return window['go']['api']['App']['CopyVaultPaths'](arg1, arg2, arg3, arg4);
 }
 
 export function CreateFolderV2(arg1, arg2) {
@@ -200,6 +208,10 @@ export function MoveFolderV2(arg1, arg2) {
 
 export function MoveVaultPath(arg1, arg2, arg3, arg4) {
   return window['go']['api']['App']['MoveVaultPath'](arg1, arg2, arg3, arg4);
+}
+
+export function MoveVaultPaths(arg1, arg2, arg3, arg4) {
+  return window['go']['api']['App']['MoveVaultPaths'](arg1, arg2, arg3, arg4);
 }
 
 export function MoveWorkspaceNode(arg1, arg2) {
