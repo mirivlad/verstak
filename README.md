@@ -213,7 +213,16 @@ To connect the extension:
 3. Paste them into the extension settings.
 4. Save the settings and send a test page.
 
-Passive domain activity tracking is disabled by default. When enabled, it sends bounded time totals by normalized domain. It does not send page contents, keystrokes or full browsing history.
+Passive page activity tracking is disabled by default. When enabled, it sends
+bounded time totals for the page you are on, with everything after `#` removed.
+It does not send page titles, page contents, keystrokes or full browsing
+history, and nothing at all for an excluded domain.
+
+Recorded time turns into journal entries without being sorted by hand. A page
+opened while you were working in one Deal is proposed for that Deal, the Journal
+asks rather than asserts, and your answer becomes a rule about that address so
+the same question is not asked again. Every rule is listed and removable, and
+whether a Deal came from you, a rule or a guess is shown on each row.
 
 ## Optional synchronization
 
