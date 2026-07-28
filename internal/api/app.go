@@ -35,6 +35,7 @@ import (
 	"github.com/verstak/verstak-desktop/internal/core/permissions"
 	"github.com/verstak/verstak-desktop/internal/core/plugin"
 	"github.com/verstak/verstak-desktop/internal/core/pluginstate"
+	"github.com/verstak/verstak-desktop/internal/core/pluginsync"
 	coresecrets "github.com/verstak/verstak-desktop/internal/core/secrets"
 	"github.com/verstak/verstak-desktop/internal/core/storage"
 	syncsvc "github.com/verstak/verstak-desktop/internal/core/sync"
@@ -1344,10 +1345,12 @@ func (a *App) WritePluginSettings(pluginID string, data map[string]interface{}) 
 	if a.storage == nil {
 		return "storage not initialized"
 	}
+	before := a.snapshotPluginRecords(pluginID)
 	if err := a.storage.WritePluginSettings(pluginID, data); err != nil {
 		log.Printf("[api] WritePluginSettings(%s): %v", pluginID, err)
 		return err.Error()
 	}
+	a.recordPluginRecordChanges(pluginID, before)
 	return ""
 }
 
@@ -1376,10 +1379,12 @@ func (a *App) WritePluginSetting(pluginID, key string, value interface{}) string
 	if a.storage == nil {
 		return "storage not initialized"
 	}
+	before := a.snapshotPluginRecords(pluginID)
 	if err := a.storage.WritePluginSetting(pluginID, key, value); err != nil {
 		log.Printf("[api] WritePluginSetting(%s, %s): %v", pluginID, key, err)
 		return err.Error()
 	}
+	a.recordPluginRecordChanges(pluginID, before)
 	return ""
 }
 
@@ -1427,10 +1432,12 @@ func (a *App) WritePluginDataNDJSON(pluginID, name string, data []map[string]int
 	if a.storage == nil {
 		return "storage not initialized"
 	}
+	before := a.snapshotPluginRecords(pluginID)
 	if err := a.storage.WritePluginDataNDJSON(pluginID, name, data); err != nil {
 		log.Printf("[api] WritePluginDataNDJSON(%s, %s): %v", pluginID, name, err)
 		return err.Error()
 	}
+	a.recordPluginRecordChanges(pluginID, before)
 	return ""
 }
 
@@ -4854,6 +4861,9 @@ func (a *App) applyRemoteOpWithClient(client *syncsvc.Client, op syncsvc.Op, ini
 			emitFrontendEvent(a.ctx, "verstak:workspace-tree-changed")
 		}
 		return nil
+	}
+	if op.EntityType == pluginsync.EntityType {
+		return a.applyRemotePluginRecordOp(op)
 	}
 	if a.files == nil {
 		return fmt.Errorf("files service not initialized")
