@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { waitForAppReady, setupConsoleCollector, resetMockState } from './helpers.js';
+import { waitForAppReady, setupConsoleCollector, resetMockState, readJournalText } from './helpers.js';
 
 test.describe('Todo plugin workflow', () => {
   let consoleCollector;
@@ -72,15 +72,18 @@ test.describe('Todo plugin workflow', () => {
     await journal.locator('[data-journal-input="title"]').fill('Prepare project review handoff');
     await journal.locator('[data-journal-input="summary"]').fill('Reviewed factual project notes before handoff.');
     await journal.locator('[data-journal-action="save-entry"]').click();
-    await expect.poll(async () => page.evaluate(async () => {
-      const todoResult = await window.go.api.App.ReadPluginSettings('verstak.todo');
-      const todoSettings = Array.isArray(todoResult) ? todoResult[0] : todoResult;
-      const todo = todoSettings['todos:global'].find((item) => item.title === 'Prepare project review updated');
-      const journalResult = await window.go.api.App.ReadPluginSettings('verstak.journal');
-      const journalSettings = Array.isArray(journalResult) ? journalResult[0] : journalResult;
-      const entry = journalSettings['worklog:workspace:Project'].find((item) => item.sourceTodoId === todo.id);
-      return entry && [entry.title, entry.summary, entry.minutes].join('|');
-    })).toBe('Prepare project review handoff|Reviewed factual project notes before handoff.|0');
+    // The entry lands in the Deal's own journal, and carries the todo it came
+    // from so the same todo cannot be journalled twice.
+    const todoId = await page.evaluate(async () => {
+      const result = await window.go.api.App.ReadPluginSettings('verstak.todo');
+      const settings = Array.isArray(result) ? result[0] : result;
+      return settings['todos:global'].find((item) => item.title === 'Prepare project review updated').id;
+    });
+    await expect.poll(async () => readJournalText(page, 'Project')).toContain('### Prepare project review handoff');
+    const journalText = await readJournalText(page, 'Project');
+    expect(journalText).toContain('Reviewed factual project notes before handoff.');
+    expect(journalText).toContain('0 min');
+    expect(journalText).toContain(`"sourceTodoId":"${todoId}"`);
 
     await page.getByRole('tab', { name: 'Todos' }).click();
     await page.locator('.todo-root [data-todo-action="delete"]').click();

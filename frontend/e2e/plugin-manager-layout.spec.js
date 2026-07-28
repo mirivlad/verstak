@@ -84,7 +84,7 @@ test.describe('E: Plugin Manager layout', () => {
 
     const risk = page.locator('[data-plugin-manager-summary="risk"]');
     await expect(risk).toBeVisible();
-    await expect(risk.locator('[data-plugin-risk-summary="elevated-permissions"]')).toContainText('7');
+    await expect(risk.locator('[data-plugin-risk-summary="elevated-permissions"]')).toContainText('8');
     await expect(risk).toContainText('elevated permissions');
   });
 

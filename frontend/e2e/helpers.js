@@ -60,3 +60,22 @@ export async function setPluginStatus(page, pluginId, status, enabled) {
     { id: pluginId, st: status, en: enabled }
   );
 }
+
+/**
+ * Everything the Deal's own journal files say. The worklog is an ordinary
+ * Markdown document inside the Deal, so this is what a person opening the vault
+ * would read.
+ */
+export async function readJournalText(page, dealRoot) {
+  return page.evaluate(async (deal) => {
+    const listed = await window.go.api.App.ListVaultFiles('verstak.journal', `${deal}/Журнал`);
+    const entries = Array.isArray(listed) ? listed[0] : listed;
+    const texts = [];
+    for (const entry of entries || []) {
+      if (entry.type === 'folder') continue;
+      const read = await window.go.api.App.ReadVaultTextFile('verstak.journal', entry.relativePath);
+      texts.push(Array.isArray(read) ? read[0] : read);
+    }
+    return texts.join('\n');
+  }, dealRoot);
+}
