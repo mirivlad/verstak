@@ -4,10 +4,13 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"testing"
 
 	corefiles "github.com/verstak/verstak-desktop/internal/core/files"
+	"github.com/verstak/verstak-desktop/internal/core/plugin"
+	"github.com/verstak/verstak-desktop/internal/core/storage"
 	"github.com/verstak/verstak-desktop/internal/core/workspace"
 )
 
@@ -173,6 +176,107 @@ func TestSyncNowAgainstRealServerTwoVaults(t *testing.T) {
 	expectSyncCounts(t, appA, 1, 1)
 	expectSyncCounts(t, appB, 0, 1)
 	assertWorkspaceIdentity(t, appB, "Restored Deal", deal.ID)
+
+	// A plugin's own data, through the same server. The record is the unit that
+	// travels, so a todo written on each device leaves both devices with both.
+	enableTodoRecordSync(appA)
+	enableTodoRecordSync(appB)
+	writeSyncedTodos(t, appA, map[string]string{"shared": "prepare the invoice"})
+	expectSyncCounts(t, appA, 1, 1)
+	expectSyncCounts(t, appB, 0, 1)
+	expectSyncedTodos(t, appB, map[string]string{"shared": "prepare the invoice"})
+	assertNoUnpushedOps(t, appB)
+
+	writeSyncedTodos(t, appA, map[string]string{
+		"shared":      "prepare the invoice",
+		"from-laptop": "written on A",
+	})
+	writeSyncedTodos(t, appB, map[string]string{
+		"shared":       "prepare the invoice",
+		"from-desktop": "written on B",
+	})
+	expectSyncCounts(t, appA, 1, 1)
+	// B pushes its own and pulls two: A's new todo and its own coming back.
+	expectSyncCounts(t, appB, 1, 2)
+	expectSyncCounts(t, appA, 0, 1)
+	both := map[string]string{
+		"shared":       "prepare the invoice",
+		"from-laptop":  "written on A",
+		"from-desktop": "written on B",
+	}
+	expectSyncedTodos(t, appA, both)
+	expectSyncedTodos(t, appB, both)
+
+	writeSyncedTodos(t, appB, map[string]string{
+		"shared":       "prepare the invoice",
+		"from-desktop": "written on B",
+	})
+	expectSyncCounts(t, appB, 1, 1)
+	expectSyncCounts(t, appA, 0, 1)
+	expectSyncedTodos(t, appA, map[string]string{
+		"shared":       "prepare the invoice",
+		"from-desktop": "written on B",
+	})
+	assertNoUnpushedOps(t, appA)
+}
+
+// enableTodoRecordSync gives a test app a plugin that shares one list, which is
+// all the record contract is: a document, and the field that identifies a row.
+func enableTodoRecordSync(app *App) {
+	app.storage = storage.New(app.vault)
+	app.plugins = append(app.plugins, plugin.Plugin{
+		Manifest: plugin.Manifest{
+			ID:          "verstak.todo",
+			Name:        "Todos",
+			Version:     "1.0.0",
+			Permissions: []string{"storage.namespace"},
+			Sync: &plugin.SyncConfig{
+				Records: []plugin.SyncRecordSet{
+					{ID: "todos", Storage: "settings", Key: "todos:global", Identity: "id"},
+				},
+			},
+		},
+		Status:  plugin.StatusLoaded,
+		Enabled: true,
+	})
+}
+
+func writeSyncedTodos(t *testing.T, app *App, titlesByID map[string]string) {
+	t.Helper()
+	ids := make([]string, 0, len(titlesByID))
+	for id := range titlesByID {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	value := make([]interface{}, 0, len(ids))
+	for _, id := range ids {
+		value = append(value, map[string]interface{}{"id": id, "title": titlesByID[id]})
+	}
+	if errStr := app.WritePluginSetting("verstak.todo", "todos:global", value); errStr != "" {
+		t.Fatalf("WritePluginSetting: %s", errStr)
+	}
+}
+
+func expectSyncedTodos(t *testing.T, app *App, want map[string]string) {
+	t.Helper()
+	settings, errStr := app.ReadPluginSettings("verstak.todo")
+	if errStr != "" {
+		t.Fatalf("ReadPluginSettings: %s", errStr)
+	}
+	got := map[string]string{}
+	for _, record := range recordsFromSettingsValue(settings["todos:global"]) {
+		id, _ := record["id"].(string)
+		title, _ := record["title"].(string)
+		got[id] = title
+	}
+	if len(got) != len(want) {
+		t.Fatalf("todos = %#v, want %#v", got, want)
+	}
+	for id, title := range want {
+		if got[id] != title {
+			t.Fatalf("todos = %#v, want %#v", got, want)
+		}
+	}
 }
 
 func expectSyncCounts(t *testing.T, app *App, pushed, pulled int) {
