@@ -78,11 +78,35 @@ make_deal() {
   mkdir -p "$VAULT/$path/Notes" "$VAULT/$path/Files"
   printf '# %s\n' "$(basename "$path")" > "$VAULT/$path/Notes/Overview.md"
 }
+# A worklog, so the Journal and its report have something to draw. Both live in
+# the Deal as ordinary Markdown, which is the whole point of them being files.
+make_journal() {
+  local path="$1" month="$2"
+  shift 2
+  mkdir -p "$VAULT/$path/Журнал"
+  {
+    printf -- '---\nverstak: worklog\nversion: 1\ndeal: "%s"\nmonth: %s\n---\n\n# Журнал\n\n' "$path" "$month"
+    local day
+    for day in "$@"; do
+      IFS='|' read -r date title minutes billable body <<<"$day"
+      printf '## %s\n\n### %s\n\n%s мин · %s\n\n%s\n\n<!-- verstak-entry {"entryId":"probe:%s:%s","minutes":%s,"billable":%s} -->\n\n' \
+        "$date" "$title" "$minutes" "$billable" "$body" "$path" "$date" "$minutes" \
+        "$([ "$billable" = "оплачиваемая" ] && echo true || echo false)"
+    done
+  } > "$VAULT/$path/Журнал/$month.md"
+}
+
 for folder in Alpha Beta Gamma; do
   for deal in one two three four five; do
     make_deal "$folder/$folder-$deal"
   done
 done
+make_journal "Alpha" "$(date -u +%Y-%m)" \
+  "$(date -u +%Y-%m)-01|Созвон и разбор требований|90|оплачиваемая|Прошли список вопросов, записали решения." \
+  "$(date -u +%Y-%m)-02|Правки в макете|45|оплачиваемая|Поправили шапку и отступы." \
+  "$(date -u +%Y-%m)-03|Внутренняя планёрка|30|неоплачиваемая|Обсудили порядок работ."
+make_journal "Beta" "$(date -u +%Y-%m)" \
+  "$(date -u +%Y-%m)-02|Разбор выгрузки|120|оплачиваемая|Сверили справочники."
 for deal in loose-one loose-two loose-three; do
   make_deal "$deal"
 done

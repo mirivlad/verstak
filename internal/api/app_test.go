@@ -3003,6 +3003,7 @@ func TestPluginListWorkspacesReturnsNestedDealsOnly(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(root, "OrdinaryFolder"), 0o755); err != nil {
 		t.Fatal(err)
 	}
+	writeMarker("Handmade", "workspace.json", `{"schemaVersion":1,"workspaceId":"55555555-5555-4555-8555-555555555555"}`)
 	writeMetadata("22222222-2222-4222-8222-222222222222", `{"workspaceTools":["files.plugin"]}`)
 	writeMetadata("33333333-3333-4333-8333-333333333333", `{"workspaceTools":["another.plugin"]}`)
 	writeMetadata("44444444-4444-4444-8444-444444444444", `{"workspaceTools":`)
@@ -3015,10 +3016,24 @@ func TestPluginListWorkspacesReturnsNestedDealsOnly(t *testing.T) {
 	if errText != "" {
 		t.Fatal(errText)
 	}
-	if len(rows) != 1 {
-		t.Fatalf("workspaces = %#v", rows)
+	// A tool list is a restriction. A Deal made by hand has none, and metadata
+	// that will not parse is not one either -- the workspace host shows every
+	// tab in both cases, and a plugin asking which Deals it belongs to has to
+	// be told the same thing or the Deal shows a tab into a tool that cannot
+	// see it.
+	listed := map[string]bool{}
+	for _, row := range rows {
+		listed[row.RootPath] = true
 	}
-	if rows[0].RootPath != "Clients/Acme" {
+	for _, expected := range []string{"Clients/Acme", "Handmade", "Broken"} {
+		if !listed[expected] {
+			t.Fatalf("workspace %s is missing: %#v", expected, rows)
+		}
+	}
+	if listed["Project"] {
+		t.Fatalf("a Deal that restricts its tools was listed anyway: %#v", rows)
+	}
+	if len(rows) != 3 {
 		t.Fatalf("workspaces = %#v", rows)
 	}
 	writeMetadata("22222222-2222-4222-8222-222222222222", `{"workspaceTools":["another.plugin"]}`)
@@ -3026,16 +3041,36 @@ func TestPluginListWorkspacesReturnsNestedDealsOnly(t *testing.T) {
 	if errText != "" {
 		t.Fatal(errText)
 	}
-	if len(rows) != 0 {
-		t.Fatalf("disabled workspace remained selectable: %#v", rows)
+	for _, row := range rows {
+		if row.RootPath == "Clients/Acme" {
+			t.Fatalf("disabled workspace remained selectable: %#v", rows)
+		}
 	}
 	writeMetadata("22222222-2222-4222-8222-222222222222", `{"workspaceTools":["files.plugin"]}`)
 	rows, errText = app.PluginListWorkspaces("files.plugin")
 	if errText != "" {
 		t.Fatal(errText)
 	}
-	if len(rows) != 1 || rows[0].RootPath != "Clients/Acme" {
+	restored := false
+	for _, row := range rows {
+		if row.RootPath == "Clients/Acme" {
+			restored = true
+		}
+	}
+	if !restored {
 		t.Fatalf("re-enabled workspace was not restored: %#v", rows)
+	}
+	// A Deal created from a template before the tool list was recorded still
+	// says what it was made with, and this plugin is not in it.
+	writeMetadata("55555555-5555-4555-8555-555555555555", `{"createdFromTemplate":{"templateId":"minimal"},"features":{"notes":true,"files":true}}`)
+	rows, errText = app.PluginListWorkspaces("files.plugin")
+	if errText != "" {
+		t.Fatal(errText)
+	}
+	for _, row := range rows {
+		if row.RootPath == "Handmade" {
+			t.Fatalf("a template that did not include this tool listed the Deal anyway: %#v", rows)
+		}
 	}
 	app.plugins[0].Manifest.Permissions = nil
 	if _, errText := app.PluginListWorkspaces("files.plugin"); !strings.Contains(errText, "files.read") {

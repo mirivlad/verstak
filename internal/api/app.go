@@ -3300,26 +3300,59 @@ func (a *App) PluginListWorkspaces(pluginID string) ([]PluginWorkspaceDTO, strin
 	return rows, ""
 }
 
+// workspaceHasTool answers the same question the workspace host answers when it
+// decides which tabs a Deal gets, and has to answer it the same way. A Deal
+// made by hand or carried in by an import has no tool list, and the host reads
+// that as "nothing is restricted" -- it shows every tool. Reading it here as
+// "no tools at all" made a Deal show the Journal tab and be invisible to the
+// Journal, which is most of a migrated vault.
 func workspaceHasTool(vaultPath, workspaceID, pluginID string) bool {
 	if vaultPath == "" || workspaceID == "" || pluginID == "" {
 		return false
 	}
 	data, err := os.ReadFile(filepath.Join(vaultPath, ".verstak", "workspaces", "uuid-"+workspaceID+".json"))
 	if err != nil {
-		return false
+		return true
 	}
 	var metadata struct {
-		WorkspaceTools []string `json:"workspaceTools"`
+		WorkspaceTools      []string        `json:"workspaceTools"`
+		CreatedFromTemplate json.RawMessage `json:"createdFromTemplate"`
+		Features            map[string]bool `json:"features"`
 	}
 	if err := json.Unmarshal(data, &metadata); err != nil {
-		return false
+		return true
 	}
-	for _, toolID := range metadata.WorkspaceTools {
+	allowed := metadata.WorkspaceTools
+	if allowed == nil {
+		if len(metadata.CreatedFromTemplate) == 0 {
+			return true
+		}
+		allowed = toolsFromWorkspaceFeatures(metadata.Features)
+	}
+	for _, toolID := range allowed {
 		if toolID == pluginID {
 			return true
 		}
 	}
 	return false
+}
+
+// toolsFromWorkspaceFeatures reads the intended tool set out of template
+// metadata written before the tool list itself was recorded.
+func toolsFromWorkspaceFeatures(features map[string]bool) []string {
+	tools := []string{"verstak.notes", "verstak.files"}
+	for feature, pluginID := range map[string]string{
+		"journal":       "verstak.journal",
+		"activity":      "verstak.activity",
+		"browser-inbox": "verstak.browser-inbox",
+		"todo":          "verstak.todo",
+		"secrets":       "verstak.secrets",
+	} {
+		if features[feature] {
+			tools = append(tools, pluginID)
+		}
+	}
+	return tools
 }
 
 // GetWorkspaceByID returns a single workspace by its durable UUID.
