@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { waitForAppReady, setupConsoleCollector, resetMockState } from './helpers.js';
+import { waitForAppReady, setupConsoleCollector, resetMockState, readJournalText } from './helpers.js';
 
 test.describe('Activity workflow', () => {
   let consoleCollector;
@@ -162,15 +162,13 @@ test.describe('Activity workflow', () => {
 
     await expect(journal).toContainText('Review research capture');
     await expect(journal).toContainText('15 min');
-    const stored = await page.evaluate(async () => {
-      const result = await window.go.api.App.ReadPluginSettings('verstak.journal');
-      return Array.isArray(result) ? result[0]['worklog:workspace:Project'] : result['worklog:workspace:Project'];
-    });
-    await expect(stored).toEqual([expect.objectContaining({
-      title: 'Review research capture',
-      summary: 'Read the capture and updated the project note.',
-      sourceCandidateId: expect.any(String),
-      activityIds: ['review-capture'],
-    })]);
+    // The entry is in the Deal's own journal, and it carries only the activity
+    // the user left ticked.
+    const stored = await readJournalText(page, 'Project');
+    expect(stored).toContain('### Review research capture');
+    expect(stored).toContain('Read the capture and updated the project note.');
+    // Only the activity the user left ticked. The candidate's own id names both,
+    // which is why the link list is what this asserts.
+    expect(stored).toContain('"activityIds":["review-capture"]');
   });
 });

@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { waitForAppReady, setupConsoleCollector, resetMockState } from './helpers.js';
+import { waitForAppReady, setupConsoleCollector, resetMockState, readJournalText } from './helpers.js';
 
 // Activity's view is never opened in this spec. That is the point: the Journal
 // reaches possible entries through the plugin's activation, not through
@@ -53,11 +53,7 @@ test('the global Journal lists proposals without Activity being open', async ({ 
   await journal.locator('[data-journal-input="title"]').fill('Worked on the project');
   await journal.locator('[data-journal-action="save-entry"]').click();
 
-  await expect.poll(async () => page.evaluate(async () => {
-    const result = await window.go.api.App.ReadPluginSettings('verstak.journal');
-    const settings = Array.isArray(result) ? result[0] : result;
-    return settings['worklog:workspace:Project']?.[0]?.title;
-  })).toBe('Worked on the project');
+  await expect.poll(async () => readJournalText(page, 'Project')).toContain('### Worked on the project');
   // Accepted, so it is no longer a proposal.
   await expect(journal.locator('[data-journal-proposal]')).toHaveCount(0);
   consoleCollector.assertNoErrors();
