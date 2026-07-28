@@ -186,7 +186,9 @@ The Overview screen shows recent changes, unfinished captures, activity and othe
 Verstak follows several principles:
 
 * your vault is local and works without an account or internet connection;
-* files and notes remain readable outside the application;
+* files, notes and the worklog remain readable outside the application — the
+  journal is ordinary Markdown inside the Deal, one file per month
+  (`<Deal>/Журнал/2026-07.md`);
 * synchronization is optional and is not the source of truth;
 * the user should understand where data is stored and what happens to it;
 * application tools are provided by plugins rather than being permanently embedded into the core.
