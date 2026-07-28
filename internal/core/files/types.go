@@ -56,6 +56,11 @@ type ExternalOpenTarget struct {
 type WriteOptions struct {
 	CreateIfMissing bool `json:"createIfMissing"`
 	Overwrite       bool `json:"overwrite"`
+	// Service marks a write the application made to keep its own records --
+	// a plugin saving the file it stores its data in, not the user producing
+	// something. The file writer ignores it; the API layer passes it to the
+	// activity event so such a write is never counted as work.
+	Service bool `json:"service"`
 }
 
 type MoveOptions struct {

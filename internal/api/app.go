@@ -1569,10 +1569,19 @@ func (a *App) WriteVaultTextFile(pluginID, relativePath string, content string, 
 	if err := a.recordFileSyncPaths(relativePath); err != nil {
 		return err.Error()
 	}
-	a.publishFileActivity("file.changed", pluginID, relativePath, map[string]interface{}{
-		"operation": opType,
-	})
+	a.publishFileActivity("file.changed", pluginID, relativePath, writeActivityPayload(opType, options))
 	return ""
+}
+
+// writeActivityPayload describes a write to whoever records activity. A plugin
+// saving its own records asked for the write, so it says so, and the record is
+// kept without being mistaken for the user's work.
+func writeActivityPayload(opType string, options corefiles.WriteOptions) map[string]interface{} {
+	payload := map[string]interface{}{"operation": opType}
+	if options.Service {
+		payload["service"] = true
+	}
+	return payload
 }
 
 // WriteVaultFileBytes atomically writes a bounded base64 file for a plugin with files.write.
@@ -1597,9 +1606,7 @@ func (a *App) WriteVaultFileBytes(pluginID, relativePath string, dataBase64 stri
 	if err := a.recordFileSyncPaths(relativePath); err != nil {
 		return err.Error()
 	}
-	a.publishFileActivity("file.changed", pluginID, relativePath, map[string]interface{}{
-		"operation": opType,
-	})
+	a.publishFileActivity("file.changed", pluginID, relativePath, writeActivityPayload(opType, options))
 	return ""
 }
 
