@@ -21,6 +21,8 @@ export function ClearPluginNotifications(arg1:string):Promise<string>;
 
 export function CloseVault():Promise<void>;
 
+export function CollectDiagnostics():Promise<string|string>;
+
 export function CopyVaultPath(arg1:string,arg2:string,arg3:string,arg4:files.CopyOptions):Promise<string>;
 
 export function CopyVaultPaths(arg1:string,arg2:string,arg3:Array<files.PathTransfer>,arg4:files.CopyOptions):Promise<files.TransferOutcome|string>;
@@ -62,6 +64,8 @@ export function GetContributions():Promise<api.ContributionSummary>;
 export function GetCurrentWorkspace():Promise<Record<string, any>>;
 
 export function GetCurrentWorkspaceNode():Promise<Record<string, any>>;
+
+export function GetDiagnosticsInfo():Promise<api.DiagnosticsInfo>;
 
 export function GetFolderAppearance(arg1:string):Promise<Record<string, any>>;
 

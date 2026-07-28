@@ -15,6 +15,7 @@
 
   const GENERAL = 'general';
   const PLUGINS = 'plugins';
+  const DIAGNOSTICS = 'diagnostics';
 
   let locale = i18n.getLocale();
   const unsubscribeLocale = i18n.subscribe((next) => { locale = next; });
@@ -27,6 +28,28 @@
   let selectedLanguage = i18n.getLanguagePreference();
   let pluginInfo = {};
   let listEl = null;
+  let diagnostics = null;
+  let diagnosticsReportPath = '';
+  let diagnosticsError = '';
+  let collectingDiagnostics = false;
+
+  // Somebody reporting a problem should not have to be told to find a terminal
+  // and pass a flag. The report is written where they can read it first.
+  async function collectDiagnostics() {
+    collectingDiagnostics = true;
+    diagnosticsError = '';
+    diagnosticsReportPath = '';
+    try {
+      const response = await App.CollectDiagnostics();
+      const [path, err] = Array.isArray(response) ? response : [response, ''];
+      if (err) diagnosticsError = err;
+      else diagnosticsReportPath = path;
+    } catch (error) {
+      diagnosticsError = error?.message || String(error);
+    } finally {
+      collectingDiagnostics = false;
+    }
+  }
 
   $: pluginSections = (contributions.settingsPanels || [])
     .filter((panel) => enabledPluginIds.has(panel.pluginId))
@@ -47,6 +70,7 @@
     { id: GENERAL, title: tr('settings.section.general', undefined, 'General'), icon: 'settings' },
     { id: PLUGINS, title: tr('settings.pluginManager'), icon: 'puzzle' },
     ...pluginSections,
+    { id: DIAGNOSTICS, title: tr('settings.section.diagnostics', undefined, 'Diagnostics'), icon: 'info' },
   ];
 
   // Search matches a section by its own name and, for the built-in ones, by the
@@ -55,6 +79,7 @@
   const searchTerms = {
     [GENERAL]: () => [tr('settings.language'), tr('settings.section.appearance', undefined, 'Appearance')],
     [PLUGINS]: () => [tr('settings.section.pluginsHint', undefined, 'install, enable, disable, permissions')],
+    [DIAGNOSTICS]: () => [tr('settings.section.diagnosticsHint', undefined, 'log, crash, report, bug, support')],
   };
 
   $: normalizedQuery = query.trim().toLowerCase();
@@ -91,10 +116,12 @@
   }
 
   async function load() {
-    const [rawContributions, rawPlugins] = await Promise.all([
+    const [rawContributions, rawPlugins, rawDiagnostics] = await Promise.all([
       App.GetContributions().catch(() => ({})),
       App.GetPlugins().catch(() => []),
+      App.GetDiagnosticsInfo().catch(() => null),
     ]);
+    diagnostics = rawDiagnostics;
     await Promise.all((rawPlugins || []).map((plugin) => (
       i18n.loadPlugin(plugin.manifest?.id, plugin.manifest?.localization).catch(() => {})
     )));
@@ -240,6 +267,32 @@
         <button class="vt-button" type="button" data-settings-open-plugin-manager on:click={openPluginManager}>
           {tr('settings.openPluginManager', undefined, 'Open Plugin Manager')}
         </button>
+      {:else if activeSection === DIAGNOSTICS}
+        <h3>{tr('settings.section.diagnostics', undefined, 'Diagnostics')}</h3>
+        <p class="settings-hint">
+          {tr('settings.diagnosticsDescription', undefined, 'A report of what this build is, which plugins loaded and what the log says. It never includes the contents of your vault, your secrets or your sync key.')}
+        </p>
+        <div class="settings-group">
+          <div class="settings-group-title">{tr('settings.diagnosticsLog', undefined, 'Session log')}</div>
+          <p class="settings-hint" data-settings-diagnostics-log>{diagnostics?.logPath || tr('settings.diagnosticsNoLog', undefined, 'This run is not writing a log.')}</p>
+        </div>
+        <button
+          class="vt-button"
+          type="button"
+          data-settings-collect-diagnostics
+          disabled={collectingDiagnostics}
+          on:click={collectDiagnostics}
+        >
+          {tr('settings.collectDiagnostics', undefined, 'Save a report')}
+        </button>
+        {#if diagnosticsReportPath}
+          <p class="settings-hint" data-settings-diagnostics-report>
+            {tr('settings.diagnosticsSaved', { path: diagnosticsReportPath }, `Saved to ${diagnosticsReportPath}`)}
+          </p>
+        {/if}
+        {#if diagnosticsError}
+          <p class="settings-hint settings-error" data-settings-diagnostics-error>{diagnosticsError}</p>
+        {/if}
       {:else if activeSectionData?.panel}
         <!-- No heading of our own: the panel is the section, and most panels
              title themselves. The tabpanel's aria-label carries the section
@@ -432,6 +485,10 @@
   .settings-choice:focus-visible {
     outline: 0;
     box-shadow: var(--vt-focus-ring);
+  }
+
+  .settings-error {
+    color: var(--vt-color-danger, #e94560);
   }
 
   .settings-hint {

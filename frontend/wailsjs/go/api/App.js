@@ -18,6 +18,10 @@ export function CloseVault() {
   return window['go']['api']['App']['CloseVault']();
 }
 
+export function CollectDiagnostics() {
+  return window['go']['api']['App']['CollectDiagnostics']();
+}
+
 export function CopyVaultPath(arg1, arg2, arg3, arg4) {
   return window['go']['api']['App']['CopyVaultPath'](arg1, arg2, arg3, arg4);
 }
@@ -100,6 +104,10 @@ export function GetCurrentWorkspace() {
 
 export function GetCurrentWorkspaceNode() {
   return window['go']['api']['App']['GetCurrentWorkspaceNode']();
+}
+
+export function GetDiagnosticsInfo() {
+  return window['go']['api']['App']['GetDiagnosticsInfo']();
 }
 
 export function GetFolderAppearance(arg1) {

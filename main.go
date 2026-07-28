@@ -35,11 +35,18 @@ import (
 var assets embed.FS
 
 func main() {
-	// ─── Debug Logging ───────────────────────────────────────
+	// ─── Logging ─────────────────────────────────────────────
+	// The session log is always written. A packaged application starts without
+	// a terminal, so without this the one run anybody wants to look at -- the
+	// one that already failed -- is the one with no record of what happened.
 	debugEnabled := debug.Init(os.Args)
 	if debugEnabled {
-		log.Printf("[main] debug mode enabled — logging to file")
+		log.Printf("[main] debug mode enabled — verbose logging")
 	}
+	// A crash leaves its own file, which outlives the log retention. The panic
+	// continues afterwards: a window still standing with half its state gone is
+	// worse than one that stops.
+	defer debug.Recover()
 
 	// ─── Initialize Core Registries ──────────────────────────
 	capRegistry := capability.NewRegistry()

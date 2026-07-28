@@ -354,6 +354,7 @@ import importStyle from '../../../../../verstak-official-plugins/plugins/import/
   }
 
   var vaultStatus = { status: 'open', path: '/tmp/verstak-test/vault', vaultId: 'test-vault-001' };
+  var diagnosticsReports = [];
   var vaultPluginState = { enabledPlugins: ['verstak.platform-test', 'verstak.default-editor', 'verstak.files', 'verstak.notes', 'verstak.sync', 'verstak.activity', 'verstak.journal', 'verstak.browser-inbox', 'verstak.search'], disabledPlugins: [], desiredPlugins: [{ id: 'verstak.platform-test', version: '0.1.0', source: 'official' }, { id: 'verstak.default-editor', version: '0.1.0', source: 'official' }, { id: 'verstak.files', version: '0.1.0', source: 'official' }, { id: 'verstak.notes', version: '0.1.0', source: 'official' }, { id: 'verstak.sync', version: '0.1.0', source: 'official' }, { id: 'verstak.activity', version: '0.1.0', source: 'official' }, { id: 'verstak.journal', version: '0.1.0', source: 'official' }, { id: 'verstak.browser-inbox', version: '0.1.0', source: 'official' }, { id: 'verstak.search', version: '0.1.0', source: 'official' }] };
   vaultPluginState.enabledPlugins.push('verstak.trash');
   vaultPluginState.desiredPlugins.push({ id: 'verstak.trash', version: '0.1.0', source: 'official' });
@@ -3092,6 +3093,17 @@ function cloneJson(value) {
     GetContributions: function () { return Promise.resolve(allContributions()); },
     GetVaultStatus: function () { return Promise.resolve(vaultStatus); },
     GetVaultPluginState: function () { return Promise.resolve(vaultPluginState); },
+    GetDiagnosticsInfo: function () {
+      return Promise.resolve({
+        logPath: '/home/tester/.local/share/verstak/logs/verstak-2026-01-01-000000.log',
+        logDir: '/home/tester/.local/share/verstak/logs',
+        verbose: false,
+      });
+    },
+    CollectDiagnostics: function () {
+      diagnosticsReports.push('/home/tester/.local/share/verstak/logs/verstak-diagnostics-2026-01-01-000000.txt');
+      return Promise.resolve([diagnosticsReports[diagnosticsReports.length - 1], '']);
+    },
     GetBuildInfo: function () {
       return Promise.resolve({
         version: 'test',
