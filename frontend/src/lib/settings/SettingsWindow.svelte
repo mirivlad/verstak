@@ -98,7 +98,7 @@
   onMount(async () => {
     await load();
     if (requestedSection) {
-      activeSection = requestedSection;
+      applyRequestedSection();
     } else {
       const stored = await App.GetAppSettings().catch(() => ({}));
       const remembered = stored && stored.settingsSection;
@@ -111,8 +111,43 @@
 
   onDestroy(unsubscribeLocale);
 
-  $: if (requestedSection && requestedSection !== activeSection) {
-    activeSection = requestedSection;
+  // A request opens a section once. It used to be a rule that held for as long
+  // as the window was open: every click on another section was undone on the
+  // next tick, because the section clicked was not the one requested. Opening
+  // settings from the sync status bar left a window where nothing could be
+  // selected at all.
+  let appliedRequest = '';
+  $: if (requestedSection !== appliedRequest) {
+    appliedRequest = requestedSection;
+    if (requestedSection) applyRequestedSection();
+  }
+
+  // A plugin asking for its own settings without naming a panel means the one
+  // panel it has. `api.ui.openSettings()` takes an optional panel id, and the
+  // Sync status bar -- the one place a user reaches settings other than the
+  // gear -- passes none, so the request named a section that never existed.
+  function applyRequestedSection() {
+    activeSection = resolveSection(requestedSection);
+  }
+
+  function resolveSection(requested) {
+    if (!requested) return activeSection;
+    if (sections.some((section) => section.id === requested)) return requested;
+    const openEnded = /^plugin:(.+):$/.exec(requested);
+    if (openEnded) {
+      const panel = pluginSections.find((section) => section.panel.pluginId === openEnded[1]);
+      if (panel) return panel.id;
+    }
+    return requested;
+  }
+
+  // Sections arrive with the contribution list, which is loaded after the
+  // request. The one asked for is opened as soon as it exists.
+  $: if (requestedSection && requestedSection === appliedRequest && pluginSections.length) {
+    const resolved = resolveSection(requestedSection);
+    if (resolved !== requestedSection && activeSection === requestedSection) {
+      activeSection = resolved;
+    }
   }
 
   async function load() {

@@ -2085,7 +2085,7 @@ function cloneJson(value) {
   function syncPluginBundle() {
     return [
       "(function(){",
-      "var SyncStatusBar={mount:function(container){container.innerHTML='';var button=document.createElement('button');button.type='button';button.className='mock-sync-status';button.textContent='Synced';button.addEventListener('click',function(){window.dispatchEvent(new CustomEvent('verstak:open-settings',{detail:{pluginId:'verstak.sync',panelId:'verstak.sync.settings'}}));});container.appendChild(button);},unmount:function(container){container.innerHTML='';}};",
+      "var SyncStatusBar={mount:function(container){container.innerHTML='';var button=document.createElement('button');button.type='button';button.className='mock-sync-status';button.textContent='Synced';button.addEventListener('click',function(){window.dispatchEvent(new CustomEvent('verstak:open-settings',{detail:{pluginId:'verstak.sync',panelId:''}}));});container.appendChild(button);},unmount:function(container){container.innerHTML='';}};",
       "var SyncSettings={mount:function(container){container.innerHTML='<div class=\"sync-settings-root\">Sync settings</div>';},unmount:function(container){container.innerHTML='';}};",
       "window.VerstakPluginRegister('verstak.sync',{components:{SyncStatusBar:SyncStatusBar,SyncSettings:SyncSettings}});",
       "})();"
