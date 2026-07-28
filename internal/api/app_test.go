@@ -1071,6 +1071,46 @@ func TestFilesBridgeWritePublishesFileChangedActivityEvent(t *testing.T) {
 	if received[0].Timestamp == "" {
 		t.Fatal("event timestamp is empty")
 	}
+	if _, marked := payload["service"]; marked {
+		t.Fatalf("payload marked an ordinary write as service: %#v", payload)
+	}
+}
+
+// A plugin saving the file it keeps its own records in is not the user doing
+// work. The write is still recorded; it is marked so nothing counts it as work.
+func TestFilesBridgeMarksServiceWriteInFileChangedEvent(t *testing.T) {
+	app, _ := newFilesTestApp(t, []string{"files.write"})
+	bus := events.NewBus()
+	app.eventBus = bus
+
+	if errStr := app.CreateVaultFolder("files.plugin", "Project"); errStr != "" {
+		t.Fatalf("CreateVaultFolder Project: %s", errStr)
+	}
+
+	var received []events.Event
+	bus.Subscribe("file.changed", func(event events.Event) {
+		received = append(received, event)
+	})
+
+	if errStr := app.WriteVaultTextFile("files.plugin", "Project/worklog.md", "hello", corefiles.WriteOptions{CreateIfMissing: true, Service: true}); errStr != "" {
+		t.Fatalf("WriteVaultTextFile: %s", errStr)
+	}
+	if errStr := app.WriteVaultFileBytes("files.plugin", "Project/worklog.bin", "aGVsbG8=", corefiles.WriteOptions{CreateIfMissing: true, Service: true}); errStr != "" {
+		t.Fatalf("WriteVaultFileBytes: %s", errStr)
+	}
+
+	if len(received) != 2 {
+		t.Fatalf("received %d file.changed events, want 2", len(received))
+	}
+	for _, event := range received {
+		payload, ok := event.Payload.(map[string]interface{})
+		if !ok {
+			t.Fatalf("payload = %#v, want map[string]interface{}", event.Payload)
+		}
+		if payload["service"] != true {
+			t.Fatalf("payload service = %#v, want true for %#v", payload["service"], payload["path"])
+		}
+	}
 }
 
 func TestActivityProviderRecordsFileChangedWithoutMountedView(t *testing.T) {
