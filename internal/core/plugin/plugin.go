@@ -239,6 +239,10 @@ type Plugin struct {
 	Error    string   `json:"error,omitempty"`
 	Enabled  bool     `json:"enabled"`
 	RootPath string   `json:"rootPath"`
+	// Integrity is what the package checksums said, if they disagreed. It is
+	// kept apart from Error because lifecycle resolution clears that field
+	// every time it runs, and a stale file does not stop being stale.
+	Integrity string `json:"integrity,omitempty"`
 }
 
 // validationErrors tracks manifest validation issues.
@@ -453,10 +457,23 @@ func loadPlugin(pluginDir string) (Plugin, error) {
 		return Plugin{}, fmt.Errorf("invalid manifest: %s", strings.Join(errs, "; "))
 	}
 
-	return Plugin{
+	loaded := Plugin{
 		Manifest: m,
 		Status:   StatusDiscovered,
 		Enabled:  true,
 		RootPath: pluginDir,
-	}, nil
+	}
+
+	// A packaged plugin says what left the build. One that no longer matches is
+	// still loaded -- refusing to start over a stale file would be worse than
+	// the file -- but it says so, and the Plugin Manager shows it.
+	findings, err := VerifyPackage(pluginDir)
+	if err != nil {
+		loaded.Integrity = fmt.Sprintf("package integrity could not be checked: %v", err)
+		return loaded, nil
+	}
+	if len(findings) > 0 {
+		loaded.Integrity = "package does not match its checksums: " + strings.Join(findings, "; ")
+	}
+	return loaded, nil
 }

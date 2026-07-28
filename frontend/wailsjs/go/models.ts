@@ -1458,6 +1458,7 @@ export namespace plugin {
 	    error?: string;
 	    enabled: boolean;
 	    rootPath: string;
+	    integrity?: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new Plugin(source);
@@ -1470,6 +1471,7 @@ export namespace plugin {
 	        this.error = source["error"];
 	        this.enabled = source["enabled"];
 	        this.rootPath = source["rootPath"];
+	        this.integrity = source["integrity"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
