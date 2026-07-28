@@ -318,6 +318,24 @@ export namespace api {
 		    return a;
 		}
 	}
+	export class DiagnosticsInfo {
+	    logPath: string;
+	    logDir: string;
+	    verbose: boolean;
+	    lastError?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new DiagnosticsInfo(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.logPath = source["logPath"];
+	        this.logDir = source["logDir"];
+	        this.verbose = source["verbose"];
+	        this.lastError = source["lastError"];
+	    }
+	}
 	
 	
 	
@@ -1306,9 +1324,28 @@ export namespace plugin {
 	        this.locales = source["locales"];
 	    }
 	}
+	export class SyncRecordSet {
+	    id: string;
+	    storage: string;
+	    key?: string;
+	    name?: string;
+	    identity: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new SyncRecordSet(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.storage = source["storage"];
+	        this.key = source["key"];
+	        this.name = source["name"];
+	        this.identity = source["identity"];
+	    }
+	}
 	export class SyncConfig {
-	    namespaces?: string[];
-	    participate?: boolean;
+	    records?: SyncRecordSet[];
 	
 	    static createFrom(source: any = {}) {
 	        return new SyncConfig(source);
@@ -1316,9 +1353,26 @@ export namespace plugin {
 	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.namespaces = source["namespaces"];
-	        this.participate = source["participate"];
+	        this.records = this.convertValues(source["records"], SyncRecordSet);
 	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
 	}
 	export class MigrationConfig {
 	    path?: string;
@@ -1436,6 +1490,7 @@ export namespace plugin {
 		    return a;
 		}
 	}
+	
 
 }
 
