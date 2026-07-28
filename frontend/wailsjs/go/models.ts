@@ -673,6 +673,7 @@ export namespace files {
 	export class WriteOptions {
 	    createIfMissing: boolean;
 	    overwrite: boolean;
+	    service: boolean;
 	
 	    static createFrom(source: any = {}) {
 	        return new WriteOptions(source);
@@ -682,6 +683,7 @@ export namespace files {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.createIfMissing = source["createIfMissing"];
 	        this.overwrite = source["overwrite"];
+	        this.service = source["service"];
 	    }
 	}
 

@@ -629,7 +629,7 @@ function cloneJson(value) {
         icon: 'list-todo',
         provides: ['todo.list', 'todo.workspace'],
         requires: ['verstak/core/notifications/v1'],
-        permissions: ['files.read', 'storage.namespace', 'ui.register', 'notifications.schedule'],
+        permissions: ['events.subscribe', 'files.read', 'storage.namespace', 'ui.register', 'notifications.schedule'],
         frontend: { entry: 'frontend/dist/index.js' },
         contributes: {
           views: [{ id: 'verstak.todo.view', title: 'Todos', icon: 'list-todo', component: 'TodoView' }],
