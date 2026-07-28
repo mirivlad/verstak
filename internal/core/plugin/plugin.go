@@ -196,10 +196,26 @@ type ContributionWorkspaceItem struct {
 	Component string `json:"component"`
 }
 
-// SyncConfig describes plugin sync configuration.
+// SyncConfig declares which of a plugin's own data travels between devices.
+//
+// It used to be a `participate` flag and a list of namespace names that nothing
+// read. What sync needs to know is narrower and has to be exact: which document
+// holds a list, and which field on those records identifies them.
 type SyncConfig struct {
-	Namespaces  []string `json:"namespaces,omitempty"`
-	Participate bool     `json:"participate,omitempty"`
+	Records []SyncRecordSet `json:"records,omitempty"`
+}
+
+// SyncRecordSet is one list of records the plugin keeps and agrees to share.
+type SyncRecordSet struct {
+	// ID names the set in the operation log and must stay stable across
+	// versions of the plugin.
+	ID string `json:"id"`
+	// Storage is "settings" (an array under Key in the plugin's settings) or
+	// "data" (a named NDJSON file in the plugin's data namespace).
+	Storage  string `json:"storage"`
+	Key      string `json:"key,omitempty"`
+	Name     string `json:"name,omitempty"`
+	Identity string `json:"identity"`
 }
 
 // Status represents the current state of a plugin.
