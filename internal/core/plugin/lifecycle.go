@@ -71,5 +71,16 @@ func ResolveLifecycle(plugins []Plugin, registry *capability.Registry, isDisable
 			p.Status = StatusDegraded
 			p.Error = fmt.Sprintf("missing optional: %s", strings.Join(missing, ", "))
 		}
+		// A plugin whose files no longer match the package it was built as runs,
+		// but says so. Refusing to start over a stale file would cost more than
+		// the file does.
+		if p.Integrity != "" {
+			p.Status = StatusDegraded
+			if p.Error == "" {
+				p.Error = p.Integrity
+			} else {
+				p.Error = p.Error + "; " + p.Integrity
+			}
+		}
 	}
 }

@@ -8,8 +8,11 @@
 # Usage:
 #   scripts/verstak-check.sh              # every repository
 #   scripts/verstak-check.sh desktop      # one or more repositories by suffix
-#   VERSTAK_CHECK_E2E=1 scripts/verstak-check.sh
-#     also runs the Playwright suite, which needs ~5 minutes and a browser.
+#   VERSTAK_CHECK_E2E=0 scripts/verstak-check.sh
+#     skips the Playwright suite, which needs ~5 minutes and a browser.
+#
+# The e2e suite used to be opt-in. Four specs were red for days because of it:
+# nobody ran the check that would have said so.
 set -uo pipefail
 
 DESKTOP_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -65,11 +68,11 @@ if wanted verstak-desktop "${SELECTORS[@]}"; then
   section "verstak-desktop"
   check_repo verstak-desktop "desktop: static checks" bash scripts/check.sh
   check_repo verstak-desktop "desktop: go + contract tests" bash scripts/test.sh
-  if [ "${VERSTAK_CHECK_E2E:-0}" = "1" ]; then
+  if [ "${VERSTAK_CHECK_E2E:-1}" = "1" ]; then
     check_repo verstak-desktop "desktop: playwright e2e" npm --prefix frontend run test:e2e
   else
-    SKIPPED+=("desktop: playwright e2e (set VERSTAK_CHECK_E2E=1)")
-    printf '  \033[33m∅\033[0m desktop: playwright e2e — set VERSTAK_CHECK_E2E=1 to include\n'
+    SKIPPED+=("desktop: playwright e2e (VERSTAK_CHECK_E2E=0)")
+    printf '  \033[33m∅\033[0m desktop: playwright e2e — skipped by VERSTAK_CHECK_E2E=0\n'
   fi
 fi
 

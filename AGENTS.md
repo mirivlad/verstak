@@ -166,18 +166,26 @@ See `docs/GUI_TESTING.md` for details.
 
 **Always use debug logging when investigating issues. Never rely on "it should work" — look at the logs.**
 
-### Backend debug
+### Backend log
 
-Enable with `--debug` flag:
+Every run writes a session log; `--debug` only makes it verbose and mirrors it
+to stderr. Ten sessions are kept, and a crash writes its own `crash-*.log`
+beside them, which the retention never deletes.
+
+A user can produce all of this without a terminal: Settings → Диагностика →
+«Сохранить отчёт» writes the build, the plugin statuses and the tail of the log
+into one plain-text file.
+
+Enable verbose logging with the `--debug` flag:
 ```bash
 ./verstak-desktop --debug
 ```
 
-Logs go to: `~/.local/share/verstak/debug/verstak-YYYY-MM-DD-HHMMSS.log`
+Logs go to: `~/.local/share/verstak/logs/verstak-YYYY-MM-DD-HHMMSS.log`
 
 View in real-time:
 ```bash
-tail -f ~/.local/share/verstak/debug/verstak-*.log
+tail -f ~/.local/share/verstak/logs/verstak-*.log
 ```
 
 What's logged (when `--debug` is active):
@@ -213,7 +221,7 @@ What's logged:
 
 1. User reports issue
 2. Restart app with `--debug` and reproduce
-3. Run `tail -f ~/.local/share/verstak/debug/verstak-*.log` and share output
+3. Run `tail -f ~/.local/share/verstak/logs/verstak-*.log` and share output
 4. For frontend issues: enable frontend debug view `exportLog()` output
 5. Analyze logs, identify root cause, fix
 6. Verify fix by asking user to reproduce again with debug on
