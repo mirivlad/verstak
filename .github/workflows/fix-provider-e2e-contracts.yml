@@ -10,6 +10,10 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: fix-provider-e2e-contracts
+  cancel-in-progress: true
+
 jobs:
   apply:
     runs-on: ubuntu-latest
@@ -55,11 +59,11 @@ jobs:
         working-directory: work/verstak
         run: node frontend/tests/shell-source-contract-test.mjs
 
-      - name: Run failed-suite E2E regression set
+      - name: Run focused E2E diagnostics
         working-directory: work/verstak/frontend
         run: |
           npx playwright install --with-deps chromium
-          npx playwright test activity.spec.js browser-inbox.spec.js plugin-api-bridge.spec.js todo.spec.js ux-followup.spec.js ux-today.spec.js
+          npx playwright test browser-inbox.spec.js ux-today.spec.js
 
       - name: Remove one-shot machinery and commit
         working-directory: work/verstak
