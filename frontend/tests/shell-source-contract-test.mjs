@@ -20,7 +20,7 @@ function assertExcludes(source, needle, message) {
 }
 
 const workspaceHost = read('frontend/src/lib/shell/WorkspaceHost.svelte');
-const overviewSurface = read('frontend/src/lib/shell/TodaySurface.svelte');
+const overviewSurface = read('frontend/src/lib/shell/OverviewSurface.svelte');
 const globalSearch = read('frontend/src/lib/shell/GlobalSearch.svelte');
 const app = read('frontend/src/App.svelte');
 const statusBar = read('frontend/src/lib/shell/StatusBar.svelte');
@@ -67,7 +67,7 @@ for (const panel of [
   'frontend/src/lib/plugin-manager/PluginManager.svelte',
   'frontend/src/lib/plugin-manager/PluginCard.svelte',
   'frontend/src/lib/settings/SettingsWindow.svelte',
-  'frontend/src/lib/shell/TodaySurface.svelte',
+  'frontend/src/lib/shell/OverviewSurface.svelte',
 ]) {
   assertExcludes(
     read(panel),
@@ -135,6 +135,16 @@ assertIncludes(
   'executePluginCommand(provider.pluginId, provider.handler',
   'Overview shell should consume declared Overview providers through the generic command runtime',
 );
+if ((overviewSurface.match(/openTool\(item\.actionKind, item\.toolRequest\)/g) || []).length !== 5) {
+  throw new Error('Overview shell should preserve provider toolRequest for summary, resume, attention, recent, and resources');
+}
+assertIncludes(
+  overviewSurface,
+  'toolRequest: item.action.toolRequest || null',
+  'Overview summary normalization should preserve provider toolRequest',
+);
+assertExcludes(overviewSurface, 'today-', 'Overview shell should not retain Today-era internal CSS names');
+assertExcludes(workspaceHost, 'TodaySurface', 'WorkspaceHost should use the final OverviewSurface component name');
 assertIncludes(
   workspaceHost,
   'findWorkspaceItem(workspaceItemId)',

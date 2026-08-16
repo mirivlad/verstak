@@ -18,7 +18,7 @@ for (const [name, pattern] of forbidden) {
 }
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const overview = fs.readFileSync(path.join(root, 'src/lib/shell/TodaySurface.svelte'), 'utf8');
+const overview = fs.readFileSync(path.join(root, 'src/lib/shell/OverviewSurface.svelte'), 'utf8');
 for (const phrase of ['Workspace opened', 'Workspace activity', 'Workspace overview note']) {
   if (overview.includes(phrase)) {
     throw new Error(`Overview exposes workspace terminology: ${phrase}`);

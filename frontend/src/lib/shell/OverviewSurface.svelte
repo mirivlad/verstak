@@ -143,6 +143,7 @@
       count: Number.isFinite(Number(item.count)) ? Number(item.count) : 0,
       actionKind: item.action.workspaceItemId,
       actionLabel: tr('overview.openTool', { tool: target?.title || item.action.workspaceItemId }),
+      toolRequest: item.action.toolRequest || null,
       _sequence: sequence,
     };
   }
@@ -252,8 +253,8 @@
   }
 </script>
 
-<div class="today-root overview-root" aria-label={tr('workspace.overview')} data-overview-root>
-  <div class="today-header overview-header">
+<div class="overview-root" aria-label={tr('workspace.overview')} data-overview-root>
+  <div class="overview-header">
     <div>
       <h2>{tr('workspace.overview')}</h2>
       <p title={lastActive ? absoluteTime(lastActive) : ''}>
@@ -271,13 +272,13 @@
 
   <div class="overview-layout" class:overview-layout-wide={!hasOverviewSideContent}>
     <main class="overview-main">
-      <section class="today-resume overview-continue" data-overview-section="continue">
-        <div class="today-resume-copy overview-continue-copy">
+      <section class="overview-continue" data-overview-section="continue">
+        <div class="overview-continue-copy">
           <span>{tr('overview.continue')}</span>
           <h3>{tr('overview.continueHint')}</h3>
         </div>
         {#if loading}
-          <p class="today-empty compact">{tr('overview.loadingSignals')}</p>
+          <p class="overview-empty compact">{tr('overview.loadingSignals')}</p>
         {:else if continueItems.length}
           <div class="overview-continue-list">
             {#each continueItems as item}
@@ -286,7 +287,7 @@
                 class="overview-continue-item"
                 data-overview-continue-item={item.category || item.actionKind || item.id}
                 data-overview-action={item.actionKind}
-                on:click={() => openTool(item.actionKind)}
+                on:click={() => openTool(item.actionKind, item.toolRequest)}
               >
                 <span class="overview-continue-item-copy">
                   <strong title={item.title}>{item.title}</strong>
@@ -304,15 +305,15 @@
         {/if}
       </section>
 
-      <div class="today-summary overview-summary" data-overview-section="summary" aria-label={tr('overview.summary')}>
+      <div class="overview-summary" data-overview-section="summary" aria-label={tr('overview.summary')}>
         {#each summaryItems as item}
           <button
             type="button"
-            class="today-summary-item overview-summary-item"
+            class="overview-summary-item"
             data-overview-summary={item.key}
             data-overview-action={item.actionKind}
             aria-label={`${item.label}: ${item.actionLabel}`}
-            on:click={() => openTool(item.actionKind)}
+            on:click={() => openTool(item.actionKind, item.toolRequest)}
           >
             <strong>{loading ? '...' : item.count}</strong>
             <span>{item.label}</span>
@@ -321,8 +322,8 @@
         {/each}
       </div>
 
-      <section class="today-panel overview-panel overview-recent" data-overview-section="recent">
-        <div class="today-panel-head overview-panel-head">
+      <section class="overview-panel overview-recent" data-overview-section="recent">
+        <div class="overview-panel-head">
           <div>
             <h3>{tr('overview.recentChanges')}</h3>
             <p>{tr('overview.recentChangesHint')}</p>
@@ -342,16 +343,16 @@
           </div>
         </div>
         {#if loading}
-          <p class="today-empty">{tr('overview.loadingRecent')}</p>
+          <p class="overview-empty">{tr('overview.loadingRecent')}</p>
         {:else if filteredRecentChanges.length}
-          <div class="today-list overview-list">
+          <div class="overview-list">
             {#each filteredRecentChanges as item}
               <button
                 type="button"
-                class="today-row overview-change-row"
+                class="overview-row overview-change-row"
                 data-overview-recent-item={item.category}
                 data-overview-action={item.actionKind}
-                on:click={() => openTool(item.actionKind)}
+                on:click={() => openTool(item.actionKind, item.toolRequest)}
               >
                 <span class="overview-change-copy">
                   <strong title={item.title}>{item.title}</strong>
@@ -362,7 +363,7 @@
             {/each}
           </div>
         {:else}
-          <p class="today-empty">{tr('overview.noChanges')}</p>
+          <p class="overview-empty">{tr('overview.noChanges')}</p>
         {/if}
       </section>
     </main>
@@ -370,19 +371,19 @@
     {#if hasOverviewSideContent}
     <aside class="overview-side">
       {#if hasAttentionTools && (needsAttention.length || loading)}
-        <section class="today-panel overview-panel" data-overview-section="attention">
-          <div class="today-panel-head overview-panel-head">
+        <section class="overview-panel" data-overview-section="attention">
+          <div class="overview-panel-head">
             <div>
               <h3>{tr('overview.attention')}</h3>
               <p>{tr('overview.attentionHint')}</p>
             </div>
           </div>
           {#if loading}
-            <p class="today-empty">{tr('overview.loadingPending')}</p>
+            <p class="overview-empty">{tr('overview.loadingPending')}</p>
           {:else if needsAttention.length}
-            <div class="today-list overview-list compact">
+            <div class="overview-list compact">
               {#each needsAttention as item}
-                <div class="today-row overview-attention-row">
+                <div class="overview-row overview-attention-row">
                   <strong title={item.title}>{item.title}</strong>
                   <span>{item.meta}</span>
                   <button type="button" on:click={() => openTool(item.actionKind, item.toolRequest)}>{item.actionLabel}</button>
@@ -390,22 +391,22 @@
               {/each}
             </div>
           {:else}
-            <p class="today-empty compact">{tr('overview.noPending')}</p>
+            <p class="overview-empty compact">{tr('overview.noPending')}</p>
           {/if}
         </section>
       {/if}
 
       {#if keyResources.length}
-        <section class="today-panel overview-panel secondary" data-overview-section="key-resources">
-          <div class="today-panel-head overview-panel-head">
+        <section class="overview-panel secondary" data-overview-section="key-resources">
+          <div class="overview-panel-head">
             <h3>{tr('overview.keyResources')}</h3>
           </div>
-          <div class="today-list overview-list compact">
+          <div class="overview-list compact">
             {#each keyResources as item}
-              <div class="today-row overview-resource-row">
+              <div class="overview-row overview-resource-row">
                 <strong title={item.title}>{item.title}</strong>
                 <span title={item.meta}>{item.meta}</span>
-                <button type="button" on:click={() => openTool(item.actionKind)}>{item.actionLabel}</button>
+                <button type="button" on:click={() => openTool(item.actionKind, item.toolRequest)}>{item.actionLabel}</button>
               </div>
             {/each}
           </div>
@@ -417,7 +418,7 @@
 </div>
 
 <style>
-  .today-root {
+  .overview-root {
     height: 100%;
     min-height: 0;
     display: flex;
@@ -427,7 +428,7 @@
     overflow: auto;
   }
 
-  .today-header {
+  .overview-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -437,24 +438,24 @@
     background: var(--vt-color-surface-muted);
   }
 
-  .today-header h2 {
+  .overview-header h2 {
     margin: 0;
     font-size: 1.05rem;
   }
 
-  .today-header p {
+  .overview-header p {
     margin: 0.25rem 0 0;
     color: var(--vt-color-text-muted);
     font-size: 0.8rem;
   }
 
-  .today-summary {
+  .overview-summary {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
     gap: 0.4rem;
   }
 
-  .today-summary-item {
+  .overview-summary-item {
     min-width: 0;
     display: grid;
     grid-template-columns: auto minmax(0, 1fr);
@@ -472,22 +473,22 @@
     text-align: left;
   }
 
-  .today-summary-item:hover,
-  .today-summary-item:focus-visible {
+  .overview-summary-item:hover,
+  .overview-summary-item:focus-visible {
     border-color: var(--vt-color-accent);
     background: var(--vt-color-surface-hover);
     outline: none;
   }
 
-  .today-summary-item strong {
+  .overview-summary-item strong {
     grid-row: 1 / 3;
     color: var(--vt-color-text-primary);
     font-size: 1.05rem;
     line-height: 1;
   }
 
-  .today-summary-item span,
-  .today-summary-item small {
+  .overview-summary-item span,
+  .overview-summary-item small {
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -496,7 +497,7 @@
     font-size: 0.72rem;
   }
 
-  .today-summary-item span {
+  .overview-summary-item span {
     color: var(--vt-color-text-secondary);
     font-weight: 600;
   }
@@ -521,7 +522,7 @@
     gap: 0.75rem;
   }
 
-  .today-resume {
+  .overview-continue {
     display: grid;
     gap: 0.75rem;
     padding: 0.9rem 1rem;
@@ -530,13 +531,13 @@
     background: var(--vt-color-accent-muted);
   }
 
-  .today-resume-copy {
+  .overview-continue-copy {
     min-width: 0;
     display: grid;
     gap: 0.22rem;
   }
 
-  .today-resume-copy span {
+  .overview-continue-copy span {
     color: var(--vt-color-accent);
     font-size: 0.72rem;
     font-weight: 700;
@@ -544,14 +545,14 @@
     letter-spacing: 0.05em;
   }
 
-  .today-resume-copy h3 {
+  .overview-continue-copy h3 {
     margin: 0;
     color: var(--vt-color-text-primary);
     font-size: 0.98rem;
     font-weight: 600;
   }
 
-  .today-panel {
+  .overview-panel {
     min-width: 0;
     display: flex;
     flex-direction: column;
@@ -573,7 +574,7 @@
     background: var(--vt-color-warning-muted);
   }
 
-  .today-panel-head {
+  .overview-panel-head {
     min-height: 2.8rem;
     display: flex;
     align-items: center;
@@ -583,13 +584,13 @@
     border-bottom: 1px solid var(--vt-color-border);
   }
 
-  .today-panel h3 {
+  .overview-panel h3 {
     margin: 0;
     color: var(--vt-color-text-primary);
     font-size: 0.9rem;
   }
 
-  .today-panel-head p {
+  .overview-panel-head p {
     margin: 0.2rem 0 0;
     color: var(--vt-color-text-muted);
     font-size: 0.74rem;
@@ -606,8 +607,8 @@
   }
 
   .overview-filters button,
-  .today-panel-head button,
-  .today-header button,
+  .overview-panel-head button,
+  .overview-header button,
   .overview-continue-item,
   .overview-list button {
     min-height: 1.85rem;
@@ -629,8 +630,8 @@
 
   .overview-filters button.is-active,
   .overview-filters button:hover,
-  .today-panel-head button:hover,
-  .today-header button:hover,
+  .overview-panel-head button:hover,
+  .overview-header button:hover,
   .overview-continue-item:hover,
   .overview-list button:hover {
     border-color: var(--vt-color-accent);
@@ -642,7 +643,7 @@
     color: var(--vt-color-accent);
   }
 
-  .today-empty {
+  .overview-empty {
     flex: 1;
     display: flex;
     align-items: center;
@@ -655,21 +656,21 @@
     text-align: center;
   }
 
-  .today-empty.compact {
+  .overview-empty.compact {
     min-height: 5rem;
   }
 
-  .today-list {
+  .overview-list {
     display: grid;
     gap: 0.45rem;
     padding: 0.65rem;
   }
 
-  .today-list.compact {
+  .overview-list.compact {
     gap: 0.4rem;
   }
 
-  .today-row {
+  .overview-row {
     min-width: 0;
     display: grid;
     gap: 0.2rem;
@@ -729,7 +730,7 @@
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .today-row strong {
+  .overview-row strong {
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -738,7 +739,7 @@
     font-size: 0.85rem;
   }
 
-  .today-row span {
+  .overview-row span {
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -797,7 +798,7 @@
       grid-template-columns: 1fr;
     }
 
-    .today-panel-head {
+    .overview-panel-head {
       align-items: stretch;
       flex-direction: column;
     }
@@ -822,7 +823,7 @@
   }
 
   @container vt-content (max-width: 620px) {
-    .today-summary {
+    .overview-summary {
       grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 
