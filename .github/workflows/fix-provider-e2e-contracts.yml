@@ -5,11 +5,10 @@ on:
     branches: [audit/overview-provider-shell]
     paths:
       - '.github/scripts/fix_provider_e2e_contracts.py'
-      - '.github/scripts/diagnose_provider_e2e.py'
       - '.github/workflows/fix-provider-e2e-contracts.yml'
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: fix-provider-e2e-contracts
@@ -40,9 +39,9 @@ jobs:
           cache: npm
           cache-dependency-path: work/verstak/frontend/package-lock.json
 
-      - name: Apply provider E2E fixes and diagnostics
+      - name: Apply provider E2E fixes
         working-directory: work/verstak
-        run: python3 .github/scripts/diagnose_provider_e2e.py
+        run: python3 .github/scripts/fix_provider_e2e_contracts.py
 
       - name: Install frontend dependencies
         working-directory: work/verstak/frontend
@@ -60,8 +59,22 @@ jobs:
         working-directory: work/verstak
         run: node frontend/tests/shell-source-contract-test.mjs
 
-      - name: Run focused E2E diagnostics
+      - name: Run former failing E2E regression set
         working-directory: work/verstak/frontend
         run: |
           npx playwright install --with-deps chromium
-          npx playwright test browser-inbox.spec.js ux-today.spec.js
+          npx playwright test activity.spec.js browser-inbox.spec.js plugin-api-bridge.spec.js todo.spec.js ux-followup.spec.js ux-today.spec.js
+
+      - name: Remove one-shot machinery and commit
+        working-directory: work/verstak
+        run: |
+          rm -f \
+            .github/scripts/fix_provider_e2e_contracts.py \
+            .github/scripts/diagnose_provider_e2e.py \
+            .github/workflows/fix-provider-e2e-contracts.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git diff --cached --check
+          git commit -m 'fix: align provider navigation E2E contracts'
+          git push origin HEAD:audit/overview-provider-shell
