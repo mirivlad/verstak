@@ -1,0 +1,118 @@
+name: release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Release version (for example v0.1.3 or v0.2.0-beta.1)
+        required: true
+        type: string
+      official_plugins_ref:
+        description: Official plugins git ref to package
+        required: false
+        default: main
+        type: string
+      publish:
+        description: Create/update the GitHub Release after all checks pass
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ inputs.version }}
+  cancel-in-progress: false
+
+jobs:
+  build-release:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      VERSION: ${{ inputs.version }}
+      OFFICIAL_PLUGINS_REF: ${{ inputs.official_plugins_ref }}
+      GH_TOKEN: ${{ github.token }}
+
+    steps:
+      - name: Require main and validate version
+        run: |
+          if [[ "${GITHUB_REF_NAME}" != "main" ]]; then
+            echo "Releases must run from main, got ${GITHUB_REF_NAME}" >&2
+            exit 1
+          fi
+          if [[ ! "$VERSION" =~ ^v[0-9][A-Za-z0-9._-]*$ ]]; then
+            echo "Invalid release version: $VERSION" >&2
+            exit 1
+          fi
+
+      - name: Check out desktop
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check out official plugins
+        uses: actions/checkout@v4
+        with:
+          repository: mirivlad/verstak-official-plugins
+          ref: ${{ env.OFFICIAL_PLUGINS_REF }}
+          path: verstak-official-plugins
+
+      - name: Put official plugins beside desktop
+        run: mv verstak-official-plugins ../verstak-official-plugins
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libgtk-3-dev libwebkit2gtk-4.1-dev librsvg2-bin \
+            gcc-mingw-w64-x86-64 file curl zip
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install Wails CLI
+        run: go install github.com/wailsapp/wails/v2/cmd/wails@v2.12.0
+
+      - name: Require release notes before spending build time
+        run: test -s "release-notes/$VERSION.md"
+
+      - name: Build Linux and Windows release assets
+        run: bash scripts/release.sh "$VERSION"
+
+      - name: Smoke-test packaged release
+        run: bash scripts/release-smoke.sh "$VERSION"
+
+      - name: Verify expected assets
+        run: |
+          test -s "release/verstak_${VERSION#v}_amd64.deb"
+          test -s "release/verstak-linux-x86_64-$VERSION.AppImage"
+          test -s "release/verstak-windows-amd64-$VERSION.zip"
+          test -s release/SHA256SUMS
+          (cd release && sha256sum --check SHA256SUMS)
+
+      - name: Upload release build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: verstak-${{ inputs.version }}
+          path: |
+            release/*.deb
+            release/*.AppImage
+            release/*.zip
+            release/SHA256SUMS
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Publish GitHub Release
+        if: ${{ inputs.publish }}
+        env:
+          VERSTAK_SKIP_RELEASE_BUILD: '1'
+        run: bash scripts/publish-github-release.sh "$VERSION"
