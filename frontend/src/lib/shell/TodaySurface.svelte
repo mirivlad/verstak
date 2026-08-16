@@ -216,15 +216,22 @@
   function relativeTime(value) {
     const ms = new Date(value).getTime();
     if (!Number.isFinite(ms)) return tr('overview.time.none');
-    const delta = Date.now() - ms;
-    const abs = Math.abs(delta);
-    if (abs < 60 * 1000) return tr('overview.time.now');
-    const minutes = Math.max(1, Math.round(abs / 60000));
-    if (minutes < 60) return tr(delta >= 0 ? 'overview.time.minutesAgo' : 'overview.time.inMinutes', { count: minutes });
-    const hours = Math.max(1, Math.round(abs / 3600000));
-    if (hours < 48) return tr(delta >= 0 ? 'overview.time.hoursAgo' : 'overview.time.inHours', { count: hours });
-    const days = Math.max(1, Math.round(abs / 86400000));
-    return tr(delta >= 0 ? 'overview.time.daysAgo' : 'overview.time.inDays', { count: days });
+    const diff = Date.now() - ms;
+    if (diff < 0) return absoluteTime(value);
+    const minute = 60 * 1000;
+    const hour = 60 * minute;
+    const day = 24 * hour;
+    if (diff < minute) return tr('overview.time.now');
+    if (diff < hour) return tr('overview.time.minutes', { count: Math.floor(diff / minute) });
+    if (diff < day) return tr('overview.time.hours', { count: Math.floor(diff / hour) });
+    if (diff < 2 * day) return tr('overview.time.yesterday');
+    if (diff < 7 * day) return tr('overview.time.days', { count: Math.floor(diff / day) });
+    const date = new Date(ms);
+    return date.toLocaleDateString(locale === 'ru' ? 'ru-RU' : 'en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: date.getFullYear() === new Date().getFullYear() ? undefined : 'numeric',
+    });
   }
 
   function absoluteTime(value) {

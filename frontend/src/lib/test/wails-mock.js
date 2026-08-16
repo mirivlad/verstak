@@ -11,6 +11,16 @@ import secretsSource from '../../../../../verstak-official-plugins/plugins/secre
 import activitySource from '../../../../../verstak-official-plugins/plugins/activity/frontend/src/index.js?raw';
 import todoSource from '../../../../../verstak-official-plugins/plugins/todo/frontend/src/index.js?raw';
 import journalSource from '../../../../../verstak-official-plugins/plugins/journal/frontend/src/index.js?raw';
+import notesEnCatalog from '../../../../../verstak-official-plugins/plugins/notes/locales/en.json';
+import notesRuCatalog from '../../../../../verstak-official-plugins/plugins/notes/locales/ru.json';
+import activityEnCatalog from '../../../../../verstak-official-plugins/plugins/activity/locales/en.json';
+import activityRuCatalog from '../../../../../verstak-official-plugins/plugins/activity/locales/ru.json';
+import browserEnCatalog from '../../../../../verstak-official-plugins/plugins/browser-inbox/locales/en.json';
+import browserRuCatalog from '../../../../../verstak-official-plugins/plugins/browser-inbox/locales/ru.json';
+import journalEnCatalog from '../../../../../verstak-official-plugins/plugins/journal/locales/en.json';
+import journalRuCatalog from '../../../../../verstak-official-plugins/plugins/journal/locales/ru.json';
+import todoEnCatalog from '../../../../../verstak-official-plugins/plugins/todo/locales/en.json';
+import todoRuCatalog from '../../../../../verstak-official-plugins/plugins/todo/locales/ru.json';
 import importSource from '../../../../../verstak-official-plugins/plugins/import/frontend/dist/index.js?raw';
 import importStyle from '../../../../../verstak-official-plugins/plugins/import/frontend/dist/style.css?raw';
 
@@ -318,6 +328,14 @@ import importStyle from '../../../../../verstak-official-plugins/plugins/import/
     manifest.contributes.overviewProviders = [{ id: provider.id, label: provider.label, handler: provider.handler }];
   });
 
+  var realOverviewPluginCatalogs = {
+    'verstak.notes': { en: notesEnCatalog, ru: notesRuCatalog },
+    'verstak.activity': { en: activityEnCatalog, ru: activityRuCatalog },
+    'verstak.browser-inbox': { en: browserEnCatalog, ru: browserRuCatalog },
+    'verstak.journal': { en: journalEnCatalog, ru: journalRuCatalog },
+    'verstak.todo': { en: todoEnCatalog, ru: todoRuCatalog }
+  };
+
   var russianPluginNames = {
     'verstak.platform-test': 'Тест платформы',
     'verstak.default-editor': 'Стандартный редактор',
@@ -353,6 +371,8 @@ import importStyle from '../../../../../verstak-official-plugins/plugins/import/
   });
 
   function mockPluginCatalog(pluginId, locale) {
+    var realCatalog = realOverviewPluginCatalogs[pluginId] && realOverviewPluginCatalogs[pluginId][locale];
+    if (realCatalog) return Object.assign({}, realCatalog);
     var state = pluginStates[pluginId];
     if (!state || !state.manifest) return {};
     var manifest = state.manifest;
@@ -364,7 +384,7 @@ import importStyle from '../../../../../verstak-official-plugins/plugins/import/
     var contributionFields = {
       views: 'title', commands: 'title', settingsPanels: 'title', sidebarItems: 'title',
       fileActions: 'label', noteActions: 'label', contextMenuEntries: 'label',
-      searchProviders: 'label', worklogProviders: 'label', statusBarItems: 'label', openProviders: 'title', workspaceItems: 'title'
+      searchProviders: 'label', worklogProviders: 'label', overviewProviders: 'label', statusBarItems: 'label', openProviders: 'title', workspaceItems: 'title'
     };
     Object.keys(contributionFields).forEach(function (point) {
       var field = contributionFields[point];
