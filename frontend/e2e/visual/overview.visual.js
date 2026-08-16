@@ -9,14 +9,29 @@ async function prepare(page) {
   await resetMockState(page);
   await page.goto('/');
   await waitForAppReady(page);
+
+  // The normal mock keeps platform-test available because E2E uses it to
+  // exercise contribution plumbing. Shipping packages deliberately exclude
+  // development plugins, so visual evidence should do the same.
+  await page.evaluate(() => {
+    window.__wailsMock?.setPluginStatus('verstak.platform-test', 'disabled', false);
+    window.dispatchEvent(new CustomEvent('verstak:plugins-changed'));
+  });
+  await expect(page.locator('.sidebar')).not.toContainText('Platform Test');
+
   await page.locator('[data-settings-menu-button]').click();
   await page.locator('[data-settings-language="ru"]').click();
   await page.keyboard.press('Escape');
   await expect(page.locator('[data-overview-root]')).toBeVisible();
+  await expect(page.locator('.sidebar')).not.toContainText('Тест платформы');
   await mkdir(VISUAL_DIR, { recursive: true });
 }
 
 async function shot(page, name) {
+  // A screenshot should not accidentally document whichever button happened
+  // to keep keyboard focus after the setup flow.
+  await page.evaluate(() => document.activeElement?.blur?.());
+  await page.waitForTimeout(50);
   await page.screenshot({
     path: resolve(VISUAL_DIR, name),
     fullPage: true,
