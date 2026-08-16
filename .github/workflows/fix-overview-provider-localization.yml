@@ -45,7 +45,7 @@ jobs:
         working-directory: work/verstak/frontend
         run: |
           npx playwright install --with-deps chromium
-          npx playwright test e2e/visual/overview.visual.js
+          npx playwright test --config=playwright.visual.config.js
       - name: Architecture source contract
         working-directory: work/verstak
         run: node frontend/tests/shell-source-contract-test.mjs
