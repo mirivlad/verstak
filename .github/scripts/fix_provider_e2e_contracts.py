@@ -18,6 +18,18 @@ def replace_all(path, old, new, expected):
         raise SystemExit(f'{path}: expected {expected} matches, got {count}: {old!r}')
     p.write_text(text.replace(old, new))
 
+
+def replace_present(path, old, new):
+    p = Path(path)
+    text = p.read_text()
+    count = text.count(old)
+    if count < 1:
+        raise SystemExit(f'{path}: expected at least one match: {old!r}')
+    text = text.replace(old, new)
+    if old in text:
+        raise SystemExit(f'{path}: replacement left legacy text behind: {old!r}')
+    p.write_text(text)
+
 # GlobalSearch must navigate by exact contribution ids, never semantic/string kinds.
 p = 'frontend/src/lib/shell/GlobalSearch.svelte'
 replace_once(p, "  function pluginToolKind(pluginId, label) {\n    if (pluginId === 'verstak.browser-inbox') return 'browser-inbox';\n    if (pluginId === 'verstak.activity') return 'activity';\n    if (pluginId === 'verstak.journal') return 'journal';\n    return String(label || pluginId || '').toLowerCase();\n  }\n\n", '')
@@ -120,16 +132,14 @@ replace_once(p, "    await expect(overview.locator('[data-overview-summary=\"not
 replace_once(p, "    await expect(attention).toContainText('Deal: Project · 10 min · 2 activities');", "    await expect(attention).toContainText('10 min');\n    await expect(attention).toContainText('2 activities');")
 replace_once(p, "    await attention.locator('.overview-attention-row', { hasText: 'Possible journal entry' }).getByRole('button', { name: 'Review candidate' }).click();", "    await attention.locator('.overview-attention-row', { hasText: 'Possible journal entry' }).getByRole('button').click();")
 for old, new in [
-  ('Edited note \\\"Overview\\\"', 'Overview'),
-  ('Changed file \\\"draft.md\\\"', 'draft.md'),
-  ('Continue journal entry \\\"Write project summary\\\"', 'Write project summary'),
-  ('Captured page \\\"Research Report\\\"', 'Research Report'),
-  ('Added journal entry \\\"Write project summary\\\"', 'Write project summary'),
-  ('Captured selection \\\"Quote to process\\\"', 'Quote to process'),
+  ('Edited note "Overview"', 'Overview'),
+  ('Changed file "draft.md"', 'draft.md'),
+  ('Continue journal entry "Write project summary"', 'Write project summary'),
+  ('Captured page "Research Report"', 'Research Report'),
+  ('Added journal entry "Write project summary"', 'Write project summary'),
+  ('Captured selection "Quote to process"', 'Quote to process'),
 ]:
-    text = Path(p).read_text()
-    text = text.replace(old, new)
-    Path(p).write_text(text)
+    replace_present(p, old, new)
 replace_once(p, "    await expect(recent).toContainText('Изменена заметка «Локализация»');", "    await expect(recent).toContainText('Изменена заметка — Локализация');")
 
 # Make the exact-id rule permanent for GlobalSearch too.
