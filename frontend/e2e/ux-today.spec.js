@@ -33,7 +33,8 @@ test.describe('UX Overview workspace flow', () => {
     await expect(overview.locator('[data-overview-section="quick-actions"]')).toHaveCount(0);
 
     const summaryCards = overview.locator('button[data-overview-summary]');
-    await expect(summaryCards).toHaveCount(6);
+    await expect(summaryCards).toHaveCount(5);
+    await expect(overview.locator('[data-overview-summary="attention"]')).toHaveCount(0);
     await expect(overview.locator('[data-overview-summary="notes"]')).toContainText('1 total');
     await expect(overview.locator('[data-overview-summary="notes"]')).toContainText('0 recent changes');
     await expect(overview.locator('[data-overview-summary="captures"]')).toContainText('0 captures to review');
@@ -70,8 +71,7 @@ test.describe('UX Overview workspace flow', () => {
     await expect(page.locator('.journal-root')).toBeVisible({ timeout: 10000 });
 
     await page.getByRole('tab', { name: 'Overview' }).click();
-    await overview.locator('[data-overview-summary="attention"]').click();
-    await expect(page.getByRole('tab', { name: 'Browser' })).toHaveAttribute('aria-selected', 'true');
+    await expect(overview.locator('[data-overview-summary="attention"]')).toHaveCount(0);
   });
 
   test('Overview keeps the Notes total factual when the Files plugin is unavailable', async ({ page }) => {
@@ -262,15 +262,16 @@ test.describe('UX Overview workspace flow', () => {
 
     const resume = overview.locator('[data-overview-section="continue"]');
     const candidates = resume.locator('[data-overview-continue-item]');
-    await expect(candidates).toHaveCount(4);
-    await expect(candidates.nth(0)).toContainText('Quote to process');
-    await expect(candidates.nth(1)).toContainText('Research Report');
-    await expect(candidates.nth(2)).toContainText('Edited note "Overview"');
-    await expect(candidates.nth(3)).toContainText('Changed file "draft.md"');
+    await expect(candidates).toHaveCount(3);
+    await expect(candidates.nth(0)).toContainText('Edited note "Overview"');
+    await expect(candidates.nth(1)).toContainText('Changed file "draft.md"');
+    await expect(candidates.nth(2)).toContainText('Continue journal entry "Write project summary"');
+    await expect(resume).not.toContainText('Quote to process');
+    await expect(resume).not.toContainText('Research Report');
     await candidates.nth(0).click();
 
-    await expect(page.getByRole('tab', { name: 'Browser' })).toHaveAttribute('aria-selected', 'true');
-    await expect(page.locator('.browser-inbox-root')).toBeVisible({ timeout: 10000 });
+    await expect(page.getByRole('tab', { name: 'Notes' })).toHaveAttribute('aria-selected', 'true');
+    await expect(page.locator('.notes-root')).toBeVisible({ timeout: 10000 });
 
     await page.getByRole('tab', { name: 'Overview' }).click();
     const recent = overview.locator('[data-overview-section="recent"]');
