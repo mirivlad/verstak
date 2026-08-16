@@ -27,6 +27,8 @@ test.describe('UX Overview workspace flow', () => {
     const overview = page.locator('[data-overview-root]');
     await expect(overview).toBeVisible();
     await expect(overview.locator('[data-overview-section="continue"]')).toContainText('Continue working');
+    await expect(overview.locator('[data-overview-section="continue"]')).toContainText('Pick up where you left off.');
+    await expect(overview.locator('[data-overview-section="summary"]')).toBeVisible();
     await expect(overview.locator('[data-overview-section="recent"]')).toContainText('Recent changes');
     await expect(overview.locator('[data-overview-section="attention"]')).toHaveCount(0);
     await expect(overview.locator('[data-overview-section="key-resources"]')).toBeVisible();
@@ -250,7 +252,7 @@ test.describe('UX Overview workspace flow', () => {
     await expect(overview.locator('[data-overview-summary="captures"]')).toContainText('2');
     await expect(overview.locator('[data-overview-summary="activity"]')).toContainText('5 recorded events');
     await expect(overview.locator('[data-overview-summary="journal"]')).toContainText('1');
-    await expect(overview.locator('[data-overview-summary="attention"]')).toContainText('3');
+    await expect(overview.locator('[data-overview-summary="attention"]')).toHaveCount(0);
     const attention = overview.locator('[data-overview-section="attention"]');
     await expect(attention).toContainText('Possible journal entry');
     await expect(attention).toContainText('Deal: Project · 10 min · 2 activities');

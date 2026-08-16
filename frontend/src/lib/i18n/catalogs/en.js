@@ -300,7 +300,7 @@ export default {
   'overview.refresh': 'Refresh',
   'overview.summary': 'Deal overview summary',
   'overview.continue': 'Continue working',
-  'overview.continueHint': 'Pick up the next useful item in this Deal.',
+  'overview.continueHint': 'Pick up where you left off.',
   'overview.loadingSignals': 'Loading Deal signals...',
   'overview.noResume': 'No clear resume point yet',
   'overview.noResumeHint': 'Recent notes, files, and journal entries will appear here.',
