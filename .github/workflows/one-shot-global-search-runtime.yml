@@ -1,0 +1,304 @@
+name: one-shot-global-search-runtime
+
+on:
+  push:
+    branches:
+      - audit/global-search-providers
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: audit/global-search-providers
+          fetch-depth: 0
+      - name: Check out official plugins
+        uses: actions/checkout@v4
+        with:
+          repository: mirivlad/verstak-official-plugins
+          ref: main
+          path: verstak-official-plugins
+      - name: Put official plugins beside desktop
+        run: mv verstak-official-plugins ../verstak-official-plugins
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Patch runtime and Search shell
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          # Backend: readable vault path -> deepest owning Deal. This is
+          # intentionally NOT filtered by the calling plugin's workspace items.
+          path = Path('internal/api/app.go')
+          text = path.read_text()
+          marker = '// PluginListWorkspaces returns semantic Deal nodes where the calling plugin is active.\n'
+          if text.count(marker) != 1:
+              raise SystemExit(f'PluginListWorkspaces marker count: {text.count(marker)}')
+          insert = r'''func resolveOwningWorkspace(nodes []workspacetree.TreeNode, relativePath string) (workspacetree.TreeNode, bool) {
+	var best workspacetree.TreeNode
+	bestLength := -1
+	var walk func([]workspacetree.TreeNode)
+	walk = func(items []workspacetree.TreeNode) {
+		for _, node := range items {
+			if node.Kind == "workspace" {
+				rootPath := strings.Trim(node.Path, "/")
+				if rootPath != "" && (relativePath == rootPath || strings.HasPrefix(relativePath, rootPath+"/")) && len(rootPath) > bestLength {
+					best = node
+					bestLength = len(rootPath)
+				}
+			}
+			if len(node.Children) > 0 {
+				walk(node.Children)
+			}
+		}
+	}
+	walk(nodes)
+	return best, bestLength >= 0
+}
+
+// PluginResolveWorkspacePath resolves a readable vault-relative path to the
+// deepest owning Deal. Unlike PluginListWorkspaces, ownership does not require
+// the calling plugin to contribute a workspace item in that Deal.
+func (a *App) PluginResolveWorkspacePath(pluginID, relativePath string) (map[string]interface{}, string) {
+	if err := a.requirePluginAccess(pluginID, "files.read"); err != nil {
+		return nil, err.Error()
+	}
+	cleanPath, err := corefiles.NormalizeRelativeDir(relativePath)
+	if err != nil {
+		return nil, err.Error()
+	}
+	if a.treeV2 == nil {
+		return nil, "workspace tree not initialized"
+	}
+
+	snapshot := a.treeV2.GetTree()
+	workspace, found := resolveOwningWorkspace(snapshot.Roots, cleanPath)
+	if !found {
+		return map[string]interface{}{"found": false}, ""
+	}
+	workspaceRootPath := strings.Trim(workspace.Path, "/")
+	localPath := strings.TrimPrefix(cleanPath, workspaceRootPath)
+	localPath = strings.TrimPrefix(localPath, "/")
+	return map[string]interface{}{
+		"found":             true,
+		"workspaceId":       workspace.ID,
+		"workspaceName":     workspace.Name,
+		"workspaceRootPath": workspaceRootPath,
+		"relativePath":      localPath,
+	}, ""
+}
+
+'''
+          text = text.replace(marker, insert + marker, 1)
+          path.write_text(text)
+
+          # Go contract test for nested/deepest ownership and not-found.
+          path = Path('internal/api/app_test.go')
+          text = path.read_text()
+          marker = 'func TestPluginListWorkspacesReturnsNestedDealsOnly(t *testing.T) {'
+          if text.count(marker) != 1:
+              raise SystemExit(f'PluginListWorkspaces test marker count: {text.count(marker)}')
+          test = r'''func TestResolveOwningWorkspacePicksDeepestDeal(t *testing.T) {
+	nodes := []workspacetree.TreeNode{
+		{
+			Kind: "folder", ID: "clients", Name: "Clients", Path: "Clients",
+			Children: []workspacetree.TreeNode{
+				{Kind: "workspace", ID: "acme", Name: "Acme", Path: "Clients/Acme"},
+				{Kind: "workspace", ID: "nested", Name: "Nested", Path: "Clients/Acme/Nested"},
+			},
+		},
+	}
+
+	got, ok := resolveOwningWorkspace(nodes, "Clients/Acme/Nested/docs/readme.md")
+	if !ok || got.ID != "nested" || got.Path != "Clients/Acme/Nested" {
+		t.Fatalf("resolveOwningWorkspace nested = %+v, %v", got, ok)
+	}
+	got, ok = resolveOwningWorkspace(nodes, "Clients/Acme/docs/readme.md")
+	if !ok || got.ID != "acme" || got.Path != "Clients/Acme" {
+		t.Fatalf("resolveOwningWorkspace acme = %+v, %v", got, ok)
+	}
+	if got, ok = resolveOwningWorkspace(nodes, "Loose/file.txt"); ok {
+		t.Fatalf("resolveOwningWorkspace loose = %+v, want not found", got)
+	}
+}
+
+'''
+          path.write_text(text.replace(marker, test + marker, 1))
+
+          # Checked-in Wails bridge.
+          path = Path('frontend/wailsjs/go/api/App.js')
+          text = path.read_text()
+          old = """export function PluginListWorkspaces(arg1) {\n  return window['go']['api']['App']['PluginListWorkspaces'](arg1);\n}\n"""
+          new = old + """\nexport function PluginResolveWorkspacePath(arg1, arg2) {\n  return window['go']['api']['App']['PluginResolveWorkspacePath'](arg1, arg2);\n}\n"""
+          if text.count(old) != 1:
+              raise SystemExit(f'App.js PluginListWorkspaces anchor count: {text.count(old)}')
+          path.write_text(text.replace(old, new, 1))
+
+          path = Path('frontend/wailsjs/go/api/App.d.ts')
+          text = path.read_text()
+          old = 'export function PluginListWorkspaces(arg1:string):Promise<Array<api.PluginWorkspaceDTO>|string>;\n'
+          new = old + 'export function PluginResolveWorkspacePath(arg1:string,arg2:string):Promise<Record<string, any>|string>;\n'
+          if text.count(old) != 1:
+              raise SystemExit(f'App.d.ts PluginListWorkspaces anchor count: {text.count(old)}')
+          path.write_text(text.replace(old, new, 1))
+
+          # Public plugin runtime implementation.
+          path = Path('frontend/src/lib/plugin-host/VerstakPluginAPI.js')
+          text = path.read_text()
+          old = """    workspaces: {\n      list: function() {\n        assertActive('workspaces.list');\n        return callBackend(pluginId, 'workspaces.list', function() {\n          return App.PluginListWorkspaces(pluginId);\n        });\n      }\n    },\n"""
+          new = """    workspaces: {\n      list: function() {\n        assertActive('workspaces.list');\n        return callBackend(pluginId, 'workspaces.list', function() {\n          return App.PluginListWorkspaces(pluginId);\n        });\n      },\n      resolvePath: function(relativePath) {\n        assertActive('workspaces.resolvePath');\n        return callBackend(pluginId, 'workspaces.resolvePath', function() {\n          return App.PluginResolveWorkspacePath(pluginId, String(relativePath || ''));\n        });\n      }\n    },\n"""
+          if text.count(old) != 1:
+              raise SystemExit(f'VerstakPluginAPI workspaces anchor count: {text.count(old)}')
+          path.write_text(text.replace(old, new, 1))
+
+          # Test bridge: model the backend resolver from the semantic tree so
+          # the real Search bundle uses its real folder-action path in E2E.
+          path = Path('frontend/src/lib/test/search-provider-mock.js')
+          text = path.read_text()
+          marker = "const originalExecutePluginCommand = app.ExecutePluginCommand.bind(app);\n"
+          if text.count(marker) != 1:
+              raise SystemExit(f'search-provider mock anchor count: {text.count(marker)}')
+          addition = r'''
+function cleanVaultRelativePath(value) {
+  const raw = String(value || '');
+  if (!raw || raw.includes('\\') || raw.startsWith('/') || raw.split('/').some((part) => part === '..')) return null;
+  const parts = raw.split('/').filter(Boolean);
+  if (parts[0] === '.verstak') return null;
+  return parts.join('/');
+}
+
+app.PluginResolveWorkspacePath = async function pluginResolveWorkspacePath(pluginId, relativePath) {
+  const path = cleanVaultRelativePath(relativePath);
+  if (!path) return [null, 'invalid relative path'];
+  const snapshot = await app.GetWorkspaceTreeV2();
+  let best = null;
+  function walk(nodes) {
+    (nodes || []).forEach((node) => {
+      const root = String(node?.path || '').replace(/^\/+|\/+$/g, '');
+      if (node?.kind === 'workspace' && root && (path === root || path.startsWith(`${root}/`))) {
+        if (!best || root.length > best.root.length) best = { node, root };
+      }
+      walk(node?.children || []);
+    });
+  }
+  walk(snapshot?.roots || []);
+  if (!best) return [{ found: false }, ''];
+  return [{
+    found: true,
+    workspaceId: best.node.id || '',
+    workspaceName: best.node.name || '',
+    workspaceRootPath: best.root,
+    relativePath: path === best.root ? '' : path.slice(best.root.length + 1),
+  }, ''];
+};
+'''
+          path.write_text(text.replace(marker, marker + addition, 1))
+
+          # GlobalSearch: generic provider metadata, enabled providers only,
+          # and failed providers mark the aggregate as incomplete.
+          path = Path('frontend/src/lib/shell/GlobalSearch.svelte')
+          text = path.read_text()
+          old = """    (contributions.sidebarItems || []).forEach(item => {\n      next.push({\n"""
+          new = """    const enabledPluginIds = new Set((rawPlugins || [])\n      .filter(plugin => plugin?.enabled && (plugin?.status === 'loaded' || plugin?.status === 'degraded'))\n      .map(plugin => plugin?.manifest?.id)\n      .filter(Boolean));\n    (contributions.sidebarItems || []).filter(item => enabledPluginIds.has(item?.pluginId)).forEach(item => {\n      next.push({\n"""
+          if text.count(old) != 1:
+              raise SystemExit(f'GlobalSearch sidebar anchor count: {text.count(old)}')
+          text = text.replace(old, new, 1)
+          old = "searchProviders = (contributions.searchProviders || []).filter(provider => provider?.pluginId && provider?.handler);"
+          new = "searchProviders = (contributions.searchProviders || []).filter(provider => enabledPluginIds.has(provider?.pluginId) && provider?.handler);"
+          if text.count(old) != 1:
+              raise SystemExit(f'GlobalSearch provider filter anchor count: {text.count(old)}')
+          text = text.replace(old, new, 1)
+          old = """  function providerType(provider, item) {\n    const category = String(item?.categoryId || '').toLowerCase();\n    if (category === 'files' || category === 'file') return { type: 'File', label: tr('search.type.file') };\n    if (category === 'folders' || category === 'folder') return { type: 'Folder', label: tr('search.type.folder') };\n    const label = String(item?.categoryLabel || provider?.label || item?.categoryId || tr('search.type.tool'));\n    return { type: label, label };\n  }\n"""
+          new = """  function providerType(provider, item) {\n    const categoryId = String(item?.categoryId || provider?.id || 'provider');\n    const label = String(item?.categoryLabel || provider?.label || categoryId || tr('search.type.tool'));\n    return { type: label, categoryId, label };\n  }\n"""
+          if text.count(old) != 1:
+              raise SystemExit(f'GlobalSearch providerType anchor count: {text.count(old)}')
+          text = text.replace(old, new, 1)
+          old = """      type: type.type,\n      typeLabel: type.label,\n"""
+          new = """      type: type.type,\n      categoryId: type.categoryId,\n      typeLabel: type.label,\n"""
+          if text.count(old) != 1:
+              raise SystemExit(f'GlobalSearch normalized type anchor count: {text.count(old)}')
+          text = text.replace(old, new, 1)
+          old = "return { rows: [], partial: false };"
+          if text.count(old) != 1:
+              raise SystemExit(f'GlobalSearch failed provider partial anchor count: {text.count(old)}')
+          text = text.replace(old, "return { rows: [], partial: true };", 1)
+          old = '            data-global-search-result-type={item.type}\n            data-global-search-result-path={item.path || \'\'}\n'
+          new = '            data-global-search-result-type={item.type}\n            data-global-search-result-category={item.categoryId || \'\'}\n            data-global-search-result-path={item.path || \'\'}\n'
+          if text.count(old) != 1:
+              raise SystemExit(f'GlobalSearch DOM category anchor count: {text.count(old)}')
+          path.write_text(text.replace(old, new, 1))
+
+          # Source guard: shell cannot re-learn provider category semantics or
+          # the old Files history implementation detail.
+          path = Path('frontend/tests/shell-source-contract-test.mjs')
+          text = path.read_text()
+          old = """  'verstak.journal',\n]) {\n"""
+          new = """  'verstak.journal',\n  "category === 'files'",\n  "category === 'folders'",\n  '__filesHistoryByWorkspace',\n]) {\n"""
+          # There are multiple similar arrays in this file; limit this to the
+          # final GlobalSearch block by replacing the last occurrence.
+          idx = text.rfind(old)
+          if idx < 0:
+              raise SystemExit('GlobalSearch forbidden array tail not found')
+          text = text[:idx] + text[idx:].replace(old, new, 1)
+          marker = """assertIncludes(\n  globalSearch,\n  'contributions.searchProviders || []',\n"""
+          if text.count(marker) != 1:
+              raise SystemExit(f'GlobalSearch source assertion marker count: {text.count(marker)}')
+          addition = """assertIncludes(\n  globalSearch,\n  'item?.categoryLabel || provider?.label',\n  'GlobalSearch should render provider-owned category labels without interpreting provider category ids',\n);\nassertIncludes(\n  globalSearch,\n  'enabledPluginIds.has(provider?.pluginId)',\n  'GlobalSearch should query only providers from enabled loaded/degraded plugins',\n);\n\n"""
+          text = text.replace(marker, addition + marker, 1)
+          path.write_text(text)
+
+          # Add backend-method declaration to the test mock's Wails API type is
+          # already supplied by search-provider-mock; keep folder selector on
+          # provider-owned visible label, and assert stable machine category too.
+          path = Path('frontend/e2e/ux-followup.spec.js')
+          text = path.read_text()
+          old = "const folderResult = page.locator('[data-global-search-result-type=\\\"Folder\\\"][data-global-search-result-path=\\\"Project/Notes\\\"]');"
+          new = "const folderResult = page.locator('[data-global-search-result-category=\\\"folders\\\"][data-global-search-result-path=\\\"Project/Notes\\\"]');"
+          if text.count(old) != 1:
+              raise SystemExit(f'folder E2E selector anchor count: {text.count(old)}')
+          path.write_text(text.replace(old, new, 1))
+
+          path = Path('frontend/e2e/global-search-results.spec.js')
+          text = path.read_text()
+          text = text.replace('[data-global-search-result-type="Browser"]', '[data-global-search-result-category="browser"]')
+          text = text.replace('[data-global-search-result-type="File"]', '[data-global-search-result-category="files"]')
+          path.write_text(text)
+          PY
+          gofmt -w internal/api/app.go internal/api/app_test.go
+      - name: Install frontend dependencies
+        run: npm ci --no-audit --no-fund
+        working-directory: frontend
+      - name: Build current official plugins
+        run: bash ../verstak-official-plugins/scripts/build.sh
+      - name: Fast verification
+        run: |
+          npm run build --prefix frontend
+          node frontend/tests/shell-source-contract-test.mjs
+          go test ./internal/api -run 'TestResolveOwningWorkspacePicksDeepestDeal|TestPluginListWorkspacesReturnsNestedDealsOnly'
+          git diff --check
+      - name: Commit product changes
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add internal/api/app.go internal/api/app_test.go \
+            frontend/wailsjs/go/api/App.js frontend/wailsjs/go/api/App.d.ts \
+            frontend/src/lib/plugin-host/VerstakPluginAPI.js \
+            frontend/src/lib/test/search-provider-mock.js \
+            frontend/src/lib/shell/GlobalSearch.svelte \
+            frontend/tests/shell-source-contract-test.mjs \
+            frontend/e2e/ux-followup.spec.js frontend/e2e/global-search-results.spec.js
+          git diff --cached --check
+          git commit -m 'fix: complete generic Search provider runtime'
+          git push origin HEAD:audit/global-search-providers
