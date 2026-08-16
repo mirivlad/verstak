@@ -8,6 +8,8 @@ def replace_once(text, old, new, label):
     return text.replace(old, new, 1)
 
 
+# GlobalSearch publishes fast provider batches immediately instead of waiting
+# for every keyboard-layout variant and carries the target Deal with deep links.
 path = Path("frontend/src/lib/shell/GlobalSearch.svelte")
 text = path.read_text()
 old = r'''  async function queryProviders(variants) {
@@ -131,8 +133,121 @@ new = r'''  function publishSearchResults(seq, shellRows, providerRows, provider
   }
 '''
 text = replace_once(text, old, new, "runSearch")
+old = r'''      window.dispatchEvent(new CustomEvent('verstak:workspace-open-tool', {
+        detail: { workspaceItemId: action.workspaceItemId, toolRequest: action.toolRequest || null }
+      }));
+'''
+new = r'''      window.dispatchEvent(new CustomEvent('verstak:workspace-open-tool', {
+        detail: { workspaceRootPath, workspaceItemId: action.workspaceItemId, toolRequest: action.toolRequest || null }
+      }));
+'''
+text = replace_once(text, old, new, "workspace deep-link event")
 path.write_text(text)
 
+# WorkspaceHost queues a cross-Deal tool request until its target workspace is
+# the active one. Changing Deal must clear stale active requests, but not the
+# pending request whose target is exactly the new Deal.
+path = Path("frontend/src/lib/shell/WorkspaceHost.svelte")
+text = path.read_text()
+old = r'''  let requestedWorkspaceItemId = '';
+  let requestedToolRequest = null;
+  let activeToolRequest = null;
+  let requestedWorkspaceRoot = '';
+'''
+new = r'''  let requestedWorkspaceItemId = '';
+  let requestedToolRequest = null;
+  let requestedTargetWorkspaceRoot = '';
+  let activeToolRequest = null;
+  let requestedWorkspaceRoot = '';
+'''
+text = replace_once(text, old, new, "pending target state")
+old = r'''  $: if (workspaceRootPath !== requestedWorkspaceRoot) {
+    requestedWorkspaceRoot = workspaceRootPath;
+    requestedToolRequest = null;
+    activeToolRequest = null;
+  }
+'''
+new = r'''  $: if (workspaceRootPath !== requestedWorkspaceRoot) {
+    requestedWorkspaceRoot = workspaceRootPath;
+    activeToolRequest = null;
+    if (requestedTargetWorkspaceRoot && requestedTargetWorkspaceRoot !== workspaceRootPath) {
+      requestedWorkspaceItemId = '';
+      requestedToolRequest = null;
+      requestedTargetWorkspaceRoot = '';
+    } else if (!requestedTargetWorkspaceRoot) {
+      requestedToolRequest = null;
+    }
+  }
+'''
+text = replace_once(text, old, new, "workspace root request reset")
+old = r'''  $: if (requestedWorkspaceItemId && workspaceTools.length > 0) {
+    const match = findWorkspaceItem(requestedWorkspaceItemId);
+    if (match) {
+      const toolRequest = requestedToolRequest;
+      requestedWorkspaceItemId = '';
+      requestedToolRequest = null;
+      selectTool(match, toolRequest);
+    }
+  }
+'''
+new = r'''  $: if (requestedWorkspaceItemId && workspaceTools.length > 0 && (!requestedTargetWorkspaceRoot || requestedTargetWorkspaceRoot === workspaceRootPath)) {
+    const match = findWorkspaceItem(requestedWorkspaceItemId);
+    if (match) {
+      const toolRequest = requestedToolRequest;
+      requestedWorkspaceItemId = '';
+      requestedToolRequest = null;
+      requestedTargetWorkspaceRoot = '';
+      selectTool(match, toolRequest);
+    }
+  }
+'''
+text = replace_once(text, old, new, "pending item resolution")
+old = r'''  function requestWorkspaceItem(workspaceItemId, toolRequest = null) {
+    requestedWorkspaceItemId = String(workspaceItemId || '').trim();
+    requestedToolRequest = toolRequest;
+    const match = findWorkspaceItem(requestedWorkspaceItemId);
+    if (match) {
+      requestedWorkspaceItemId = '';
+      requestedToolRequest = null;
+      selectTool(match, toolRequest);
+    }
+  }
+
+  function openWorkspaceTool(event) {
+    requestWorkspaceItem(event?.detail?.workspaceItemId, event?.detail?.toolRequest || null);
+  }
+
+  function handleWorkspaceOpenTool(event) {
+    requestWorkspaceItem(event?.detail?.workspaceItemId, event?.detail?.toolRequest || null);
+  }
+'''
+new = r'''  function requestWorkspaceItem(workspaceItemId, toolRequest = null, targetWorkspaceRoot = '') {
+    requestedWorkspaceItemId = String(workspaceItemId || '').trim();
+    requestedToolRequest = toolRequest;
+    requestedTargetWorkspaceRoot = String(targetWorkspaceRoot || '').trim();
+    if (requestedTargetWorkspaceRoot && requestedTargetWorkspaceRoot !== workspaceRootPath) return;
+    const match = findWorkspaceItem(requestedWorkspaceItemId);
+    if (match) {
+      requestedWorkspaceItemId = '';
+      requestedToolRequest = null;
+      requestedTargetWorkspaceRoot = '';
+      selectTool(match, toolRequest);
+    }
+  }
+
+  function openWorkspaceTool(event) {
+    requestWorkspaceItem(event?.detail?.workspaceItemId, event?.detail?.toolRequest || null, event?.detail?.workspaceRootPath || '');
+  }
+
+  function handleWorkspaceOpenTool(event) {
+    requestWorkspaceItem(event?.detail?.workspaceItemId, event?.detail?.toolRequest || null, event?.detail?.workspaceRootPath || '');
+  }
+'''
+text = replace_once(text, old, new, "workspace item handoff")
+path.write_text(text)
+
+# The result contract exposes the folder path as visible subtitle text; the
+# machine field remains the provider-owned category id.
 path = Path("frontend/e2e/ux-followup.spec.js")
 text = path.read_text()
 old = '''    const folderResult = page.locator('[data-global-search-result-category="folders"][data-global-search-result-path="Project/Notes"]');\n'''
