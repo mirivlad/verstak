@@ -28,11 +28,11 @@ on:
       - 'packaging/**'
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: release-${{ github.event.pull_request.number || inputs.version || github.ref }}
-  cancel-in-progress: false
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   build-release:
@@ -41,7 +41,6 @@ jobs:
     env:
       VERSION: ${{ github.event_name == 'workflow_dispatch' && inputs.version || 'v0.1.2' }}
       OFFICIAL_PLUGINS_REF: ${{ github.event_name == 'workflow_dispatch' && inputs.official_plugins_ref || 'main' }}
-      GH_TOKEN: ${{ github.token }}
 
     steps:
       - name: Require main for a real release
@@ -115,7 +114,7 @@ jobs:
       - name: Upload release build artifact
         uses: actions/upload-artifact@v4
         with:
-          name: verstak-${{ env.VERSION }}-${{ github.run_id }}
+          name: verstak-${{ env.VERSION }}
           path: |
             release/*.deb
             release/*.AppImage
@@ -124,8 +123,38 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
+  publish-release:
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.publish }}
+    needs: build-release
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    env:
+      VERSION: ${{ inputs.version }}
+      GH_TOKEN: ${{ github.token }}
+      VERSTAK_SKIP_RELEASE_BUILD: '1'
+
+    steps:
+      - name: Check out verified main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Download verified release assets
+        uses: actions/download-artifact@v4
+        with:
+          name: verstak-${{ inputs.version }}
+          path: release
+
+      - name: Recheck downloaded assets
+        run: |
+          test -s "release/verstak_${VERSION#v}_amd64.deb"
+          test -s "release/verstak-linux-x86_64-$VERSION.AppImage"
+          test -s "release/verstak-windows-amd64-$VERSION.zip"
+          test -s release/SHA256SUMS
+          (cd release && sha256sum --check SHA256SUMS)
+
       - name: Publish GitHub Release
-        if: ${{ github.event_name == 'workflow_dispatch' && inputs.publish }}
-        env:
-          VERSTAK_SKIP_RELEASE_BUILD: '1'
         run: bash scripts/publish-github-release.sh "$VERSION"
