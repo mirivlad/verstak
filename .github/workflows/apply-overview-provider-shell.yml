@@ -61,6 +61,123 @@ jobs:
           ]
           p.write_text(s[:start] + '\n'.join(return_lines) + s[end:])
           PY
+      - name: Correct WorkspaceHost patch for current shell
+        working-directory: work/verstak
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('.github/scripts/apply_overview_provider_shell.py')
+          s = p.read_text()
+          start = s.index('# WorkspaceHost: scope providers')
+          end = s.index('# Generic TodaySurface script.', start)
+          section = r"""# WorkspaceHost: scope providers to the current Deal and navigate by exact id.
+          # ---------------------------------------------------------------------------
+          p = Path('frontend/src/lib/shell/WorkspaceHost.svelte')
+          s = p.read_text()
+          s = s.replace('  let workspaceTools = [];\n', '  let workspaceTools = [];\n  let overviewProviders = [];\n', 1)
+          s = s.replace("  let requestedToolKind = '';\n", "  let requestedWorkspaceItemId = '';\n", 1)
+          tools_line = "  $: workspaceTools = sortWorkspaceTools(filterWorkspaceTools(discoveredWorkspaceTools, workspaceMetadata));\n"
+          assert tools_line in s
+          s = s.replace(tools_line, tools_line + "  $: workspacePluginIds = new Set(workspaceTools.map(tool => tool?.pluginId).filter(Boolean));\n  $: overviewProviders = (contributions.overviewProviders || []).filter(provider => workspacePluginIds.has(provider?.pluginId));\n", 1)
+          old_retry = '''  $: if (requestedToolKind && workspaceTools.length > 0) {
+            const match = findWorkspaceTool(requestedToolKind);
+            if (match) {
+              const toolRequest = requestedToolRequest;
+              requestedToolKind = '';
+              requestedToolRequest = null;
+              selectTool(match, toolRequest);
+            }
+          }
+          '''
+          new_retry = '''  $: if (requestedWorkspaceItemId && workspaceTools.length > 0) {
+            const match = findWorkspaceItem(requestedWorkspaceItemId);
+            if (match) {
+              const toolRequest = requestedToolRequest;
+              requestedWorkspaceItemId = '';
+              requestedToolRequest = null;
+              selectTool(match, toolRequest);
+            }
+          }
+          '''
+          assert old_retry in s
+          s = s.replace(old_retry, new_retry, 1)
+          old_functions = '''  function findWorkspaceTool(kind) {
+            kind = String(kind || '').toLowerCase();
+            return workspaceTools.find(tool => {
+              const text = `${tool?.title || ''} ${tool?.id || ''} ${tool?.pluginId || ''}`.toLowerCase();
+              if (kind === 'browser-inbox') return text.includes('browser') || text.includes('inbox');
+              return text.includes(kind);
+            });
+          }
+
+          function requestWorkspaceTool(kind, toolRequest = null) {
+            requestedToolKind = String(kind || '').toLowerCase();
+            requestedToolRequest = toolRequest;
+            const match = findWorkspaceTool(requestedToolKind);
+            if (match) {
+              requestedToolKind = '';
+              requestedToolRequest = null;
+              selectTool(match, toolRequest);
+            }
+          }
+
+          function openWorkspaceTool(event) {
+            requestWorkspaceTool(event?.detail?.kind, event?.detail?.toolRequest || null);
+          }
+          '''
+          new_functions = '''  function findWorkspaceItem(workspaceItemId) {
+            const id = String(workspaceItemId || '').trim();
+            if (!id) return null;
+            return workspaceTools.find(tool => tool?.id === id) || null;
+          }
+
+          function requestWorkspaceItem(workspaceItemId, toolRequest = null) {
+            requestedWorkspaceItemId = String(workspaceItemId || '').trim();
+            requestedToolRequest = toolRequest;
+            const match = findWorkspaceItem(requestedWorkspaceItemId);
+            if (match) {
+              requestedWorkspaceItemId = '';
+              requestedToolRequest = null;
+              selectTool(match, toolRequest);
+            }
+          }
+
+          function openWorkspaceTool(event) {
+            requestWorkspaceItem(event?.detail?.workspaceItemId, event?.detail?.toolRequest || null);
+          }
+          '''
+          assert old_functions in s
+          s = s.replace(old_functions, new_functions, 1)
+          old_handler = '''  function handleWorkspaceOpenTool(event) {
+            requestWorkspaceTool(event?.detail?.kind, event?.detail?.toolRequest || null);
+          }
+          '''
+          new_handler = '''  function handleWorkspaceOpenTool(event) {
+            const workspaceItemId = event?.detail?.workspaceItemId || event?.detail?.id || '';
+            requestWorkspaceItem(workspaceItemId, event?.detail?.toolRequest || null);
+          }
+          '''
+          assert old_handler in s
+          s = s.replace(old_handler, new_handler, 1)
+          old_surface = '''            <TodaySurface
+                        {workspaceRootPath}
+                        availableTools={displayedTools}
+                        on:openTool={openWorkspaceTool}
+                      />'''
+          new_surface = '''            <TodaySurface
+                        {workspaceRootPath}
+                        availableTools={displayedTools}
+                        {overviewProviders}
+                        on:openTool={openWorkspaceTool}
+                      />'''
+          assert old_surface in s
+          s = s.replace(old_surface, new_surface, 1)
+          p.write_text(s)
+
+          # ---------------------------------------------------------------------------
+          """
+          p.write_text(s[:start] + section + s[end:])
+          PY
       - name: Apply provider shell patch
         working-directory: work/verstak
         run: |
