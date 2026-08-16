@@ -17,12 +17,21 @@ on:
         required: true
         default: false
         type: boolean
+  pull_request:
+    paths:
+      - '.github/workflows/release.yml'
+      - 'scripts/build*.sh'
+      - 'scripts/package*.sh'
+      - 'scripts/release*.sh'
+      - 'scripts/publish-github-release.sh'
+      - 'scripts/stage-shipping-plugins.sh'
+      - 'packaging/**'
 
 permissions:
   contents: write
 
 concurrency:
-  group: release-${{ inputs.version }}
+  group: release-${{ github.event.pull_request.number || inputs.version || github.ref }}
   cancel-in-progress: false
 
 jobs:
@@ -30,17 +39,21 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     env:
-      VERSION: ${{ inputs.version }}
-      OFFICIAL_PLUGINS_REF: ${{ inputs.official_plugins_ref }}
+      VERSION: ${{ github.event_name == 'workflow_dispatch' && inputs.version || 'v0.1.2' }}
+      OFFICIAL_PLUGINS_REF: ${{ github.event_name == 'workflow_dispatch' && inputs.official_plugins_ref || 'main' }}
       GH_TOKEN: ${{ github.token }}
 
     steps:
-      - name: Require main and validate version
+      - name: Require main for a real release
+        if: ${{ github.event_name == 'workflow_dispatch' }}
         run: |
           if [[ "${GITHUB_REF_NAME}" != "main" ]]; then
             echo "Releases must run from main, got ${GITHUB_REF_NAME}" >&2
             exit 1
           fi
+
+      - name: Validate version
+        run: |
           if [[ ! "$VERSION" =~ ^v[0-9][A-Za-z0-9._-]*$ ]]; then
             echo "Invalid release version: $VERSION" >&2
             exit 1
@@ -102,7 +115,7 @@ jobs:
       - name: Upload release build artifact
         uses: actions/upload-artifact@v4
         with:
-          name: verstak-${{ inputs.version }}
+          name: verstak-${{ env.VERSION }}-${{ github.run_id }}
           path: |
             release/*.deb
             release/*.AppImage
@@ -112,7 +125,7 @@ jobs:
           retention-days: 30
 
       - name: Publish GitHub Release
-        if: ${{ inputs.publish }}
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.publish }}
         env:
           VERSTAK_SKIP_RELEASE_BUILD: '1'
         run: bash scripts/publish-github-release.sh "$VERSION"
