@@ -68,7 +68,7 @@
   $: pendingWorkSessionCandidates = workSessionCandidates.filter(item => !linkedCandidateIds.has(String(item?.candidateId || '')));
   $: urgentTodos = hasTodos ? todos.filter(item => todoAttentionState(item)) : [];
   $: needsAttention = filterAvailableItems(buildNeedsAttention(unprocessedCaptures, pendingWorkSessionCandidates, urgentTodos), overviewToolKey);
-  $: continueItems = filterAvailableItems(buildContinueItems(activityEvents, unprocessedCaptures, journalEntries, urgentTodos), overviewToolKey);
+  $: continueItems = filterAvailableItems(buildContinueItems(activityEvents, journalEntries), overviewToolKey);
   $: hasAttentionTools = hasBrowserInbox || hasTodos || (hasActivity && hasJournal);
   $: attentionActionKind = needsAttention[0]?.actionKind || fallbackAttentionAction();
   $: lastActive = lastActiveDate([...recentChanges, ...continueItems], captures, journalEntries, todos);
@@ -78,12 +78,16 @@
     hasBrowserInbox ? { key: 'captures', label: tr('overview.captures'), count: unprocessedCaptures.length, detail: countText('overview.count.captures', unprocessedCaptures.length), actionKind: 'browser-inbox', actionLabel: tr('overview.reviewInbox') } : null,
     hasActivity ? { key: 'activity', label: tr('overview.activity'), count: activityEvents.length, detail: countText('overview.count.events', activityEvents.length), actionKind: 'activity', actionLabel: tr('overview.viewActivity') } : null,
     hasJournal ? { key: 'journal', label: tr('overview.journal'), count: journalEntries.length, detail: countText('overview.count.journal', journalEntries.length), actionKind: 'journal', actionLabel: tr('overview.openJournal') } : null,
-    hasAttentionTools ? { key: 'attention', label: tr('overview.attention'), count: needsAttention.length, detail: countText('overview.count.pending', needsAttention.length), actionKind: attentionActionKind, actionLabel: tr('overview.reviewPending') } : null,
+    hasAttentionTools && needsAttention.length ? { key: 'attention', label: tr('overview.attention'), count: needsAttention.length, detail: countText('overview.count.pending', needsAttention.length), actionKind: attentionActionKind, actionLabel: tr('overview.reviewPending') } : null,
   ].filter(Boolean);
   $: hasOverviewSideContent = Boolean(keyResources.length || needsAttention.length || (loading && hasAttentionTools));
 
   onMount(() => {
-    unsubscribeLocale = i18n.subscribe((nextLocale) => locale = nextLocale);
+    unsubscribeLocale = i18n.subscribe((nextLocale) => {
+      const changed = locale !== nextLocale;
+      locale = nextLocale;
+      if (changed && workspaceRootPath) loadOverview();
+    });
     toolProbe += 1;
   });
 
@@ -300,7 +304,7 @@
 
   function itemTimeLabel(item) {
     const value = timeValue(item);
-    if (!value) return 'No timestamp';
+    if (!value) return tr('overview.time.none');
     return relativeTime(value);
   }
 
@@ -447,27 +451,7 @@
     };
   }
 
-  function buildContinueItems(events, captureRows, journalRows, todoRows) {
-    const todoCandidates = [...todoRows].sort((a, b) => todoDateMs(todoTimeValue(a)) - todoDateMs(todoTimeValue(b))).map(item => ({
-      id: item.id || `todo:${todoTitle(item)}`,
-      category: 'todo',
-      title: tr('overview.event.todo', { title: todoTitle(item) }),
-      meta: `${todoAttentionState(item)}${item.dueAt ? ` · ${tr('overview.todo.due', { date: item.dueAt })}` : ''}`,
-      time: todoTimeValue(item),
-      absolute: absoluteTime(todoTimeValue(item)),
-      actionKind: 'todo',
-      actionLabel: tr('overview.openTodos'),
-    }));
-    const captureCandidates = sortByTime(captureRows).map(item => ({
-      id: item.captureId || `capture:${timeValue(item)}`,
-      category: 'captures',
-      title: tr('overview.event.reviewCapture', { title: captureTitle(item) }),
-      meta: `${itemTimeLabel(item)} · ${item.domain || captureKindLabel(item) || tr('overview.browserCapture')}`,
-      time: timeValue(item),
-      absolute: absoluteTime(timeValue(item)),
-      actionKind: 'browser-inbox',
-      actionLabel: tr('overview.reviewInbox'),
-    }));
+  function buildContinueItems(events, journalRows) {
     const noteCandidates = sortByTime(events)
       .filter(item => isResumeEvent(item) && activityCategory(item) === 'notes')
       .map(continueItemFromActivity);
@@ -475,7 +459,7 @@
       .filter(item => ['file.changed', 'file.created'].includes(String(item?.type || '').toLowerCase()))
       .map(continueItemFromActivity);
     const journalCandidates = sortByTime(journalRows).map(item => ({
-      id: item.entryId || `journal:${timeValue(item)}`,
+      id: item.entryId || `journal:${timeValue(item)}` ,
       category: 'journal',
       title: tr('overview.event.continueJournal', { title: journalTitle(item) }),
       meta: itemTimeLabel(item),
@@ -484,7 +468,7 @@
       actionKind: 'journal',
       actionLabel: tr('overview.openJournal'),
     }));
-    return [...todoCandidates, ...captureCandidates, ...noteCandidates, ...fileCandidates, ...journalCandidates].slice(0, 4);
+    return [...noteCandidates, ...fileCandidates, ...journalCandidates].slice(0, 4);
   }
 
   function buildNeedsAttention(captureRows, candidates, todoRows) {
