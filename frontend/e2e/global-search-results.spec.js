@@ -8,6 +8,44 @@ test.describe('Progressive global search index', () => {
     await resetMockState(page);
   });
 
+  test('indexes a Deal nested under semantic folders', async ({ page }) => {
+    await page.evaluate(() => {
+      window.go.api.App.GetWorkspaceTreeV2 = async () => ({
+        roots: [{
+          kind: 'folder',
+          id: 'clients',
+          key: 'folder:clients',
+          name: 'Clients',
+          path: 'Clients',
+          children: [{
+            kind: 'folder',
+            id: 'active',
+            key: 'folder:active',
+            name: 'Active',
+            path: 'Clients/Active',
+            children: [{
+              kind: 'workspace',
+              id: 'nested-deal',
+              key: 'workspace:nested-deal',
+              name: 'Acme Nested Deal',
+              path: 'Clients/Active/Acme',
+              children: [],
+            }],
+          }],
+        }],
+        currentWorkspaceId: '',
+        revision: 2,
+        warnings: [],
+      });
+    });
+
+    const input = page.locator('[data-global-search-input]');
+    await input.focus();
+    await input.fill('Acme Nested Deal');
+    const result = page.locator('[data-global-search-result-type=\"Workspace\"]', { hasText: 'Acme Nested Deal' });
+    await expect(result).toBeVisible({ timeout: 3000 });
+  });
+
   test('publishes a nested filename before delayed content reads finish', async ({ page }) => {
     await page.evaluate(() => {
       window.__wailsMock.putVaultFile('Project/Files/test.txt', 'content arrives later');

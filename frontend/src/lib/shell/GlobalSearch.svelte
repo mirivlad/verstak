@@ -96,11 +96,19 @@
   }
 
   function workspaceTitle(node) {
-    return node?.title || node?.name || node?.id || node?.rootPath || '';
+    return node?.title || node?.name || node?.id || node?.path || node?.rootPath || '';
   }
 
   function workspaceName(node) {
-    return node?.rootPath || node?.name || node?.id || '';
+    return node?.path || node?.rootPath || node?.name || node?.id || '';
+  }
+
+  function collectWorkspaceNodes(nodes, output = []) {
+    (nodes || []).forEach(node => {
+      if (node?.kind === 'workspace') output.push(node);
+      if (Array.isArray(node?.children) && node.children.length) collectWorkspaceNodes(node.children, output);
+    });
+    return output;
   }
 
   async function resultOrEmpty(promise, fallback) {
@@ -126,8 +134,8 @@
     contentReady = false;
     const next = [];
 
-    const tree = await resultOrEmpty(App.GetWorkspaceTree(), { nodes: [] });
-    const nodes = Array.isArray(tree.nodes) ? tree.nodes : [];
+    const tree = await resultOrEmpty(App.GetWorkspaceTreeV2(), { roots: [] });
+    const nodes = collectWorkspaceNodes(Array.isArray(tree.roots) ? tree.roots : []);
     nodes.forEach(node => {
       const workspaceRootPath = workspaceName(node);
       next.push({
@@ -135,7 +143,7 @@
         typeLabel: tr('search.type.workspace'),
         title: workspaceTitle(node),
         subtitle: tr('search.type.workspace'),
-        keywords: `${node.id || ''} ${node.rootPath || ''}`,
+        keywords: `${node.id || ''} ${node.path || node.rootPath || ''}`,
         rank: 10,
         action: { kind: 'workspace', workspaceRootPath },
       });

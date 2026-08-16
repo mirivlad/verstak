@@ -172,6 +172,7 @@ for (const forbidden of [
   "category === 'files'",
   "category === 'folders'",
   '__filesHistoryByWorkspace',
+  'App.GetWorkspaceTree()',
 ]) {
   assertExcludes(
     globalSearch,
@@ -179,6 +180,17 @@ for (const forbidden of [
     `GlobalSearch shell must consume generic Search providers instead of domain storage (${forbidden})`,
   );
 }
+assertIncludes(
+  globalSearch,
+  'App.GetWorkspaceTreeV2()',
+  'GlobalSearch should index Deals from the semantic workspace tree',
+);
+assertIncludes(
+  globalSearch,
+  'collectWorkspaceNodes',
+  'GlobalSearch should recursively index Deals nested under semantic folders',
+);
+
 assertIncludes(
   globalSearch,
   'item?.categoryLabel || provider?.label',
