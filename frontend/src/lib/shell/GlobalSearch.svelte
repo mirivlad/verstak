@@ -1,25 +1,27 @@
 <script>
   import { onMount } from 'svelte';
   import * as App from '../../../wailsjs/go/api/App';
+  import { executePluginCommand } from '../plugin-host/VerstakPluginAPI.js';
   import Icon from '../ui/Icon.svelte';
   import { i18n } from '../i18n/index.js';
 
-  const TEXT_EXTENSIONS = new Set(['txt', 'md', 'markdown', 'log', 'json', 'csv', 'yaml', 'yml', 'toml']);
-  const FILE_INDEX_LIMIT = 1000;
   const RESULT_LIMIT = 8;
   const RU = 'ёйцукенгшщзхъфывапролджэячсмитьбю';
   const EN = '`qwertyuiop[]asdfghjkl;\\zxcvbnm,.';
 
   let query = '';
-  let index = [];
+  let shellIndex = [];
+  let searchProviders = [];
   let results = [];
   let focused = false;
   let loading = true;
+  let searching = false;
   let contentReady = false;
   let partial = false;
   let revision = 0;
   let searchTimer = null;
-  let buildSeq = 0;
+  let contextSeq = 0;
+  let searchSeq = 0;
   let locale = i18n.getLocale();
 
   $: tr = ((activeLocale) => (key, params, fallback) => {
@@ -33,15 +35,16 @@
     const unsubscribeLocale = i18n.subscribe((nextLocale) => {
       const changed = locale !== nextLocale;
       locale = nextLocale;
-      if (changed) buildIndex();
+      if (changed) refreshContext();
     });
     const refreshSignals = ['verstak:vault-opened', 'verstak:files-changed', 'verstak:workspace-tree-changed', 'verstak:workspace-created', 'verstak:workspace-renamed', 'verstak:workspace-trashed', 'verstak:workspace-restored'];
-    const refresh = () => buildIndex();
+    const refresh = () => refreshContext();
     refreshSignals.forEach(name => window.addEventListener(name, refresh));
-    buildIndex();
+    refreshContext();
     return () => {
       unsubscribeLocale();
       clearTimeout(searchTimer);
+      searchSeq += 1;
       refreshSignals.forEach(name => window.removeEventListener(name, refresh));
     };
   });
@@ -82,21 +85,14 @@
 
   function scheduleSearch(value) {
     clearTimeout(searchTimer);
-    searchTimer = setTimeout(() => runSearch(value), 80);
-  }
-
-  function runSearch(value) {
-    const variants = queryVariants(value);
-    if (!variants.length) {
+    if (!normalize(value)) {
+      searchSeq += 1;
+      searching = false;
+      partial = false;
       results = [];
       return;
     }
-    results = index
-      .map(item => ({ item, score: matchScore(item, variants) }))
-      .filter(row => row.score > 0)
-      .sort((a, b) => b.score - a.score || a.item.rank - b.item.rank || a.item.title.localeCompare(b.item.title))
-      .slice(0, RESULT_LIMIT)
-      .map(row => row.item);
+    searchTimer = setTimeout(() => runSearch(value), 80);
   }
 
   function workspaceTitle(node) {
@@ -104,7 +100,7 @@
   }
 
   function workspaceName(node) {
-    return node?.name || node?.id || node?.rootPath || '';
+    return node?.rootPath || node?.name || node?.id || '';
   }
 
   async function resultOrEmpty(promise, fallback) {
@@ -119,85 +115,21 @@
     }
   }
 
-  async function listFilesBreadthFirst() {
-    const queue = [''];
-    const entries = [];
-    let incomplete = false;
-    while (queue.length && entries.length < FILE_INDEX_LIMIT) {
-      const dir = queue.shift();
-      try {
-        const response = await App.ListVaultFiles('verstak.search', dir);
-        const tuple = Array.isArray(response) && response.length === 2 && (typeof response[1] === 'string' || response[1] == null)
-          ? response
-          : [response, ''];
-        if (tuple[1]) {
-          incomplete = true;
-          continue;
-        }
-        for (const entry of tuple[0] || []) {
-          if (entries.length >= FILE_INDEX_LIMIT) {
-            incomplete = true;
-            break;
-          }
-          const path = entry.relativePath || entry.path || entry.name || '';
-          if (!path) continue;
-          entries.push(entry);
-          if (entry.type === 'folder') queue.push(path);
-        }
-      } catch (_) {
-        incomplete = true;
-      }
-    }
-    if (queue.length) incomplete = true;
-    return { entries, partial: incomplete };
+  function commandResult(value) {
+    if (value && value.status === 'handled') return value.result || {};
+    return value && value.result ? value.result : (value || {});
   }
 
-  async function readFileSnippet(path) {
-    const ext = String(path).split('.').pop().toLowerCase();
-    if (!TEXT_EXTENSIONS.has(ext)) return '';
-    const text = await resultOrEmpty(App.ReadVaultTextFile('verstak.search', path), '');
-    return String(text || '').slice(0, 900);
-  }
-
-  async function indexPluginSettings(pluginId, label, rank, view, nodes, workspaceItemId) {
-    const settings = await resultOrEmpty(App.ReadPluginSettings(pluginId), {});
-    const items = [];
-    Object.keys(settings || {}).forEach(key => {
-      const value = settings[key];
-      const rows = Array.isArray(value) ? value : [];
-      rows.forEach(row => {
-        if (!row || typeof row !== 'object') return;
-        if (pluginId === 'verstak.browser-inbox' && String(row.globalState || 'inbox') === 'archived') return;
-        const title = row.title || row.summary || row.url || row.captureId || row.activityId || row.entryId || label;
-        const workspaceName = row.workspaceRootPath || row.workspaceName || '';
-        items.push({
-          type: label,
-          title,
-          subtitle: row.url || row.summary || row.workspaceRootPath || key,
-          keywords: JSON.stringify(row),
-          rank,
-          action: workspaceName ? 'workspace-tool' : (view ? 'view' : ''),
-          viewId: view?.id || '',
-          pluginId,
-          workspaceName,
-          workspaceItemId: workspaceItemId || '',
-          nodes,
-        });
-      });
-    });
-    return items;
-  }
-
-  async function buildIndex() {
-    const seq = ++buildSeq;
+  async function refreshContext() {
+    const seq = ++contextSeq;
     loading = true;
     contentReady = false;
-    partial = false;
     const next = [];
 
     const tree = await resultOrEmpty(App.GetWorkspaceTree(), { nodes: [] });
     const nodes = Array.isArray(tree.nodes) ? tree.nodes : [];
     nodes.forEach(node => {
+      const workspaceRootPath = workspaceName(node);
       next.push({
         type: 'Workspace',
         typeLabel: tr('search.type.workspace'),
@@ -205,9 +137,7 @@
         subtitle: tr('search.type.workspace'),
         keywords: `${node.id || ''} ${node.rootPath || ''}`,
         rank: 10,
-        action: 'workspace',
-        workspaceName: workspaceName(node),
-        nodes,
+        action: { kind: 'workspace', workspaceRootPath },
       });
     });
 
@@ -219,15 +149,9 @@
       plugin.manifest?.id,
       plugin.manifest?.localization,
     ).catch(() => {})));
+    if (seq !== contextSeq) return;
+
     const contributions = i18n.localizeContributionSummary(rawContributions || {});
-    const workspaceItemByPluginId = new Map();
-    (contributions.workspaceItems || []).forEach(item => {
-      if (item.pluginId && item.id && !workspaceItemByPluginId.has(item.pluginId)) workspaceItemByPluginId.set(item.pluginId, item.id);
-    });
-    const viewByPluginId = new Map();
-    (contributions.views || []).forEach(view => {
-      if (view.pluginId && !viewByPluginId.has(view.pluginId)) viewByPluginId.set(view.pluginId, view);
-    });
     (contributions.sidebarItems || []).forEach(item => {
       next.push({
         type: 'Tool',
@@ -236,114 +160,167 @@
         subtitle: item.pluginId || '',
         keywords: `${item.id || ''} ${item.view || ''}`,
         rank: 20,
-        action: 'view',
-        viewId: item.view || item.id,
-        pluginId: item.pluginId,
+        action: { kind: 'view', viewId: item.view || item.id, pluginId: item.pluginId },
       });
     });
 
-    const fileScan = await listFilesBreadthFirst();
-    const fileItems = [];
-    for (const entry of fileScan.entries) {
-      const path = entry.relativePath || entry.path || entry.name || '';
-      fileItems.push({
-        type: entry.type === 'folder' ? 'Folder' : 'File',
-        typeLabel: tr(entry.type === 'folder' ? 'search.type.folder' : 'search.type.file'),
-        title: path.split('/').pop() || path,
-        subtitle: path,
-        keywords: '',
-        rank: entry.type === 'folder' ? 30 : 40,
-        action: entry.type === 'folder' ? 'file-folder' : 'file',
-        path,
-        nodes,
-        workspaceItemId: workspaceItemByPluginId.get('verstak.files') || '',
+    shellIndex = next;
+    searchProviders = (contributions.searchProviders || []).filter(provider => provider?.pluginId && provider?.handler);
+    loading = false;
+    contentReady = true;
+    revision += 1;
+    if (query) runSearch(query);
+  }
+
+  function providerType(provider, item) {
+    const category = String(item?.categoryId || '').toLowerCase();
+    if (category === 'files' || category === 'file') return { type: 'File', label: tr('search.type.file') };
+    if (category === 'folders' || category === 'folder') return { type: 'Folder', label: tr('search.type.folder') };
+    const label = String(item?.categoryLabel || provider?.label || item?.categoryId || tr('search.type.tool'));
+    return { type: label, label };
+  }
+
+  function resultActionKey(item) {
+    const action = item?.action;
+    if (!action) return '';
+    if (action.kind === 'resource') return `resource:${action.resource?.kind || ''}:${action.resource?.path || ''}`;
+    if (action.kind === 'workspace') return `workspace:${action.workspaceRootPath || ''}`;
+    if (action.kind === 'workspace-item') return `workspace-item:${action.workspaceRootPath || ''}:${action.workspaceItemId || ''}:${JSON.stringify(action.toolRequest || {})}`;
+    if (action.kind === 'view') return `view:${action.pluginId || ''}:${action.viewId || ''}`;
+    return '';
+  }
+
+  function normalizeProviderItem(provider, item, providerRank) {
+    if (!item || typeof item !== 'object' || !item.action) return null;
+    const type = providerType(provider, item);
+    const score = Number(item.score);
+    const actionPath = item.action?.kind === 'resource' ? String(item.action.resource?.path || '') : '';
+    return {
+      type: type.type,
+      typeLabel: type.label,
+      title: String(item.title || item.subtitle || provider.label || provider.id || ''),
+      subtitle: String(item.subtitle || actionPath || ''),
+      rank: 30 + providerRank,
+      score: Number.isFinite(score) ? score : 50,
+      action: item.action,
+      path: actionPath,
+      pluginId: provider.pluginId,
+      providerId: provider.id || provider.handler,
+      providerResultId: item.id || resultActionKey(item) || String(item.title || ''),
+    };
+  }
+
+  async function queryProviders(variants) {
+    const calls = [];
+    (searchProviders || []).forEach((provider, providerRank) => {
+      variants.forEach((variant) => {
+        calls.push((async () => {
+          try {
+            const response = await executePluginCommand(provider.pluginId, provider.handler, {
+              query: variant,
+              limit: RESULT_LIMIT,
+            });
+            const value = commandResult(response);
+            const list = Array.isArray(value) ? value : (Array.isArray(value?.results) ? value.results : []);
+            return {
+              rows: list.map(item => normalizeProviderItem(provider, item, providerRank)).filter(Boolean),
+              partial: Boolean(value?.partial),
+            };
+          } catch (error) {
+            console.warn(`[GlobalSearch] provider ${provider.pluginId}/${provider.id || provider.handler} failed:`, error);
+            return { rows: [], partial: false };
+          }
+        })());
       });
+    });
+    return Promise.all(calls);
+  }
+
+  function dedupeRows(rows) {
+    const byKey = new Map();
+    rows.forEach((row, index) => {
+      const item = row.item;
+      const actionKey = resultActionKey(item);
+      const key = actionKey || `${item.pluginId || 'shell'}:${item.providerId || ''}:${item.providerResultId || item.title}:${item.subtitle || ''}`;
+      const previous = byKey.get(key);
+      if (!previous || row.score > previous.score || (row.score === previous.score && index < previous.index)) {
+        byKey.set(key, { ...row, index });
+      }
+    });
+    return Array.from(byKey.values());
+  }
+
+  async function runSearch(value) {
+    const variants = queryVariants(value);
+    const seq = ++searchSeq;
+    if (!variants.length) {
+      searching = false;
+      partial = false;
+      results = [];
+      return;
     }
 
-    if (seq !== buildSeq) return;
-    index = next.concat(fileItems);
-    partial = fileScan.partial;
-    revision += 1;
-    runSearch(query);
+    searching = true;
+    const shellRows = shellIndex
+      .map(item => ({ item, score: matchScore(item, variants) }))
+      .filter(row => row.score > 0);
+    const providerBatches = await queryProviders(variants);
+    if (seq !== searchSeq) return;
 
-    const [snippets, pluginItems] = await Promise.all([
-      Promise.all(fileItems.map(item => readFileSnippet(item.path))),
-      Promise.all([
-      indexPluginSettings('verstak.journal', tr('search.type.journal'), 50, viewByPluginId.get('verstak.journal'), nodes, workspaceItemByPluginId.get('verstak.journal') || ''),
-      indexPluginSettings('verstak.browser-inbox', tr('search.type.browserInbox'), 55, viewByPluginId.get('verstak.browser-inbox'), nodes, workspaceItemByPluginId.get('verstak.browser-inbox') || ''),
-      indexPluginSettings('verstak.activity', tr('search.type.activity'), 60, viewByPluginId.get('verstak.activity'), nodes, workspaceItemByPluginId.get('verstak.activity') || ''),
-      ]),
-    ]);
-
-    if (seq !== buildSeq) return;
-    index = next.concat(fileItems.map((item, idx) => ({ ...item, keywords: snippets[idx] || '' })), pluginItems.flat());
-    contentReady = true;
-    loading = false;
+    const providerRows = providerBatches.flatMap(batch => batch.rows.map(item => ({ item, score: item.score })));
+    const combined = dedupeRows(shellRows.concat(providerRows))
+      .sort((a, b) => b.score - a.score || a.item.rank - b.item.rank || a.item.title.localeCompare(b.item.title));
+    partial = providerBatches.some(batch => batch.partial) || combined.length > RESULT_LIMIT;
+    results = combined.slice(0, RESULT_LIMIT).map(row => row.item);
+    searching = false;
     revision += 1;
-    runSearch(query);
   }
 
   function handleFocus() {
     focused = true;
-    buildIndex();
+    refreshContext();
   }
 
   async function openResult(item) {
     query = '';
     results = [];
-    if (item.action === 'workspace') {
+    const action = item?.action;
+    if (!action) return;
+
+    if (action.kind === 'workspace') {
+      const workspaceRootPath = String(action.workspaceRootPath || '');
+      if (!workspaceRootPath) return;
       window.dispatchEvent(new CustomEvent('verstak:workspace-selected', {
-        detail: { workspaceName: item.workspaceName, nodes: item.nodes || [] }
+        detail: { workspaceName: workspaceRootPath, workspaceRootPath }
       }));
       return;
     }
-    if (item.action === 'view') {
+
+    if (action.kind === 'workspace-item') {
+      const workspaceRootPath = String(action.workspaceRootPath || '');
+      if (!workspaceRootPath || !action.workspaceItemId) return;
+      window.dispatchEvent(new CustomEvent('verstak:workspace-selected', {
+        detail: { workspaceName: workspaceRootPath, workspaceRootPath }
+      }));
+      window.dispatchEvent(new CustomEvent('verstak:workspace-open-tool', {
+        detail: { workspaceItemId: action.workspaceItemId, toolRequest: action.toolRequest || null }
+      }));
+      return;
+    }
+
+    if (action.kind === 'view') {
       window.dispatchEvent(new CustomEvent('verstak:open-view', {
-        detail: { viewId: item.viewId, pluginId: item.pluginId }
+        detail: { viewId: action.viewId || '', pluginId: action.pluginId || item.pluginId || '' }
       }));
       return;
     }
-    if (item.action === 'workspace-tool') {
-      const workspaceName = item.workspaceName || '';
-      if (workspaceName) {
-        window.dispatchEvent(new CustomEvent('verstak:workspace-selected', {
-          detail: { workspaceName, nodes: item.nodes || [] }
-        }));
-        window.dispatchEvent(new CustomEvent('verstak:workspace-open-tool', {
-          detail: { workspaceItemId: item.workspaceItemId || '' }
-        }));
-      }
-      return;
-    }
-    if (item.action === 'file-folder') {
-      const parts = String(item.path || '').split('/').filter(Boolean);
-      const workspaceName = parts[0] || '';
-      const localPath = parts.slice(1).join('/');
-      if (workspaceName) {
-        window.__filesHistoryByWorkspace = window.__filesHistoryByWorkspace || {};
-        window.__filesHistoryByWorkspace[workspaceName] = {
-          stack: [localPath],
-          index: 0,
-          currentPath: localPath,
-        };
-        const detail = { workspaceName };
-        if (Array.isArray(item.nodes) && item.nodes.length > 0) detail.nodes = item.nodes;
-        window.dispatchEvent(new CustomEvent('verstak:workspace-selected', {
-          detail
-        }));
-        window.dispatchEvent(new CustomEvent('verstak:workspace-open-tool', {
-          detail: { workspaceItemId: item.workspaceItemId || '' }
-        }));
-      }
-      return;
-    }
-    if (item.action === 'file') {
-      const response = await App.OpenWorkbenchResource('verstak.search', {
-        kind: 'vault-file',
-        path: item.path,
-        mode: 'view',
-        context: { sourceView: 'global-search' }
-      });
+
+    if (action.kind === 'resource' && action.resource) {
+      const request = {
+        ...action.resource,
+        context: { ...(action.resource.context || {}), sourceView: 'global-search' },
+      };
+      const response = await App.OpenWorkbenchResource(item.pluginId || '', request);
       const [result, err] = Array.isArray(response) ? response : [response, ''];
       if (!err && result) {
         window.dispatchEvent(new CustomEvent('verstak:workbench-opened', { detail: result }));
@@ -352,7 +329,7 @@
   }
 </script>
 
-<div class="global-search" class:open={focused && (query || results.length)} data-index-revision={revision} data-index-building={loading} data-index-partial={partial}>
+<div class="global-search" class:open={focused && (query || results.length)} data-index-revision={revision} data-index-building={loading || searching} data-index-partial={partial}>
   <div class="global-search-box">
     <Icon name="search" size={14} class="global-search-icon" />
     <input
@@ -380,7 +357,7 @@
             <span class="global-search-result-meta">{item.typeLabel || item.type} · {item.subtitle}</span>
           </button>
         {/each}
-      {:else if loading || !contentReady}
+      {:else if loading || searching || !contentReady}
         <div class="global-search-empty vt-empty-title">{tr('search.indexing')}</div>
       {:else if partial}
         <div class="global-search-empty vt-empty-title">{tr('search.partial')}</div>
