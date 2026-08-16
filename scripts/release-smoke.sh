@@ -12,6 +12,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 RELEASE_DIR="${VERSTAK_RELEASE_DIR:-$ROOT/release}"
 BINARY="$ROOT/build/bin/verstak-desktop"
 PLUGINS_DIR="$ROOT/build/bin/plugins"
+VERSION="${1:-}"
 FAILED=0
 
 report() {
@@ -114,10 +115,13 @@ fi
 #
 # A release nobody described is a release nobody can decide whether to install.
 echo "[notes]"
-version="$(cd "$ROOT" && git describe --tags --abbrev=0 2>/dev/null || true)"
+version="$VERSION"
 if [ -z "$version" ]; then
-  report "a tag to describe" 1
-  note "no tag found; release notes are checked against the newest tag"
+  version="$(cd "$ROOT" && git describe --tags --abbrev=0 2>/dev/null || true)"
+fi
+if [ -z "$version" ]; then
+  report "a release version to describe" 1
+  note "pass a version to release-smoke.sh or create a tag"
 elif [ -f "$ROOT/release-notes/$version.md" ]; then
   report "release-notes/$version.md exists" 0
 else
