@@ -125,6 +125,7 @@ replace_once(p, "    PublishPluginEvent: function () { return Promise.resolve(''
 p = 'frontend/e2e/browser-inbox.spec.js'
 replace_all(p, "inbox.locator('.browser-inbox-count')", "inbox.locator('.browser-inbox-toolbar > .browser-inbox-count')", 3)
 replace_once(p, "await inbox.locator('[data-browser-inbox-action=\"remove\"]').click();", "await inbox.locator('[data-browser-inbox-action=\"delete-permanently\"]').click();")
+replace_once(p, "await expect(inbox.locator('[data-browser-inbox-action=\"remove\"]')).toBeVisible();", "await expect(inbox.locator('[data-browser-inbox-action=\"delete-permanently\"]')).toBeVisible();")
 replace_once(p, "await expect(inbox.locator('[data-browser-capture-id=\"capture-e2e-1\"]')).toContainText('Research Report');", "await expect(inbox.locator('[data-browser-capture-id=\"capture-e2e-1\"]')).toContainText('report.txt');")
 replace_once(p, "await expect(inbox.locator('.browser-inbox-detail-title')).toHaveText('Research Report');", "await expect(inbox.locator('.browser-inbox-detail-title')).toHaveText('report.txt');")
 
