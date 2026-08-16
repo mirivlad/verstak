@@ -20,6 +20,7 @@ function assertExcludes(source, needle, message) {
 }
 
 const workspaceHost = read('frontend/src/lib/shell/WorkspaceHost.svelte');
+const overviewSurface = read('frontend/src/lib/shell/TodaySurface.svelte');
 const app = read('frontend/src/App.svelte');
 const statusBar = read('frontend/src/lib/shell/StatusBar.svelte');
 const compactPluginHost = read('frontend/src/lib/plugin-host/CompactPluginHost.svelte');
@@ -106,5 +107,47 @@ if (!syncStatus || syncStatus.handler !== 'SyncStatusBar') {
 if (/lastOpenedKey\s*=\s*key;\s*openSettingsFromProps\(activeSettingsPluginId,\s*activeSettingsPanelId\)/s.test(pluginManager)) {
   throw new Error('PluginManager should not mark settings panel as opened before resolving contributions');
 }
+
+
+for (const forbidden of [
+  'ReadPluginSettings',
+  'ReadPluginDataNDJSON',
+  'ListVaultFiles',
+  'verstak.browser-inbox',
+  'verstak.activity',
+  'verstak.journal',
+  'verstak.todo',
+  'captures:workspace:',
+  'captures:global',
+  'todos:global',
+  'worklog:workspace:',
+  'work-session-candidates:workspace:',
+]) {
+  assertExcludes(
+    overviewSurface,
+    forbidden,
+    `Overview shell must consume provider semantics instead of plugin internals (${forbidden})`,
+  );
+}
+assertIncludes(
+  overviewSurface,
+  'executePluginCommand(provider.pluginId, provider.handler',
+  'Overview shell should consume declared Overview providers through the generic command runtime',
+);
+assertIncludes(
+  workspaceHost,
+  'findWorkspaceItem(workspaceItemId)',
+  'WorkspaceHost should resolve Overview navigation by exact workspace item id',
+);
+assertExcludes(
+  workspaceHost,
+  "kind === 'browser-inbox'",
+  'WorkspaceHost should not special-case Browser navigation',
+);
+assertExcludes(
+  workspaceHost,
+  'text.includes(kind)',
+  'WorkspaceHost should not guess a workspace tool from arbitrary title/id substrings',
+);
 
 console.log('shell source contract smoke passed');

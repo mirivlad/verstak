@@ -5,6 +5,8 @@
  * Состояние мутабельно — тесты могут менять его между сценариями.
  */
 import defaultEditorSource from '../../../../../verstak-official-plugins/plugins/default-editor/frontend/src/index.js?raw';
+import notesSource from '../../../../../verstak-official-plugins/plugins/notes/frontend/src/index.js?raw';
+import browserInboxSource from '../../../../../verstak-official-plugins/plugins/browser-inbox/frontend/src/index.js?raw';
 import secretsSource from '../../../../../verstak-official-plugins/plugins/secrets/frontend/src/index.js?raw';
 import activitySource from '../../../../../verstak-official-plugins/plugins/activity/frontend/src/index.js?raw';
 import todoSource from '../../../../../verstak-official-plugins/plugins/todo/frontend/src/index.js?raw';
@@ -293,6 +295,28 @@ import importStyle from '../../../../../verstak-official-plugins/plugins/import/
       error: ''
     }
   };
+
+  var overviewProviderDefs = {
+    'verstak.notes': { id: 'verstak.notes.overview', handler: 'verstak.notes.provideOverview', label: 'Notes' },
+    'verstak.activity': { id: 'verstak.activity.overview', handler: 'verstak.activity.provideOverview', label: 'Activity' },
+    'verstak.browser-inbox': { id: 'verstak.browser-inbox.overview', handler: 'verstak.browser-inbox.provideOverview', label: 'Browser' },
+    'verstak.journal': { id: 'verstak.journal.overview', handler: 'verstak.journal.provideOverview', label: 'Journal' },
+    'verstak.todo': { id: 'verstak.todo.overview', handler: 'verstak.todo.provideOverview', label: 'Todo' }
+  };
+  Object.keys(overviewProviderDefs).forEach(function (pluginId) {
+    var state = pluginStates[pluginId];
+    if (!state || !state.manifest) return;
+    var manifest = state.manifest;
+    var provider = overviewProviderDefs[pluginId];
+    manifest.permissions = manifest.permissions || [];
+    if (manifest.permissions.indexOf('commands.register') === -1) manifest.permissions.push('commands.register');
+    manifest.contributes = manifest.contributes || {};
+    manifest.contributes.commands = manifest.contributes.commands || [];
+    if (!manifest.contributes.commands.some(function (item) { return item.id === provider.handler; })) {
+      manifest.contributes.commands.push({ id: provider.handler, title: 'Provide Overview Signals', handler: provider.handler });
+    }
+    manifest.contributes.overviewProviders = [{ id: provider.id, label: provider.label, handler: provider.handler }];
+  });
 
   var russianPluginNames = {
     'verstak.platform-test': 'Тест платформы',
@@ -970,7 +994,7 @@ function cloneJson(value) {
   }
 
   function allContributions() {
-    var views = [], commands = [], searchProviders = [], worklogProviders = [], sidebarItems = [], statusBarItems = [], settingsPanels = [], openProviders = [], workspaceItems = [];
+    var views = [], commands = [], searchProviders = [], worklogProviders = [], overviewProviders = [], sidebarItems = [], statusBarItems = [], settingsPanels = [], openProviders = [], workspaceItems = [];
     for (var id in pluginStates) {
       var s = pluginStates[id];
       var c = (s.manifest && s.manifest.contributes) || {};
@@ -978,6 +1002,7 @@ function cloneJson(value) {
       if (c.commands) c.commands.forEach(function (cmd) { commands.push(Object.assign({}, cmd, { pluginId: id })); });
       if (c.searchProviders) c.searchProviders.forEach(function (sp) { searchProviders.push(Object.assign({}, sp, { pluginId: id })); });
       if (c.worklogProviders) c.worklogProviders.forEach(function (wp) { worklogProviders.push(Object.assign({}, wp, { pluginId: id })); });
+      if (c.overviewProviders) c.overviewProviders.forEach(function (op) { overviewProviders.push(Object.assign({}, op, { pluginId: id })); });
       if (c.sidebarItems) c.sidebarItems.forEach(function (sb) { sidebarItems.push(Object.assign({}, sb, { pluginId: id })); });
       if (c.statusBarItems) c.statusBarItems.forEach(function (st) { statusBarItems.push(Object.assign({}, st, { pluginId: id })); });
       if (c.settingsPanels) c.settingsPanels.forEach(function (sp) { settingsPanels.push(Object.assign({}, sp, { pluginId: id })); });
@@ -993,7 +1018,7 @@ function cloneJson(value) {
         workspaceItems.push(item);
       });
     }
-    return { views: views, commands: commands, searchProviders: searchProviders, worklogProviders: worklogProviders, sidebarItems: sidebarItems, statusBarItems: statusBarItems, settingsPanels: settingsPanels, openProviders: openProviders, workspaceItems: workspaceItems };
+    return { views: views, commands: commands, searchProviders: searchProviders, worklogProviders: worklogProviders, overviewProviders: overviewProviders, sidebarItems: sidebarItems, statusBarItems: statusBarItems, settingsPanels: settingsPanels, openProviders: openProviders, workspaceItems: workspaceItems };
   }
 
   function requestExtension(request) {
@@ -3377,7 +3402,7 @@ function cloneJson(value) {
         return Promise.resolve(trashPluginBundle());
       }
       if (pluginId === 'verstak.notes' && assetPath === 'frontend/dist/index.js') {
-        return Promise.resolve(simplePluginBundle('verstak.notes', 'NotesView', 'notes-root', 'Notes'));
+        return Promise.resolve(notesSource);
       }
       if (pluginId === 'verstak.sync' && assetPath === 'frontend/dist/index.js') {
         return Promise.resolve(syncPluginBundle());
@@ -3389,7 +3414,7 @@ function cloneJson(value) {
         return Promise.resolve(journalSource);
       }
       if (pluginId === 'verstak.browser-inbox' && assetPath === 'frontend/dist/index.js') {
-        return Promise.resolve(browserInboxBundle());
+        return Promise.resolve(browserInboxSource);
       }
       if (pluginId === 'verstak.todo' && assetPath === 'frontend/dist/index.js') {
         return Promise.resolve(todoSource);

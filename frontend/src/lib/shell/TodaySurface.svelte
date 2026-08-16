@@ -1,37 +1,18 @@
 <script>
   import { createEventDispatcher, onDestroy, onMount } from 'svelte';
-  import * as App from '../../../wailsjs/go/api/App';
+  import { executePluginCommand } from '../plugin-host/VerstakPluginAPI.js';
   import { i18n } from '../i18n/index.js';
 
   export let workspaceRootPath = '';
   export let availableTools = [];
+  export let overviewProviders = [];
 
   const dispatch = createEventDispatcher();
-  const LOW_VALUE_RECENT_TYPES = new Set([
-    'workspace.selected',
-    'case.selected',
-    'file.selected',
-    'file.opened',
-    'note.opened',
-  ]);
-  const LOW_VALUE_RESUME_TYPES = new Set([
-    'workspace.selected',
-    'case.selected',
-    'file.selected',
-  ]);
-
   let loading = true;
   let activeFilter = 'all';
-  let captures = [];
-  let activityEvents = [];
-  let journalEntries = [];
-  let todos = [];
-  let workSessionCandidates = [];
-  let keyResources = [];
-  let totalNotes = 0;
+  let providerResults = [];
   let loadedWorkspaceRoot = '';
-  let loadedToolKey = '';
-  let toolProbe = 0;
+  let loadedProviderKey = '';
   let locale = i18n.getLocale();
   let unsubscribeLocale = null;
 
@@ -39,45 +20,22 @@
     void activeLocale;
     return i18n.t(key, params, fallback);
   })(locale);
-  function countText(key, count, params = {}) {
-    return tr(`${key}.${count === 1 ? 'one' : 'many'}`, { count, ...params });
-  }
-
-  $: hasNotes = hasTool('notes', availableTools);
-  $: hasFiles = hasTool('files', availableTools);
-  $: hasBrowserInbox = hasTool('browser-inbox', availableTools);
-  $: hasActivity = hasTool('activity', availableTools);
-  $: hasJournal = hasTool('journal', availableTools);
-  $: hasTodos = hasTool('todo', availableTools);
-  $: overviewToolKey = [hasNotes, hasFiles, hasBrowserInbox, hasActivity, hasJournal, hasTodos].join('|');
-  $: FILTERS = ['all']
-    .concat(hasNotes ? ['notes'] : [])
-    .concat(hasFiles ? ['files'] : [])
-    .concat(hasBrowserInbox ? ['captures'] : [])
-    .concat(hasJournal ? ['journal'] : [])
-    .map((key) => ({ key, label: tr(`overview.filter.${key}`) }));
+  $: toolById = new Map((availableTools || []).filter(tool => tool?.id && !tool?.shell).map(tool => [tool.id, tool]));
+  $: providerKey = (overviewProviders || []).map(provider => `${provider?.pluginId || ''}:${provider?.id || ''}:${provider?.handler || ''}`).join('|');
+  $: aggregated = aggregateProviderResults(providerResults, toolById);
+  $: summaryItems = aggregated.summary;
+  $: continueItems = aggregated.resume;
+  $: needsAttention = aggregated.attention;
+  $: recentChanges = aggregated.recent;
+  $: keyResources = aggregated.resources;
+  $: lastActive = aggregated.lastActiveAt;
+  $: categoryFilters = collectCategoryFilters(recentChanges);
+  $: FILTERS = [{ key: 'all', label: tr('overview.filter.all') }, ...categoryFilters];
   $: if (!FILTERS.some(filter => filter.key === activeFilter)) activeFilter = 'all';
-  $: recentChanges = filterAvailableItems(buildRecentChanges(activityEvents, captures, journalEntries), overviewToolKey);
   $: filteredRecentChanges = activeFilter === 'all'
     ? recentChanges
     : recentChanges.filter(item => item.category === activeFilter);
-  $: noteRecentChanges = countCategory(recentChanges, 'notes');
-  $: fileRecentChanges = countCategory(recentChanges, 'files');
-  $: unprocessedCaptures = captures.filter(item => item?.processed !== true);
-  $: linkedCandidateIds = new Set(journalEntries.map(item => String(item?.sourceCandidateId || '')).filter(Boolean));
-  $: pendingWorkSessionCandidates = workSessionCandidates.filter(item => !linkedCandidateIds.has(String(item?.candidateId || '')));
-  $: urgentTodos = hasTodos ? todos.filter(item => todoAttentionState(item)) : [];
-  $: needsAttention = filterAvailableItems(buildNeedsAttention(unprocessedCaptures, pendingWorkSessionCandidates, urgentTodos), overviewToolKey);
-  $: continueItems = filterAvailableItems(buildContinueItems(activityEvents, journalEntries), overviewToolKey);
-  $: hasAttentionTools = hasBrowserInbox || hasTodos || (hasActivity && hasJournal);
-  $: lastActive = lastActiveDate([...recentChanges, ...continueItems], captures, journalEntries, todos);
-  $: summaryItems = [
-    hasNotes ? { key: 'notes', label: tr('overview.notes'), count: totalNotes, detail: countText('overview.count.totalRecent', noteRecentChanges, { total: totalNotes, recent: noteRecentChanges }), actionKind: 'notes', actionLabel: tr('overview.openNotes') } : null,
-    hasFiles ? { key: 'files', label: tr('overview.files'), count: fileRecentChanges, detail: countText('overview.count.recentChanges', fileRecentChanges), actionKind: 'files', actionLabel: tr('overview.openFiles') } : null,
-    hasBrowserInbox ? { key: 'captures', label: tr('overview.captures'), count: unprocessedCaptures.length, detail: countText('overview.count.captures', unprocessedCaptures.length), actionKind: 'browser-inbox', actionLabel: tr('overview.reviewInbox') } : null,
-    hasActivity ? { key: 'activity', label: tr('overview.activity'), count: activityEvents.length, detail: countText('overview.count.events', activityEvents.length), actionKind: 'activity', actionLabel: tr('overview.viewActivity') } : null,
-    hasJournal ? { key: 'journal', label: tr('overview.journal'), count: journalEntries.length, detail: countText('overview.count.journal', journalEntries.length), actionKind: 'journal', actionLabel: tr('overview.openJournal') } : null,
-  ].filter(Boolean);
+  $: hasAttentionTools = (overviewProviders || []).length > 0;
   $: hasOverviewSideContent = Boolean(keyResources.length || needsAttention.length || (loading && hasAttentionTools));
 
   onMount(() => {
@@ -86,512 +44,204 @@
       locale = nextLocale;
       if (changed && workspaceRootPath) loadOverview();
     });
-    toolProbe += 1;
   });
 
   onDestroy(() => unsubscribeLocale?.());
 
-  $: if (workspaceRootPath && (workspaceRootPath !== loadedWorkspaceRoot || overviewToolKey !== loadedToolKey)) {
+  $: if (workspaceRootPath && (workspaceRootPath !== loadedWorkspaceRoot || providerKey !== loadedProviderKey)) {
     loadOverview();
   }
 
-  function hasTool(name, tools = availableTools) {
-    toolProbe;
-    name = String(name || '').toLowerCase();
-    const fromProps = (tools || []).some(tool => {
-      const label = `${tool?.title || ''} ${tool?.id || ''} ${tool?.pluginId || ''}`.toLowerCase();
-      return label.includes(name);
-    });
-    return fromProps;
-  }
-
-  function actionIsAvailable(kind) {
-    if (kind === 'notes') return hasNotes;
-    if (kind === 'files') return hasFiles;
-    if (kind === 'browser-inbox') return hasBrowserInbox;
-    if (kind === 'activity') return hasActivity;
-    if (kind === 'journal') return hasJournal;
-    if (kind === 'todo') return hasTodos;
-    return false;
-  }
-
-  function filterAvailableItems(items, _toolKey) {
-    void _toolKey;
-    return (items || []).filter(item => actionIsAvailable(item?.actionKind));
-  }
-
-  function decodeTuple(response, fallback) {
-    if (Array.isArray(response) && response.length === 2) return response[1] ? fallback : (response[0] || fallback);
-    return response || fallback;
-  }
-
-  async function readPluginSettings(pluginId) {
-    try {
-      return decodeTuple(await App.ReadPluginSettings(pluginId), {});
-    } catch (_) {
-      return {};
-    }
-  }
-
-  function workspaceKey(prefix) {
-    return prefix + encodeURIComponent(String(workspaceRootPath || '').trim());
-  }
-
-  function normalizeRows(value) {
-    return Array.isArray(value) ? value.filter(item => item && typeof item === 'object') : [];
-  }
-
-  function rowsFor(settings, keys) {
-    const workspace = String(workspaceRootPath || '').trim();
-    return keys.flatMap(key => normalizeRows(settings?.[key])).filter(item => {
-      const tagged = String(item.workspaceRootPath || item.workspaceName || item.workspaceNodeId || '').trim();
-      return !tagged || !workspace || tagged === workspace;
-    });
-  }
-
-  // Activity events belonging to this Deal, counted the way the Activity tool
-  // lists them.
-  //
-  // This used to also accept events with no Deal at all. Every globally scoped
-  // event — browser domain activity, of which there can be hundreds — was then
-  // counted into every Deal, so the Overview card claimed a number the Activity
-  // tool would never show: 184 against a list of 4, in one real vault. A visited
-  // domain is not activity in a Deal.
-  //
-  // The event id also has to be there and be unique, because that is what the
-  // Activity tool keys its list on and it drops the rest.
-  // Activity Verstak recorded because files moved rather than because anybody
-  // worked: an import publishing a run, sync applying a pull, a change the
-  // watcher noticed on disk. One import produced 497 of these in a minute; the
-  // Activity tool hides them and the Overview must not count what the tool does
-  // not show.
-  function isServiceActivity(item) {
-    const payload = (item && item.payload) || {};
-    if (payload.service === true || item.service === true || payload.external === true) return true;
-    return String(payload.operation || '').startsWith('external.');
-  }
-
-  function activityRowsForWorkspace(records, workspace) {
-    const target = String(workspace || '').trim();
-    if (!target) return [];
-    const seen = new Set();
-    return normalizeRows(records).filter(item => {
-      const id = String(item.activityId || '').trim();
-      if (!id || seen.has(id)) return false;
-      if (isServiceActivity(item)) return false;
-      const tagged = String(item.workspaceRootPath || item.workspaceName || item.workspaceNodeId || '').trim();
-      if (tagged !== target) return false;
-      seen.add(id);
-      return true;
-    });
-  }
-
-  function browserCaptureRowsForWorkspace(settings) {
-    const workspace = String(workspaceRootPath || '').trim();
-    if (!workspace) return [];
-    const seen = new Set();
-    return [
-      'captures:global',
-      workspaceKey('captures:workspace:'),
-      'captures',
-    ].flatMap(key => normalizeRows(settings?.[key])).filter(item => {
-      const tagged = String(item.workspaceRootPath || item.workspaceName || item.workspaceNodeId || '').trim();
-      if (tagged !== workspace) return false;
-      if (String(item.globalState || 'inbox') === 'archived') return false;
-      const captureId = String(item.captureId || '');
-      if (!captureId || seen.has(captureId)) return !captureId;
-      seen.add(captureId);
-      return true;
-    });
-  }
-
-  function todoRowsForWorkspace(settings) {
-    const workspace = String(workspaceRootPath || '').trim();
-    if (!workspace) return [];
-    const seen = new Set();
-    return normalizeRows(settings?.['todos:global']).filter(item => {
-      const tagged = String(item.workspaceRootPath || item.workspaceName || item.workspaceNodeId || '').trim();
-      if (tagged !== workspace) return false;
-      const todoId = String(item.id || '');
-      if (!todoId || seen.has(todoId)) return !todoId;
-      seen.add(todoId);
-      return true;
-    });
-  }
-
-  function todoDateMs(value) {
-    const raw = String(value || '').trim();
-    if (!raw) return 0;
-    const normalized = /^\d{4}-\d{2}-\d{2}$/.test(raw) ? `${raw}T00:00:00` : raw;
-    const date = new Date(normalized);
-    return Number.isNaN(date.getTime()) ? 0 : date.getTime();
-  }
-
-  function todoTitle(item) {
-    return String(item?.title || item?.name || tr('overview.untitledTodo')).trim() || tr('overview.untitledTodo');
-  }
-
-  function todoAttentionState(item) {
-    if (String(item?.status || 'open').toLowerCase() !== 'open') return '';
-    const now = Date.now();
-    const dueAt = todoDateMs(item?.dueAt);
-    const reminderAt = todoDateMs(item?.reminderAt);
-    if (reminderAt && reminderAt <= now) return tr('overview.todo.reminderDue');
-    if (dueAt && dueAt < now) return tr('overview.todo.overdue');
-    if (dueAt && dueAt <= now + 3 * 24 * 60 * 60 * 1000) return tr('overview.todo.dueSoon');
-    return '';
-  }
-
-  function todoTimeValue(item) {
-    return item?.dueAt || item?.reminderAt || item?.updatedAt || item?.createdAt || '';
-  }
-
-  function timeValue(item) {
-    return item?.capturedAt || item?.endedAt || item?.startedAt || item?.occurredAt || item?.receivedAt || item?.updatedAt || item?.modifiedAt || item?.date || item?.time || '';
-  }
-
-  function timeMs(item) {
-    const value = timeValue(item);
-    if (!value) return 0;
-    const normalized = /^\d{4}-\d{2}-\d{2}$/.test(String(value)) ? `${value}T00:00:00` : value;
-    const date = new Date(normalized);
-    return Number.isNaN(date.getTime()) ? 0 : date.getTime();
-  }
-
-  function sortByTime(rows) {
-    return [...rows].sort((a, b) => timeMs(b) - timeMs(a));
-  }
-
-  function fileName(path) {
-    const value = String(path || '').split('/').filter(Boolean).pop() || '';
-    return value || String(path || '').trim();
-  }
-
-  function titleFromPath(path) {
-    return fileName(path).replace(/\.(md|markdown|txt)$/i, '').replace(/_/g, ' ') || 'Untitled';
-  }
-
-  function entityName(item) {
-    const payload = item?.payload && typeof item.payload === 'object' ? item.payload : {};
-    const path = payload.path || payload.notePath || item?.path || item?.relativePath || looksLikePath(item?.summary);
-    const title = String(item?.title || payload.title || '').trim();
-    if (path && (!title || /^(saved note|file opened|file changed|activity event)$/i.test(title))) return titleFromPath(path);
-    return title || titleFromPath(path) || String(item?.summary || item?.activityId || tr('overview.item'));
-  }
-
-  function looksLikePath(value) {
-    const text = String(value || '').trim();
-    if (!text) return '';
-    return text.includes('/') || /\.[a-z0-9]{1,8}$/i.test(text) ? text : '';
-  }
-
-  function captureTitle(capture) {
-    return capture?.title || capture?.fileName || capture?.url || capture?.captureId || tr('overview.untitledCapture');
-  }
-
-  function journalTitle(entry) {
-    return entry?.title || entry?.summary || entry?.date || entry?.entryId || tr('overview.untitledJournal');
-  }
-
-  function itemTimeLabel(item) {
-    const value = timeValue(item);
-    if (!value) return tr('overview.time.none');
-    return relativeTime(value);
-  }
-
-  function absoluteTime(value) {
-    const ms = timeMs({ occurredAt: value });
-    if (!ms) return '';
-    return new Date(ms).toLocaleString(undefined, {
-      year: 'numeric',
-      month: 'short',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-  }
-
-  function relativeTime(value) {
-    const ms = timeMs({ occurredAt: value });
-    if (!ms) return tr('overview.time.none');
-    const diff = Date.now() - ms;
-    if (diff < 0) return absoluteTime(value);
-    const minute = 60 * 1000;
-    const hour = 60 * minute;
-    const day = 24 * hour;
-    if (diff < minute) return tr('overview.time.now');
-    if (diff < hour) return tr('overview.time.minutes', { count: Math.floor(diff / minute) });
-    if (diff < day) return tr('overview.time.hours', { count: Math.floor(diff / hour) });
-    if (diff < 2 * day) return tr('overview.time.yesterday');
-    if (diff < 7 * day) return tr('overview.time.days', { count: Math.floor(diff / day) });
-    const date = new Date(ms);
-    return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: date.getFullYear() === new Date().getFullYear() ? undefined : 'numeric' });
-  }
-
-  function activityCategory(item) {
-    const type = String(item?.type || '').toLowerCase();
-    if (type.startsWith('note.')) return 'notes';
-    if (type.startsWith('file.')) return 'files';
-    if (type.startsWith('browser.capture')) return 'captures';
-    if (type.startsWith('journal.') || type.startsWith('worklog.')) return 'journal';
-    return 'activity';
-  }
-
-  function activityTitle(item) {
-    const type = String(item?.type || '').toLowerCase();
-    const name = entityName(item);
-    if (type === 'note.saved' || type === 'note.edited') return tr('overview.event.noteEdited', { name });
-    if (type === 'note.opened') return tr('overview.event.noteOpened', { name });
-    if (type === 'note.created') return tr('overview.event.noteCreated', { name });
-    if (type === 'file.opened') return tr('overview.event.fileOpened', { name });
-    if (type === 'file.changed') return tr('overview.event.fileChanged', { name });
-    if (type === 'file.created') return tr('overview.event.fileCreated', { name });
-    if (type === 'file.deleted' || type === 'file.trashed') return tr('overview.event.fileRemoved', { name });
-    if (type === 'browser.capture.page') return tr('overview.event.capturePage', { name });
-    if (type === 'browser.capture.selection') return tr('overview.event.captureSelection', { name });
-    if (type === 'browser.capture.link') return tr('overview.event.captureLink', { name });
-    if (type === 'browser.capture.file') return tr('overview.event.captureFile', { name });
-    if (type === 'browser.capture.converted') return tr('overview.event.captureConverted', { name });
-    if (type === 'journal.entry.added' || type === 'worklog.entry.added') return tr('overview.event.journalAdded', { name });
-    if (type === 'action.started') return tr('overview.event.workSessionDetected');
-    if (type === 'workspace.opened') return tr('overview.event.workspaceOpened');
-    return item?.title || item?.summary || tr('overview.event.activity');
-  }
-
-  function captureKindLabel(capture) {
-    const kind = String(capture?.kind || '').toLowerCase();
-    if (kind === 'page') return tr('overview.captureKind.page');
-    if (kind === 'selection') return tr('overview.captureKind.selection');
-    if (kind === 'link') return tr('overview.captureKind.link');
-    if (kind === 'file') return tr('overview.captureKind.file');
-    return tr('overview.captureKind.item');
-  }
-
-  function actionForCategory(category) {
-    if (category === 'notes') return { kind: 'notes', label: tr('overview.openNotes') };
-    if (category === 'files') return { kind: 'files', label: tr('overview.openFiles') };
-    if (category === 'captures') return { kind: 'browser-inbox', label: tr('overview.reviewInbox') };
-    if (category === 'journal') return { kind: 'journal', label: tr('overview.openJournal') };
-    return { kind: 'activity', label: tr('overview.viewActivity') };
-  }
-
-  function buildRecentChanges(events, captureRows, journalRows) {
-    const activityItems = sortByTime(events)
-      .filter(item => !LOW_VALUE_RECENT_TYPES.has(String(item?.type || '').toLowerCase()))
-      .map(item => {
-        const category = activityCategory(item);
-        const action = actionForCategory(category);
-        return {
-          id: item.activityId || `${item.type}:${timeValue(item)}`,
-          category,
-          title: activityTitle(item),
-          meta: itemTimeLabel(item),
-          time: timeValue(item),
-          absolute: absoluteTime(timeValue(item)),
-          actionKind: action.kind,
-          actionLabel: action.label,
-        };
-      });
-    const captureItems = captureRows.map(item => ({
-      id: item.captureId || `capture:${timeValue(item)}`,
-      category: 'captures',
-      title: tr('overview.event.capture', { kind: captureKindLabel(item), title: captureTitle(item) }),
-      meta: `${itemTimeLabel(item)} · ${item.domain || item.url || tr('overview.browserCapture')}`,
-      time: timeValue(item),
-      absolute: absoluteTime(timeValue(item)),
-      actionKind: 'browser-inbox',
-      actionLabel: tr('overview.reviewInbox'),
-    }));
-    const journalItems = journalRows.map(item => ({
-      id: item.entryId || `journal:${timeValue(item)}`,
-      category: 'journal',
-      title: tr('overview.event.journalAdded', { name: journalTitle(item) }),
-      meta: `${itemTimeLabel(item)}${item.minutes ? ' · ' + tr('overview.minutes', { count: item.minutes }) : ''}`,
-      time: timeValue(item),
-      absolute: absoluteTime(timeValue(item)),
-      actionKind: 'journal',
-      actionLabel: tr('overview.openJournal'),
-    }));
-    return sortByTime([...activityItems, ...captureItems, ...journalItems]).slice(0, 12);
-  }
-
-  function isResumeEvent(item) {
-    const type = String(item?.type || '').toLowerCase();
-    if (LOW_VALUE_RESUME_TYPES.has(type)) return false;
-    return type === 'file.opened' ||
-      type === 'note.opened' ||
-      type === 'note.saved' ||
-      type === 'note.edited' ||
-      type === 'file.changed' ||
-      type === 'file.created' ||
-      type === 'browser.capture.converted';
-  }
-
-  function continueItemFromActivity(item) {
-    const category = activityCategory(item);
-    const action = actionForCategory(category);
-    return {
-      id: item.activityId || `${item.type}:${timeValue(item)}`,
-      category,
-      title: activityTitle(item),
-      meta: itemTimeLabel(item),
-      time: timeValue(item),
-      absolute: absoluteTime(timeValue(item)),
-      actionKind: action.kind,
-      actionLabel: action.label,
-    };
-  }
-
-  function buildContinueItems(events, journalRows) {
-    const noteCandidates = sortByTime(events)
-      .filter(item => isResumeEvent(item) && activityCategory(item) === 'notes')
-      .map(continueItemFromActivity);
-    const fileCandidates = sortByTime(events)
-      .filter(item => ['file.changed', 'file.created'].includes(String(item?.type || '').toLowerCase()))
-      .map(continueItemFromActivity);
-    const journalCandidates = sortByTime(journalRows).map(item => ({
-      id: item.entryId || `journal:${timeValue(item)}` ,
-      category: 'journal',
-      title: tr('overview.event.continueJournal', { title: journalTitle(item) }),
-      meta: itemTimeLabel(item),
-      time: timeValue(item),
-      absolute: absoluteTime(timeValue(item)),
-      actionKind: 'journal',
-      actionLabel: tr('overview.openJournal'),
-    }));
-    return [...noteCandidates, ...fileCandidates, ...journalCandidates].slice(0, 4);
-  }
-
-  function buildNeedsAttention(captureRows, candidates, todoRows) {
-    const captureItems = sortByTime(captureRows).slice(0, 4).map(item => ({
-      id: item.captureId || `capture:${timeValue(item)}`,
-      title: captureTitle(item),
-      meta: `${captureKindLabel(item)} · ${itemTimeLabel(item)}`,
-      actionKind: 'browser-inbox',
-      actionLabel: tr('overview.reviewInbox'),
-    }));
-    const candidateItems = sortByTime(candidates).slice(0, 4).map(item => ({
-      id: item.candidateId || `work-session:${timeValue(item)}`,
-      title: tr('overview.event.possibleJournalEntry'),
-      meta: tr('overview.candidateMeta', {
-        deal: item.workspaceRootPath || workspaceRootPath || tr('overview.unknownDeal'),
-        minutes: item.estimatedMinutes || 0,
-        activities: item.activityCount || (item.activityIds || []).length || 0,
-      }),
-      actionKind: 'journal',
-      actionLabel: tr('overview.reviewCandidate'),
-      toolRequest: { type: 'work-session-candidate', candidate: item },
-    }));
-    const todoItems = [...todoRows].sort((a, b) => todoDateMs(todoTimeValue(a)) - todoDateMs(todoTimeValue(b))).slice(0, 4).map(item => ({
-      id: item.id || `todo:${todoTitle(item)}`,
-      title: todoTitle(item),
-      meta: `${todoAttentionState(item)}${item.dueAt ? ` · ${tr('overview.todo.due', { date: item.dueAt })}` : ''}`,
-      actionKind: 'todo',
-      actionLabel: tr('overview.openTodos'),
-    }));
-    return [...todoItems, ...captureItems, ...candidateItems].slice(0, 6);
-  }
-
-  function countCategory(items, category) {
-    return items.filter(item => item.category === category).length;
-  }
-
-  function countLabel(count, singular) {
-    return `${count} ${singular}${count === 1 ? '' : 's'}`;
-  }
-
-  function totalAndRecentLabel(total, recent) {
-    return `${total} total · ${countLabel(recent, 'recent change')}`;
-  }
-
-  function captureReviewLabel(count) {
-    return `${count} capture${count === 1 ? '' : 's'} to review`;
-  }
-
-  function journalEntryLabel(count) {
-    return `${count} journal entr${count === 1 ? 'y' : 'ies'}`;
-  }
-
-  function lastActiveDate(items, captureRows, journalRows, todoRows) {
-    const source = sortByTime([...items, ...captureRows, ...journalRows, ...todoRows])[0];
-    return timeValue(source);
-  }
-
-  async function listFiles(pluginId, relativeDir) {
-    if (!App.ListVaultFiles) return [];
-    try {
-      return decodeTuple(await App.ListVaultFiles(pluginId, relativeDir), []);
-    } catch (_) {
-      return [];
-    }
-  }
-
-  async function loadWorkspaceResources(toolState) {
-    const workspace = String(workspaceRootPath || '').trim();
-    if (!workspace) return { keyResources: [], totalNotes: 0 };
-    const [rootEntries, notesEntries] = await Promise.all([
-      toolState.files ? listFiles('verstak.files', workspace) : Promise.resolve([]),
-      toolState.notes ? listFiles('verstak.notes', `${workspace}/Notes`) : Promise.resolve([]),
-    ]);
-    const noteFiles = notesEntries.filter(item => item?.type === 'file');
-    const overview = [...notesEntries, ...rootEntries].find(item => /(^|\/)overview\.md$/i.test(String(item.relativePath || item.name || '')));
-    return {
-      totalNotes: noteFiles.length,
-      keyResources: overview ? [{
-        id: overview.relativePath || overview.name,
-        title: overview.name || fileName(overview.relativePath) || 'Overview.md',
-        meta: overview.relativePath || tr('overview.overviewNote'),
-        actionKind: toolState.notes ? 'notes' : 'files',
-        actionLabel: toolState.notes ? tr('overview.openNotes') : tr('overview.openFiles'),
-      }] : [],
-    };
+  function commandResult(value) {
+    if (value && value.status === 'handled') return value.result || {};
+    return value && value.result ? value.result : (value || {});
   }
 
   async function loadOverview() {
     const workspaceAtStart = String(workspaceRootPath || '').trim();
-    const toolKeyAtStart = overviewToolKey;
-    const toolState = {
-      notes: hasNotes,
-      files: hasFiles,
-      browserInbox: hasBrowserInbox,
-      activity: hasActivity,
-      journal: hasJournal,
-      todos: hasTodos,
-    };
+    const providerKeyAtStart = providerKey;
     loadedWorkspaceRoot = workspaceAtStart;
-    loadedToolKey = toolKeyAtStart;
+    loadedProviderKey = providerKeyAtStart;
     loading = true;
-    const [browserSettings, activitySettings, activityRecords, journalSettings, todoSettings, resources] = await Promise.all([
-      toolState.browserInbox ? readPluginSettings('verstak.browser-inbox') : Promise.resolve({}),
-      toolState.activity ? readPluginSettings('verstak.activity') : Promise.resolve({}),
-      toolState.activity && App.ReadPluginDataNDJSON
-        ? App.ReadPluginDataNDJSON('verstak.activity', 'activity-events')
-          .then(value => decodeTuple(value, []))
-          .catch(() => [])
-        : Promise.resolve([]),
-      toolState.journal ? readPluginSettings('verstak.journal') : Promise.resolve({}),
-      toolState.todos ? readPluginSettings('verstak.todo') : Promise.resolve({}),
-      loadWorkspaceResources(toolState),
-    ]);
-    if (workspaceAtStart !== String(workspaceRootPath || '').trim() || toolKeyAtStart !== overviewToolKey) return;
 
-    captures = toolState.browserInbox ? browserCaptureRowsForWorkspace(browserSettings) : [];
-    activityEvents = toolState.activity ? activityRowsForWorkspace(activityRecords, workspaceAtStart) : [];
-    journalEntries = toolState.journal ? rowsFor(journalSettings, [
-      workspaceKey('worklog:workspace:'),
-      'worklog',
-    ]) : [];
-    todos = toolState.todos ? todoRowsForWorkspace(todoSettings) : [];
-    workSessionCandidates = toolState.activity && toolState.journal ? rowsFor(activitySettings, [
-      workspaceKey('work-session-candidates:workspace:'),
-    ]) : [];
-    keyResources = resources.keyResources;
-    totalNotes = resources.totalNotes;
+    const rows = await Promise.all((overviewProviders || []).map(async provider => {
+      if (!provider?.pluginId || !provider?.handler) return null;
+      try {
+        const response = await executePluginCommand(provider.pluginId, provider.handler, {
+          workspaceRootPath: workspaceAtStart,
+        });
+        return {
+          pluginId: provider.pluginId,
+          providerId: provider.id || provider.handler,
+          result: commandResult(response),
+        };
+      } catch (error) {
+        console.warn(`[Overview] provider ${provider.pluginId}/${provider.id || provider.handler} failed:`, error);
+        return null;
+      }
+    }));
+
+    if (workspaceAtStart !== String(workspaceRootPath || '').trim() || providerKeyAtStart !== providerKey) return;
+    providerResults = rows.filter(Boolean);
     loading = false;
   }
 
-  function openTool(kind, toolRequest = null) {
-    dispatch('openTool', { kind, toolRequest });
+  function actionAvailable(action, tools) {
+    if (!action?.workspaceItemId) return false;
+    return tools.has(action.workspaceItemId);
+  }
+
+  function timeValue(item) {
+    const value = item?.occurredAt || item?.time || '';
+    if (!value) return 0;
+    const parsed = new Date(value).getTime();
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+
+  function explicitOrder(item) {
+    return Number.isFinite(Number(item?.order)) ? Number(item.order) : null;
+  }
+
+  function sortByTime(items) {
+    return [...items].sort((a, b) => timeValue(b) - timeValue(a) || (a._sequence || 0) - (b._sequence || 0));
+  }
+
+  function sortAttention(items) {
+    return [...items].sort((a, b) => {
+      const ao = explicitOrder(a);
+      const bo = explicitOrder(b);
+      if (ao !== null || bo !== null) return (ao ?? 10000) - (bo ?? 10000);
+      return timeValue(b) - timeValue(a) || (a._sequence || 0) - (b._sequence || 0);
+    });
+  }
+
+  function normalizeActionItem(item, providerId, sequence, tools) {
+    if (!item || !actionAvailable(item.action, tools)) return null;
+    const target = tools.get(item.action.workspaceItemId);
+    const occurredAt = item.occurredAt || '';
+    const metaParts = [];
+    if (item.meta) metaParts.push(String(item.meta));
+    if (occurredAt) metaParts.push(relativeTime(occurredAt));
+    return {
+      ...item,
+      id: `${providerId}:${item.id || sequence}`,
+      meta: metaParts.join(' · '),
+      absolute: occurredAt ? absoluteTime(occurredAt) : '',
+      actionKind: item.action.workspaceItemId,
+      actionLabel: tr('overview.openTool', { tool: target?.title || item.action.workspaceItemId }),
+      toolRequest: item.action.toolRequest || null,
+      _sequence: sequence,
+    };
+  }
+
+  function normalizeSummaryItem(item, providerId, sequence, tools) {
+    if (!item || !actionAvailable(item.action, tools)) return null;
+    const target = tools.get(item.action.workspaceItemId);
+    return {
+      ...item,
+      key: item.id || `${providerId}:${sequence}`,
+      count: Number.isFinite(Number(item.count)) ? Number(item.count) : 0,
+      actionKind: item.action.workspaceItemId,
+      actionLabel: tr('overview.openTool', { tool: target?.title || item.action.workspaceItemId }),
+      _sequence: sequence,
+    };
+  }
+
+  function aggregateProviderResults(rows, tools) {
+    const summary = [];
+    const resume = [];
+    const attention = [];
+    const recent = [];
+    const resources = [];
+    const lastActiveCandidates = [];
+    let sequence = 0;
+
+    (rows || []).forEach(row => {
+      const result = row?.result && typeof row.result === 'object' ? row.result : {};
+      const providerId = `${row?.pluginId || 'provider'}:${row?.providerId || ''}`;
+      (result.summary || []).forEach(item => {
+        const normalized = normalizeSummaryItem(item, providerId, sequence++, tools);
+        if (normalized) summary.push(normalized);
+      });
+      (result.resume || []).forEach(item => {
+        const normalized = normalizeActionItem(item, providerId, sequence++, tools);
+        if (normalized) resume.push(normalized);
+      });
+      (result.attention || []).forEach(item => {
+        const normalized = normalizeActionItem(item, providerId, sequence++, tools);
+        if (normalized) attention.push(normalized);
+      });
+      (result.recent || []).forEach(item => {
+        const normalized = normalizeActionItem(item, providerId, sequence++, tools);
+        if (normalized) {
+          normalized.category = String(item.categoryId || 'other');
+          normalized.categoryLabel = String(item.categoryLabel || tools.get(item.action.workspaceItemId)?.title || normalized.category);
+          recent.push(normalized);
+        }
+      });
+      (result.resources || []).forEach(item => {
+        const normalized = normalizeActionItem(item, providerId, sequence++, tools);
+        if (normalized) resources.push(normalized);
+      });
+      if (result.lastActiveAt) lastActiveCandidates.push({ occurredAt: result.lastActiveAt });
+    });
+
+    summary.sort((a, b) => (explicitOrder(a) ?? 10000) - (explicitOrder(b) ?? 10000) || String(a.label || '').localeCompare(String(b.label || '')));
+    const visibleItems = [...resume, ...attention, ...recent, ...resources];
+    visibleItems.forEach(item => {
+      if (item.occurredAt) lastActiveCandidates.push(item);
+    });
+    return {
+      summary,
+      resume: sortByTime(resume).slice(0, 4),
+      attention: sortAttention(attention).slice(0, 6),
+      recent: sortByTime(recent).slice(0, 12),
+      resources: resources.sort((a, b) => (explicitOrder(a) ?? 10000) - (explicitOrder(b) ?? 10000) || (a._sequence || 0) - (b._sequence || 0)),
+      lastActiveAt: sortByTime(lastActiveCandidates)[0]?.occurredAt || '',
+    };
+  }
+
+  function collectCategoryFilters(items) {
+    const categories = [];
+    const seen = new Set();
+    (items || []).forEach(item => {
+      const key = String(item?.category || '').trim();
+      if (!key || seen.has(key)) return;
+      seen.add(key);
+      categories.push({ key, label: item.categoryLabel || key });
+    });
+    return categories;
+  }
+
+  function relativeTime(value) {
+    const ms = new Date(value).getTime();
+    if (!Number.isFinite(ms)) return tr('overview.time.none');
+    const delta = Date.now() - ms;
+    const abs = Math.abs(delta);
+    if (abs < 60 * 1000) return tr('overview.time.now');
+    const minutes = Math.max(1, Math.round(abs / 60000));
+    if (minutes < 60) return tr(delta >= 0 ? 'overview.time.minutesAgo' : 'overview.time.inMinutes', { count: minutes });
+    const hours = Math.max(1, Math.round(abs / 3600000));
+    if (hours < 48) return tr(delta >= 0 ? 'overview.time.hoursAgo' : 'overview.time.inHours', { count: hours });
+    const days = Math.max(1, Math.round(abs / 86400000));
+    return tr(delta >= 0 ? 'overview.time.daysAgo' : 'overview.time.inDays', { count: days });
+  }
+
+  function absoluteTime(value) {
+    const date = new Date(value);
+    if (!Number.isFinite(date.getTime())) return '';
+    try {
+      return new Intl.DateTimeFormat(locale === 'ru' ? 'ru-RU' : 'en-US', {
+        dateStyle: 'medium',
+        timeStyle: 'short',
+      }).format(date);
+    } catch (_) {
+      return date.toISOString();
+    }
+  }
+
+  function openTool(workspaceItemId, toolRequest = null) {
+    dispatch('openTool', { workspaceItemId, toolRequest });
   }
 </script>
 

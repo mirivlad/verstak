@@ -184,6 +184,7 @@ func TestListByPoint(t *testing.T) {
 		SearchProviders:    []plugin.ContributionSearchProvider{{ID: "sp1", Label: "SP1", Handler: "h"}},
 		ActivityProviders:  []plugin.ContributionActivityProvider{{ID: "ap1", Events: []string{"test"}, Handler: "h"}},
 		WorklogProviders:   []plugin.ContributionWorklogProvider{{ID: "wp1", Label: "WP1", Handler: "h"}},
+		OverviewProviders:  []plugin.ContributionOverviewProvider{{ID: "ov1", Label: "OV1", Handler: "overview"}},
 		StatusBarItems:     []plugin.ContributionStatusBarItem{{ID: "sb1", Label: "SB1"}},
 		OpenProviders: []plugin.ContributionOpenProvider{{
 			ID:        "op1",
@@ -214,6 +215,7 @@ func TestListByPoint(t *testing.T) {
 		{PointSearchProviders, 1},
 		{PointActivity, 1},
 		{PointWorklog, 1},
+		{PointOverview, 1},
 		{PointStatusBar, 1},
 		{PointOpenProviders, 1},
 	}

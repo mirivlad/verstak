@@ -280,6 +280,7 @@ export default {
   'overview.reviewInbox': 'Разобрать входящие',
   'overview.viewActivity': 'Открыть активность',
   'overview.openJournal': 'Открыть журнал',
+  'overview.openTool': 'Открыть: {tool}',
   'overview.openTodos': 'Открыть задачи',
   'overview.reviewCandidate': 'Просмотреть запись',
   'overview.reviewPending': 'Разобрать ожидающее',
