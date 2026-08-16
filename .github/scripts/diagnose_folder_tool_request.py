@@ -19,17 +19,16 @@ path.write_text(text.replace(old, new, 1))
 
 path = Path('frontend/e2e/ux-followup.spec.js')
 text = path.read_text()
-old = """    await folderResult.click();
-    await expect(page.locator('[data-workspace-current=\"Project\"]')).toBeVisible();
-"""
-new = """    await page.evaluate(() => {
+anchor = "    await folderResult.click();\n"
+if text.count(anchor) != 1:
+    raise SystemExit(f'folder click trace anchor count: {text.count(anchor)}')
+replacement = """    await page.evaluate(() => {
       window.__verstakWorkspaceOpenTrace = [];
       window.addEventListener('verstak:workspace-open-tool', (event) => {
         window.__verstakWorkspaceOpenTrace.push(JSON.parse(JSON.stringify(event.detail || {})));
       });
     });
     await folderResult.click();
-    await expect(page.locator('[data-workspace-current=\"Project\"]')).toBeVisible();
     await page.waitForTimeout(500);
     const navTrace = await page.evaluate(() => ({
       openTool: window.__verstakWorkspaceOpenTrace || [],
@@ -37,6 +36,4 @@ new = """    await page.evaluate(() => {
     }));
     console.log('SEARCH_FOLDER_NAV_TRACE=' + JSON.stringify(navTrace));
 """
-if text.count(old) != 1:
-    raise SystemExit(f'folder click trace anchor count: {text.count(old)}')
-path.write_text(text.replace(old, new, 1))
+path.write_text(text.replace(anchor, replacement, 1))
