@@ -154,13 +154,25 @@ test = replace_once(
 )
 write(test_path, test)
 
-# Final repo-level assertions for the intended cleanup scope.
+# The terminology contract also reads the Overview implementation directly.
+terminology_path = 'frontend/tests/user-terminology-test.mjs'
+terminology = read(terminology_path)
+terminology = replace_once(
+    terminology,
+    "src/lib/shell/TodaySurface.svelte",
+    "src/lib/shell/OverviewSurface.svelte",
+    'user terminology Overview filename',
+)
+write(terminology_path, terminology)
+
+# Final repo-level assertions for production references. The source-contract
+# intentionally contains the literal legacy name in an assertExcludes check.
 remaining = subprocess.run(
-    ['git', 'grep', '-n', 'TodaySurface', '--', 'frontend/src', 'frontend/tests'],
+    ['git', 'grep', '-n', 'TodaySurface', '--', 'frontend/src'],
     text=True,
     capture_output=True,
 )
 if remaining.returncode == 0 and remaining.stdout.strip():
-    raise SystemExit('Unexpected TodaySurface references remain:\n' + remaining.stdout)
+    raise SystemExit('Unexpected production TodaySurface references remain:\n' + remaining.stdout)
 
 print('Overview cleanup patch applied')
