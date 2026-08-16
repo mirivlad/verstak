@@ -19,6 +19,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Contract tests intentionally verify the real bundled manifests and
+      # source-level cross-repository contracts. A clean desktop checkout does
+      # not contain those plugins, so make the sibling dependency explicit.
+      - name: Check out the official plugins
+        uses: actions/checkout@v4
+        with:
+          repository: mirivlad/verstak-official-plugins
+          ref: main
+          path: verstak-official-plugins
+
+      - name: Put official plugins beside desktop
+        run: mv verstak-official-plugins ../verstak-official-plugins
+
       # Ubuntu 24.04 no longer ships webkit2gtk-4.0. scripts/build.sh already
       # picks the right Wails build tag from pkg-config, so installing 4.1 is
       # enough and no build tag has to be pinned here.
@@ -42,6 +55,12 @@ jobs:
 
       - run: npm ci --no-audit --no-fund
         working-directory: frontend
+
+      - name: Build current official plugins
+        run: bash ../verstak-official-plugins/scripts/build.sh
+
+      - name: Install current official plugins
+        run: bash scripts/install-dev-plugins.sh
 
       # main.go embeds frontend/dist, which is not committed. Without this the
       # Go steps fail before running anything with "pattern frontend/dist: no
