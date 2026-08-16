@@ -5,6 +5,7 @@ on:
     branches: [audit/overview-provider-shell]
     paths:
       - '.github/scripts/fix_provider_e2e_contracts.py'
+      - '.github/scripts/diagnose_provider_e2e.py'
       - '.github/workflows/fix-provider-e2e-contracts.yml'
 
 permissions:
@@ -39,9 +40,9 @@ jobs:
           cache: npm
           cache-dependency-path: work/verstak/frontend/package-lock.json
 
-      - name: Apply provider E2E fixes
+      - name: Apply provider E2E fixes and diagnostics
         working-directory: work/verstak
-        run: python3 .github/scripts/fix_provider_e2e_contracts.py
+        run: python3 .github/scripts/diagnose_provider_e2e.py
 
       - name: Install frontend dependencies
         working-directory: work/verstak/frontend
