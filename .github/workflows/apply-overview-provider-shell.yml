@@ -71,7 +71,7 @@ jobs:
           s = p.read_text()
           start = s.index('# WorkspaceHost: scope providers')
           end = s.index('# Generic TodaySurface script.', start)
-          section = dedent(r'''
+          section = dedent(r"""
           # WorkspaceHost: scope providers to the current Deal and navigate by exact id.
           # ---------------------------------------------------------------------------
           p = Path('frontend/src/lib/shell/WorkspaceHost.svelte')
@@ -119,7 +119,7 @@ jobs:
           p.write_text(s)
 
           # ---------------------------------------------------------------------------
-          ''')
+          """)
           p.write_text(s[:start] + section + s[end:])
           PY
       - name: Apply provider shell patch
