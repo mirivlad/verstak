@@ -2,133 +2,155 @@
 
 ## Overview
 
-Verstak Desktop uses **Playwright** for frontend E2E tests that run in a real
-Chromium browser with mocked Wails bindings. This tests the Svelte component
-logic, user interactions, and UI state transitions — without needing the actual
-Wails desktop shell.
+Verstak has two complementary GUI test layers:
 
-## What is tested
+1. **Playwright + Chromium** for deterministic frontend behavior with mocked
+   Wails bindings and real official plugin bundles.
+2. **Real Wails + WebKitGTK under Xvfb** for native desktop rendering and
+   startup smoke evidence.
 
-### Frontend E2E (Playwright)
+Neither layer replaces the other. Playwright is the fast, controllable product
+flow test. The Wails probe verifies that the application we actually ship can be
+built, started and rendered by the Linux desktop engine.
 
-Located in `frontend/e2e/`, run via `npm run test:e2e`.
+## Frontend E2E (Playwright)
 
-These tests:
+Tests live in `frontend/e2e/` and run with:
 
-- Launch a Vite dev server with mock Wails bindings
-- Open the app in a real Chromium browser via Playwright
-- Simulate user clicks, wait for UI transitions, assert DOM state
-- Collect console errors and page errors on failure
-- Capture screenshots on failure
+```bash
+cd frontend
+npm run test:e2e
+```
 
-### Test suites
+The test-mode Vite server loads `src/lib/test/wails-mock.js`, which provides
+in-memory Wails API implementations. The desktop CI job checks out and uses the
+current `verstak-official-plugins` bundles, so plugin screens are exercised from
+real plugin frontend code rather than shell-owned stand-ins.
 
-| File | Suite | Tests | Status |
-|------|-------|-------|--------|
-| `plugin-manager-disable-enable.spec.js` | A: Disable/Enable refresh | 4 | pass |
-| `sidebar-opens-view.spec.js` | B: Sidebar → view routing | 3 | 3 pass |
-| `reload-updates-state.spec.js` | C: Reload updates UI | 4 | pass |
+Coverage includes, among other flows:
 
-## Resolved bugs covered by tests
+- plugin enable/disable and contribution refresh;
+- sidebar and workspace navigation;
+- Overview/resume flow;
+- Notes, Files, Todo, Activity, Journal, Browser Inbox and Trash;
+- default editor and Workbench routing;
+- global search and command palette;
+- Settings and diagnostics;
+- workspace templates, tree overlays, resize and drag-and-drop;
+- localization and plugin API bridge contracts.
 
-### Bug M5-1: Sidebar updates when plugin state changes
+Playwright also collects console/page errors. On CI failures, screenshots,
+traces, video-on-retry and JSON results are kept under `frontend/e2e-results/`
+and uploaded as the `e2e-results` Actions artifact.
 
-**Previous symptom:** After disabling a plugin in Plugin Manager, the sidebar
-item for that plugin remained visible. Reloading after external mock state
-changes also left stale sidebar items.
+## Real desktop GUI (Wails + WebKitGTK)
 
-**Current behavior:** `PluginManager.svelte` dispatches
-`verstak:plugins-changed` after reload/enable/disable flows. `Sidebar.svelte`
-listens for that event and re-fetches plugins, vault status, and contributions.
+`scripts/gui-probe.sh` starts the built `build/bin/verstak-desktop` on an Xvfb
+virtual display with an isolated temporary `HOME` and a synthetic vault. It
+waits for the real window with `xdotool`, captures the X11 root window with
+ImageMagick, and writes evidence under:
 
-**Regression coverage:**
+```text
+build/gui-probe/
+  startup.png
+  app.log
+  xvfb.log
+```
 
-- `A: Disable plugin: button changes to Enable, sidebar item disappears`
-- `A: Disable → Enable full flow in sequence`
-- `C: Reload after mock state change reflects new plugin status`
+The probe launches from the binary directory. This is deliberate: plugin
+discovery supports both a developer `./plugins` directory and plugins beside the
+executable. Running a packaged binary from the source checkout would discover
+the same plugins twice and would not represent an installed application.
 
-## What is NOT tested
+Run it locally after a build with:
 
-### Real desktop GUI (WebKitGTK + Wails native shell)
+```bash
+bash scripts/gui-probe.sh --shot startup
+```
 
-The Playwright tests run the frontend in a **standard Chromium browser** with
-mocked Wails bindings. They do **not** test:
+Use `--keep` when manual `xdotool` interaction or additional screenshots are
+needed:
 
-- Actual WebKitGTK rendering (Wails uses WebKitGTK, not Chromium)
-- Native window management (minimize, maximize, resize)
-- Native file dialogs (SelectDirectory, SelectVaultForOpen)
-- Clipboard integration
-- System tray / menu bar
-- Plugin frontend bundle loading from real filesystem
-- Wails event system (window.runtime.EventsOn/Emit)
+```bash
+bash scripts/gui-probe.sh --keep --shot startup
+```
 
-For real Wails smoke tests, a separate layer is needed using:
-- **AT-SPI2** (Linux accessibility tree inspection)
-- **xdotool** / **ydotool** (input simulation)
-- **scrot** / **import** (screenshot capture)
+### GitHub Actions GUI audit
 
-## Running tests
+`.github/workflows/gui-audit.yml` runs the same real-desktop probe on Ubuntu. It:
+
+- checks out the desktop and official-plugin repositories;
+- builds the current official plugins;
+- builds the real Wails application with the Wails CLI version paired to
+  `go.mod`;
+- replaces the build output with the **shipping** plugin set, excluding manifests
+  marked `development: true`;
+- launches the application under Xvfb;
+- uploads screenshot and logs as a `gui-audit-*` artifact even if the probe
+  fails.
+
+The workflow runs for pull requests and can also be started manually. A manual
+run may supply another official-plugin git ref when validating coordinated
+cross-repository work.
+
+## What the two layers do not prove
+
+The Xvfb probe is genuine Wails/WebKitGTK rendering, but a headless CI machine
+still cannot fully validate desktop integration that depends on the user's
+session. In particular, final release smoke on a real desktop remains useful
+for:
+
+- tray integration with the actual desktop environment;
+- native file dialogs and window-manager behavior;
+- clipboard integration across real applications;
+- physical DPI/font/theme differences;
+- long interactive workflows that are better inspected by a person.
+
+The GitHub Actions screenshots are therefore valid visual evidence for layout
+and WebKitGTK rendering, not a claim that every Linux desktop integration has
+been exercised.
+
+## Running Playwright interactively
 
 ```bash
 cd frontend
 
-# Run all E2E tests (headless)
+# All E2E tests, headless
 npm run test:e2e
 
-# Run with Playwright UI (interactive)
+# Playwright UI
 npm run test:e2e:ui
 
-# Run in headed browser (visible)
+# Headed Chromium
 npm run test:e2e:headed
 ```
 
-## Test infrastructure
+## Playwright infrastructure
 
 ### Mock bridge (`src/lib/test/wails-mock.js`)
 
-Replaces `window['go']['api']['App']` with in-memory mock implementations of
-all Wails backend methods. Provides:
-
-- Mutable plugin state (enable/disable/status)
-- Mutable vault state
-- Mutable contributions (views, commands, sidebar items, settings panels)
-- Test helpers via `window.__wailsMock`:
-  - `reset()` — reset all state to defaults
-  - `setPluginStatus(id, status, enabled)` — change plugin state
-  - `getPluginState(id)` — read current state
-  - `setVaultStatus(status)` — change vault state
+Provides mutable plugin, vault, contribution and storage state plus test helpers
+through `window.__wailsMock`. This lets a test construct deterministic product
+states without editing a real vault.
 
 ### Test harness (`index.html`)
 
-The same `index.html` is used for both production and test. It detects whether
-the Wails runtime (`window['go']`) is present. If not (i.e. running in a plain
-browser), it loads the mock bridge before the Svelte app.
+Production and test use the same page. When the Wails runtime is absent, test
+mode loads the mock bridge before the Svelte application.
 
 ### Playwright config (`playwright.config.js`)
 
-- Dev server: `vite --mode test --port 5174`
-- Browser: Chromium headless
-- Timeouts: 30s test, 10s expect
-- Workers: 1 (sequential)
-- Screenshots: on failure
-- Traces: on first retry
-- Results: `e2e-results/test-results.json`
+- Vite test server on port 5174;
+- Chromium headless by default;
+- 30 second per-test timeout, 10 second assertion timeout;
+- one worker for deterministic shared mock state;
+- screenshots on failure;
+- trace and video on first retry;
+- JSON results under `e2e-results/`.
 
-## Adding new tests
+## Adding coverage
 
-1. Create `e2e/your-test.spec.js`
-2. Import helpers from `./helpers.js`
-3. Use `test.beforeEach` to reset mock state and navigate to `/`
-4. Use `test.afterEach` to assert no console errors
-5. Write scenarios as user actions + assertions
-6. Run with `npm run test:e2e`
-
-### Selector conventions
-
-- Plugin cards: `.plugin-card` filtered by text
-- Buttons: `.btn-disable`, `.btn-enable`, `.btn-settings`, `.reload-btn`
-- Sidebar items: `.sidebar .plugin-item`
-- View container: `.view-container`
-- View header: `.view-header h2`
-- Status badges: `.status-badge`
-- Toast: `.toast`
+For behavior, add or extend an E2E scenario in `frontend/e2e/` and assert user
+visible outcomes rather than implementation details. For a rendering bug that
+may be WebKitGTK-specific, reproduce it with `scripts/gui-probe.sh` as well and
+keep the screenshot/log evidence with the change or CI run.
