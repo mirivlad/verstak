@@ -1,6 +1,6 @@
 <script>
   import PluginBundleHost from '../plugin-host/PluginBundleHost.svelte';
-  import TodaySurface from './TodaySurface.svelte';
+  import OverviewSurface from './OverviewSurface.svelte';
   import * as App from '../../../wailsjs/go/api/App';
   import { onDestroy, onMount } from 'svelte';
   import { i18n } from '../i18n/index.js';
@@ -29,8 +29,7 @@
     void activeLocale;
     return i18n.t(key, params, fallback);
   })(locale);
-  // TODO: Rename TodaySurface.svelte to OverviewSurface.svelte in a refactor-only follow-up.
-  $: overviewTool = { id: '__overview', title: tr('workspace.overview'), pluginId: 'verstak.shell', component: 'TodaySurface', shell: true };
+  $: overviewTool = { id: '__overview', title: tr('workspace.overview'), pluginId: 'verstak.shell', component: 'OverviewSurface', shell: true };
 
   // Where a tool sits among a Deal's tabs comes from its own manifest. The
   // shell used to hold a table matching substrings of plugin names to ranks,
@@ -195,23 +194,23 @@
   }
 
   function findWorkspaceItem(workspaceItemId) {
-  const id = String(workspaceItemId || '').trim();
-  if (!id) return null;
-  return workspaceTools.find(tool => tool?.id === id) || null;
-}
-
-function requestWorkspaceItem(workspaceItemId, toolRequest = null) {
-  requestedWorkspaceItemId = String(workspaceItemId || '').trim();
-  requestedToolRequest = toolRequest;
-  const match = findWorkspaceItem(requestedWorkspaceItemId);
-  if (match) {
-    requestedWorkspaceItemId = '';
-    requestedToolRequest = null;
-    selectTool(match, toolRequest);
+    const id = String(workspaceItemId || '').trim();
+    if (!id) return null;
+    return workspaceTools.find(tool => tool?.id === id) || null;
   }
-}
 
-function openWorkspaceTool(event) {
+  function requestWorkspaceItem(workspaceItemId, toolRequest = null) {
+    requestedWorkspaceItemId = String(workspaceItemId || '').trim();
+    requestedToolRequest = toolRequest;
+    const match = findWorkspaceItem(requestedWorkspaceItemId);
+    if (match) {
+      requestedWorkspaceItemId = '';
+      requestedToolRequest = null;
+      selectTool(match, toolRequest);
+    }
+  }
+
+  function openWorkspaceTool(event) {
     requestWorkspaceItem(event?.detail?.workspaceItemId, event?.detail?.toolRequest || null);
   }
 
@@ -270,7 +269,7 @@ function openWorkspaceTool(event) {
       <div class="workspace-tool-content" role="tabpanel" aria-label={activeTool?.title || activeTool?.id || tr('workspace.tool')}>
         {#if activeTool}
           {#if activeTool.shell}
-            <TodaySurface
+            <OverviewSurface
               {workspaceRootPath}
               availableTools={displayedTools}
               {overviewProviders}
