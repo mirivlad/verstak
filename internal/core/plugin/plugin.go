@@ -75,6 +75,7 @@ type Contributions struct {
 	SearchProviders    []ContributionSearchProvider   `json:"searchProviders,omitempty"`
 	ActivityProviders  []ContributionActivityProvider `json:"activityProviders,omitempty"`
 	WorklogProviders   []ContributionWorklogProvider  `json:"worklogProviders,omitempty"`
+	OverviewProviders  []ContributionOverviewProvider `json:"overviewProviders,omitempty"`
 	StatusBarItems     []ContributionStatusBarItem    `json:"statusBarItems,omitempty"`
 	OpenProviders      []ContributionOpenProvider     `json:"openProviders,omitempty"`
 	WorkspaceItems     []ContributionWorkspaceItem    `json:"workspaceItems,omitempty"`
@@ -151,6 +152,15 @@ type ContributionActivityProvider struct {
 // entries. The Journal asks every one of them for its proposals, so a plugin
 // other than Activity can suggest entries without the Journal knowing it.
 type ContributionWorklogProvider struct {
+	ID      string `json:"id"`
+	Label   string `json:"label"`
+	Handler string `json:"handler"`
+}
+
+// ContributionOverviewProvider contributes normalized semantic signals to the
+// Deal Overview. The provider owns its storage and business rules; the shell
+// owns aggregation and presentation.
+type ContributionOverviewProvider struct {
 	ID      string `json:"id"`
 	Label   string `json:"label"`
 	Handler string `json:"handler"`
@@ -301,6 +311,17 @@ func ValidateManifest(m *Manifest) []string {
 		}
 	}
 	if m.Contributes != nil {
+		for i, provider := range m.Contributes.OverviewProviders {
+			if provider.ID == "" {
+				errs.add("contributes.overviewProviders[%d].id is required", i)
+			}
+			if provider.Label == "" {
+				errs.add("contributes.overviewProviders[%d].label is required", i)
+			}
+			if provider.Handler == "" {
+				errs.add("contributes.overviewProviders[%d].handler is required", i)
+			}
+		}
 		for i, provider := range m.Contributes.OpenProviders {
 			if provider.ID == "" {
 				errs.add("contributes.openProviders[%d].id is required", i)

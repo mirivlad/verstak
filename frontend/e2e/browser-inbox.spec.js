@@ -21,7 +21,7 @@ test.describe('Browser workflow', () => {
     const inbox = page.locator('.browser-inbox-root');
     await expect(inbox).toBeVisible({ timeout: 10000 });
     await expect(inbox.locator('.browser-inbox-title')).toHaveText('Browser');
-    await expect(inbox.locator('.browser-inbox-count')).toHaveText('0 items');
+    await expect(inbox.locator('.browser-inbox-toolbar > .browser-inbox-count')).toHaveText('0 items');
     await expect(inbox.locator('.browser-inbox-empty')).toContainText('No browser materials yet');
     await expect(inbox.locator('.browser-inbox-empty')).toContainText('Send a page, selection, or link from the extension');
     await expect(inbox.locator('[data-browser-inbox-filter="status"]')).toBeVisible();
@@ -50,15 +50,15 @@ test.describe('Browser workflow', () => {
     await page.getByRole('tab', { name: 'Browser' }).click();
 
     const inbox = page.locator('.browser-inbox-root');
-    await expect(inbox.locator('.browser-inbox-count')).toHaveText('1 item');
-    await expect(inbox.locator('[data-browser-capture-id="capture-e2e-1"]')).toContainText('Research Report');
-    await expect(inbox.locator('.browser-inbox-detail-title')).toHaveText('Research Report');
+    await expect(inbox.locator('.browser-inbox-toolbar > .browser-inbox-count')).toHaveText('1 item');
+    await expect(inbox.locator('[data-browser-capture-id="capture-e2e-1"]')).toContainText('report.txt');
+    await expect(inbox.locator('.browser-inbox-detail-title')).toHaveText('report.txt');
     await expect(inbox.locator('.browser-inbox-meta')).toContainText('example.com');
     await expect(inbox.locator('.browser-inbox-text').first()).toContainText('Selected page text');
     await expect(inbox.locator('[data-browser-inbox-action="create-note"]')).toBeVisible();
     await expect(inbox.locator('[data-browser-inbox-action="create-link"]')).toBeVisible();
     await expect(inbox.locator('[data-browser-inbox-action="create-file"]')).toBeVisible();
-    await expect(inbox.locator('[data-browser-inbox-action="remove"]')).toBeVisible();
+    await expect(inbox.locator('[data-browser-inbox-action="delete-permanently"]')).toBeVisible();
   });
 
   test('global inbox assigns, reassigns, filters, marks, and deletes captures', async ({ page }) => {
@@ -97,7 +97,7 @@ test.describe('Browser workflow', () => {
     await page.locator('.sidebar .plugin-item').filter({ hasText: 'Browser' }).click();
 
     const inbox = page.locator('.browser-inbox-root');
-    await expect(inbox.locator('.browser-inbox-count')).toHaveText('3 items');
+    await expect(inbox.locator('.browser-inbox-toolbar > .browser-inbox-count')).toHaveText('3 items');
     const statusFilter = inbox.locator('[data-browser-inbox-filter="status"]');
     const workspaceFilter = inbox.locator('[data-browser-inbox-filter="workspace"]');
 
@@ -147,7 +147,7 @@ test.describe('Browser workflow', () => {
     })).toBe(true);
 
     await inbox.locator('[data-browser-inbox-action="toggle-processed"]').click();
-    await inbox.locator('[data-browser-inbox-action="remove"]').click();
+    await inbox.locator('[data-browser-inbox-action="delete-permanently"]').click();
     await expect.poll(async () => page.evaluate(async () => {
       const result = await window.go.api.App.ReadPluginSettings('verstak.browser-inbox');
       const settings = Array.isArray(result) ? result[0] : result;

@@ -15,10 +15,11 @@
   let plugins = [];
   let discoveredWorkspaceTools = [];
   let workspaceTools = [];
+  let overviewProviders = [];
   let workspaceMetadata = null;
   let metadataWorkspaceRoot = '';
   let toolsLoaded = false;
-  let requestedToolKind = '';
+  let requestedWorkspaceItemId = '';
   let requestedToolRequest = null;
   let activeToolRequest = null;
   let requestedWorkspaceRoot = '';
@@ -53,6 +54,8 @@
     if (workspaceRootPath) loadWorkspaceMetadata(workspaceRootPath);
   }
   $: workspaceTools = sortWorkspaceTools(filterWorkspaceTools(discoveredWorkspaceTools, workspaceMetadata));
+  $: workspacePluginIds = new Set(workspaceTools.map(tool => tool?.pluginId).filter(Boolean));
+  $: overviewProviders = (contributions.overviewProviders || []).filter(provider => workspacePluginIds.has(provider?.pluginId));
   $: if (workspaceRootPath !== requestedWorkspaceRoot) {
     requestedWorkspaceRoot = workspaceRootPath;
     requestedToolRequest = null;
@@ -68,11 +71,11 @@
       detail: { title: workspaceTitle }
     }));
   }
-  $: if (requestedToolKind && workspaceTools.length > 0) {
-    const match = findWorkspaceTool(requestedToolKind);
+  $: if (requestedWorkspaceItemId && workspaceTools.length > 0) {
+    const match = findWorkspaceItem(requestedWorkspaceItemId);
     if (match) {
       const toolRequest = requestedToolRequest;
-      requestedToolKind = '';
+      requestedWorkspaceItemId = '';
       requestedToolRequest = null;
       selectTool(match, toolRequest);
     }
@@ -191,32 +194,29 @@
     }));
   }
 
-  function findWorkspaceTool(kind) {
-    kind = String(kind || '').toLowerCase();
-    return workspaceTools.find(tool => {
-      const text = `${tool?.title || ''} ${tool?.id || ''} ${tool?.pluginId || ''}`.toLowerCase();
-      if (kind === 'browser-inbox') return text.includes('browser') || text.includes('inbox');
-      return text.includes(kind);
-    });
-  }
+  function findWorkspaceItem(workspaceItemId) {
+  const id = String(workspaceItemId || '').trim();
+  if (!id) return null;
+  return workspaceTools.find(tool => tool?.id === id) || null;
+}
 
-  function requestWorkspaceTool(kind, toolRequest = null) {
-    requestedToolKind = String(kind || '').toLowerCase();
-    requestedToolRequest = toolRequest;
-    const match = findWorkspaceTool(requestedToolKind);
-    if (match) {
-      requestedToolKind = '';
-      requestedToolRequest = null;
-      selectTool(match, toolRequest);
-    }
+function requestWorkspaceItem(workspaceItemId, toolRequest = null) {
+  requestedWorkspaceItemId = String(workspaceItemId || '').trim();
+  requestedToolRequest = toolRequest;
+  const match = findWorkspaceItem(requestedWorkspaceItemId);
+  if (match) {
+    requestedWorkspaceItemId = '';
+    requestedToolRequest = null;
+    selectTool(match, toolRequest);
   }
+}
 
-  function openWorkspaceTool(event) {
-    requestWorkspaceTool(event?.detail?.kind, event?.detail?.toolRequest || null);
+function openWorkspaceTool(event) {
+    requestWorkspaceItem(event?.detail?.workspaceItemId, event?.detail?.toolRequest || null);
   }
 
   function handleWorkspaceOpenTool(event) {
-    requestWorkspaceTool(event?.detail?.kind, event?.detail?.toolRequest || null);
+    requestWorkspaceItem(event?.detail?.workspaceItemId, event?.detail?.toolRequest || null);
   }
 
   function handlePluginsChanged() {
@@ -273,6 +273,7 @@
             <TodaySurface
               {workspaceRootPath}
               availableTools={displayedTools}
+              {overviewProviders}
               on:openTool={openWorkspaceTool}
             />
           {:else}

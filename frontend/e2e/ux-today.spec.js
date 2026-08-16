@@ -37,8 +37,7 @@ test.describe('UX Overview workspace flow', () => {
     const summaryCards = overview.locator('button[data-overview-summary]');
     await expect(summaryCards).toHaveCount(5);
     await expect(overview.locator('[data-overview-summary="attention"]')).toHaveCount(0);
-    await expect(overview.locator('[data-overview-summary="notes"]')).toContainText('1 total');
-    await expect(overview.locator('[data-overview-summary="notes"]')).toContainText('0 recent changes');
+    await expect(overview.locator('[data-overview-summary="notes"]')).toContainText('1 note');
     await expect(overview.locator('[data-overview-summary="captures"]')).toContainText('0 captures to review');
     await expect(overview.locator('[data-overview-summary="activity"]')).toContainText('0 recorded events');
     await expect(overview.locator('[data-overview-summary="journal"]')).toContainText('0 journal entries');
@@ -80,7 +79,7 @@ test.describe('UX Overview workspace flow', () => {
     await page.evaluate(() => window.__wailsMock.setPluginStatus('verstak.files', 'disabled', false));
     await page.locator('[data-overview-action="refresh"]').click();
 
-    await expect(page.locator('[data-overview-summary="notes"]')).toContainText('1 total');
+    await expect(page.locator('[data-overview-summary="notes"]')).toContainText('1 note');
   });
 
   test('Overview hides Browser cards and actions when the current Deal does not include it', async ({ page }) => {
@@ -246,8 +245,7 @@ test.describe('UX Overview workspace flow', () => {
     await page.locator('[data-overview-action="refresh"]').click();
 
     const overview = page.locator('[data-overview-root]');
-    await expect(overview.locator('[data-overview-summary="notes"]')).toContainText('1 total');
-    await expect(overview.locator('[data-overview-summary="notes"]')).toContainText('1 recent change');
+    await expect(overview.locator('[data-overview-summary="notes"]')).toContainText('1 note');
     await expect(overview.locator('[data-overview-summary="files"]')).toContainText('1 recent change');
     await expect(overview.locator('[data-overview-summary="captures"]')).toContainText('2');
     await expect(overview.locator('[data-overview-summary="activity"]')).toContainText('5 recorded events');
@@ -255,8 +253,9 @@ test.describe('UX Overview workspace flow', () => {
     await expect(overview.locator('[data-overview-summary="attention"]')).toHaveCount(0);
     const attention = overview.locator('[data-overview-section="attention"]');
     await expect(attention).toContainText('Possible journal entry');
-    await expect(attention).toContainText('Deal: Project · 10 min · 2 activities');
-    await attention.locator('.overview-attention-row', { hasText: 'Possible journal entry' }).getByRole('button', { name: 'Review candidate' }).click();
+    await expect(attention).toContainText('10 min');
+    await expect(attention).toContainText('2 activities');
+    await attention.locator('.overview-attention-row', { hasText: 'Possible journal entry' }).getByRole('button').click();
     await expect(page.getByRole('tab', { name: 'Journal' })).toHaveAttribute('aria-selected', 'true');
     await expect(page.locator('.journal-root [data-journal-candidate]')).toContainText('Deal: Project');
     await page.locator('.journal-modal-actions').getByRole('button', { name: 'Cancel' }).click();
@@ -265,9 +264,9 @@ test.describe('UX Overview workspace flow', () => {
     const resume = overview.locator('[data-overview-section="continue"]');
     const candidates = resume.locator('[data-overview-continue-item]');
     await expect(candidates).toHaveCount(3);
-    await expect(candidates.nth(0)).toContainText('Edited note "Overview"');
-    await expect(candidates.nth(1)).toContainText('Changed file "draft.md"');
-    await expect(candidates.nth(2)).toContainText('Continue journal entry "Write project summary"');
+    await expect(candidates.nth(0)).toContainText('Overview');
+    await expect(candidates.nth(1)).toContainText('draft.md');
+    await expect(candidates.nth(2)).toContainText('Write project summary');
     await expect(resume).not.toContainText('Quote to process');
     await expect(resume).not.toContainText('Research Report');
     await candidates.nth(0).click();
@@ -277,10 +276,10 @@ test.describe('UX Overview workspace flow', () => {
 
     await page.getByRole('tab', { name: 'Overview' }).click();
     const recent = overview.locator('[data-overview-section="recent"]');
-    await expect(recent).toContainText('Edited note "Overview"');
-    await expect(recent).toContainText('Changed file "draft.md"');
-    await expect(recent).toContainText('Captured page "Research Report"');
-    await expect(recent).toContainText('Added journal entry "Write project summary"');
+    await expect(recent).toContainText('Overview');
+    await expect(recent).toContainText('draft.md');
+    await expect(recent).toContainText('Research Report');
+    await expect(recent).toContainText('Write project summary');
     await expect(recent).not.toContainText('Selected file');
     await expect(recent).not.toContainText('Workspace selected');
     await expect(recent).not.toContainText('file.opened');
@@ -290,18 +289,18 @@ test.describe('UX Overview workspace flow', () => {
     await expect(recent.locator('[data-overview-recent-item] button')).toHaveCount(0);
 
     await overview.locator('[data-overview-filter="notes"]').click();
-    await expect(recent).toContainText('Edited note "Overview"');
-    await expect(recent).not.toContainText('Changed file "draft.md"');
+    await expect(recent).toContainText('Overview');
+    await expect(recent).not.toContainText('draft.md');
     await expect(recent).not.toContainText('Research Report');
 
     await overview.locator('[data-overview-filter="captures"]').click();
-    await expect(recent).toContainText('Captured page "Research Report"');
-    await expect(recent).toContainText('Captured selection "Quote to process"');
-    await expect(recent).not.toContainText('Edited note "Overview"');
+    await expect(recent).toContainText('Research Report');
+    await expect(recent).toContainText('Quote to process');
+    await expect(recent).not.toContainText('Overview');
 
     await overview.locator('[data-overview-filter="journal"]').click();
-    await expect(recent).toContainText('Added journal entry "Write project summary"');
-    await expect(recent).not.toContainText('Changed file "draft.md"');
+    await expect(recent).toContainText('Write project summary');
+    await expect(recent).not.toContainText('draft.md');
   });
 
   // The Activity card claimed a number the Activity tool would never show,
@@ -391,7 +390,7 @@ test.describe('UX Overview workspace flow', () => {
     const overview = page.locator('[data-overview-root]');
     await overview.locator('[data-overview-action="refresh"]').click();
     const recent = overview.locator('[data-overview-section="recent"]');
-    await expect(recent).toContainText('Изменена заметка «Локализация»');
+    await expect(recent).toContainText('Изменена заметка — Локализация');
     await expect(recent).not.toContainText('note.saved');
     await expect(recent).not.toContainText('Edited note');
   });

@@ -27,7 +27,7 @@ test.describe('D: Plugin API bridge', () => {
     await expect(saved).toHaveText('Saved setting: persisted through bridge', { timeout: 10000 });
 
     await openPluginManager(page);
-    await expect.poll(() => page.evaluate(() => Object.keys(window.__VERSTAK_COMMAND_HANDLERS__ || {}).length)).toBe(0);
+    await expect.poll(() => page.evaluate(() => Boolean(window.__VERSTAK_COMMAND_HANDLERS__?.['verstak.platform-test:verstak.platform-test.show-version']))).toBe(false);
     await expect.poll(() => page.evaluate(() => (window.__VERSTAK_EVENT_HANDLERS__?.['verstak.platform-test.echo'] || []).length)).toBe(0);
     await page.locator('[data-plugin-manager-reload]').click();
     await expect(page.locator('.plugin-card').filter({ hasText: 'verstak.platform-test' }).locator('.status-badge')).toHaveText('loaded', { timeout: 10000 });
@@ -178,12 +178,12 @@ test.describe('D: Plugin API bridge', () => {
 
     await expect(page.locator('.pt-command-result')).toContainText('Command: handled', { timeout: 10000 });
     await expect(page.locator('.pt-event-result')).toHaveAttribute('data-event-status', 'received', { timeout: 10000 });
-    await expect.poll(() => page.evaluate(() => Object.keys(window.__VERSTAK_COMMAND_HANDLERS__ || {}).length)).toBe(1);
+    await expect.poll(() => page.evaluate(() => Boolean(window.__VERSTAK_COMMAND_HANDLERS__?.['verstak.platform-test:verstak.platform-test.show-version']))).toBe(true);
     await expect.poll(() => page.evaluate(() => (window.__VERSTAK_EVENT_HANDLERS__?.['verstak.platform-test.echo'] || []).length)).toBe(1);
 
     await openPluginManager(page);
 
-    await expect.poll(() => page.evaluate(() => Object.keys(window.__VERSTAK_COMMAND_HANDLERS__ || {}).length)).toBe(0);
+    await expect.poll(() => page.evaluate(() => Boolean(window.__VERSTAK_COMMAND_HANDLERS__?.['verstak.platform-test:verstak.platform-test.show-version']))).toBe(false);
     await expect.poll(() => page.evaluate(() => (window.__VERSTAK_EVENT_HANDLERS__?.['verstak.platform-test.echo'] || []).length)).toBe(0);
   });
 
@@ -196,7 +196,7 @@ test.describe('D: Plugin API bridge', () => {
     await pluginCard.locator('button.btn-disable').click();
     await expect(pluginCard.locator('button.btn-enable')).toBeVisible({ timeout: 10000 });
 
-    await expect.poll(() => page.evaluate(() => Object.keys(window.__VERSTAK_COMMAND_HANDLERS__ || {}).length)).toBe(0);
+    await expect.poll(() => page.evaluate(() => Boolean(window.__VERSTAK_COMMAND_HANDLERS__?.['verstak.platform-test:verstak.platform-test.show-version']))).toBe(false);
     await expect.poll(() => page.evaluate(() => (window.__VERSTAK_EVENT_HANDLERS__?.['verstak.platform-test.echo'] || []).length)).toBe(0);
   });
 

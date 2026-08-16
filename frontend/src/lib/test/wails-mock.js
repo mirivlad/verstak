@@ -5,10 +5,22 @@
  * Состояние мутабельно — тесты могут менять его между сценариями.
  */
 import defaultEditorSource from '../../../../../verstak-official-plugins/plugins/default-editor/frontend/src/index.js?raw';
+import notesSource from '../../../../../verstak-official-plugins/plugins/notes/frontend/src/index.js?raw';
+import browserInboxSource from '../../../../../verstak-official-plugins/plugins/browser-inbox/frontend/src/index.js?raw';
 import secretsSource from '../../../../../verstak-official-plugins/plugins/secrets/frontend/src/index.js?raw';
 import activitySource from '../../../../../verstak-official-plugins/plugins/activity/frontend/src/index.js?raw';
 import todoSource from '../../../../../verstak-official-plugins/plugins/todo/frontend/src/index.js?raw';
 import journalSource from '../../../../../verstak-official-plugins/plugins/journal/frontend/src/index.js?raw';
+import notesEnCatalog from '../../../../../verstak-official-plugins/plugins/notes/locales/en.json';
+import notesRuCatalog from '../../../../../verstak-official-plugins/plugins/notes/locales/ru.json';
+import activityEnCatalog from '../../../../../verstak-official-plugins/plugins/activity/locales/en.json';
+import activityRuCatalog from '../../../../../verstak-official-plugins/plugins/activity/locales/ru.json';
+import browserEnCatalog from '../../../../../verstak-official-plugins/plugins/browser-inbox/locales/en.json';
+import browserRuCatalog from '../../../../../verstak-official-plugins/plugins/browser-inbox/locales/ru.json';
+import journalEnCatalog from '../../../../../verstak-official-plugins/plugins/journal/locales/en.json';
+import journalRuCatalog from '../../../../../verstak-official-plugins/plugins/journal/locales/ru.json';
+import todoEnCatalog from '../../../../../verstak-official-plugins/plugins/todo/locales/en.json';
+import todoRuCatalog from '../../../../../verstak-official-plugins/plugins/todo/locales/ru.json';
 import importSource from '../../../../../verstak-official-plugins/plugins/import/frontend/dist/index.js?raw';
 import importStyle from '../../../../../verstak-official-plugins/plugins/import/frontend/dist/style.css?raw';
 
@@ -294,6 +306,36 @@ import importStyle from '../../../../../verstak-official-plugins/plugins/import/
     }
   };
 
+  var overviewProviderDefs = {
+    'verstak.notes': { id: 'verstak.notes.overview', handler: 'verstak.notes.provideOverview', label: 'Notes' },
+    'verstak.activity': { id: 'verstak.activity.overview', handler: 'verstak.activity.provideOverview', label: 'Activity' },
+    'verstak.browser-inbox': { id: 'verstak.browser-inbox.overview', handler: 'verstak.browser-inbox.provideOverview', label: 'Browser' },
+    'verstak.journal': { id: 'verstak.journal.overview', handler: 'verstak.journal.provideOverview', label: 'Journal' },
+    'verstak.todo': { id: 'verstak.todo.overview', handler: 'verstak.todo.provideOverview', label: 'Todo' }
+  };
+  Object.keys(overviewProviderDefs).forEach(function (pluginId) {
+    var state = pluginStates[pluginId];
+    if (!state || !state.manifest) return;
+    var manifest = state.manifest;
+    var provider = overviewProviderDefs[pluginId];
+    manifest.permissions = manifest.permissions || [];
+    if (manifest.permissions.indexOf('commands.register') === -1) manifest.permissions.push('commands.register');
+    manifest.contributes = manifest.contributes || {};
+    manifest.contributes.commands = manifest.contributes.commands || [];
+    if (!manifest.contributes.commands.some(function (item) { return item.id === provider.handler; })) {
+      manifest.contributes.commands.push({ id: provider.handler, title: 'Provide Overview Signals', handler: provider.handler });
+    }
+    manifest.contributes.overviewProviders = [{ id: provider.id, label: provider.label, handler: provider.handler }];
+  });
+
+  var realOverviewPluginCatalogs = {
+    'verstak.notes': { en: notesEnCatalog, ru: notesRuCatalog },
+    'verstak.activity': { en: activityEnCatalog, ru: activityRuCatalog },
+    'verstak.browser-inbox': { en: browserEnCatalog, ru: browserRuCatalog },
+    'verstak.journal': { en: journalEnCatalog, ru: journalRuCatalog },
+    'verstak.todo': { en: todoEnCatalog, ru: todoRuCatalog }
+  };
+
   var russianPluginNames = {
     'verstak.platform-test': 'Тест платформы',
     'verstak.default-editor': 'Стандартный редактор',
@@ -329,6 +371,8 @@ import importStyle from '../../../../../verstak-official-plugins/plugins/import/
   });
 
   function mockPluginCatalog(pluginId, locale) {
+    var realCatalog = realOverviewPluginCatalogs[pluginId] && realOverviewPluginCatalogs[pluginId][locale];
+    if (realCatalog) return Object.assign({}, realCatalog);
     var state = pluginStates[pluginId];
     if (!state || !state.manifest) return {};
     var manifest = state.manifest;
@@ -340,7 +384,7 @@ import importStyle from '../../../../../verstak-official-plugins/plugins/import/
     var contributionFields = {
       views: 'title', commands: 'title', settingsPanels: 'title', sidebarItems: 'title',
       fileActions: 'label', noteActions: 'label', contextMenuEntries: 'label',
-      searchProviders: 'label', worklogProviders: 'label', statusBarItems: 'label', openProviders: 'title', workspaceItems: 'title'
+      searchProviders: 'label', worklogProviders: 'label', overviewProviders: 'label', statusBarItems: 'label', openProviders: 'title', workspaceItems: 'title'
     };
     Object.keys(contributionFields).forEach(function (point) {
       var field = contributionFields[point];
@@ -970,7 +1014,7 @@ function cloneJson(value) {
   }
 
   function allContributions() {
-    var views = [], commands = [], searchProviders = [], worklogProviders = [], sidebarItems = [], statusBarItems = [], settingsPanels = [], openProviders = [], workspaceItems = [];
+    var views = [], commands = [], searchProviders = [], worklogProviders = [], overviewProviders = [], sidebarItems = [], statusBarItems = [], settingsPanels = [], openProviders = [], workspaceItems = [];
     for (var id in pluginStates) {
       var s = pluginStates[id];
       var c = (s.manifest && s.manifest.contributes) || {};
@@ -978,6 +1022,7 @@ function cloneJson(value) {
       if (c.commands) c.commands.forEach(function (cmd) { commands.push(Object.assign({}, cmd, { pluginId: id })); });
       if (c.searchProviders) c.searchProviders.forEach(function (sp) { searchProviders.push(Object.assign({}, sp, { pluginId: id })); });
       if (c.worklogProviders) c.worklogProviders.forEach(function (wp) { worklogProviders.push(Object.assign({}, wp, { pluginId: id })); });
+      if (c.overviewProviders) c.overviewProviders.forEach(function (op) { overviewProviders.push(Object.assign({}, op, { pluginId: id })); });
       if (c.sidebarItems) c.sidebarItems.forEach(function (sb) { sidebarItems.push(Object.assign({}, sb, { pluginId: id })); });
       if (c.statusBarItems) c.statusBarItems.forEach(function (st) { statusBarItems.push(Object.assign({}, st, { pluginId: id })); });
       if (c.settingsPanels) c.settingsPanels.forEach(function (sp) { settingsPanels.push(Object.assign({}, sp, { pluginId: id })); });
@@ -993,7 +1038,7 @@ function cloneJson(value) {
         workspaceItems.push(item);
       });
     }
-    return { views: views, commands: commands, searchProviders: searchProviders, worklogProviders: worklogProviders, sidebarItems: sidebarItems, statusBarItems: statusBarItems, settingsPanels: settingsPanels, openProviders: openProviders, workspaceItems: workspaceItems };
+    return { views: views, commands: commands, searchProviders: searchProviders, worklogProviders: worklogProviders, overviewProviders: overviewProviders, sidebarItems: sidebarItems, statusBarItems: statusBarItems, settingsPanels: settingsPanels, openProviders: openProviders, workspaceItems: workspaceItems };
   }
 
   function requestExtension(request) {
@@ -3377,7 +3422,7 @@ function cloneJson(value) {
         return Promise.resolve(trashPluginBundle());
       }
       if (pluginId === 'verstak.notes' && assetPath === 'frontend/dist/index.js') {
-        return Promise.resolve(simplePluginBundle('verstak.notes', 'NotesView', 'notes-root', 'Notes'));
+        return Promise.resolve(notesSource);
       }
       if (pluginId === 'verstak.sync' && assetPath === 'frontend/dist/index.js') {
         return Promise.resolve(syncPluginBundle());
@@ -3389,7 +3434,7 @@ function cloneJson(value) {
         return Promise.resolve(journalSource);
       }
       if (pluginId === 'verstak.browser-inbox' && assetPath === 'frontend/dist/index.js') {
-        return Promise.resolve(browserInboxBundle());
+        return Promise.resolve(browserInboxSource);
       }
       if (pluginId === 'verstak.todo' && assetPath === 'frontend/dist/index.js') {
         return Promise.resolve(todoSource);
@@ -3421,7 +3466,73 @@ function cloneJson(value) {
       if (!found) return Promise.resolve([{}, 'command not declared']);
       return Promise.resolve([{ status: 'declared', pluginId: pluginId, commandId: commandId, handler: found.handler, args: args || {} }, '']);
     },
-    PublishPluginEvent: function () { return Promise.resolve(''); },
+    PublishPluginEvent: function (pluginId, eventName, payload) {
+      if (pluginId === 'verstak.browser-inbox' && eventName === 'browser-inbox.storage.mutate') {
+        payload = payload || {};
+        var settings = Object.assign({}, pluginSettings[pluginId] || {});
+        var globalKey = 'captures:global';
+        var legacyKey = 'captures';
+        var workspacePrefix = 'captures:workspace:';
+        var captures = Array.isArray(settings[globalKey]) ? settings[globalKey].map(cloneJson) : [];
+        var action = String(payload.action || '');
+        if (action === 'migrate') {
+          var seen = {};
+          var migrated = [];
+          Object.keys(settings).filter(function (key) {
+            return key === globalKey || key === legacyKey || key.indexOf(workspacePrefix) === 0;
+          }).forEach(function (key) {
+            var scopedWorkspace = '';
+            if (key.indexOf(workspacePrefix) === 0) {
+              try { scopedWorkspace = decodeURIComponent(key.slice(workspacePrefix.length)); }
+              catch (_) { scopedWorkspace = key.slice(workspacePrefix.length); }
+            }
+            (Array.isArray(settings[key]) ? settings[key] : []).forEach(function (row) {
+              if (!row || typeof row !== 'object') return;
+              var item = cloneJson(row);
+              if (scopedWorkspace && !item.workspaceRootPath) item.workspaceRootPath = scopedWorkspace;
+              if (scopedWorkspace && !item.workspaceName) item.workspaceName = scopedWorkspace;
+              var id = String(item.captureId || '');
+              if (id && seen[id]) return;
+              if (id) seen[id] = true;
+              migrated.push(item);
+            });
+          });
+          captures = migrated;
+          delete settings[legacyKey];
+          Object.keys(settings).forEach(function (key) {
+            if (key.indexOf(workspacePrefix) === 0) delete settings[key];
+          });
+        } else if (action === 'assign') {
+          var workspaceRoot = String(payload.workspaceRootPath || '').replace(/^\/+|\/+$/g, '');
+          captures = captures.map(function (capture) {
+            return capture.captureId === payload.captureId
+              ? Object.assign({}, capture, { workspaceRootPath: workspaceRoot, workspaceName: workspaceRoot })
+              : capture;
+          });
+        } else if (action === 'processed') {
+          captures = captures.map(function (capture) {
+            return capture.captureId === payload.captureId
+              ? Object.assign({}, capture, { processed: payload.processed === true })
+              : capture;
+          });
+        } else if (action === 'archive') {
+          var archiveIds = {};
+          (Array.isArray(payload.captureIds) ? payload.captureIds : []).forEach(function (id) { archiveIds[id] = true; });
+          captures = captures.map(function (capture) {
+            return archiveIds[capture.captureId] ? Object.assign({}, capture, { globalState: 'archived' }) : capture;
+          });
+        } else if (action === 'restore') {
+          captures = captures.map(function (capture) {
+            return capture.captureId === payload.captureId ? Object.assign({}, capture, { globalState: 'inbox' }) : capture;
+          });
+        } else if (action === 'delete' && payload.permanent === true) {
+          captures = captures.filter(function (capture) { return capture.captureId !== payload.captureId; });
+        }
+        settings[globalKey] = captures;
+        pluginSettings[pluginId] = settings;
+      }
+      return Promise.resolve('');
+    },
     SubscribePluginEvent: function (pluginId, eventName) {
       var s = pluginStates[pluginId];
       if (!s || !s.enabled || s.status !== 'loaded') return Promise.resolve('plugin not enabled and loaded');

@@ -279,6 +279,7 @@ export default {
   'overview.reviewInbox': 'Review Inbox',
   'overview.viewActivity': 'View Activity',
   'overview.openJournal': 'Open Journal',
+  'overview.openTool': 'Open “{tool}”',
   'overview.openTodos': 'Open Todos',
   'overview.reviewCandidate': 'Review candidate',
   'overview.reviewPending': 'Review pending items',

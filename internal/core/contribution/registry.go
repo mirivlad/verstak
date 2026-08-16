@@ -22,6 +22,7 @@ type Registry struct {
 	searchProviders   []ContributionSearchProvider
 	activityProviders []ContributionActivityProvider
 	worklogProviders  []ContributionWorklogProvider
+	overviewProviders []ContributionOverviewProvider
 	statusBarItems    []ContributionStatusBarItem
 	openProviders     []ContributionOpenProvider
 	workspaceItems    []ContributionWorkspaceItem
@@ -41,6 +42,7 @@ const (
 	PointSearchProviders ContributionPointType = "searchProviders"
 	PointActivity        ContributionPointType = "activityProviders"
 	PointWorklog         ContributionPointType = "worklogProviders"
+	PointOverview        ContributionPointType = "overviewProviders"
 	PointStatusBar       ContributionPointType = "statusBarItems"
 	PointOpenProviders   ContributionPointType = "openProviders"
 	PointWorkspaceItems  ContributionPointType = "workspaceItems"
@@ -91,6 +93,10 @@ func (r *Registry) ListByPoint(point ContributionPointType) []interface{} {
 		}
 	case PointWorklog:
 		for _, v := range r.worklogProviders {
+			result = append(result, v)
+		}
+	case PointOverview:
+		for _, v := range r.overviewProviders {
 			result = append(result, v)
 		}
 	case PointStatusBar:
@@ -154,6 +160,11 @@ type ContributionWorklogProvider struct {
 	Item     plugin.ContributionWorklogProvider `json:"item"`
 }
 
+type ContributionOverviewProvider struct {
+	PluginID string                              `json:"pluginId"`
+	Item     plugin.ContributionOverviewProvider `json:"item"`
+}
+
 type ContributionStatusBarItem struct {
 	PluginID string                           `json:"pluginId"`
 	Item     plugin.ContributionStatusBarItem `json:"item"`
@@ -193,6 +204,7 @@ func (r *Registry) Register(pluginID string, c *plugin.Contributions) {
 	r.searchProviders = removeSearchProviders(r.searchProviders, pluginID)
 	r.activityProviders = removeActivityProviders(r.activityProviders, pluginID)
 	r.worklogProviders = removeWorklogProviders(r.worklogProviders, pluginID)
+	r.overviewProviders = removeOverviewProviders(r.overviewProviders, pluginID)
 	r.statusBarItems = removeStatusBarItems(r.statusBarItems, pluginID)
 	r.openProviders = removeOpenProviders(r.openProviders, pluginID)
 	r.workspaceItems = removeWorkspaceItems(r.workspaceItems, pluginID)
@@ -227,6 +239,9 @@ func (r *Registry) Register(pluginID string, c *plugin.Contributions) {
 	for _, item := range c.WorklogProviders {
 		r.worklogProviders = append(r.worklogProviders, ContributionWorklogProvider{PluginID: pluginID, Item: item})
 	}
+	for _, item := range c.OverviewProviders {
+		r.overviewProviders = append(r.overviewProviders, ContributionOverviewProvider{PluginID: pluginID, Item: item})
+	}
 	for _, item := range c.StatusBarItems {
 		r.statusBarItems = append(r.statusBarItems, ContributionStatusBarItem{PluginID: pluginID, Item: item})
 	}
@@ -253,6 +268,7 @@ func (r *Registry) Unregister(pluginID string) {
 	r.searchProviders = removeSearchProviders(r.searchProviders, pluginID)
 	r.activityProviders = removeActivityProviders(r.activityProviders, pluginID)
 	r.worklogProviders = removeWorklogProviders(r.worklogProviders, pluginID)
+	r.overviewProviders = removeOverviewProviders(r.overviewProviders, pluginID)
 	r.statusBarItems = removeStatusBarItems(r.statusBarItems, pluginID)
 	r.openProviders = removeOpenProviders(r.openProviders, pluginID)
 	r.workspaceItems = removeWorkspaceItems(r.workspaceItems, pluginID)
@@ -369,6 +385,20 @@ func (r *Registry) WorklogProviders() []ContributionWorklogProvider {
 	return result
 }
 
+func (r *Registry) OverviewProviders() []ContributionOverviewProvider {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	result := make([]ContributionOverviewProvider, len(r.overviewProviders))
+	copy(result, r.overviewProviders)
+	sort.Slice(result, func(i, j int) bool {
+		if result[i].PluginID != result[j].PluginID {
+			return result[i].PluginID < result[j].PluginID
+		}
+		return result[i].Item.ID < result[j].Item.ID
+	})
+	return result
+}
+
 func (r *Registry) OpenProviders() []ContributionOpenProvider {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -471,6 +501,16 @@ func removeSearchProviders(items []ContributionSearchProvider, pluginID string) 
 
 func removeWorklogProviders(items []ContributionWorklogProvider, pluginID string) []ContributionWorklogProvider {
 	var result []ContributionWorklogProvider
+	for _, item := range items {
+		if item.PluginID != pluginID {
+			result = append(result, item)
+		}
+	}
+	return result
+}
+
+func removeOverviewProviders(items []ContributionOverviewProvider, pluginID string) []ContributionOverviewProvider {
+	var result []ContributionOverviewProvider
 	for _, item := range items {
 		if item.PluginID != pluginID {
 			result = append(result, item)

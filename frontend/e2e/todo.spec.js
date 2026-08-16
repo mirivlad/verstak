@@ -138,7 +138,7 @@ test.describe('Todo plugin workflow', () => {
     const attention = overview.locator('[data-overview-section="attention"]');
     await expect(attention).toContainText('Project deadline');
     await expect(attention).not.toContainText('Test workspace item');
-    await attention.locator('.overview-attention-row', { hasText: 'Project deadline' }).getByRole('button', { name: 'Open Todos' }).click();
+    await attention.locator('.overview-attention-row', { hasText: 'Project deadline' }).getByRole('button', { name: 'Open “Todos”' }).click();
     await expect(page.getByRole('tab', { name: 'Todos' })).toHaveAttribute('aria-selected', 'true');
 
     await page.locator('.sidebar .plugin-item').filter({ hasText: 'Todos' }).click();

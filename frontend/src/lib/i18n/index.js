@@ -12,6 +12,7 @@ const CONTRIBUTION_TEXT_FIELDS = {
   contextMenuEntries: 'label',
   searchProviders: 'label',
   worklogProviders: 'label',
+  overviewProviders: 'label',
   statusBarItems: 'label',
   openProviders: 'title',
   workspaceItems: 'title',
