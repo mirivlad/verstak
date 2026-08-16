@@ -33,7 +33,7 @@ jobs:
           node-version: '20'
           cache: npm
           cache-dependency-path: work/verstak/frontend/package-lock.json
-      - name: Correct one-shot API flattening anchor
+      - name: Correct one-shot API flattening anchors
         working-directory: work/verstak
         run: |
           python3 - <<'PY'
@@ -50,7 +50,16 @@ jobs:
               "s = s.replace(worklog_loop, worklog_loop + overview_loop, 1)",
               "",
           ]
-          p.write_text(s[:start] + '\n'.join(lines) + s[end:])
+          s = s[:start] + '\n'.join(lines) + s[end:]
+          start = s.index('# Return field near WorklogProviders.')
+          end = s.index('p.write_text(s)', start)
+          return_lines = [
+              "old_return = 'WorklogProviders: worklogProviders, SettingsPanels:'",
+              "assert old_return in s, 'ContributionSummary return WorklogProviders not found'",
+              "s = s.replace(old_return, 'WorklogProviders: worklogProviders, OverviewProviders: overviewProviders, SettingsPanels:', 1)",
+              "",
+          ]
+          p.write_text(s[:start] + '\n'.join(return_lines) + s[end:])
           PY
       - name: Apply provider shell patch
         working-directory: work/verstak
