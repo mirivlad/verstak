@@ -18,8 +18,8 @@ jobs:
           ref: audit/overview-ux-1
 
       - name: Apply exact Overview UX changes
-        shell: python
         run: |
+          python - <<'PY'
           from pathlib import Path
           import re
 
@@ -150,6 +150,7 @@ jobs:
           if text.count(old) != 1:
               raise SystemExit('visual populated-state anchor did not match exactly')
           visual.write_text(text.replace(old, new, 1))
+          PY
 
       - name: Remove one-shot workflow and commit result
         run: |
