@@ -169,6 +169,9 @@ for (const forbidden of [
   'verstak.browser-inbox',
   'verstak.activity',
   'verstak.journal',
+  "category === 'files'",
+  "category === 'folders'",
+  '__filesHistoryByWorkspace',
 ]) {
   assertExcludes(
     globalSearch,
@@ -176,6 +179,17 @@ for (const forbidden of [
     `GlobalSearch shell must consume generic Search providers instead of domain storage (${forbidden})`,
   );
 }
+assertIncludes(
+  globalSearch,
+  'item?.categoryLabel || provider?.label',
+  'GlobalSearch should render provider-owned category labels without interpreting provider category ids',
+);
+assertIncludes(
+  globalSearch,
+  'enabledPluginIds.has(provider?.pluginId)',
+  'GlobalSearch should query only providers from enabled loaded/degraded plugins',
+);
+
 assertIncludes(
   globalSearch,
   'contributions.searchProviders || []',

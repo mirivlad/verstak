@@ -152,7 +152,11 @@
     if (seq !== contextSeq) return;
 
     const contributions = i18n.localizeContributionSummary(rawContributions || {});
-    (contributions.sidebarItems || []).forEach(item => {
+    const enabledPluginIds = new Set((rawPlugins || [])
+      .filter(plugin => plugin?.enabled && (plugin?.status === 'loaded' || plugin?.status === 'degraded'))
+      .map(plugin => plugin?.manifest?.id)
+      .filter(Boolean));
+    (contributions.sidebarItems || []).filter(item => enabledPluginIds.has(item?.pluginId)).forEach(item => {
       next.push({
         type: 'Tool',
         typeLabel: tr('search.type.tool'),
@@ -165,7 +169,7 @@
     });
 
     shellIndex = next;
-    searchProviders = (contributions.searchProviders || []).filter(provider => provider?.pluginId && provider?.handler);
+    searchProviders = (contributions.searchProviders || []).filter(provider => enabledPluginIds.has(provider?.pluginId) && provider?.handler);
     loading = false;
     contentReady = true;
     revision += 1;
@@ -173,11 +177,9 @@
   }
 
   function providerType(provider, item) {
-    const category = String(item?.categoryId || '').toLowerCase();
-    if (category === 'files' || category === 'file') return { type: 'File', label: tr('search.type.file') };
-    if (category === 'folders' || category === 'folder') return { type: 'Folder', label: tr('search.type.folder') };
-    const label = String(item?.categoryLabel || provider?.label || item?.categoryId || tr('search.type.tool'));
-    return { type: label, label };
+    const categoryId = String(item?.categoryId || provider?.id || 'provider');
+    const label = String(item?.categoryLabel || provider?.label || categoryId || tr('search.type.tool'));
+    return { type: label, categoryId, label };
   }
 
   function resultActionKey(item) {
@@ -197,6 +199,7 @@
     const actionPath = item.action?.kind === 'resource' ? String(item.action.resource?.path || '') : '';
     return {
       type: type.type,
+      categoryId: type.categoryId,
       typeLabel: type.label,
       title: String(item.title || item.subtitle || provider.label || provider.id || ''),
       subtitle: String(item.subtitle || actionPath || ''),
@@ -228,7 +231,7 @@
             };
           } catch (error) {
             console.warn(`[GlobalSearch] provider ${provider.pluginId}/${provider.id || provider.handler} failed:`, error);
-            return { rows: [], partial: false };
+            return { rows: [], partial: true };
           }
         })());
       });
@@ -350,6 +353,7 @@
             type="button"
             class="global-search-result"
             data-global-search-result-type={item.type}
+            data-global-search-result-category={item.categoryId || ''}
             data-global-search-result-path={item.path || ''}
             on:mousedown|preventDefault={() => openResult(item)}
           >

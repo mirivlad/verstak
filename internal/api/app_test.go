@@ -2974,6 +2974,30 @@ func TestPluginSyncFailureStatusPreservesLastSuccess(t *testing.T) {
 	}
 }
 
+func TestResolveOwningWorkspacePicksDeepestDeal(t *testing.T) {
+	nodes := []workspacetree.TreeNode{
+		{
+			Kind: "folder", ID: "clients", Name: "Clients", Path: "Clients",
+			Children: []workspacetree.TreeNode{
+				{Kind: "workspace", ID: "acme", Name: "Acme", Path: "Clients/Acme"},
+				{Kind: "workspace", ID: "nested", Name: "Nested", Path: "Clients/Acme/Nested"},
+			},
+		},
+	}
+
+	got, ok := resolveOwningWorkspace(nodes, "Clients/Acme/Nested/docs/readme.md")
+	if !ok || got.ID != "nested" || got.Path != "Clients/Acme/Nested" {
+		t.Fatalf("resolveOwningWorkspace nested = %+v, %v", got, ok)
+	}
+	got, ok = resolveOwningWorkspace(nodes, "Clients/Acme/docs/readme.md")
+	if !ok || got.ID != "acme" || got.Path != "Clients/Acme" {
+		t.Fatalf("resolveOwningWorkspace acme = %+v, %v", got, ok)
+	}
+	if got, ok = resolveOwningWorkspace(nodes, "Loose/file.txt"); ok {
+		t.Fatalf("resolveOwningWorkspace loose = %+v, want not found", got)
+	}
+}
+
 func TestPluginListWorkspacesReturnsNestedDealsOnly(t *testing.T) {
 	app, root := newFilesTestApp(t, []string{"files.read"})
 	writeMarker := func(relativePath, fileName, body string) {

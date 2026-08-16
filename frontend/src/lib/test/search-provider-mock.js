@@ -20,6 +20,39 @@ const originalGetContributions = app.GetContributions.bind(app);
 const originalGetPluginAssetContent = app.GetPluginAssetContent.bind(app);
 const originalExecutePluginCommand = app.ExecutePluginCommand.bind(app);
 
+function cleanVaultRelativePath(value) {
+  const raw = String(value || '');
+  if (!raw || raw.includes('\\') || raw.startsWith('/') || raw.split('/').some((part) => part === '..')) return null;
+  const parts = raw.split('/').filter(Boolean);
+  if (parts[0] === '.verstak') return null;
+  return parts.join('/');
+}
+
+app.PluginResolveWorkspacePath = async function pluginResolveWorkspacePath(pluginId, relativePath) {
+  const path = cleanVaultRelativePath(relativePath);
+  if (!path) return [null, 'invalid relative path'];
+  const snapshot = await app.GetWorkspaceTreeV2();
+  let best = null;
+  function walk(nodes) {
+    (nodes || []).forEach((node) => {
+      const root = String(node?.path || '').replace(/^\/+|\/+$/g, '');
+      if (node?.kind === 'workspace' && root && (path === root || path.startsWith(`${root}/`))) {
+        if (!best || root.length > best.root.length) best = { node, root };
+      }
+      walk(node?.children || []);
+    });
+  }
+  walk(snapshot?.roots || []);
+  if (!best) return [{ found: false }, ''];
+  return [{
+    found: true,
+    workspaceId: best.node.id || '',
+    workspaceName: best.node.name || '',
+    workspaceRootPath: best.root,
+    relativePath: path === best.root ? '' : path.slice(best.root.length + 1),
+  }, ''];
+};
+
 function searchProviderRows(manifest) {
   const contributes = manifest?.contributes || {};
   return (contributes.searchProviders || []).map((provider) => ({
