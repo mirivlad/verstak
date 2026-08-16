@@ -43,6 +43,14 @@ replace_once(p, "      indexPluginSettings('verstak.activity', tr('search.type.a
 replace_once(p, "          detail: { kind: item.toolKind || item.type || '' }", "          detail: { workspaceItemId: item.workspaceItemId || '' }")
 replace_once(p, "          detail: { kind: 'files' }", "          detail: { workspaceItemId: item.workspaceItemId || '' }")
 
+# Resume provider items no longer need a category. Keep the DOM/test hook stable anyway.
+p = 'frontend/src/lib/shell/TodaySurface.svelte'
+replace_once(
+    p,
+    'data-overview-continue-item={item.category}',
+    'data-overview-continue-item={item.category || item.actionKind || item.id}',
+)
+
 # The Wails mock must emulate the backend side of Browser's mutation event.
 p = 'frontend/src/lib/test/wails-mock.js'
 replace_once(p, "    PublishPluginEvent: function () { return Promise.resolve(''); },", """    PublishPluginEvent: function (pluginId, eventName, payload) {
@@ -113,8 +121,12 @@ replace_once(p, "    PublishPluginEvent: function () { return Promise.resolve(''
       return Promise.resolve('');
     },""")
 
-# Browser UI is now the real plugin bundle; scope the counter to the toolbar.
-replace_all('frontend/e2e/browser-inbox.spec.js', "inbox.locator('.browser-inbox-count')", "inbox.locator('.browser-inbox-toolbar .browser-inbox-count')", 3)
+# Browser UI is now the real plugin bundle, not the retired handwritten mock.
+p = 'frontend/e2e/browser-inbox.spec.js'
+replace_all(p, "inbox.locator('.browser-inbox-count')", "inbox.locator('.browser-inbox-toolbar > .browser-inbox-count')", 3)
+replace_once(p, "await inbox.locator('[data-browser-inbox-action=\"remove\"]').click();", "await inbox.locator('[data-browser-inbox-action=\"delete-permanently\"]').click();")
+replace_once(p, "await expect(inbox.locator('[data-browser-capture-id=\"capture-e2e-1\"]')).toContainText('Research Report');", "await expect(inbox.locator('[data-browser-capture-id=\"capture-e2e-1\"]')).toContainText('report.txt');")
+replace_once(p, "await expect(inbox.locator('.browser-inbox-detail-title')).toHaveText('Research Report');", "await expect(inbox.locator('.browser-inbox-detail-title')).toHaveText('report.txt');")
 
 # Background provider commands legitimately stay registered. Test only platform-test cleanup.
 p = 'frontend/e2e/plugin-api-bridge.spec.js'
