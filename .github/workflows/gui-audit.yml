@@ -1,0 +1,83 @@
+name: gui-audit
+
+on:
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      official_plugins_ref:
+        description: Official plugins git ref to build and install
+        required: false
+        default: main
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: gui-audit-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  real-gui:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      OFFICIAL_PLUGINS_REF: ${{ github.event_name == 'workflow_dispatch' && inputs.official_plugins_ref || 'main' }}
+
+    steps:
+      - name: Check out desktop
+        uses: actions/checkout@v4
+
+      - name: Check out official plugins
+        uses: actions/checkout@v4
+        with:
+          repository: mirivlad/verstak-official-plugins
+          ref: ${{ env.OFFICIAL_PLUGINS_REF }}
+          path: verstak-official-plugins
+
+      - name: Put official plugins beside desktop
+        run: mv verstak-official-plugins ../verstak-official-plugins
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libgtk-3-dev libwebkit2gtk-4.1-dev \
+            imagemagick xvfb xdotool
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Build current official plugins
+        run: bash ../verstak-official-plugins/scripts/build.sh
+
+      - name: Install current official plugins
+        run: bash scripts/install-dev-plugins.sh
+
+      # Keep the CLI paired with the library version in go.mod instead of
+      # letting scripts/build.sh install whatever Wails happens to be latest.
+      - name: Install Wails CLI
+        run: go install github.com/wailsapp/wails/v2/cmd/wails@v2.12.0
+
+      - name: Build real desktop application
+        run: bash scripts/build.sh
+
+      - name: Capture real WebKitGTK startup GUI
+        run: bash scripts/gui-probe.sh --shot startup
+
+      - name: Upload GUI evidence
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: gui-audit-${{ github.run_id }}
+          path: build/gui-probe/
+          if-no-files-found: warn
+          retention-days: 14
