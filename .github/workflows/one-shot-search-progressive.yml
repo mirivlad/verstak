@@ -51,7 +51,9 @@ jobs:
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add frontend/src/lib/shell/GlobalSearch.svelte frontend/e2e/ux-followup.spec.js
+          git add frontend/src/lib/shell/GlobalSearch.svelte \
+            frontend/src/lib/shell/WorkspaceHost.svelte \
+            frontend/e2e/ux-followup.spec.js
           git diff --cached --check
-          git commit -m 'fix: publish global Search results progressively'
+          git commit -m 'fix: preserve deep Search navigation handoff'
           git push origin HEAD:audit/global-search-providers
