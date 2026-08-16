@@ -85,19 +85,14 @@ jobs:
           assert tools_line in s
           s = s.replace(tools_line, tools_line + "  $: workspacePluginIds = new Set(workspaceTools.map(tool => tool?.pluginId).filter(Boolean));\n  $: overviewProviders = (contributions.overviewProviders || []).filter(provider => workspacePluginIds.has(provider?.pluginId));\n", 1)
 
-          find_pattern = re.compile(r"  function findWorkspaceItem\(kind\) \{.*?\n  \}\n\n  function requestWorkspaceItem", re.S)
-          find_replacement = '''  function findWorkspaceItem(workspaceItemId) {
+          nav_pattern = re.compile(r"  function findWorkspaceItem\(kind\) \{.*?\n  function openWorkspaceTool", re.S)
+          nav_replacement = '''  function findWorkspaceItem(workspaceItemId) {
             const id = String(workspaceItemId || '').trim();
             if (!id) return null;
             return workspaceTools.find(tool => tool?.id === id) || null;
           }
 
-          function requestWorkspaceItem'''
-          s, count = find_pattern.subn(find_replacement, s, count=1)
-          assert count == 1, 'findWorkspaceItem block not found'
-
-          request_pattern = re.compile(r"  function requestWorkspaceItem\(kind, toolRequest = null\) \{.*?\n  \}\n\n  function openWorkspaceTool", re.S)
-          request_replacement = '''  function requestWorkspaceItem(workspaceItemId, toolRequest = null) {
+          function requestWorkspaceItem(workspaceItemId, toolRequest = null) {
             requestedWorkspaceItemId = String(workspaceItemId || '').trim();
             requestedToolRequest = toolRequest;
             const match = findWorkspaceItem(requestedWorkspaceItemId);
@@ -109,8 +104,8 @@ jobs:
           }
 
           function openWorkspaceTool'''
-          s, count = request_pattern.subn(request_replacement, s, count=1)
-          assert count == 1, 'requestWorkspaceItem block not found'
+          s, count = nav_pattern.subn(nav_replacement, s, count=1)
+          assert count == 1, 'workspace navigation block not found'
 
           s = s.replace('event?.detail?.kind', 'event?.detail?.workspaceItemId')
           surface_anchor = '              availableTools={displayedTools}\n              on:openTool={openWorkspaceTool}'
