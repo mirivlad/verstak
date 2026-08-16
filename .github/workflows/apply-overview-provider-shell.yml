@@ -33,6 +33,22 @@ jobs:
           node-version: '20'
           cache: npm
           cache-dependency-path: work/verstak/frontend/package-lock.json
+      - name: Correct one-shot API flattening anchor
+        working-directory: work/verstak
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('.github/scripts/apply_overview_provider_shell.py')
+          s = p.read_text()
+          start = s.index("s = s.replace('\\tworklogProviders := make([]FlatWorklogProvider")
+          end = s.index('# Return field near WorklogProviders.', start)
+          replacement = '''s = s.replace('\\tworklogProviders := make([]FlatWorklogProvider, len(regWorklogProviders))\\n', '\\tworklogProviders := make([]FlatWorklogProvider, len(regWorklogProviders))\\n\\toverviewProviders := make([]FlatOverviewProvider, len(regOverviewProviders))\\n', 1)
+          worklog_loop = '''\\tfor i, v := range regWorklogProviders {\n\\t\\tworklogProviders[i] = FlatWorklogProvider{PluginID: v.PluginID, ID: v.Item.ID, Label: v.Item.Label, Handler: v.Item.Handler}\n\\t}\n'''
+          assert worklog_loop in s, 'worklog flatten loop not found'
+          s = s.replace(worklog_loop, worklog_loop + '''\\tfor i, v := range regOverviewProviders {\n\\t\\toverviewProviders[i] = FlatOverviewProvider{PluginID: v.PluginID, ID: v.Item.ID, Label: v.Item.Label, Handler: v.Item.Handler}\n\\t}\n''', 1)
+          '''
+          p.write_text(s[:start] + replacement + s[end:])
+          PY
       - name: Apply provider shell patch
         working-directory: work/verstak
         run: |
