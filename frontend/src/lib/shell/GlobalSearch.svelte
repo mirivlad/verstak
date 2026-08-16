@@ -159,14 +159,7 @@
     return String(text || '').slice(0, 900);
   }
 
-  function pluginToolKind(pluginId, label) {
-    if (pluginId === 'verstak.browser-inbox') return 'browser-inbox';
-    if (pluginId === 'verstak.activity') return 'activity';
-    if (pluginId === 'verstak.journal') return 'journal';
-    return String(label || pluginId || '').toLowerCase();
-  }
-
-  async function indexPluginSettings(pluginId, label, rank, view, nodes) {
+  async function indexPluginSettings(pluginId, label, rank, view, nodes, workspaceItemId) {
     const settings = await resultOrEmpty(App.ReadPluginSettings(pluginId), {});
     const items = [];
     Object.keys(settings || {}).forEach(key => {
@@ -187,7 +180,7 @@
           viewId: view?.id || '',
           pluginId,
           workspaceName,
-          toolKind: pluginToolKind(pluginId, label),
+          workspaceItemId: workspaceItemId || '',
           nodes,
         });
       });
@@ -227,6 +220,10 @@
       plugin.manifest?.localization,
     ).catch(() => {})));
     const contributions = i18n.localizeContributionSummary(rawContributions || {});
+    const workspaceItemByPluginId = new Map();
+    (contributions.workspaceItems || []).forEach(item => {
+      if (item.pluginId && item.id && !workspaceItemByPluginId.has(item.pluginId)) workspaceItemByPluginId.set(item.pluginId, item.id);
+    });
     const viewByPluginId = new Map();
     (contributions.views || []).forEach(view => {
       if (view.pluginId && !viewByPluginId.has(view.pluginId)) viewByPluginId.set(view.pluginId, view);
@@ -259,6 +256,7 @@
         action: entry.type === 'folder' ? 'file-folder' : 'file',
         path,
         nodes,
+        workspaceItemId: workspaceItemByPluginId.get('verstak.files') || '',
       });
     }
 
@@ -271,9 +269,9 @@
     const [snippets, pluginItems] = await Promise.all([
       Promise.all(fileItems.map(item => readFileSnippet(item.path))),
       Promise.all([
-      indexPluginSettings('verstak.journal', tr('search.type.journal'), 50, viewByPluginId.get('verstak.journal'), nodes),
-      indexPluginSettings('verstak.browser-inbox', tr('search.type.browserInbox'), 55, viewByPluginId.get('verstak.browser-inbox'), nodes),
-      indexPluginSettings('verstak.activity', tr('search.type.activity'), 60, viewByPluginId.get('verstak.activity'), nodes),
+      indexPluginSettings('verstak.journal', tr('search.type.journal'), 50, viewByPluginId.get('verstak.journal'), nodes, workspaceItemByPluginId.get('verstak.journal') || ''),
+      indexPluginSettings('verstak.browser-inbox', tr('search.type.browserInbox'), 55, viewByPluginId.get('verstak.browser-inbox'), nodes, workspaceItemByPluginId.get('verstak.browser-inbox') || ''),
+      indexPluginSettings('verstak.activity', tr('search.type.activity'), 60, viewByPluginId.get('verstak.activity'), nodes, workspaceItemByPluginId.get('verstak.activity') || ''),
       ]),
     ]);
 
@@ -312,7 +310,7 @@
           detail: { workspaceName, nodes: item.nodes || [] }
         }));
         window.dispatchEvent(new CustomEvent('verstak:workspace-open-tool', {
-          detail: { kind: item.toolKind || item.type || '' }
+          detail: { workspaceItemId: item.workspaceItemId || '' }
         }));
       }
       return;
@@ -334,7 +332,7 @@
           detail
         }));
         window.dispatchEvent(new CustomEvent('verstak:workspace-open-tool', {
-          detail: { kind: 'files' }
+          detail: { workspaceItemId: item.workspaceItemId || '' }
         }));
       }
       return;
