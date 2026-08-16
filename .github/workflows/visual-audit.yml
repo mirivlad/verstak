@@ -40,6 +40,9 @@ jobs:
         run: npm ci --no-audit --no-fund
         working-directory: frontend
 
+      - name: Build current official plugins
+        run: bash ../verstak-official-plugins/scripts/build.sh
+
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
         working-directory: frontend
