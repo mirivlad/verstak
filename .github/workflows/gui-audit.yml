@@ -59,7 +59,10 @@ jobs:
       - name: Build current official plugins
         run: bash ../verstak-official-plugins/scripts/build.sh
 
-      - name: Install current official plugins
+      # Build uses the complete development plugin set because its own tests
+      # exercise platform-test. The visual probe is converted to a shipping
+      # layout after the binary has been produced.
+      - name: Install current development plugins for build verification
         run: bash scripts/install-dev-plugins.sh
 
       # Keep the CLI paired with the library version in go.mod instead of
@@ -69,6 +72,14 @@ jobs:
 
       - name: Build real desktop application
         run: bash scripts/build.sh
+
+      - name: Stage shipping plugins for GUI audit
+        run: |
+          bash scripts/stage-shipping-plugins.sh \
+            ../verstak-official-plugins/dist \
+            build/bin/plugins
+          test ! -e build/bin/plugins/platform-test
+          echo "shipping plugins: $(find build/bin/plugins -mindepth 1 -maxdepth 1 -type d | wc -l)"
 
       - name: Capture real WebKitGTK startup GUI
         run: bash scripts/gui-probe.sh --shot startup
