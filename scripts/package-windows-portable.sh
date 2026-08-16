@@ -16,7 +16,7 @@ for command in zip; do
   fi
 done
 
-"$ROOT/scripts/build-windows.sh"
+VERSTAK_VERSION="$VERSION" "$ROOT/scripts/build-windows.sh"
 
 RELEASE_ROOT="$ROOT/release"
 STAGING="$RELEASE_ROOT/verstak-windows-amd64-$VERSION"

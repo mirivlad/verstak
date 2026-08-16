@@ -56,12 +56,27 @@ if [[ ! -d "$WINDOWS_PLUGIN_DIST" ]]; then
 fi
 VERSTAK_RELEASE_PLUGIN_DIR="$WINDOWS_PLUGIN_DIST" go test ./internal/core/plugin -run TestBundledOfficialPluginRequirementsResolve -count=1
 
+# Stamp Windows exactly like the native build. A release binary must be able to
+# report the release version that produced it; cross-compilation is not a reason
+# to silently fall back to an unstamped dev build.
+BUILDINFO_PKG="github.com/verstak/verstak-desktop/internal/core/buildinfo"
+BUILD_VERSION="${VERSTAK_VERSION:-}"
+BUILD_COMMIT="$(git -C "$ROOT" rev-parse --short HEAD 2>/dev/null || true)"
+BUILD_DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+if [[ -z "$BUILD_VERSION" ]]; then
+  BUILD_VERSION="$(git -C "$ROOT" describe --tags --always --dirty 2>/dev/null || echo dev)"
+fi
+LDFLAGS="-X $BUILDINFO_PKG.version=$BUILD_VERSION"
+LDFLAGS="$LDFLAGS -X $BUILDINFO_PKG.commit=$BUILD_COMMIT"
+LDFLAGS="$LDFLAGS -X $BUILDINFO_PKG.buildDate=$BUILD_DATE"
+echo "  🏷  version: $BUILD_VERSION ($BUILD_COMMIT)"
+
 # Wails' -compiler option selects a Go binary, not a C compiler. Cross-CGO
 # therefore has to be supplied through the standard Go environment instead.
 # The portable archive uses the installed Evergreen WebView2 Runtime, so never
 # compile an Evergreen downloader into the executable.
 CC="$WINDOWS_CC" CGO_ENABLED=1 GOFLAGS="${GOFLAGS:+$GOFLAGS }-buildvcs=false" "$WAILS" build -clean -platform windows/amd64 \
-  -webview2 error -o verstak-desktop.exe
+  -webview2 error -ldflags "$LDFLAGS" -o verstak-desktop.exe
 
 WINDOWS_BINARY="$ROOT/build/bin/verstak-desktop.exe"
 if [[ ! -f "$WINDOWS_BINARY" ]]; then
