@@ -20,6 +20,7 @@ set -uo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 OUT="${VERSTAK_PROBE_OUT:-$ROOT/build/gui-probe}"
 BINARY="$ROOT/build/bin/verstak-desktop"
+BINARY_DIR="$(dirname "$BINARY")"
 DISPLAY_NUM="${VERSTAK_PROBE_DISPLAY:-:97}"
 GEOMETRY="${VERSTAK_PROBE_GEOMETRY:-1200x820x24}"
 SHOT_NAME="startup"
@@ -126,13 +127,21 @@ if ! kill -0 "$XVFB_PID" 2>/dev/null; then
 fi
 
 # ── Application ─────────────────────────────────────────────────────────────
-env -i \
-  HOME="$PROBE_HOME" \
-  DISPLAY="$DISPLAY_NUM" \
-  PATH="/usr/bin:/bin" \
-  XDG_RUNTIME_DIR="$PROBE_HOME/run" \
-  WEBKIT_DISABLE_COMPOSITING_MODE="${WEBKIT_DISABLE_COMPOSITING_MODE:-0}" \
-  "$BINARY" --debug >"$OUT/app.log" 2>&1 &
+# Run from beside the binary, not from the source checkout. Plugin discovery
+# intentionally checks both ./plugins (developer workflow) and plugins beside
+# the executable (packaged workflow); starting a packaged binary from the repo
+# root makes the same plugins appear twice and can leak development-only tools
+# into a screenshot. The probe should model an installed application.
+(
+  cd "$BINARY_DIR" || exit 1
+  exec env -i \
+    HOME="$PROBE_HOME" \
+    DISPLAY="$DISPLAY_NUM" \
+    PATH="/usr/bin:/bin" \
+    XDG_RUNTIME_DIR="$PROBE_HOME/run" \
+    WEBKIT_DISABLE_COMPOSITING_MODE="${WEBKIT_DISABLE_COMPOSITING_MODE:-0}" \
+    "$BINARY" --debug
+) >"$OUT/app.log" 2>&1 &
 APP_PID=$!
 
 # Wait for the window rather than sleeping a fixed amount.

@@ -1,0 +1,61 @@
+name: visual-audit
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: visual-audit-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  screenshots:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out desktop
+        uses: actions/checkout@v4
+
+      - name: Check out current official plugins
+        uses: actions/checkout@v4
+        with:
+          repository: mirivlad/verstak-official-plugins
+          ref: main
+          path: verstak-official-plugins
+
+      - name: Put official plugins beside desktop
+        run: mv verstak-official-plugins ../verstak-official-plugins
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        run: npm ci --no-audit --no-fund
+        working-directory: frontend
+
+      - name: Build current official plugins
+        run: bash ../verstak-official-plugins/scripts/build.sh
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+        working-directory: frontend
+
+      - name: Capture deterministic UI states
+        run: npx playwright test --config=playwright.visual.config.js
+        working-directory: frontend
+
+      - name: Upload visual evidence
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: visual-audit-${{ github.run_id }}
+          path: frontend/e2e-results/visual/
+          if-no-files-found: warn
+          retention-days: 14

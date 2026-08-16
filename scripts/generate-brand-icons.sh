@@ -2,10 +2,23 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-MAGICK="${MAGICK_BIN:-magick}"
 SOURCE="$ROOT/packaging/linux/verstak.svg"
 
-if ! command -v "$MAGICK" >/dev/null; then
+if [[ -n "${MAGICK_BIN:-}" ]]; then
+  MAGICK="$MAGICK_BIN"
+elif command -v magick >/dev/null 2>&1; then
+  MAGICK="magick"
+elif command -v convert >/dev/null 2>&1; then
+  # Ubuntu 24.04 ships ImageMagick 6, where the ImageMagick 7 `magick`
+  # launcher does not exist. The operations used below have the same CLI
+  # syntax through the IM6 `convert` entry point.
+  MAGICK="convert"
+else
+  echo "ImageMagick is required to generate Verstak application icons: neither magick nor convert was found" >&2
+  exit 1
+fi
+
+if ! command -v "$MAGICK" >/dev/null 2>&1; then
   echo "ImageMagick is required to generate Verstak application icons: $MAGICK not found" >&2
   exit 1
 fi
@@ -45,4 +58,4 @@ render_ico "$ROOT/internal/shell/tray/verstak.ico" 16 20 24 32 48 256
 render_png 1024 "$ROOT/build/appicon.png"
 render_ico "$ROOT/build/windows/icon.ico" 16 32 48 64 128 256
 
-echo "generated Verstak tray and application icons from $SOURCE"
+echo "generated Verstak tray and application icons from $SOURCE using $MAGICK"

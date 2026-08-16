@@ -19,15 +19,29 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Contract tests intentionally verify the real bundled manifests and
+      # source-level cross-repository contracts. A clean desktop checkout does
+      # not contain those plugins, so make the sibling dependency explicit.
+      - name: Check out the official plugins
+        uses: actions/checkout@v4
+        with:
+          repository: mirivlad/verstak-official-plugins
+          ref: main
+          path: verstak-official-plugins
+
+      - name: Put official plugins beside desktop
+        run: mv verstak-official-plugins ../verstak-official-plugins
+
       # Ubuntu 24.04 no longer ships webkit2gtk-4.0. scripts/build.sh already
       # picks the right Wails build tag from pkg-config, so installing 4.1 is
       # enough and no build tag has to be pinned here.
-      # imagemagick is needed by scripts/test-brand-icons.sh.
+      # ImageMagick 6 delegates SVG rendering to rsvg-convert, provided by
+      # librsvg2-bin, so both are required by scripts/test-brand-icons.sh.
       - name: Install system dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            libgtk-3-dev libwebkit2gtk-4.1-dev imagemagick
+            libgtk-3-dev libwebkit2gtk-4.1-dev librsvg2-bin imagemagick
 
       - uses: actions/setup-go@v5
         with:
@@ -42,6 +56,12 @@ jobs:
 
       - run: npm ci --no-audit --no-fund
         working-directory: frontend
+
+      - name: Build current official plugins
+        run: bash ../verstak-official-plugins/scripts/build.sh
+
+      - name: Install current official plugins
+        run: bash scripts/install-dev-plugins.sh
 
       # main.go embeds frontend/dist, which is not committed. Without this the
       # Go steps fail before running anything with "pattern frontend/dist: no
@@ -70,7 +90,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: mirivlad/verstak-official-plugins
-          ref: refactor/design-system
+          ref: main
           path: verstak-official-plugins
 
       - name: Put the plugins where the mock expects them
@@ -84,6 +104,12 @@ jobs:
 
       - run: npm ci --no-audit --no-fund
         working-directory: frontend
+
+      # Some official plugins intentionally commit source but not generated
+      # frontend/dist output. The Wails mock imports those built bundles, so a
+      # clean E2E checkout must build the sibling repository first.
+      - name: Build current official plugins
+        run: bash ../verstak-official-plugins/scripts/build.sh
 
       - run: npx playwright install --with-deps chromium
         working-directory: frontend
