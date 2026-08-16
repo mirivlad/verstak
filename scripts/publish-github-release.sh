@@ -38,7 +38,11 @@ if [[ "$HEAD" != "$("$GIT_BIN" rev-parse origin/main)" ]]; then
   exit 1
 fi
 
-"$RELEASE_SCRIPT" "$VERSION"
+if [[ "${VERSTAK_SKIP_RELEASE_BUILD:-0}" != "1" ]]; then
+  "$RELEASE_SCRIPT" "$VERSION"
+else
+  echo "using prebuilt release assets from $RELEASE_DIR"
+fi
 
 ASSETS=(
   "$RELEASE_DIR/verstak_${VERSION#v}_amd64.deb"
