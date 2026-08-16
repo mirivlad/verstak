@@ -160,6 +160,32 @@ assertExcludes(
   'text.includes(kind)',
   'WorkspaceHost should not guess a workspace tool from arbitrary title/id substrings',
 );
+
+for (const forbidden of [
+  'ReadPluginSettings',
+  'ReadVaultTextFile',
+  'ListVaultFiles',
+  'indexPluginSettings',
+  'verstak.browser-inbox',
+  'verstak.activity',
+  'verstak.journal',
+]) {
+  assertExcludes(
+    globalSearch,
+    forbidden,
+    `GlobalSearch shell must consume generic Search providers instead of domain storage (${forbidden})`,
+  );
+}
+assertIncludes(
+  globalSearch,
+  'contributions.searchProviders || []',
+  'GlobalSearch should discover Search providers from contribution metadata',
+);
+assertIncludes(
+  globalSearch,
+  'executePluginCommand(provider.pluginId, provider.handler',
+  'GlobalSearch should execute declared Search providers through the generic command runtime',
+);
 assertIncludes(
   globalSearch,
   'workspaceItemId:',
