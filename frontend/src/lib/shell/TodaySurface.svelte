@@ -70,7 +70,6 @@
   $: needsAttention = filterAvailableItems(buildNeedsAttention(unprocessedCaptures, pendingWorkSessionCandidates, urgentTodos), overviewToolKey);
   $: continueItems = filterAvailableItems(buildContinueItems(activityEvents, journalEntries), overviewToolKey);
   $: hasAttentionTools = hasBrowserInbox || hasTodos || (hasActivity && hasJournal);
-  $: attentionActionKind = needsAttention[0]?.actionKind || fallbackAttentionAction();
   $: lastActive = lastActiveDate([...recentChanges, ...continueItems], captures, journalEntries, todos);
   $: summaryItems = [
     hasNotes ? { key: 'notes', label: tr('overview.notes'), count: totalNotes, detail: countText('overview.count.totalRecent', noteRecentChanges, { total: totalNotes, recent: noteRecentChanges }), actionKind: 'notes', actionLabel: tr('overview.openNotes') } : null,
@@ -78,7 +77,6 @@
     hasBrowserInbox ? { key: 'captures', label: tr('overview.captures'), count: unprocessedCaptures.length, detail: countText('overview.count.captures', unprocessedCaptures.length), actionKind: 'browser-inbox', actionLabel: tr('overview.reviewInbox') } : null,
     hasActivity ? { key: 'activity', label: tr('overview.activity'), count: activityEvents.length, detail: countText('overview.count.events', activityEvents.length), actionKind: 'activity', actionLabel: tr('overview.viewActivity') } : null,
     hasJournal ? { key: 'journal', label: tr('overview.journal'), count: journalEntries.length, detail: countText('overview.count.journal', journalEntries.length), actionKind: 'journal', actionLabel: tr('overview.openJournal') } : null,
-    hasAttentionTools && needsAttention.length ? { key: 'attention', label: tr('overview.attention'), count: needsAttention.length, detail: countText('overview.count.pending', needsAttention.length), actionKind: attentionActionKind, actionLabel: tr('overview.reviewPending') } : null,
   ].filter(Boolean);
   $: hasOverviewSideContent = Boolean(keyResources.length || needsAttention.length || (loading && hasAttentionTools));
 
@@ -120,13 +118,6 @@
   function filterAvailableItems(items, _toolKey) {
     void _toolKey;
     return (items || []).filter(item => actionIsAvailable(item?.actionKind));
-  }
-
-  function fallbackAttentionAction() {
-    if (hasBrowserInbox) return 'browser-inbox';
-    if (hasTodos) return 'todo';
-    if (hasActivity && hasJournal) return 'journal';
-    return '';
   }
 
   function decodeTuple(response, fallback) {
@@ -621,25 +612,6 @@
     <button type="button" data-overview-action="refresh" on:click={loadOverview}>{tr('overview.refresh')}</button>
   </div>
 
-  <div class="today-summary overview-summary" aria-label={tr('overview.summary')}>
-    {#each summaryItems as item}
-      <button
-        type="button"
-        class="today-summary-item overview-summary-item"
-        class:summary-attention={item.key === 'attention'}
-        data-overview-summary={item.key}
-        data-overview-action={item.actionKind}
-        aria-label={`${item.label}: ${item.actionLabel}`}
-        on:click={() => openTool(item.actionKind)}
-      >
-        <strong>{loading ? '...' : item.count}</strong>
-        <span>{item.label}</span>
-        <small>{loading ? tr('common.loading') : item.detail}</small>
-        <em>{item.actionLabel}</em>
-      </button>
-    {/each}
-  </div>
-
   <div class="overview-layout" class:overview-layout-wide={!hasOverviewSideContent}>
     <main class="overview-main">
       <section class="today-resume overview-continue" data-overview-section="continue">
@@ -674,6 +646,23 @@
           </div>
         {/if}
       </section>
+
+      <div class="today-summary overview-summary" data-overview-section="summary" aria-label={tr('overview.summary')}>
+        {#each summaryItems as item}
+          <button
+            type="button"
+            class="today-summary-item overview-summary-item"
+            data-overview-summary={item.key}
+            data-overview-action={item.actionKind}
+            aria-label={`${item.label}: ${item.actionLabel}`}
+            on:click={() => openTool(item.actionKind)}
+          >
+            <strong>{loading ? '...' : item.count}</strong>
+            <span>{item.label}</span>
+            <small>{loading ? tr('common.loading') : item.detail}</small>
+          </button>
+        {/each}
+      </div>
 
       <section class="today-panel overview-panel overview-recent" data-overview-section="recent">
         <div class="today-panel-head overview-panel-head">
@@ -804,16 +793,19 @@
 
   .today-summary {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
-    gap: 0.5rem;
-    padding: 0.75rem 0.75rem 0;
+    grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+    gap: 0.4rem;
   }
 
   .today-summary-item {
     min-width: 0;
     display: grid;
-    gap: 0.16rem;
-    padding: 0.65rem 0.75rem;
+    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-rows: auto auto;
+    align-items: center;
+    column-gap: 0.55rem;
+    row-gap: 0.12rem;
+    padding: 0.5rem 0.65rem;
     border: 1px solid var(--vt-color-border);
     border-radius: var(--vt-radius-lg);
     background: var(--vt-color-surface);
@@ -831,40 +823,25 @@
   }
 
   .today-summary-item strong {
+    grid-row: 1 / 3;
     color: var(--vt-color-text-primary);
-    font-size: 1rem;
+    font-size: 1.05rem;
     line-height: 1;
   }
 
   .today-summary-item span,
-  .today-summary-item small,
-  .today-summary-item em {
+  .today-summary-item small {
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
     color: var(--vt-color-text-muted);
-    font-size: 0.74rem;
+    font-size: 0.72rem;
   }
 
   .today-summary-item span {
     color: var(--vt-color-text-secondary);
     font-weight: 600;
-  }
-
-  .today-summary-item em {
-    color: var(--vt-color-accent);
-    font-size: 0.7rem;
-    font-style: normal;
-  }
-
-  .today-summary-item.summary-attention {
-    border-color: rgba(255, 200, 87, 0.5);
-    background: var(--vt-color-warning-muted);
-  }
-
-  .today-summary-item.summary-attention em {
-    color: var(--vt-color-warning);
   }
 
   .overview-layout {
@@ -1156,12 +1133,6 @@
     margin: 0;
     color: var(--vt-color-text-muted);
     font-size: 0.8rem;
-  }
-
-  @container vt-content (max-width: 1120px) {
-    .today-summary {
-      grid-template-columns: repeat(3, minmax(0, 1fr));
-    }
   }
 
   @container vt-content (max-width: 980px) {

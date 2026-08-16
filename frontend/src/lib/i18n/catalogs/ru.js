@@ -301,7 +301,7 @@ export default {
   'overview.refresh': 'Обновить',
   'overview.summary': 'Сводка Дела',
   'overview.continue': 'Продолжить работу',
-  'overview.continueHint': 'Вернитесь к следующему полезному делу в этом Деле.',
+  'overview.continueHint': 'Вернитесь к тому, на чём остановились.',
   'overview.loadingSignals': 'Загрузка данных Дела...',
   'overview.noResume': 'Пока неясно, с чего продолжить',
   'overview.noResumeHint': 'Здесь появятся недавние заметки, файлы и записи журнала.',
