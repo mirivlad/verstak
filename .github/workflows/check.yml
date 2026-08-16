@@ -105,6 +105,12 @@ jobs:
       - run: npm ci --no-audit --no-fund
         working-directory: frontend
 
+      # Some official plugins intentionally commit source but not generated
+      # frontend/dist output. The Wails mock imports those built bundles, so a
+      # clean E2E checkout must build the sibling repository first.
+      - name: Build current official plugins
+        run: bash ../verstak-official-plugins/scripts/build.sh
+
       - run: npx playwright install --with-deps chromium
         working-directory: frontend
 
