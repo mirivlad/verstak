@@ -43,7 +43,9 @@ test.describe('Visual audit: Overview', () => {
   test('empty Deal in Russian', async ({ page }) => {
     await prepare(page);
     await expect(page.locator('[data-overview-section="continue"]')).toContainText('Пока неясно, с чего продолжить');
+    await expect(page.locator('[data-overview-section="continue"]')).toContainText('Вернитесь к тому, на чём остановились.');
     await expect(page.locator('[data-overview-summary="attention"]')).toHaveCount(0);
+    await expect(page.locator('[data-overview-section="summary"]')).toBeVisible();
     await expect(page.locator('[data-overview-section="key-resources"]')).toContainText('Открыть заметки');
     await expect(page.locator('[data-overview-section="key-resources"]')).not.toContainText('Open Notes');
     await shot(page, 'overview-empty-ru.png');
@@ -154,7 +156,12 @@ test.describe('Visual audit: Overview', () => {
     await expect(overview.locator('[data-overview-section="continue"]')).not.toContainText('План выпуска');
     await expect(overview.locator('[data-overview-section="attention"]')).toContainText('Проверить резервную копию');
     await expect(overview.locator('[data-overview-section="attention"]')).toContainText('План выпуска');
-    await expect(overview.locator('[data-overview-summary="attention"]')).toContainText('4');
+    await expect(overview.locator('[data-overview-summary="attention"]')).toHaveCount(0);
+    const continueBox = await overview.locator('[data-overview-section="continue"]').boundingBox();
+    const attentionBox = await overview.locator('[data-overview-section="attention"]').boundingBox();
+    const summaryBox = await overview.locator('[data-overview-section="summary"]').boundingBox();
+    expect(Math.abs(continueBox.y - attentionBox.y)).toBeLessThan(4);
+    expect(summaryBox.y).toBeGreaterThan(continueBox.y + continueBox.height - 1);
     await shot(page, 'overview-populated-ru.png');
   });
 });
