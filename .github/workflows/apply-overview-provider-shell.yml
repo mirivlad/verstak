@@ -1,0 +1,65 @@
+name: apply-overview-provider-shell
+
+on:
+  push:
+    branches: [audit/overview-provider-shell]
+    paths:
+      - '.github/scripts/apply_overview_provider_shell.py'
+      - '.github/workflows/apply-overview-provider-shell.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: audit/overview-provider-shell
+          fetch-depth: 0
+          path: work/verstak
+      - uses: actions/checkout@v4
+        with:
+          repository: mirivlad/verstak-official-plugins
+          ref: main
+          path: work/verstak-official-plugins
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: work/verstak/go.mod
+          cache-dependency-path: work/verstak/go.sum
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: work/verstak/frontend/package-lock.json
+      - name: Apply provider shell patch
+        working-directory: work/verstak
+        run: |
+          python3 .github/scripts/apply_overview_provider_shell.py
+          gofmt -w internal/core/plugin/plugin.go internal/core/contribution/registry.go internal/core/contribution/registry_test.go internal/api/app.go
+      - name: Install frontend dependencies
+        working-directory: work/verstak/frontend
+        run: npm ci --no-audit --no-fund
+      - name: Build current official plugins
+        working-directory: work/verstak
+        run: bash ../verstak-official-plugins/scripts/build.sh
+      - name: Build frontend
+        working-directory: work/verstak/frontend
+        run: npm run build
+      - name: Architecture source contract
+        working-directory: work/verstak
+        run: node frontend/tests/shell-source-contract-test.mjs
+      - name: Focused Go tests
+        working-directory: work/verstak
+        run: go test ./internal/core/plugin ./internal/core/contribution ./internal/api
+      - name: Remove one-shot machinery and commit
+        working-directory: work/verstak
+        run: |
+          rm -f .github/scripts/apply_overview_provider_shell.py .github/workflows/apply-overview-provider-shell.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git diff --cached --check
+          git commit -m 'refactor: consume Overview provider contributions'
+          git push origin HEAD:audit/overview-provider-shell
