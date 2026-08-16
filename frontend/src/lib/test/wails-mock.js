@@ -3466,7 +3466,73 @@ function cloneJson(value) {
       if (!found) return Promise.resolve([{}, 'command not declared']);
       return Promise.resolve([{ status: 'declared', pluginId: pluginId, commandId: commandId, handler: found.handler, args: args || {} }, '']);
     },
-    PublishPluginEvent: function () { return Promise.resolve(''); },
+    PublishPluginEvent: function (pluginId, eventName, payload) {
+      if (pluginId === 'verstak.browser-inbox' && eventName === 'browser-inbox.storage.mutate') {
+        payload = payload || {};
+        var settings = Object.assign({}, pluginSettings[pluginId] || {});
+        var globalKey = 'captures:global';
+        var legacyKey = 'captures';
+        var workspacePrefix = 'captures:workspace:';
+        var captures = Array.isArray(settings[globalKey]) ? settings[globalKey].map(cloneJson) : [];
+        var action = String(payload.action || '');
+        if (action === 'migrate') {
+          var seen = {};
+          var migrated = [];
+          Object.keys(settings).filter(function (key) {
+            return key === globalKey || key === legacyKey || key.indexOf(workspacePrefix) === 0;
+          }).forEach(function (key) {
+            var scopedWorkspace = '';
+            if (key.indexOf(workspacePrefix) === 0) {
+              try { scopedWorkspace = decodeURIComponent(key.slice(workspacePrefix.length)); }
+              catch (_) { scopedWorkspace = key.slice(workspacePrefix.length); }
+            }
+            (Array.isArray(settings[key]) ? settings[key] : []).forEach(function (row) {
+              if (!row || typeof row !== 'object') return;
+              var item = cloneJson(row);
+              if (scopedWorkspace && !item.workspaceRootPath) item.workspaceRootPath = scopedWorkspace;
+              if (scopedWorkspace && !item.workspaceName) item.workspaceName = scopedWorkspace;
+              var id = String(item.captureId || '');
+              if (id && seen[id]) return;
+              if (id) seen[id] = true;
+              migrated.push(item);
+            });
+          });
+          captures = migrated;
+          delete settings[legacyKey];
+          Object.keys(settings).forEach(function (key) {
+            if (key.indexOf(workspacePrefix) === 0) delete settings[key];
+          });
+        } else if (action === 'assign') {
+          var workspaceRoot = String(payload.workspaceRootPath || '').replace(/^\/+|\/+$/g, '');
+          captures = captures.map(function (capture) {
+            return capture.captureId === payload.captureId
+              ? Object.assign({}, capture, { workspaceRootPath: workspaceRoot, workspaceName: workspaceRoot })
+              : capture;
+          });
+        } else if (action === 'processed') {
+          captures = captures.map(function (capture) {
+            return capture.captureId === payload.captureId
+              ? Object.assign({}, capture, { processed: payload.processed === true })
+              : capture;
+          });
+        } else if (action === 'archive') {
+          var archiveIds = {};
+          (Array.isArray(payload.captureIds) ? payload.captureIds : []).forEach(function (id) { archiveIds[id] = true; });
+          captures = captures.map(function (capture) {
+            return archiveIds[capture.captureId] ? Object.assign({}, capture, { globalState: 'archived' }) : capture;
+          });
+        } else if (action === 'restore') {
+          captures = captures.map(function (capture) {
+            return capture.captureId === payload.captureId ? Object.assign({}, capture, { globalState: 'inbox' }) : capture;
+          });
+        } else if (action === 'delete' && payload.permanent === true) {
+          captures = captures.filter(function (capture) { return capture.captureId !== payload.captureId; });
+        }
+        settings[globalKey] = captures;
+        pluginSettings[pluginId] = settings;
+      }
+      return Promise.resolve('');
+    },
     SubscribePluginEvent: function (pluginId, eventName) {
       var s = pluginStates[pluginId];
       if (!s || !s.enabled || s.status !== 'loaded') return Promise.resolve('plugin not enabled and loaded');

@@ -21,6 +21,7 @@ function assertExcludes(source, needle, message) {
 
 const workspaceHost = read('frontend/src/lib/shell/WorkspaceHost.svelte');
 const overviewSurface = read('frontend/src/lib/shell/TodaySurface.svelte');
+const globalSearch = read('frontend/src/lib/shell/GlobalSearch.svelte');
 const app = read('frontend/src/App.svelte');
 const statusBar = read('frontend/src/lib/shell/StatusBar.svelte');
 const compactPluginHost = read('frontend/src/lib/plugin-host/CompactPluginHost.svelte');
@@ -148,6 +149,21 @@ assertExcludes(
   workspaceHost,
   'text.includes(kind)',
   'WorkspaceHost should not guess a workspace tool from arbitrary title/id substrings',
+);
+assertIncludes(
+  globalSearch,
+  'workspaceItemId:',
+  'GlobalSearch should navigate workspace tools by exact workspace item id',
+);
+assertExcludes(
+  globalSearch,
+  'toolKind:',
+  'GlobalSearch should not encode semantic workspace tool kinds',
+);
+assertExcludes(
+  globalSearch,
+  'detail: { kind:',
+  'GlobalSearch should not dispatch legacy kind-based workspace navigation',
 );
 
 console.log('shell source contract smoke passed');

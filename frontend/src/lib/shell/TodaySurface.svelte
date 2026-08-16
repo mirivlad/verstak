@@ -284,7 +284,7 @@
               <button
                 type="button"
                 class="overview-continue-item"
-                data-overview-continue-item={item.category}
+                data-overview-continue-item={item.category || item.actionKind || item.id}
                 data-overview-action={item.actionKind}
                 on:click={() => openTool(item.actionKind)}
               >
