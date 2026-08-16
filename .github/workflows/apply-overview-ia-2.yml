@@ -1,0 +1,32 @@
+name: apply-overview-ia-2
+
+on:
+  push:
+    branches:
+      - audit/overview-ia-2
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: audit/overview-ia-2
+
+      - name: Apply Overview information hierarchy changes
+        run: python .github/scripts/apply_overview_ia_2.py
+
+      - name: Remove one-shot machinery and commit
+        run: |
+          rm .github/workflows/apply-overview-ia-2.yml
+          rm .github/scripts/apply_overview_ia_2.py
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git diff --cached --check
+          git commit -m "refactor: prioritize Overview work context"
+          git push origin HEAD:audit/overview-ia-2
