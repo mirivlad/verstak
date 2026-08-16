@@ -30,8 +30,10 @@ jobs:
           node-version: '20'
           cache: npm
           cache-dependency-path: frontend/package-lock.json
-      - name: Apply progressive Search patch
-        run: python3 .github/scripts/patch_progressive_global_search.py
+      - name: Apply progressive Search patches
+        run: |
+          python3 .github/scripts/patch_progressive_global_search.py
+          python3 .github/scripts/patch_folder_search_e2e.py
       - name: Install frontend dependencies
         run: npm ci --no-audit --no-fund
         working-directory: frontend
@@ -51,7 +53,9 @@ jobs:
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add frontend/src/lib/shell/GlobalSearch.svelte frontend/tests/shell-source-contract-test.mjs
+          git add frontend/src/lib/shell/GlobalSearch.svelte \
+            frontend/tests/shell-source-contract-test.mjs \
+            frontend/e2e/ux-followup.spec.js
           git diff --cached --check
           git commit -m 'fix: publish GlobalSearch provider results progressively'
           git push origin HEAD:audit/global-search-providers
