@@ -3,9 +3,9 @@ from pathlib import Path
 path = Path('frontend/src/lib/shell/GlobalSearch.svelte')
 text = path.read_text()
 
-old = """  import { onMount, onDestroy } from 'svelte';
+old = """  import { onMount } from 'svelte';
 """
-new = """  import { onMount, onDestroy, tick } from 'svelte';
+new = """  import { onMount, tick } from 'svelte';
 """
 if text.count(old) != 1:
     raise SystemExit(f'svelte import anchor count: {text.count(old)}')
