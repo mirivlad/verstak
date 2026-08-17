@@ -1,0 +1,58 @@
+name: one-shot-refresh-icon-assets
+
+on:
+  push:
+    branches:
+      - audit/file-preview-e2e-catalog
+
+permissions:
+  contents: write
+
+concurrency:
+  group: one-shot-refresh-icon-assets
+  cancel-in-progress: true
+
+jobs:
+  refresh:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: audit/file-preview-e2e-catalog
+
+      - name: Check out current official plugins
+        uses: actions/checkout@v4
+        with:
+          repository: mirivlad/verstak-official-plugins
+          ref: main
+          path: verstak-official-plugins
+
+      - name: Put official plugins beside desktop
+        run: mv verstak-official-plugins ../verstak-official-plugins
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        run: npm ci --no-audit --no-fund
+        working-directory: frontend
+
+      - name: Regenerate icon assets
+        run: node scripts/generate-icon-assets.mjs
+
+      - name: Verify generated icon assets
+        run: node scripts/generate-icon-assets.mjs --check
+
+      - name: Commit generated assets
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add frontend/src/lib/ui/icons/core.js frontend/src/lib/ui/icons/sprite.js
+          git diff --cached --check
+          git diff --cached --quiet && exit 0
+          git commit -m "build: refresh icons after folder appearance retirement"
+          git push origin HEAD:audit/file-preview-e2e-catalog
