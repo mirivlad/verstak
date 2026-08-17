@@ -45,9 +45,9 @@ jobs:
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
         working-directory: frontend
-      - name: Run complete Files E2E spec
+      - name: Run Files E2E diagnostic
         working-directory: frontend
-        run: npx playwright test --config playwright.config.js e2e/files-plugin.spec.js
+        run: npx playwright test --config playwright.config.js e2e/files-plugin.spec.js --retries=0 --max-failures=5
       - name: Commit product changes
         run: |
           git config user.name 'github-actions[bot]'
