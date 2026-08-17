@@ -197,3 +197,25 @@ assertIncludes(
 """
 text = replace_once(text, anchor, addition, "manifest source-contract guard")
 path.write_text(text)
+
+# The risk summary should agree with the rendered plugin cards rather than
+# pinning a magic count that changes whenever a real manifest gains or loses a
+# dangerous permission. PluginManager and PluginCard calculate that fact via
+# separate rendering paths, so this still checks the summary for consistency.
+path = Path("frontend/e2e/plugin-manager-layout.spec.js")
+text = path.read_text()
+old = """    const risk = page.locator('[data-plugin-manager-summary=\"risk\"]');
+    await expect(risk).toBeVisible();
+    await expect(risk.locator('[data-plugin-risk-summary=\"elevated-permissions\"]')).toContainText('8');
+    await expect(risk).toContainText('elevated permissions');
+"""
+new = """    const risk = page.locator('[data-plugin-manager-summary=\"risk\"]');
+    await expect(risk).toBeVisible();
+    const elevatedCards = page.locator('.plugin-card').filter({ has: page.locator('.tag.dangerous') });
+    const elevatedCount = await elevatedCards.count();
+    expect(elevatedCount).toBeGreaterThan(0);
+    await expect(risk.locator('[data-plugin-risk-summary=\"elevated-permissions\"]')).toContainText(String(elevatedCount));
+    await expect(risk).toContainText('elevated permissions');
+"""
+text = replace_once(text, old, new, "plugin manager elevated permission count")
+path.write_text(text)
