@@ -101,6 +101,27 @@ assertExcludes(
 
 assertIncludes(
   wailsMock,
+  "plugins/platform-test/frontend/src/index.js?raw",
+  'E2E should exercise the real official Platform Test frontend bundle',
+);
+assertIncludes(
+  wailsMock,
+  'Promise.resolve(platformTestSource)',
+  'E2E Platform Test asset loading should return the real official source',
+);
+assertExcludes(
+  wailsMock,
+  'function platformTestBundle()',
+  'E2E should not maintain a divergent synthetic Platform Test implementation',
+);
+assertExcludes(
+  wailsMock,
+  'Promise.resolve(platformTestBundle())',
+  'E2E Platform Test asset loader should never return a synthetic Platform Test bundle',
+);
+
+assertIncludes(
+  wailsMock,
   "plugins/file-preview/frontend/src/index.js?raw",
   'E2E should exercise the real shipped File Preview frontend bundle',
 );

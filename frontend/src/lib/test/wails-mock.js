@@ -9,6 +9,7 @@ import filesSource from '../../../../../verstak-official-plugins/plugins/files/f
 import filePreviewSource from '../../../../../verstak-official-plugins/plugins/file-preview/frontend/src/index.js?raw';
 import trashSource from '../../../../../verstak-official-plugins/plugins/trash/frontend/src/index.js?raw';
 import searchSource from '../../../../../verstak-official-plugins/plugins/search/frontend/src/index.js?raw';
+import platformTestSource from '../../../../../verstak-official-plugins/plugins/platform-test/frontend/src/index.js?raw';
 import filesManifest from '../../../../../verstak-official-plugins/plugins/files/plugin.json';
 import platformTestManifest from '../../../../../verstak-official-plugins/plugins/platform-test/plugin.json';
 import defaultEditorManifest from '../../../../../verstak-official-plugins/plugins/default-editor/plugin.json';
@@ -1697,110 +1698,7 @@ function cloneJson(value) {
   }
 
 
-  function platformTestBundle() {
-    return [
-      "(function(){",
-      "var DiagnosticsPanel={",
-      "mount:function(containerEl,props,api){",
-      "containerEl.innerHTML='';",
-      "containerEl.__ptCleanup=[];",
-      "function track(fn){if(typeof fn==='function')containerEl.__ptCleanup.push(fn);}",
-      "var root=document.createElement('div');",
-      "root.className='pt-root';",
-      "var title=document.createElement('h2');",
-      "title.className='pt-plugin-name';",
-      "title.textContent='Platform Diagnostics';",
-      "var pluginId=document.createElement('p');",
-      "pluginId.className='pt-plugin-id';",
-      "pluginId.textContent=api.pluginId;",
-      "var status=document.createElement('div');",
-      "status.className='pt-badge pt-badge-success';",
-      "status.textContent='Frontend Bundle Loaded';",
-      "var saved=document.createElement('div');",
-      "saved.className='pt-card pt-saved-setting';",
-      "saved.textContent='Saved setting: loading...';",
-      "var cap=document.createElement('div');",
-      "cap.className='pt-capability-result';",
-      "cap.textContent='Capabilities: loading...';",
-      "api.capabilities.list().then(function(caps){cap.textContent='Capabilities: '+caps.length+' available';});",
-      "api.settings.read('savedText').then(function(value){saved.textContent='Saved setting: '+(value||'');});",
-      "var input=document.createElement('input');",
-      "input.className='pt-setting-input';",
-      "input.setAttribute('aria-label','Saved setting');",
-      "input.value='changed value';",
-      "var button=document.createElement('button');",
-      "button.className='btn btn-primary pt-save-setting';",
-      "button.textContent='Save Setting';",
-      "button.addEventListener('click',function(){api.settings.write('savedText',input.value).then(function(){saved.textContent='Saved setting: '+input.value;});});",
-      "api.capabilities.has('verstak/platform-test/v1').then(function(ok){status.textContent='Frontend Bundle Loaded | capability '+(ok?'available':'missing');});",
-      "var command=document.createElement('div');",
-      "command.className='pt-command-result';",
-      "command.textContent='Command: registering...';",
-      "api.commands.register('verstak.platform-test.show-version',function(){return {version:'0.1.0',source:'bundled-frontend'};}).then(function(unregister){track(unregister);return api.commands.execute('verstak.platform-test.show-version',{});}).then(function(result){status.setAttribute('data-command-status',result.status||'');command.textContent='Command: '+result.status+' '+result.result.version+' from '+result.result.source;});",
-      "var eventResult=document.createElement('div');",
-      "eventResult.className='pt-event-result';",
-      "eventResult.textContent='Event: subscribing...';",
-      "api.events.subscribe('verstak.platform-test.echo',function(event){eventResult.textContent='Event: received '+event.payload.message;eventResult.setAttribute('data-event-status','received');}).then(function(unsubscribe){track(unsubscribe);return api.events.publish('verstak.platform-test.echo',{message:'hello-event'});});",
-      "var filesResult=document.createElement('div');",
-      "filesResult.className='pt-files-result';",
-      "filesResult.textContent='Files: running...';",
-      "var filesError=document.createElement('div');",
-      "filesError.className='pt-files-error-result';",
-      "filesError.textContent='Files error path: checking...';",
-      "var workbenchResult=document.createElement('div');",
-      "workbenchResult.className='pt-workbench-result';",
-      "workbenchResult.textContent='Workbench: ready';",
-      "function makeWorkbenchButton(cls,label,request){var b=document.createElement('button');b.className='btn btn-primary '+cls;b.textContent=label;b.addEventListener('click',function(){workbenchResult.textContent='Workbench: opening...';api.workbench.editResource(request).then(function(result){workbenchResult.textContent='Workbench: opened '+result.request.path+' with '+(result.providerId||'no-provider');workbenchResult.setAttribute('data-workbench-status',result.status==='opened'?'ok':result.status);}).catch(function(err){workbenchResult.textContent='Workbench error: '+(err&&err.message?err.message:String(err));workbenchResult.setAttribute('data-workbench-status','error');});});return b;}",
-      "var textWorkbenchButton=makeWorkbenchButton('pt-open-workbench-text','Open Text Diagnostic',{kind:'vault-file',path:'Docs/todo.txt',extension:'.txt',mime:'text/plain',context:{sourceView:'files'}});",
-      "var markdownWorkbenchButton=makeWorkbenchButton('pt-open-workbench-markdown','Open Markdown Diagnostic',{kind:'vault-file',path:'Docs/readme.md',extension:'.md',context:{sourceView:'files'}});",
-      "var notesWorkbenchButton=makeWorkbenchButton('pt-open-workbench-notes','Open Notes Diagnostic',{kind:'vault-file',path:'Notes/Overview.md',extension:'.md',context:{sourceView:'notes',isInsideNotesFolder:true,notesMode:true}});",
-      "api.files.createFolder('PlatformTest').catch(function(e){if(String(e).indexOf('conflict')===-1)throw e;}).then(function(){return api.files.writeText('PlatformTest/files-api.txt','hello files',{createIfMissing:true,overwrite:true});}).then(function(){return api.files.readText('PlatformTest/files-api.txt');}).then(function(text){if(text!=='hello files')throw new Error('read mismatch');return api.files.list('PlatformTest');}).then(function(entries){if(!entries.some(function(e){return e.relativePath==='PlatformTest/files-api.txt';}))throw new Error('list missing file');return api.files.move('PlatformTest/files-api.txt','PlatformTest/files-api-moved.txt',{overwrite:true});}).then(function(){return api.files.trash('PlatformTest/files-api-moved.txt');}).then(function(){filesResult.textContent='Files: wrote/read/listed/moved/trashed';filesResult.setAttribute('data-files-status','ok');}).catch(function(err){filesResult.textContent='Files error: '+(err&&err.message?err.message:String(err));filesResult.setAttribute('data-files-status','error');});",
-      "api.files.readText('.verstak/vault.json').then(function(){filesError.textContent='Files error path: unexpectedly allowed';filesError.setAttribute('data-files-error-status','error');}).catch(function(err){var message=err&&err.message?err.message:String(err);if(message.indexOf('reserved-path')===-1&&message.indexOf('.verstak')===-1){filesError.textContent='Files error path: wrong error '+message;filesError.setAttribute('data-files-error-status','error');return;}filesError.textContent='Files error path: rejected reserved-path';filesError.setAttribute('data-files-error-status','expected');});",
-      "root.appendChild(title);",
-      "root.appendChild(pluginId);",
-      "root.appendChild(status);",
-      "root.appendChild(saved);",
-      "root.appendChild(input);",
-      "root.appendChild(button);",
-      "root.appendChild(cap);",
-      "root.appendChild(command);",
-      "root.appendChild(eventResult);",
-      "root.appendChild(filesResult);",
-      "root.appendChild(filesError);",
-      "root.appendChild(textWorkbenchButton);",
-      "root.appendChild(markdownWorkbenchButton);",
-      "root.appendChild(notesWorkbenchButton);",
-      "root.appendChild(workbenchResult);",
-      "containerEl.appendChild(root);",
-      "},",
-      "unmount:function(containerEl){while(containerEl.__ptCleanup&&containerEl.__ptCleanup.length){containerEl.__ptCleanup.pop()();}containerEl.innerHTML='';}",
-      "};",
-      "var MarkdownDiagnosticProvider={",
-      "mount:function(containerEl,props,api){",
-      "containerEl.innerHTML='';",
-      "var root=document.createElement('div');",
-      "root.className='pt-root pt-workbench-result';",
-      "root.setAttribute('data-workbench-status','ok');",
-      "var req=(props&&props.request)||{};",
-      "var ctx=(req.context&&req.context.notesMode)||false?'notes-markdown':((req.extension==='.md'||req.extension==='.markdown')?'generic-markdown':'generic-text');",
-      "root.setAttribute('data-resource-path',req.path||'');",
-      "root.setAttribute('data-resource-mode',req.mode||'');",
-      "root.setAttribute('data-resource-context',ctx);",
-      "root.textContent='Workbench: opened '+(req.path||'')+' with '+((props&&props.providerId)||'')+' mode='+(req.mode||'')+' context='+ctx;",
-      "containerEl.appendChild(root);",
-      "},",
-      "unmount:function(containerEl){containerEl.innerHTML='';}",
-      "};",
-      "var PlatformTestSettings={",
-      "mount:function(containerEl,props,api){",
-      "containerEl.innerHTML='<div class=\"pt-root\"><h2>Platform Test Settings</h2><p>'+api.pluginId+'</p></div>';",
-      "},",
-      "unmount:function(containerEl){containerEl.innerHTML='';}",
-      "};",
-      "window.VerstakPluginRegister('verstak.platform-test',{components:{DiagnosticsPanel:DiagnosticsPanel,PlatformTestSettings:PlatformTestSettings,MarkdownDiagnosticProvider:MarkdownDiagnosticProvider}});",
-      "})();"
-    ].join('');
-  }
+
 
   // ── Mock API ───────────────────────────────────────────────────────
   var mock = {
@@ -2082,7 +1980,7 @@ function cloneJson(value) {
     },
     GetPluginAssetContent: function (pluginId, assetPath) {
       if (pluginId === platformTestManifest.id && assetPath === platformTestManifest.frontend.entry) {
-        return Promise.resolve(platformTestBundle());
+        return Promise.resolve(platformTestSource);
       }
       if (pluginId === defaultEditorManifest.id && assetPath === defaultEditorManifest.frontend.entry) {
         return Promise.resolve(defaultEditorSource);
