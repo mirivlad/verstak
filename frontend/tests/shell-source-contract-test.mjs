@@ -80,6 +80,27 @@ assertExcludes(
 
 assertIncludes(
   wailsMock,
+  "plugins/search/frontend/src/index.js?raw",
+  'E2E should exercise the real official Search frontend bundle',
+);
+assertIncludes(
+  wailsMock,
+  'Promise.resolve(searchSource)',
+  'E2E Search asset loading should return the real official source',
+);
+assertExcludes(
+  wailsMock,
+  'function searchPluginBundle()',
+  'E2E should not maintain a divergent synthetic Search implementation',
+);
+assertExcludes(
+  wailsMock,
+  'Promise.resolve(searchPluginBundle())',
+  'E2E Search asset loader should never return a synthetic Search bundle',
+);
+
+assertIncludes(
+  wailsMock,
   "plugins/file-preview/frontend/src/index.js?raw",
   'E2E should exercise the real shipped File Preview frontend bundle',
 );
