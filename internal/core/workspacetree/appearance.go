@@ -9,10 +9,21 @@ import (
 	"github.com/google/uuid"
 )
 
+const legacyFolderAppearancePluginID = "verstak.folder-appearance"
+
 // FolderAppearance stores visual presentation metadata for a folder.
 type FolderAppearance struct {
 	Icon  string `json:"icon,omitempty"`
 	Color string `json:"color,omitempty"`
+}
+
+type legacyFolderAppearance struct {
+	IconID  string `json:"iconId,omitempty"`
+	ColorID string `json:"colorId,omitempty"`
+}
+
+type legacyFolderAppearanceFile struct {
+	Folders map[string]legacyFolderAppearance `json:"folders"`
 }
 
 // GetFolderAppearance reads appearance metadata for a folder.
@@ -35,19 +46,13 @@ func (s *Service) GetFolderAppearance(folderID string) (*FolderAppearance, error
 	return &a, nil
 }
 
-// SetFolderAppearance writes appearance metadata for a folder.
+// SetFolderAppearance applies non-empty fields as a patch. Core callers that
+// need exact UI replacement semantics should use ReplaceFolderAppearance.
 func (s *Service) SetFolderAppearance(folderID string, patch *FolderAppearance) error {
-	if _, err := uuid.Parse(folderID); err != nil {
-		return fmt.Errorf("invalid folder ID")
-	}
-	if patch.Icon != "" && !isValidIconName(patch.Icon) {
-		return fmt.Errorf("invalid icon name")
-	}
-	if patch.Color != "" && !isValidColor(patch.Color) {
-		return fmt.Errorf("invalid color format, expected #RRGGBB")
+	if err := validateFolderAppearance(folderID, patch); err != nil {
+		return err
 	}
 
-	// Read existing.
 	existing, _ := s.GetFolderAppearance(folderID)
 	if patch.Icon != "" {
 		existing.Icon = patch.Icon
@@ -55,20 +60,20 @@ func (s *Service) SetFolderAppearance(folderID string, patch *FolderAppearance) 
 	if patch.Color != "" {
 		existing.Color = patch.Color
 	}
+	return writeFolderAppearance(s.vaultDir, folderID, existing)
+}
 
-	path := folderAppearancePath(s.vaultDir, folderID)
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+// ReplaceFolderAppearance persists exactly the supplied icon and color. Empty
+// values remove the corresponding customization, matching the workspace-tree
+// editor's Save semantics. With both fields empty there is no metadata file.
+func (s *Service) ReplaceFolderAppearance(folderID string, appearance *FolderAppearance) error {
+	if err := validateFolderAppearance(folderID, appearance); err != nil {
 		return err
 	}
-	data, err := json.Marshal(existing)
-	if err != nil {
-		return err
+	if appearance.Icon == "" && appearance.Color == "" {
+		return s.ResetFolderAppearance(folderID)
 	}
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o644); err != nil {
-		return err
-	}
-	return os.Rename(tmp, path)
+	return writeFolderAppearance(s.vaultDir, folderID, appearance)
 }
 
 // ResetFolderAppearance removes appearance metadata for a folder.
@@ -83,8 +88,90 @@ func (s *Service) ResetFolderAppearance(folderID string) error {
 	return nil
 }
 
+func validateFolderAppearance(folderID string, appearance *FolderAppearance) error {
+	if _, err := uuid.Parse(folderID); err != nil {
+		return fmt.Errorf("invalid folder ID")
+	}
+	if appearance == nil {
+		return fmt.Errorf("folder appearance is nil")
+	}
+	if appearance.Icon != "" && !isValidIconName(appearance.Icon) {
+		return fmt.Errorf("invalid icon name")
+	}
+	if appearance.Color != "" && !isValidColor(appearance.Color) {
+		return fmt.Errorf("invalid color format, expected #RRGGBB")
+	}
+	return nil
+}
+
+func writeFolderAppearance(vaultDir, folderID string, appearance *FolderAppearance) error {
+	path := folderAppearancePath(vaultDir, folderID)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	data, err := json.Marshal(appearance)
+	if err != nil {
+		return err
+	}
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, data, 0o644); err != nil {
+		return err
+	}
+	return os.Rename(tmp, path)
+}
+
 func folderAppearancePath(vaultDir, folderID string) string {
 	return filepath.Join(vaultDir, ".verstak", "folders", folderID+".json")
+}
+
+func legacyFolderAppearancePath(vaultDir string) string {
+	return filepath.Join(vaultDir, ".verstak", "plugin-data", legacyFolderAppearancePluginID, "appearance.json")
+}
+
+// migrateLegacyFolderAppearance moves still-relevant appearance values from
+// the retired plugin namespace into core-owned per-folder metadata. It is
+// deliberately best-effort: corrupt cosmetic legacy data must never prevent a
+// vault from opening. Existing core metadata always wins and the legacy file is
+// retained, making the migration idempotent and recoverable.
+func (s *Service) migrateLegacyFolderAppearance() int {
+	data, err := os.ReadFile(legacyFolderAppearancePath(s.vaultDir))
+	if err != nil {
+		return 0
+	}
+	var legacy legacyFolderAppearanceFile
+	if err := json.Unmarshal(data, &legacy); err != nil {
+		return 0
+	}
+
+	migrated := 0
+	for folderID, old := range legacy.Folders {
+		if _, err := uuid.Parse(folderID); err != nil {
+			continue
+		}
+		if _, ok := s.GetFolderByID(folderID); !ok {
+			continue
+		}
+		if _, err := os.Stat(folderAppearancePath(s.vaultDir, folderID)); err == nil {
+			continue
+		} else if !os.IsNotExist(err) {
+			continue
+		}
+
+		next := &FolderAppearance{}
+		if isValidIconName(old.IconID) {
+			next.Icon = old.IconID
+		}
+		if isValidColor(old.ColorID) {
+			next.Color = old.ColorID
+		}
+		if next.Icon == "" && next.Color == "" {
+			continue
+		}
+		if err := s.ReplaceFolderAppearance(folderID, next); err == nil {
+			migrated++
+		}
+	}
+	return migrated
 }
 
 func isValidIconName(name string) bool {
@@ -109,38 +196,6 @@ func isValidColor(color string) bool {
 		}
 	}
 	return true
-}
-
-// ── Contribution point helpers ───────────────────────────────────────────────
-
-// GetFolderTreeNodeActions returns contribution-compatible metadata for a folder node.
-func (s *Service) GetFolderTreeNodeActions(folderID string) map[string]interface{} {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	f, ok := s.scan.Folders[folderID]
-	if !ok {
-		return nil
-	}
-	return map[string]interface{}{
-		"folderId":   folderID,
-		"folderName": f.Name,
-		"folderPath": f.Path,
-	}
-}
-
-// GetWorkspaceTreeNodeActions returns contribution-compatible metadata for a workspace node.
-func (s *Service) GetWorkspaceTreeNodeActions(workspaceID string) map[string]interface{} {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	ws, ok := s.scan.Workspaces[workspaceID]
-	if !ok {
-		return nil
-	}
-	return map[string]interface{}{
-		"workspaceId":   workspaceID,
-		"workspaceName": ws.Name,
-		"workspacePath": ws.RootPath,
-	}
 }
 
 // GetFolderAppearanceByID is a static helper for the V2 API layer.

@@ -22,6 +22,8 @@ function assertExcludes(source, needle, message) {
 const workspaceHost = read('frontend/src/lib/shell/WorkspaceHost.svelte');
 const overviewSurface = read('frontend/src/lib/shell/OverviewSurface.svelte');
 const globalSearch = read('frontend/src/lib/shell/GlobalSearch.svelte');
+const workspaceTree = read('frontend/src/lib/shell/WorkspaceTree.svelte');
+const folderAppearanceCore = read('internal/core/workspacetree/appearance.go');
 const app = read('frontend/src/App.svelte');
 const statusBar = read('frontend/src/lib/shell/StatusBar.svelte');
 const compactPluginHost = read('frontend/src/lib/plugin-host/CompactPluginHost.svelte');
@@ -111,6 +113,33 @@ assertIncludes(
   '<GlobalSearch />',
   'App should expose global search in the main content header'
 );
+assertIncludes(
+  workspaceTree,
+  'App.GetFolderAppearance(',
+  'WorkspaceTree should read core-owned folder appearance through Wails',
+);
+assertIncludes(
+  workspaceTree,
+  'App.SetFolderAppearance(',
+  'WorkspaceTree should save core-owned folder appearance through Wails',
+);
+assertExcludes(
+  workspaceTree,
+  "createPluginAPI('verstak.folder-appearance')",
+  'WorkspaceTree must not impersonate the retired folder-appearance plugin',
+);
+assertIncludes(
+  folderAppearanceCore,
+  'legacyFolderAppearancePluginID = "verstak.folder-appearance"',
+  'core folder appearance should preserve legacy plugin data migration',
+);
+for (const staleContributionHelper of ['GetFolderTreeNodeActions', 'GetWorkspaceTreeNodeActions']) {
+  assertExcludes(
+    folderAppearanceCore,
+    staleContributionHelper,
+    `core appearance should not retain abandoned contribution helper ${staleContributionHelper}`,
+  );
+}
 assertIncludes(
   workspaceHost,
   'sortWorkspaceTools',

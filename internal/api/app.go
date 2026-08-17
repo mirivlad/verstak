@@ -3716,7 +3716,7 @@ func (a *App) SetFolderAppearance(folderID string, patch map[string]interface{})
 	if v, ok := patch["color"].(string); ok {
 		fa.Color = v
 	}
-	if err := a.treeV2.SetFolderAppearance(folderID, fa); err != nil {
+	if err := a.treeV2.ReplaceFolderAppearance(folderID, fa); err != nil {
 		return err.Error()
 	}
 	return ""

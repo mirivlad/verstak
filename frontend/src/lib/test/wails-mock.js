@@ -164,6 +164,7 @@ import importStyle from '../../../../../verstak-official-plugins/plugins/import/
   };
   var pluginNotifications = {};
   var pluginData = {};
+  var folderAppearances = {};
   var secretRecords = makeDefaultSecretRecords();
   var vaultFiles = makeDefaultVaultFiles();
   var externalOpens = [];
@@ -2874,6 +2875,22 @@ function cloneJson(value) {
     GetWorkspaceTreeV2: function () {
       return Promise.resolve(workspaceTreeV2Snapshot());
     },
+    GetFolderAppearance: function (folderId) {
+      var appearance = folderAppearances[folderId] || {};
+      return Promise.resolve({ icon: appearance.icon || '', color: appearance.color || '' });
+    },
+    SetFolderAppearance: function (folderId, patch) {
+      var appearance = patch || {};
+      var icon = String(appearance.icon || '');
+      var color = String(appearance.color || '');
+      if (!icon && !color) delete folderAppearances[folderId];
+      else folderAppearances[folderId] = { icon: icon, color: color };
+      return Promise.resolve('');
+    },
+    ResetFolderAppearance: function (folderId) {
+      delete folderAppearances[folderId];
+      return Promise.resolve('');
+    },
     PluginListWorkspaces: function (pluginId) {
       var err = requirePluginPermission(pluginId, 'files.read');
       if (err) return Promise.resolve([[], err]);
@@ -3077,6 +3094,7 @@ function cloneJson(value) {
       pluginSettings = { 'verstak.platform-test': { savedText: 'initial value' } };
       pluginNotifications = {};
       pluginData = {};
+      folderAppearances = {};
       secretRecords = makeDefaultSecretRecords();
       vaultFiles = makeDefaultVaultFiles();
       externalOpens = [];
