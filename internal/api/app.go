@@ -3299,6 +3299,60 @@ type PluginWorkspaceDTO struct {
 	RootPath string `json:"rootPath"`
 }
 
+func resolveOwningWorkspace(nodes []workspacetree.TreeNode, relativePath string) (workspacetree.TreeNode, bool) {
+	var best workspacetree.TreeNode
+	bestLength := -1
+	var walk func([]workspacetree.TreeNode)
+	walk = func(items []workspacetree.TreeNode) {
+		for _, node := range items {
+			if node.Kind == "workspace" {
+				rootPath := strings.Trim(node.Path, "/")
+				if rootPath != "" && (relativePath == rootPath || strings.HasPrefix(relativePath, rootPath+"/")) && len(rootPath) > bestLength {
+					best = node
+					bestLength = len(rootPath)
+				}
+			}
+			if len(node.Children) > 0 {
+				walk(node.Children)
+			}
+		}
+	}
+	walk(nodes)
+	return best, bestLength >= 0
+}
+
+// PluginResolveWorkspacePath resolves a readable vault-relative path to the
+// deepest owning Deal. Unlike PluginListWorkspaces, ownership does not require
+// the calling plugin to contribute a workspace item in that Deal.
+func (a *App) PluginResolveWorkspacePath(pluginID, relativePath string) (map[string]interface{}, string) {
+	if _, err := a.requirePluginAccess(pluginID, "files.read"); err != nil {
+		return nil, err.Error()
+	}
+	cleanPath, err := corefiles.NormalizeRelativeDir(relativePath)
+	if err != nil {
+		return nil, err.Error()
+	}
+	if a.treeV2 == nil {
+		return nil, "workspace tree not initialized"
+	}
+
+	snapshot := a.treeV2.GetTree()
+	workspace, found := resolveOwningWorkspace(snapshot.Roots, cleanPath)
+	if !found {
+		return map[string]interface{}{"found": false}, ""
+	}
+	workspaceRootPath := strings.Trim(workspace.Path, "/")
+	localPath := strings.TrimPrefix(cleanPath, workspaceRootPath)
+	localPath = strings.TrimPrefix(localPath, "/")
+	return map[string]interface{}{
+		"found":             true,
+		"workspaceId":       workspace.ID,
+		"workspaceName":     workspace.Name,
+		"workspaceRootPath": workspaceRootPath,
+		"relativePath":      localPath,
+	}, ""
+}
+
 // PluginListWorkspaces returns semantic Deal nodes where the calling plugin is active.
 func (a *App) PluginListWorkspaces(pluginID string) ([]PluginWorkspaceDTO, string) {
 	if _, err := a.requirePluginAccess(pluginID, "files.read"); err != nil {

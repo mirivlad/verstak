@@ -4,7 +4,7 @@ import { i18n } from './lib/i18n/index.js';
 import './lib/ui/design-system.css';
 
 // Replaced with a literal by Vite; false outside `--mode test`, so the mock
-// import below is removed from the bundle rather than shipped and skipped.
+// imports below are removed from the bundle rather than shipped and skipped.
 /* global __VERSTAK_TEST_MOCK__ */
 const TEST_MOCK_ENABLED = __VERSTAK_TEST_MOCK__;
 
@@ -54,6 +54,10 @@ i18n.configure({
 async function start() {
   if (TEST_MOCK_ENABLED && !backendAvailable()) {
     await import('./lib/test/wails-mock.js');
+    // Search-provider support was added after the original monolithic Wails
+    // fixture. Keep that compatibility seam isolated and backed by the real
+    // official plugin manifests/bundle instead of duplicating provider logic.
+    await import('./lib/test/search-provider-mock.js');
   }
 
   if (!backendAvailable()) {

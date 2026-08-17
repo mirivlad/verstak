@@ -6,6 +6,30 @@ async function openFilesTool(page) {
   await expect(page.locator('.files-root')).toBeVisible({ timeout: 10000 });
 }
 
+async function dragFileToWorkspace(page, fileName, workspaceName) {
+  await page.evaluate(({ fileName, workspaceName }) => {
+    const source = document.querySelector(`[data-file-name="${CSS.escape(fileName)}"]`);
+    const targetLabel = Array.from(document.querySelectorAll('.wt-label'))
+      .find((node) => node.textContent.trim() === workspaceName);
+    const target = targetLabel?.closest('.wt-node');
+    if (!source || !target) throw new Error(`missing drag endpoints: ${fileName} -> ${workspaceName}`);
+
+    const dataTransfer = new DataTransfer();
+    source.dispatchEvent(new DragEvent('dragstart', { bubbles: true, cancelable: true, dataTransfer }));
+    target.dispatchEvent(new DragEvent('dragover', { bubbles: true, cancelable: true, dataTransfer }));
+    target.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer }));
+    source.dispatchEvent(new DragEvent('dragend', { bubbles: true, cancelable: true, dataTransfer }));
+  }, { fileName, workspaceName });
+}
+
+async function returnToFilesAfterCreate(page, { workspaceName = 'Project', resourcePath, breadcrumb = workspaceName, fileName }) {
+  if (resourcePath) await expect(page.locator(`[data-resource-path="${resourcePath}"]`)).toBeVisible({ timeout: 10000 });
+  await page.locator('.wt-label').filter({ hasText: workspaceName }).click();
+  await openFilesTool(page);
+  await expect(page.locator('.files-breadcrumb')).toContainText(breadcrumb, { timeout: 10000 });
+  if (fileName) await expect(page.locator(`[data-file-name="${fileName}"]`)).toBeVisible({ timeout: 10000 });
+}
+
 test.describe('G: Files Plugin', () => {
   let consoleCollector;
 
@@ -81,7 +105,7 @@ test.describe('G: Files Plugin', () => {
       'verstak.files',
       'Project/project-only.txt',
       'Test/Files/project-only.txt',
-      { overwrite: false },
+      expect.objectContaining({ overwrite: false, transferId: expect.any(String) }),
     ]]);
     await expect.poll(async () => page.evaluate(async () => {
       const [text, err] = await window.go.api.App.ReadVaultTextFile('verstak.files', 'Test/Files/project-only.txt');
@@ -114,9 +138,7 @@ test.describe('G: Files Plugin', () => {
     await page.locator('.wt-label').filter({ hasText: 'Project' }).click();
     await openFilesTool(page);
 
-    const source = page.locator('[data-file-name="project-only.txt"]');
-    const target = page.locator('.wt-node').filter({ hasText: 'Test' });
-    await source.dragTo(target);
+    await dragFileToWorkspace(page, 'project-only.txt', 'Test');
 
     await expect.poll(async () => page.evaluate(async () => {
       const [text, err] = await window.go.api.App.ReadVaultTextFile(
@@ -134,9 +156,7 @@ test.describe('G: Files Plugin', () => {
     await page.locator('.wt-label').filter({ hasText: 'Project' }).click();
     await openFilesTool(page);
 
-    const source = page.locator('[data-file-name="project-only.txt"]');
-    const target = page.locator('.wt-node').filter({ hasText: 'Test' });
-    await source.dragTo(target);
+    await dragFileToWorkspace(page, 'project-only.txt', 'Test');
 
     // The failure is a notice above the tree; the tree itself stays usable.
     await expect(page.locator('[data-workspace-tree-notice]')).toContainText('does not have an available Files folder');
@@ -160,7 +180,7 @@ test.describe('G: Files Plugin', () => {
 
     await page.locator('[data-files-action="new-folder"]').click();
     await page.locator('[data-files-create-input]').fill('Daily');
-    await page.locator('[data-files-create-confirm]').click();
+    await page.locator('[data-files-create-modal] .files-modal-btn.confirm').click();
     await expect(page.locator('[data-file-name="Daily"]')).toBeVisible();
 
     await page.locator('[data-file-name="Daily"]').dblclick();
@@ -168,13 +188,17 @@ test.describe('G: Files Plugin', () => {
 
     await page.locator('[data-files-action="new-markdown"]').click();
     await page.locator('[data-files-create-input]').fill('Log.md');
-    await page.locator('[data-files-create-confirm]').click();
-    await expect(page.locator('[data-file-name="Log.md"]')).toBeVisible();
+    await page.locator('[data-files-create-modal] .files-modal-btn.confirm').click();
+    await returnToFilesAfterCreate(page, {
+      resourcePath: 'Project/Daily/Log.md',
+      breadcrumb: 'Daily',
+      fileName: 'Log.md',
+    });
 
     await page.locator('[data-file-name="Log.md"]').click();
     await page.locator('[data-files-action="rename"]').click();
     await page.locator('[data-files-rename-input]').fill('Journal.md');
-    await page.locator('[data-files-rename-confirm]').click();
+    await page.locator('[data-files-rename-modal] .files-modal-btn.confirm').click();
     await expect(page.locator('[data-file-name="Journal.md"]')).toBeVisible();
     await expect(page.locator('[data-file-name="Log.md"]')).toHaveCount(0);
 
@@ -212,10 +236,10 @@ test.describe('G: Files Plugin', () => {
     await page.locator('[data-file-name="project-only.txt"]').click();
     await page.locator('[data-files-action="rename"]').click();
     await page.locator('[data-files-rename-input]').fill('bad/name.txt');
-    await page.locator('[data-files-rename-confirm]').click();
+    await page.locator('[data-files-rename-modal] .files-modal-btn.confirm').click();
 
     await expect(page.locator('[data-files-rename-error]')).toBeVisible();
-    await expect(page.locator('[data-files-rename-error]')).toContainText('Invalid characters');
+    await expect(page.locator('[data-files-rename-error]')).toContainText(/invalid characters/i);
     await expect(page.locator('[data-files-rename-input]')).toBeVisible();
     await expect(page.locator('[data-file-name="project-only.txt"]')).toBeVisible();
     await expect(page.locator('[data-file-name="bad"]')).toHaveCount(0);
@@ -229,7 +253,7 @@ test.describe('G: Files Plugin', () => {
     await page.locator('[data-file-name="project-only.txt"]').click();
     await page.locator('[data-files-action="rename"]').click();
     await page.locator('[data-files-rename-input]').fill('Notes');
-    await page.locator('[data-files-rename-confirm]').click();
+    await page.locator('[data-files-rename-modal] .files-modal-btn.confirm').click();
 
     await expect(page.locator('[data-files-rename-error]')).toBeVisible();
     await expect(page.locator('[data-files-rename-error]')).toContainText('already exists');
@@ -246,10 +270,10 @@ test.describe('G: Files Plugin', () => {
 
     await page.locator('[data-files-action="new-folder"]').click();
     await page.locator('[data-files-create-input]').fill('bad/name');
-    await page.locator('[data-files-create-confirm]').click();
+    await page.locator('[data-files-create-modal] .files-modal-btn.confirm').click();
 
     await expect(page.locator('[data-files-create-error]')).toBeVisible();
-    await expect(page.locator('[data-files-create-error]')).toContainText('Invalid characters');
+    await expect(page.locator('[data-files-create-error]')).toContainText(/invalid characters/i);
     await expect(page.locator('[data-files-create-input]')).toBeVisible();
     await expect(page.locator('[data-file-name="bad"]')).toHaveCount(0);
   });
@@ -262,8 +286,8 @@ test.describe('G: Files Plugin', () => {
     async function createFile(action, name) {
       await page.locator(`[data-files-action="${action}"]`).click();
       await page.locator('[data-files-create-input]').fill(name);
-      await page.locator('[data-files-create-confirm]').click();
-      await expect(page.locator(`[data-file-name="${name}"]`)).toBeVisible();
+      await page.locator('[data-files-create-modal] .files-modal-btn.confirm').click();
+      await returnToFilesAfterCreate(page, { fileName: name });
     }
 
     await createFile('new-markdown', 'IconNote.md');
@@ -289,7 +313,7 @@ test.describe('G: Files Plugin', () => {
 
     await page.locator('[data-files-action="new-folder"]').click();
     await page.locator('[data-files-create-input]').fill('EmptyQuickActions');
-    await page.locator('[data-files-create-confirm]').click();
+    await page.locator('[data-files-create-modal] .files-modal-btn.confirm').click();
     await page.locator('[data-file-name="EmptyQuickActions"]').dblclick();
 
     const emptyState = page.locator('.files-empty');
@@ -300,9 +324,13 @@ test.describe('G: Files Plugin', () => {
 
     await emptyState.locator('[data-files-empty-action="new-markdown"]').click();
     await page.locator('[data-files-create-input]').fill('FromEmpty.md');
-    await page.locator('[data-files-create-confirm]').click();
+    await page.locator('[data-files-create-modal] .files-modal-btn.confirm').click();
+    await returnToFilesAfterCreate(page, {
+      resourcePath: 'Project/EmptyQuickActions/FromEmpty.md',
+      breadcrumb: 'EmptyQuickActions',
+      fileName: 'FromEmpty.md',
+    });
 
-    await expect(page.locator('[data-file-name="FromEmpty.md"]')).toBeVisible();
     await expect(page.locator('.files-empty')).toHaveCount(0);
   });
 
@@ -332,8 +360,11 @@ test.describe('G: Files Plugin', () => {
 
     await page.locator('[data-files-action="new-text"]').click();
     await page.locator('[data-files-create-input]').fill('RestoreMe.txt');
-    await page.locator('[data-files-create-confirm]').click();
-    await expect(page.locator('[data-file-name="RestoreMe.txt"]')).toBeVisible();
+    await page.locator('[data-files-create-modal] .files-modal-btn.confirm').click();
+    await returnToFilesAfterCreate(page, {
+      resourcePath: 'Project/RestoreMe.txt',
+      fileName: 'RestoreMe.txt',
+    });
 
     await page.locator('[data-file-name="RestoreMe.txt"]').click();
     await page.locator('[data-files-action="trash"]').click();
@@ -403,10 +434,10 @@ test.describe('G: Files Plugin', () => {
 
     await page.locator('[data-files-action="new-folder"]').click();
     await page.locator('[data-files-create-input]').fill('CutMe');
-    await page.locator('[data-files-create-confirm]').click();
+    await page.locator('[data-files-create-modal] .files-modal-btn.confirm').click();
     await page.locator('[data-files-action="new-folder"]').click();
     await page.locator('[data-files-create-input]').fill('Target');
-    await page.locator('[data-files-create-confirm]').click();
+    await page.locator('[data-files-create-modal] .files-modal-btn.confirm').click();
 
     await page.locator('[data-file-name="CutMe"]').click({ button: 'right' });
     await page.locator('[data-files-menu-action="cut"]').click();
@@ -428,13 +459,13 @@ test.describe('G: Files Plugin', () => {
 
     await page.locator('[data-files-action="new-folder"]').click();
     await page.locator('[data-files-create-input]').fill('BreadcrumbParent');
-    await page.locator('[data-files-create-confirm]').click();
+    await page.locator('[data-files-create-modal] .files-modal-btn.confirm').click();
     await page.locator('[data-file-name="BreadcrumbParent"]').dblclick();
     await expect(page.locator('.files-breadcrumb')).toContainText('BreadcrumbParent');
 
     await page.locator('[data-files-action="new-folder"]').click();
     await page.locator('[data-files-create-input]').fill('BreadcrumbChild');
-    await page.locator('[data-files-create-confirm]').click();
+    await page.locator('[data-files-create-modal] .files-modal-btn.confirm').click();
     await page.locator('[data-file-name="BreadcrumbChild"]').dblclick();
     await expect(page.locator('.files-breadcrumb')).toContainText('BreadcrumbChild');
 
@@ -467,13 +498,21 @@ test.describe('G: Files Plugin', () => {
 
     await page.locator('[data-files-action="new-folder"]').click();
     await page.locator('[data-files-create-input]').fill('DropTarget');
-    await page.locator('[data-files-create-confirm]').click();
+    await page.locator('[data-files-create-modal] .files-modal-btn.confirm').click();
     await page.locator('[data-files-action="new-markdown"]').click();
     await page.locator('[data-files-create-input]').fill('DragOne.md');
-    await page.locator('[data-files-create-confirm]').click();
+    await page.locator('[data-files-create-modal] .files-modal-btn.confirm').click();
+    await returnToFilesAfterCreate(page, {
+      resourcePath: 'Project/DragOne.md',
+      fileName: 'DragOne.md',
+    });
     await page.locator('[data-files-action="new-text"]').click();
     await page.locator('[data-files-create-input]').fill('DragTwo.txt');
-    await page.locator('[data-files-create-confirm]').click();
+    await page.locator('[data-files-create-modal] .files-modal-btn.confirm').click();
+    await returnToFilesAfterCreate(page, {
+      resourcePath: 'Project/DragTwo.txt',
+      fileName: 'DragTwo.txt',
+    });
 
     await page.locator('[data-file-name="DragOne.md"]').click();
     await page.locator('[data-file-name="DragTwo.txt"]').click({ modifiers: [process.platform === 'darwin' ? 'Meta' : 'Control'] });

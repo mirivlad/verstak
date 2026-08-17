@@ -709,6 +709,12 @@ export function createPluginAPI(pluginId) {
         return callBackend(pluginId, 'workspaces.list', function() {
           return App.PluginListWorkspaces(pluginId);
         });
+      },
+      resolvePath: function(relativePath) {
+        assertActive('workspaces.resolvePath');
+        return callBackend(pluginId, 'workspaces.resolvePath', function() {
+          return App.PluginResolveWorkspacePath(pluginId, String(relativePath || ''));
+        });
       }
     },
 

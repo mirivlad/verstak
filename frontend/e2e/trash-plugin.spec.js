@@ -38,8 +38,12 @@ test.describe('L: Global Trash Plugin', () => {
 
     await page.locator('[data-files-action="new-text"]').click();
     await page.locator('[data-files-create-input]').fill('GlobalTrash.txt');
-    await page.locator('[data-files-create-confirm]').click();
-    await expect(page.locator('[data-file-name="GlobalTrash.txt"]')).toBeVisible();
+    await page.locator('[data-files-create-modal] .files-modal-btn.confirm').click();
+    await expect(page.locator('[data-resource-path="Project/GlobalTrash.txt"]')).toBeVisible({ timeout: 10000 });
+
+    await page.locator('.wt-label').filter({ hasText: 'Project' }).click();
+    await page.getByRole('tab', { name: 'Files' }).click();
+    await expect(page.locator('[data-file-name="GlobalTrash.txt"]')).toBeVisible({ timeout: 10000 });
     await page.locator('[data-file-name="GlobalTrash.txt"]').click();
     await page.locator('[data-files-action="trash"]').click();
     await page.locator('.files-modal-btn.confirm').click();
