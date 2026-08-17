@@ -221,7 +221,7 @@
     };
   }
 
-  async function queryProviders(variants) {
+  function queryProviderCalls(variants) {
     const calls = [];
     (searchProviders || []).forEach((provider, providerRank) => {
       variants.forEach((variant) => {
@@ -244,7 +244,7 @@
         })());
       });
     });
-    return Promise.all(calls);
+    return calls;
   }
 
   function dedupeRows(rows) {
@@ -261,7 +261,17 @@
     return Array.from(byKey.values());
   }
 
-  async function runSearch(value) {
+  function publishSearchResults(seq, shellRows, providerRows, providerPartial, pending) {
+    if (seq !== searchSeq) return;
+    const combined = dedupeRows(shellRows.concat(providerRows))
+      .sort((a, b) => b.score - a.score || a.item.rank - b.item.rank || a.item.title.localeCompare(b.item.title));
+    partial = providerPartial || pending > 0 || combined.length > RESULT_LIMIT;
+    results = combined.slice(0, RESULT_LIMIT).map(row => row.item);
+    searching = pending > 0;
+    revision += 1;
+  }
+
+  function runSearch(value) {
     const variants = queryVariants(value);
     const seq = ++searchSeq;
     if (!variants.length) {
@@ -271,20 +281,24 @@
       return;
     }
 
-    searching = true;
     const shellRows = shellIndex
       .map(item => ({ item, score: matchScore(item, variants) }))
       .filter(row => row.score > 0);
-    const providerBatches = await queryProviders(variants);
-    if (seq !== searchSeq) return;
+    const providerRows = [];
+    let providerPartial = false;
+    const calls = queryProviderCalls(variants);
+    let pending = calls.length;
 
-    const providerRows = providerBatches.flatMap(batch => batch.rows.map(item => ({ item, score: item.score })));
-    const combined = dedupeRows(shellRows.concat(providerRows))
-      .sort((a, b) => b.score - a.score || a.item.rank - b.item.rank || a.item.title.localeCompare(b.item.title));
-    partial = providerBatches.some(batch => batch.partial) || combined.length > RESULT_LIMIT;
-    results = combined.slice(0, RESULT_LIMIT).map(row => row.item);
-    searching = false;
-    revision += 1;
+    publishSearchResults(seq, shellRows, providerRows, providerPartial, pending);
+    calls.forEach((call) => {
+      call.then((batch) => {
+        if (seq !== searchSeq) return;
+        pending -= 1;
+        providerPartial = providerPartial || batch.partial;
+        providerRows.push(...batch.rows.map(item => ({ item, score: item.score })));
+        publishSearchResults(seq, shellRows, providerRows, providerPartial, pending);
+      });
+    });
   }
 
   function handleFocus() {
@@ -314,7 +328,7 @@
         detail: { workspaceName: workspaceRootPath, workspaceRootPath }
       }));
       window.dispatchEvent(new CustomEvent('verstak:workspace-open-tool', {
-        detail: { workspaceItemId: action.workspaceItemId, toolRequest: action.toolRequest || null }
+        detail: { workspaceRootPath, workspaceItemId: action.workspaceItemId, toolRequest: action.toolRequest || null }
       }));
       return;
     }

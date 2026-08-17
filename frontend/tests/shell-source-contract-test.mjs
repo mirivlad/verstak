@@ -26,7 +26,24 @@ const app = read('frontend/src/App.svelte');
 const statusBar = read('frontend/src/lib/shell/StatusBar.svelte');
 const compactPluginHost = read('frontend/src/lib/plugin-host/CompactPluginHost.svelte');
 const pluginManager = read('frontend/src/lib/plugin-manager/PluginManager.svelte');
+const wailsMock = read('frontend/src/lib/test/wails-mock.js');
 const syncManifest = JSON.parse(read('../verstak-official-plugins/plugins/sync/plugin.json'));
+
+assertIncludes(
+  wailsMock,
+  "plugins/files/frontend/src/index.js?raw",
+  'E2E should exercise the real official Files frontend bundle',
+);
+assertIncludes(
+  wailsMock,
+  'Promise.resolve(filesSource)',
+  'E2E Files asset loading should return the real official Files source',
+);
+assertExcludes(
+  wailsMock,
+  'function filesPluginBundle()',
+  'E2E should not maintain a divergent synthetic Files implementation',
+);
 
 assertIncludes(
   app,

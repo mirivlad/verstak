@@ -21,6 +21,7 @@
   let toolsLoaded = false;
   let requestedWorkspaceItemId = '';
   let requestedToolRequest = null;
+  let requestedTargetWorkspaceRoot = '';
   let activeToolRequest = null;
   let requestedWorkspaceRoot = '';
   let locale = i18n.getLocale();
@@ -57,8 +58,14 @@
   $: overviewProviders = (contributions.overviewProviders || []).filter(provider => workspacePluginIds.has(provider?.pluginId));
   $: if (workspaceRootPath !== requestedWorkspaceRoot) {
     requestedWorkspaceRoot = workspaceRootPath;
-    requestedToolRequest = null;
     activeToolRequest = null;
+    if (requestedTargetWorkspaceRoot && requestedTargetWorkspaceRoot !== workspaceRootPath) {
+      requestedWorkspaceItemId = '';
+      requestedToolRequest = null;
+      requestedTargetWorkspaceRoot = '';
+    } else if (!requestedTargetWorkspaceRoot) {
+      requestedToolRequest = null;
+    }
   }
   $: displayedTools = selectedWorkspace ? [overviewTool, ...workspaceTools] : [];
   $: activeTool = displayedTools.find(tool => toolKey(tool) === activeToolKey) || displayedTools[0] || null;
@@ -70,12 +77,13 @@
       detail: { title: workspaceTitle }
     }));
   }
-  $: if (requestedWorkspaceItemId && workspaceTools.length > 0) {
+  $: if (requestedWorkspaceItemId && workspaceTools.length > 0 && (!requestedTargetWorkspaceRoot || requestedTargetWorkspaceRoot === workspaceRootPath)) {
     const match = findWorkspaceItem(requestedWorkspaceItemId);
     if (match) {
       const toolRequest = requestedToolRequest;
       requestedWorkspaceItemId = '';
       requestedToolRequest = null;
+      requestedTargetWorkspaceRoot = '';
       selectTool(match, toolRequest);
     }
   }
@@ -199,23 +207,26 @@
     return workspaceTools.find(tool => tool?.id === id) || null;
   }
 
-  function requestWorkspaceItem(workspaceItemId, toolRequest = null) {
+  function requestWorkspaceItem(workspaceItemId, toolRequest = null, targetWorkspaceRoot = '') {
     requestedWorkspaceItemId = String(workspaceItemId || '').trim();
     requestedToolRequest = toolRequest;
+    requestedTargetWorkspaceRoot = String(targetWorkspaceRoot || '').trim();
+    if (requestedTargetWorkspaceRoot && requestedTargetWorkspaceRoot !== workspaceRootPath) return;
     const match = findWorkspaceItem(requestedWorkspaceItemId);
     if (match) {
       requestedWorkspaceItemId = '';
       requestedToolRequest = null;
+      requestedTargetWorkspaceRoot = '';
       selectTool(match, toolRequest);
     }
   }
 
   function openWorkspaceTool(event) {
-    requestWorkspaceItem(event?.detail?.workspaceItemId, event?.detail?.toolRequest || null);
+    requestWorkspaceItem(event?.detail?.workspaceItemId, event?.detail?.toolRequest || null, event?.detail?.workspaceRootPath || '');
   }
 
   function handleWorkspaceOpenTool(event) {
-    requestWorkspaceItem(event?.detail?.workspaceItemId, event?.detail?.toolRequest || null);
+    requestWorkspaceItem(event?.detail?.workspaceItemId, event?.detail?.toolRequest || null, event?.detail?.workspaceRootPath || '');
   }
 
   function handlePluginsChanged() {

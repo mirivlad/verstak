@@ -37,7 +37,7 @@ test.describe('UX follow-up fixes', () => {
     const search = page.locator('[data-global-search-input]');
     await search.fill('Project/Notes');
 
-    const folderResult = page.locator('[data-global-search-result-category="folders"][data-global-search-result-path="Project/Notes"]');
+    const folderResult = page.locator('[data-global-search-result-category="folders"]').filter({ hasText: 'Project/Notes' });
     await expect(folderResult).toBeVisible({ timeout: 10000 });
     await folderResult.click();
 
