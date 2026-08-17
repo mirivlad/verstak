@@ -21,6 +21,9 @@ jobs:
         with:
           ref: audit/core-folder-appearance
 
+      - name: Fetch current main baseline
+        run: git fetch origin main:refs/remotes/origin/main --depth=1
+
       - name: Check out official plugins
         uses: actions/checkout@v4
         with:
