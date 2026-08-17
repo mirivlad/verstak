@@ -6,16 +6,17 @@ on:
       - audit/global-search-providers
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
-  diagnose:
+  patch:
     if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           ref: audit/global-search-providers
+          fetch-depth: 0
       - name: Check out official plugins
         uses: actions/checkout@v4
         with:
@@ -34,70 +35,32 @@ jobs:
         working-directory: frontend
       - name: Build current official plugins
         run: bash ../verstak-official-plugins/scripts/build.sh
-      - name: Apply candidate product fix
-        run: python3 .github/scripts/patch_global_search_progressive.py
-      - name: Build frontend
-        run: npm run build --prefix frontend
+      - name: Apply Search and test-contract fixes
+        run: |
+          python3 .github/scripts/patch_global_search_progressive.py
+          python3 .github/scripts/patch_real_files_mock.py
+      - name: Build and source-contract checks
+        run: |
+          npm run build --prefix frontend
+          node frontend/tests/shell-source-contract-test.mjs
+          git diff --check
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
         working-directory: frontend
-      - name: Create diagnostic spec
-        run: |
-          cat > frontend/e2e/search-folder-debug.spec.js <<'EOF'
-          import { test, expect } from '@playwright/test';
-          import { waitForAppReady } from './helpers.js';
-
-          test('diagnose Search folder handoff', async ({ page }) => {
-            await page.goto('/');
-            await waitForAppReady(page);
-
-            await page.evaluate(() => {
-              window.__searchFolderDebug = { openEvents: [], selectedEvents: [], mounts: [] };
-              window.addEventListener('verstak:workspace-open-tool', (event) => {
-                window.__searchFolderDebug.openEvents.push(JSON.parse(JSON.stringify(event.detail || {})));
-              });
-              window.addEventListener('verstak:workspace-tool-selected', (event) => {
-                window.__searchFolderDebug.selectedEvents.push(JSON.parse(JSON.stringify(event.detail || {})));
-              });
-
-              const wrapFiles = () => {
-                const component = window.__VERSTAK_PLUGIN_REGISTRY__?.['verstak.files']?.FilesView;
-                if (!component || component.__searchFolderDebugWrapped) return;
-                const originalMount = component.mount;
-                component.mount = function(container, props, api) {
-                  window.__searchFolderDebug.mounts.push(JSON.parse(JSON.stringify(props || {})));
-                  return originalMount.call(this, container, props, api);
-                };
-                component.__searchFolderDebugWrapped = true;
-              };
-
-              wrapFiles();
-              const originalRegister = window.VerstakPluginRegister;
-              window.VerstakPluginRegister = function(...args) {
-                const result = originalRegister.apply(this, args);
-                wrapFiles();
-                return result;
-              };
-            });
-
-            const search = page.locator('[data-global-search-input]');
-            await search.fill('Project/Notes');
-            const folderResult = page.locator('[data-global-search-result-category="folders"]').filter({ hasText: 'Project/Notes' });
-            await expect(folderResult).toBeVisible({ timeout: 10000 });
-            await folderResult.click();
-            await page.waitForTimeout(1500);
-
-            const debug = await page.evaluate(() => ({
-              ...window.__searchFolderDebug,
-              breadcrumb: document.querySelector('.files-breadcrumb')?.textContent || '',
-              activeTab: document.querySelector('.workspace-tabs [aria-selected="true"]')?.textContent || '',
-              history: window.__filesHistoryByWorkspace || {},
-            }));
-            console.log('SEARCH_FOLDER_DEBUG=' + JSON.stringify(debug));
-
-            await expect(page.locator('.files-breadcrumb')).toContainText('Notes', { timeout: 1000 });
-          });
-          EOF
-      - name: Run folder diagnostic
+      - name: Run the two Search regressions
         working-directory: frontend
-        run: npx playwright test --config playwright.config.js e2e/search-folder-debug.spec.js
+        run: |
+          npx playwright test --config playwright.config.js e2e/global-search-results.spec.js -g 'publishes a nested filename before delayed content reads finish'
+          npx playwright test --config playwright.config.js e2e/ux-followup.spec.js -g 'global search folder results open the workspace Files context'
+      - name: Commit product changes
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add frontend/src/lib/shell/GlobalSearch.svelte \
+            frontend/src/lib/shell/WorkspaceHost.svelte \
+            frontend/src/lib/test/wails-mock.js \
+            frontend/e2e/ux-followup.spec.js \
+            frontend/tests/shell-source-contract-test.mjs
+          git diff --cached --check
+          git commit -m 'fix: preserve fast and deep Search navigation'
+          git push origin HEAD:audit/global-search-providers
