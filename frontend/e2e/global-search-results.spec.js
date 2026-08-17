@@ -8,6 +8,44 @@ test.describe('Progressive global search index', () => {
     await resetMockState(page);
   });
 
+  test('indexes a Deal nested under semantic folders', async ({ page }) => {
+    await page.evaluate(() => {
+      window.go.api.App.GetWorkspaceTreeV2 = async () => ({
+        roots: [{
+          kind: 'folder',
+          id: 'clients',
+          key: 'folder:clients',
+          name: 'Clients',
+          path: 'Clients',
+          children: [{
+            kind: 'folder',
+            id: 'active',
+            key: 'folder:active',
+            name: 'Active',
+            path: 'Clients/Active',
+            children: [{
+              kind: 'workspace',
+              id: 'nested-deal',
+              key: 'workspace:nested-deal',
+              name: 'Acme Nested Deal',
+              path: 'Clients/Active/Acme',
+              children: [],
+            }],
+          }],
+        }],
+        currentWorkspaceId: '',
+        revision: 2,
+        warnings: [],
+      });
+    });
+
+    const input = page.locator('[data-global-search-input]');
+    await input.focus();
+    await input.fill('Acme Nested Deal');
+    const result = page.locator('[data-global-search-result-type=\"Workspace\"]', { hasText: 'Acme Nested Deal' });
+    await expect(result).toBeVisible({ timeout: 3000 });
+  });
+
   test('publishes a nested filename before delayed content reads finish', async ({ page }) => {
     await page.evaluate(() => {
       window.__wailsMock.putVaultFile('Project/Files/test.txt', 'content arrives later');
@@ -69,7 +107,7 @@ test.describe('Progressive global search index', () => {
     await input.focus();
     await input.fill('converted-search-token');
     await expect(page.locator('[data-global-search-result-path="Project/Notes/Converted_Search_Note.md"]')).toBeVisible({ timeout: 5000 });
-    await expect(page.locator('[data-global-search-result-type="Browser"]')).toHaveCount(0);
+    await expect(page.locator('[data-global-search-result-category="browser"]')).toHaveCount(0);
   });
 
   test('results panel is about three input widths wide and at least five rows tall', async ({ page }) => {
@@ -84,11 +122,11 @@ test.describe('Progressive global search index', () => {
     await input.focus();
     await input.fill('panel-sizing');
     const panel = page.locator('[data-global-search-results]');
-    await expect(panel.locator('[data-global-search-result-type="File"]')).toHaveCount(5, { timeout: 5000 });
+    await expect(panel.locator('[data-global-search-result-category="files"]')).toHaveCount(5, { timeout: 5000 });
     const [inputBox, panelBox, rowBoxes] = await Promise.all([
       input.boundingBox(),
       panel.boundingBox(),
-      panel.locator('[data-global-search-result-type="File"]').evaluateAll((rows) => rows.map((row) => row.getBoundingClientRect().height)),
+      panel.locator('[data-global-search-result-category="files"]').evaluateAll((rows) => rows.map((row) => row.getBoundingClientRect().height)),
     ]);
     expect(panelBox.width).toBeGreaterThanOrEqual(inputBox.width * 2.8);
     expect(panelBox.height).toBeGreaterThanOrEqual(rowBoxes.slice(0, 5).reduce((sum, height) => sum + height, 0));

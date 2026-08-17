@@ -26,7 +26,39 @@ const app = read('frontend/src/App.svelte');
 const statusBar = read('frontend/src/lib/shell/StatusBar.svelte');
 const compactPluginHost = read('frontend/src/lib/plugin-host/CompactPluginHost.svelte');
 const pluginManager = read('frontend/src/lib/plugin-manager/PluginManager.svelte');
+const wailsMock = read('frontend/src/lib/test/wails-mock.js');
 const syncManifest = JSON.parse(read('../verstak-official-plugins/plugins/sync/plugin.json'));
+
+assertIncludes(
+  wailsMock,
+  "plugins/files/frontend/src/index.js?raw",
+  'E2E should exercise the real official Files frontend bundle',
+);
+assertIncludes(
+  wailsMock,
+  "plugins/files/plugin.json",
+  'E2E should exercise the real official Files manifest and permissions',
+);
+assertIncludes(
+  wailsMock,
+  'manifest: filesManifest',
+  'E2E Files plugin state should use the real official manifest',
+);
+assertIncludes(
+  wailsMock,
+  "assetPath === filesManifest.frontend.entry",
+  'E2E Files bundle should be loaded through the entry declared by the real manifest',
+);
+assertIncludes(
+  wailsMock,
+  'Promise.resolve(filesSource)',
+  'E2E Files asset loading should return the real official Files source',
+);
+assertExcludes(
+  wailsMock,
+  'function filesPluginBundle()',
+  'E2E should not maintain a divergent synthetic Files implementation',
+);
 
 assertIncludes(
   app,
@@ -159,6 +191,58 @@ assertExcludes(
   workspaceHost,
   'text.includes(kind)',
   'WorkspaceHost should not guess a workspace tool from arbitrary title/id substrings',
+);
+
+for (const forbidden of [
+  'ReadPluginSettings',
+  'ReadVaultTextFile',
+  'ListVaultFiles',
+  'indexPluginSettings',
+  'verstak.browser-inbox',
+  'verstak.activity',
+  'verstak.journal',
+  "category === 'files'",
+  "category === 'folders'",
+  '__filesHistoryByWorkspace',
+  'App.GetWorkspaceTree()',
+]) {
+  assertExcludes(
+    globalSearch,
+    forbidden,
+    `GlobalSearch shell must consume generic Search providers instead of domain storage (${forbidden})`,
+  );
+}
+assertIncludes(
+  globalSearch,
+  'App.GetWorkspaceTreeV2()',
+  'GlobalSearch should index Deals from the semantic workspace tree',
+);
+assertIncludes(
+  globalSearch,
+  'collectWorkspaceNodes',
+  'GlobalSearch should recursively index Deals nested under semantic folders',
+);
+
+assertIncludes(
+  globalSearch,
+  'item?.categoryLabel || provider?.label',
+  'GlobalSearch should render provider-owned category labels without interpreting provider category ids',
+);
+assertIncludes(
+  globalSearch,
+  'enabledPluginIds.has(provider?.pluginId)',
+  'GlobalSearch should query only providers from enabled loaded/degraded plugins',
+);
+
+assertIncludes(
+  globalSearch,
+  'contributions.searchProviders || []',
+  'GlobalSearch should discover Search providers from contribution metadata',
+);
+assertIncludes(
+  globalSearch,
+  'executePluginCommand(provider.pluginId, provider.handler',
+  'GlobalSearch should execute declared Search providers through the generic command runtime',
 );
 assertIncludes(
   globalSearch,

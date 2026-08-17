@@ -82,8 +82,8 @@ test.describe('Command Palette', () => {
     await expect(page.locator('[data-files-create-input]')).toBeVisible();
 
     await page.locator('[data-files-create-input]').fill('Palette Note.md');
-    await page.locator('[data-files-create-confirm]').click();
-    await expect(page.locator('[data-file-name="Palette Note.md"]')).toBeVisible();
+    await page.locator('[data-files-create-modal] .files-modal-btn.confirm').click();
+    await expect(page.locator('[data-resource-path="Project/Palette Note.md"]')).toBeVisible({ timeout: 10000 });
 
     await page.keyboard.press(process.platform === 'darwin' ? 'Meta+K' : 'Control+K');
     palette = page.locator('.command-palette');
@@ -93,8 +93,8 @@ test.describe('Command Palette', () => {
 
     await expect(page.locator('[data-files-create-input]')).toBeVisible();
     await page.locator('[data-files-create-input]').fill('Palette Text.txt');
-    await page.locator('[data-files-create-confirm]').click();
-    await expect(page.locator('[data-file-name="Palette Text.txt"]')).toBeVisible();
+    await page.locator('[data-files-create-modal] .files-modal-btn.confirm').click();
+    await expect(page.locator('[data-resource-path="Project/Palette Text.txt"]')).toBeVisible({ timeout: 10000 });
   });
 
   test('runs sync workflow commands', async ({ page }) => {
