@@ -82,8 +82,8 @@ test.describe('D: Plugin API bridge', () => {
     await page.evaluate(async () => {
       const [result, err] = await window.go.api.App.OpenWorkbenchResource('verstak.platform-test', {
         kind: 'vault-file',
-        path: 'Images/logo.png',
-        extension: '.png',
+        path: 'Unknown/blob.unsupported',
+        extension: '.unsupported',
         context: { sourceView: 'files' },
       });
       if (err) throw new Error(err);
