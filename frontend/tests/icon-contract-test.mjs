@@ -52,10 +52,16 @@ const aliases = new Map(
   [...(aliasBlock?.[1] || '').matchAll(/"([^"]+)":\s*"([^"]+)"/g)].map((m) => [m[1], m[2]]),
 );
 
-const pluginRoots = [
-  path.join(repo, '..', 'verstak-official-plugins', 'plugins'),
-  path.join(repo, 'plugins'),
-];
+// Only the sibling source repository, never `repo/plugins`: that directory is
+// a gitignored install copy, so a plugin left behind by an older
+// install-dev-plugins.sh run fails this assertion on one machine and passes on
+// another. The generator applies the same rule for the same reason.
+const sourcePluginRoot = path.join(repo, '..', 'verstak-official-plugins', 'plugins');
+assert.ok(
+  existsSync(sourcePluginRoot),
+  `verstak-official-plugins must be checked out beside this repository (expected ${sourcePluginRoot})`,
+);
+const pluginRoots = [sourcePluginRoot];
 const missing = [];
 for (const pluginRoot of pluginRoots) {
   if (!existsSync(pluginRoot)) continue;
