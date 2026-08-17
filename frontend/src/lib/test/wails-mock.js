@@ -6,9 +6,11 @@
  */
 import defaultEditorSource from '../../../../../verstak-official-plugins/plugins/default-editor/frontend/src/index.js?raw';
 import filesSource from '../../../../../verstak-official-plugins/plugins/files/frontend/src/index.js?raw';
+import filePreviewSource from '../../../../../verstak-official-plugins/plugins/file-preview/frontend/src/index.js?raw';
 import filesManifest from '../../../../../verstak-official-plugins/plugins/files/plugin.json';
 import platformTestManifest from '../../../../../verstak-official-plugins/plugins/platform-test/plugin.json';
 import defaultEditorManifest from '../../../../../verstak-official-plugins/plugins/default-editor/plugin.json';
+import filePreviewManifest from '../../../../../verstak-official-plugins/plugins/file-preview/plugin.json';
 import trashManifest from '../../../../../verstak-official-plugins/plugins/trash/plugin.json';
 import notesManifest from '../../../../../verstak-official-plugins/plugins/notes/plugin.json';
 import syncManifest from '../../../../../verstak-official-plugins/plugins/sync/plugin.json';
@@ -31,6 +33,8 @@ import activityEnCatalog from '../../../../../verstak-official-plugins/plugins/a
 import activityRuCatalog from '../../../../../verstak-official-plugins/plugins/activity/locales/ru.json';
 import browserEnCatalog from '../../../../../verstak-official-plugins/plugins/browser-inbox/locales/en.json';
 import browserRuCatalog from '../../../../../verstak-official-plugins/plugins/browser-inbox/locales/ru.json';
+import filePreviewEnCatalog from '../../../../../verstak-official-plugins/plugins/file-preview/locales/en.json';
+import filePreviewRuCatalog from '../../../../../verstak-official-plugins/plugins/file-preview/locales/ru.json';
 import journalEnCatalog from '../../../../../verstak-official-plugins/plugins/journal/locales/en.json';
 import journalRuCatalog from '../../../../../verstak-official-plugins/plugins/journal/locales/ru.json';
 import todoEnCatalog from '../../../../../verstak-official-plugins/plugins/todo/locales/en.json';
@@ -52,35 +56,48 @@ import importStyle from '../../../../../verstak-official-plugins/plugins/import/
     };
   }
 
+  var officialPluginFixtures = [
+    [platformTestManifest, 'platform-test'],
+    [defaultEditorManifest, 'default-editor'],
+    [filePreviewManifest, 'file-preview'],
+    [filesManifest, 'files'],
+    [trashManifest, 'trash'],
+    [notesManifest, 'notes'],
+    [syncManifest, 'sync'],
+    [activityManifest, 'activity'],
+    [journalManifest, 'journal'],
+    [browserInboxManifest, 'browser-inbox'],
+    [todoManifest, 'todo'],
+    [secretsManifest, 'secrets'],
+    [importManifest, 'import'],
+    [searchManifest, 'search']
+  ];
+
   function makeDefaultPluginStates() {
-    var fixtures = [
-      [platformTestManifest, 'platform-test'],
-      [defaultEditorManifest, 'default-editor'],
-      [filesManifest, 'files'],
-      [trashManifest, 'trash'],
-      [notesManifest, 'notes'],
-      [syncManifest, 'sync'],
-      [activityManifest, 'activity'],
-      [journalManifest, 'journal'],
-      [browserInboxManifest, 'browser-inbox'],
-      [todoManifest, 'todo'],
-      [secretsManifest, 'secrets'],
-      [importManifest, 'import'],
-      [searchManifest, 'search']
-    ];
     var states = {};
-    fixtures.forEach(function (fixture) {
+    officialPluginFixtures.forEach(function (fixture) {
       states[fixture[0].id] = makePluginState(fixture[0], fixture[1]);
     });
     return states;
   }
 
+  function makeDefaultVaultPluginState() {
+    return {
+      enabledPlugins: officialPluginFixtures.map(function (fixture) { return fixture[0].id; }),
+      disabledPlugins: [],
+      desiredPlugins: officialPluginFixtures.map(function (fixture) {
+        return { id: fixture[0].id, version: fixture[0].version, source: 'official' };
+      })
+    };
+  }
+
   var pluginStates = makeDefaultPluginStates();
 
-  var realOverviewPluginCatalogs = {
+  var realPluginCatalogs = {
     'verstak.notes': { en: notesEnCatalog, ru: notesRuCatalog },
     'verstak.activity': { en: activityEnCatalog, ru: activityRuCatalog },
     'verstak.browser-inbox': { en: browserEnCatalog, ru: browserRuCatalog },
+    'verstak.file-preview': { en: filePreviewEnCatalog, ru: filePreviewRuCatalog },
     'verstak.journal': { en: journalEnCatalog, ru: journalRuCatalog },
     'verstak.todo': { en: todoEnCatalog, ru: todoRuCatalog }
   };
@@ -112,7 +129,7 @@ import importStyle from '../../../../../verstak-official-plugins/plugins/import/
     'verstak.search.vault-text': 'Поиск по тексту хранилища'
   };
   function mockPluginCatalog(pluginId, locale) {
-    var realCatalog = realOverviewPluginCatalogs[pluginId] && realOverviewPluginCatalogs[pluginId][locale];
+    var realCatalog = realPluginCatalogs[pluginId] && realPluginCatalogs[pluginId][locale];
     if (realCatalog) return Object.assign({}, realCatalog);
     var state = pluginStates[pluginId];
     if (!state || !state.manifest) return {};
@@ -140,15 +157,7 @@ import importStyle from '../../../../../verstak-official-plugins/plugins/import/
 
   var vaultStatus = { status: 'open', path: '/tmp/verstak-test/vault', vaultId: 'test-vault-001' };
   var diagnosticsReports = [];
-  var vaultPluginState = { enabledPlugins: ['verstak.platform-test', 'verstak.default-editor', 'verstak.files', 'verstak.notes', 'verstak.sync', 'verstak.activity', 'verstak.journal', 'verstak.browser-inbox', 'verstak.search'], disabledPlugins: [], desiredPlugins: [{ id: 'verstak.platform-test', version: '0.1.0', source: 'official' }, { id: 'verstak.default-editor', version: '0.1.0', source: 'official' }, { id: 'verstak.files', version: '0.1.0', source: 'official' }, { id: 'verstak.notes', version: '0.1.0', source: 'official' }, { id: 'verstak.sync', version: '0.1.0', source: 'official' }, { id: 'verstak.activity', version: '0.1.0', source: 'official' }, { id: 'verstak.journal', version: '0.1.0', source: 'official' }, { id: 'verstak.browser-inbox', version: '0.1.0', source: 'official' }, { id: 'verstak.search', version: '0.1.0', source: 'official' }] };
-  vaultPluginState.enabledPlugins.push('verstak.trash');
-  vaultPluginState.desiredPlugins.push({ id: 'verstak.trash', version: '0.1.0', source: 'official' });
-  vaultPluginState.enabledPlugins.push('verstak.todo');
-  vaultPluginState.desiredPlugins.push({ id: 'verstak.todo', version: '0.1.0', source: 'official' });
-  vaultPluginState.enabledPlugins.push('verstak.secrets');
-  vaultPluginState.desiredPlugins.push({ id: 'verstak.secrets', version: '0.1.0', source: 'official' });
-  vaultPluginState.enabledPlugins.push('verstak.import');
-  vaultPluginState.desiredPlugins.push({ id: 'verstak.import', version: '0.1.0', source: 'official' });
+  var vaultPluginState = makeDefaultVaultPluginState();
   var appSettings = {
     currentVaultPath: '/tmp/verstak-test/vault',
     recentVaults: [],
@@ -2386,6 +2395,9 @@ function cloneJson(value) {
       if (pluginId === defaultEditorManifest.id && assetPath === defaultEditorManifest.frontend.entry) {
         return Promise.resolve(defaultEditorSource);
       }
+      if (pluginId === filePreviewManifest.id && assetPath === filePreviewManifest.frontend.entry) {
+        return Promise.resolve(filePreviewSource);
+      }
       if (pluginId === filesManifest.id && assetPath === filesManifest.frontend.entry) {
         return Promise.resolve(filesSource);
       }
@@ -3077,17 +3089,7 @@ function cloneJson(value) {
     reset: function () {
       pluginStates = makeDefaultPluginStates();
       vaultStatus = { status: 'open', path: '/tmp/verstak-test/vault', vaultId: 'test-vault-001' };
-      vaultPluginState = { enabledPlugins: ['verstak.platform-test', 'verstak.default-editor', 'verstak.files', 'verstak.notes', 'verstak.sync', 'verstak.activity', 'verstak.journal', 'verstak.browser-inbox', 'verstak.search'], disabledPlugins: [], desiredPlugins: [{ id: 'verstak.platform-test', version: '0.1.0', source: 'official' }, { id: 'verstak.default-editor', version: '0.1.0', source: 'official' }, { id: 'verstak.files', version: '0.1.0', source: 'official' }, { id: 'verstak.notes', version: '0.1.0', source: 'official' }, { id: 'verstak.sync', version: '0.1.0', source: 'official' }, { id: 'verstak.activity', version: '0.1.0', source: 'official' }, { id: 'verstak.journal', version: '0.1.0', source: 'official' }, { id: 'verstak.browser-inbox', version: '0.1.0', source: 'official' }, { id: 'verstak.search', version: '0.1.0', source: 'official' }] };
-      vaultPluginState.enabledPlugins.push('verstak.trash');
-      vaultPluginState.desiredPlugins.push({ id: 'verstak.trash', version: '0.1.0', source: 'official' });
-      vaultPluginState.enabledPlugins.push('verstak.todo');
-      vaultPluginState.desiredPlugins.push({ id: 'verstak.todo', version: '0.1.0', source: 'official' });
-      vaultPluginState.enabledPlugins.push('verstak.secrets');
-      vaultPluginState.desiredPlugins.push({ id: 'verstak.secrets', version: '0.1.0', source: 'official' });
-      vaultPluginState.enabledPlugins.push('verstak.import');
-      vaultPluginState.desiredPlugins.push({ id: 'verstak.import', version: '0.1.0', source: 'official' });
-      localStorage.removeItem('verstak-test-language');
-      localStorage.removeItem('verstak-test-sidebar-width');
+      vaultPluginState = makeDefaultVaultPluginState();
       appSettings = { currentVaultPath: '/tmp/verstak-test/vault', recentVaults: [], language: 'system', sidebarWidth: 220, expandedFolderIds: [], settingsSection: '' };
       workbenchPreferences = {};
       openedResources = [];
