@@ -16,28 +16,49 @@ test.describe('D: Plugin API bridge', () => {
   });
 
   test('platform-test reads and writes settings through scoped API after reload', async ({ page }) => {
-    const initial = await page.evaluate(async () => {
-      const api = window.createPluginAPI('verstak.platform-test');
-      return api.storage.settings.read();
-    });
-    expect(initial.savedText).toBe('initial value');
+    await page.locator('.sidebar .plugin-item').filter({ hasText: 'Platform Test' }).click();
+
+    const saved = page.locator('.pt-saved-setting');
+    await expect(saved).toHaveText('Saved setting: initial value', { timeout: 10000 });
+
+    const input = page.locator('.pt-setting-input');
+    await input.fill('persisted through bridge');
+    await page.locator('.pt-save-setting').click();
+    await expect(saved).toHaveText('Saved setting: persisted through bridge', { timeout: 10000 });
+
+    await openPluginManager(page);
+    await expect.poll(() => page.evaluate(() => Boolean(window.__VERSTAK_COMMAND_HANDLERS__?.['verstak.platform-test:verstak.platform-test.show-version']))).toBe(false);
+    await expect.poll(() => page.evaluate(() => (window.__VERSTAK_EVENT_HANDLERS__?.['verstak.platform-test.echo'] || []).length)).toBe(0);
+    await page.locator('[data-plugin-manager-reload]').click();
+    await expect(page.locator('.plugin-card').filter({ hasText: 'verstak.platform-test' }).locator('.status-badge')).toHaveText('loaded', { timeout: 10000 });
+
+    await page.locator('.sidebar .plugin-item').filter({ hasText: 'Platform Test' }).click();
+
+    await expect(page.locator('.pt-saved-setting')).toHaveText('Saved setting: persisted through bridge', { timeout: 10000 });
+    await expect(page.locator('.pt-badge')).toHaveAttribute('data-command-status', 'handled');
+    await expect(page.locator('.pt-badge')).toContainText('capability available');
+    await expect(page.locator('.pt-command-result')).toContainText('Command: handled 0.1.0 from bundled-frontend');
+    await expect(page.locator('.pt-event-result')).toHaveAttribute('data-event-status', 'received');
+    await expect(page.locator('.pt-event-result')).toContainText('Event: received hello-event');
+    await expect(page.locator('.pt-files-result')).toHaveAttribute('data-files-status', 'ok');
+    await expect(page.locator('.pt-files-result')).toContainText('Files: wrote/read/listed/moved/trashed');
+    await expect(page.locator('.pt-files-error-result')).toHaveAttribute('data-files-error-status', 'expected');
+    await expect(page.locator('.pt-files-error-result')).toContainText('Files error path: rejected reserved-path');
 
     await page.evaluate(async () => {
-      const api = window.createPluginAPI('verstak.platform-test');
-      await api.storage.settings.write({ savedText: 'changed from e2e' });
+      const [result, err] = await window.go.api.App.OpenWorkbenchResource('verstak.platform-test', {
+        kind: 'vault-file',
+        path: 'Notes/Overview.md',
+        extension: '.md',
+        context: { sourceView: 'notes', isInsideNotesFolder: true, notesMode: true },
+      });
+      if (err) throw new Error(err);
+      window.dispatchEvent(new CustomEvent('verstak:workbench-opened', { detail: result }));
     });
 
-    await page.locator('[data-sidebar-item="verstak.platform-test.sidebar"]').click();
-    await expect(page.locator('[data-plugin-id="verstak.platform-test"]')).toBeVisible({ timeout: 10000 });
-    await expect(page.locator('[data-platform-settings-value]')).toHaveValue('changed from e2e');
-
-    await page.locator('[data-platform-settings-value]').fill('changed from panel');
-    await page.locator('[data-platform-settings-save]').click();
-    await expect.poll(() => page.evaluate(async () => {
-      const api = window.createPluginAPI('verstak.platform-test');
-      const settings = await api.storage.settings.read();
-      return settings.savedText;
-    })).toBe('changed from panel');
+    const workbench = page.locator('.workbench-host');
+    await expect(workbench).toBeVisible({ timeout: 10000 });
+    await expect(page.locator('.main-content-title-text')).toHaveText('Overview');
   });
 
   test('workbench routes markdown files to default-editor provider', async ({ page }) => {
@@ -88,77 +109,108 @@ test.describe('D: Plugin API bridge', () => {
       const reset = await api.sync.status();
       await api.sync.disconnect();
       const disconnected = await api.sync.status();
+      api.dispose();
       return { initial, configured, syncNow, reset, disconnected };
     });
 
-    expect(result.initial.configured).toBe(false);
+    expect(result.initial.statusLabel).toBe('disabled');
     expect(result.configured.configured).toBe(true);
-    expect(result.configured.intervalMinutes).toBe(15);
-    expect(result.configured.remoteVaultId).toBe('existing-remote-vault');
-    expect(result.syncNow.pushed).toBe(0);
-    expect(result.syncNow.pulled).toBe(0);
-    expect(result.reset.hasKey).toBe(false);
+    expect(result.configured.serverUrl).toBe('https://sync.example.test');
+    expect(result.configured.vaultId).toBe('existing-remote-vault');
+    expect(result.configured.lastWarning).toBe('');
+    expect(result.configured.syncInterval).toBe(15);
+    expect(result.syncNow).toEqual({ pushed: 0, pulled: 0, serverSequence: 0 });
+    expect(result.reset.configured).toBe(false);
+    expect(result.reset.serverUrl).toBe('https://sync.example.test');
+    expect(result.reset.tokenStored).toBe(false);
+    expect(result.reset.statusLabel).toBe('disconnected');
     expect(result.disconnected.configured).toBe(false);
+    expect(result.disconnected.statusLabel).toBe('disabled');
   });
 
   test('files API permanently deletes an existing trash entry through the bridge', async ({ page }) => {
     const result = await page.evaluate(async () => {
-      const api = window.createPluginAPI('verstak.trash');
-      await window.go.api.App.TrashVaultPath('verstak.files', 'Project/Docs/readme.md');
+      const api = window.createPluginAPI('verstak.files');
+      await api.files.writeText('Project/bridge-trash.txt', 'remove me', { createIfMissing: true });
+      const trash = await api.files.trash('Project/bridge-trash.txt');
       const before = await api.files.listTrash();
-      await api.files.deleteTrash(before[0].trashId);
+      await api.files.deleteTrash(trash.trashId);
       const after = await api.files.listTrash();
-      return { before, after };
+      let readError = '';
+      try {
+        await api.files.readText('Project/bridge-trash.txt');
+      } catch (error) {
+        readError = String(error && error.message || error);
+      }
+      api.dispose();
+      return { before, after, readError };
     });
 
     expect(result.before).toHaveLength(1);
-    expect(result.after).toHaveLength(0);
+    expect(result.after).toEqual([]);
+    expect(result.readError).toContain('not-found: Project/bridge-trash.txt');
   });
 
   test('backend plugin events are dispatched to subscribed frontend handlers', async ({ page }) => {
-    const observed = await page.evaluate(async () => {
+    const result = await page.evaluate(async () => {
       const api = window.createPluginAPI('verstak.platform-test');
-      let payload = null;
-      const off = api.events.on('platform-test.event', (value) => { payload = value; });
-      window.dispatchEvent(new CustomEvent('verstak:plugin-event', {
-        detail: { pluginId: 'verstak.platform-test', eventName: 'platform-test.event', payload: { ok: true } },
-      }));
-      await new Promise((resolve) => setTimeout(resolve, 0));
-      off();
-      return payload;
+      let received = null;
+      const unsubscribe = await api.events.subscribe('browser.capture.page', (event) => {
+        received = event;
+      });
+      window.__VERSTAK_DISPATCH_BACKEND_EVENT__({
+        name: 'browser.capture.page',
+        timestamp: '2026-06-27T00:00:00.000Z',
+        payload: { url: 'https://example.com/article' }
+      });
+      unsubscribe();
+      api.dispose();
+      return received;
     });
-    expect(observed).toEqual({ ok: true });
+
+    expect(result.name).toBe('browser.capture.page');
+    expect(result.payload.url).toBe('https://example.com/article');
+    expect(result.timestamp).toBe('2026-06-27T00:00:00.000Z');
   });
 
   test('platform-test command and event handlers are cleaned up after leaving plugin view', async ({ page }) => {
-    await page.locator('[data-sidebar-item="verstak.platform-test.sidebar"]').click();
-    await expect(page.locator('[data-plugin-id="verstak.platform-test"]')).toBeVisible({ timeout: 10000 });
-    await page.locator('[data-workspace-node="workspace-project"]').click();
-    await expect(page.locator('[data-plugin-id="verstak.platform-test"]')).toHaveCount(0);
+    await page.locator('.sidebar .plugin-item').filter({ hasText: 'Platform Test' }).click();
 
-    const cleanup = await page.evaluate(() => window.__verstakPluginRuntimeDiagnostics?.['verstak.platform-test'] || null);
-    expect(cleanup?.commands || 0).toBe(0);
-    expect(cleanup?.events || 0).toBe(0);
+    await expect(page.locator('.pt-command-result')).toContainText('Command: handled', { timeout: 10000 });
+    await expect(page.locator('.pt-event-result')).toHaveAttribute('data-event-status', 'received', { timeout: 10000 });
+    await expect.poll(() => page.evaluate(() => Boolean(window.__VERSTAK_COMMAND_HANDLERS__?.['verstak.platform-test:verstak.platform-test.show-version']))).toBe(true);
+    await expect.poll(() => page.evaluate(() => (window.__VERSTAK_EVENT_HANDLERS__?.['verstak.platform-test.echo'] || []).length)).toBe(1);
+
+    await openPluginManager(page);
+
+    await expect.poll(() => page.evaluate(() => Boolean(window.__VERSTAK_COMMAND_HANDLERS__?.['verstak.platform-test:verstak.platform-test.show-version']))).toBe(false);
+    await expect.poll(() => page.evaluate(() => (window.__VERSTAK_EVENT_HANDLERS__?.['verstak.platform-test.echo'] || []).length)).toBe(0);
   });
 
   test('platform-test cleanup remains empty after disable reload flow', async ({ page }) => {
-    await page.locator('[data-sidebar-item="verstak.platform-test.sidebar"]').click();
-    await expect(page.locator('[data-plugin-id="verstak.platform-test"]')).toBeVisible({ timeout: 10000 });
+    await page.locator('.sidebar .plugin-item').filter({ hasText: 'Platform Test' }).click();
+    await expect(page.locator('.pt-command-result')).toContainText('Command: handled', { timeout: 10000 });
 
     await openPluginManager(page);
-    const card = page.locator('.plugin-card').filter({ hasText: 'verstak.platform-test' });
-    await card.locator('button.btn-disable').click();
-    await expect(card.locator('button.btn-enable')).toBeVisible({ timeout: 10000 });
+    const pluginCard = page.locator('.plugin-card').filter({ hasText: 'verstak.platform-test' });
+    await pluginCard.locator('button.btn-disable').click();
+    await expect(pluginCard.locator('button.btn-enable')).toBeVisible({ timeout: 10000 });
 
-    const cleanup = await page.evaluate(() => window.__verstakPluginRuntimeDiagnostics?.['verstak.platform-test'] || null);
-    expect(cleanup?.commands || 0).toBe(0);
-    expect(cleanup?.events || 0).toBe(0);
+    await expect.poll(() => page.evaluate(() => Boolean(window.__VERSTAK_COMMAND_HANDLERS__?.['verstak.platform-test:verstak.platform-test.show-version']))).toBe(false);
+    await expect.poll(() => page.evaluate(() => (window.__VERSTAK_EVENT_HANDLERS__?.['verstak.platform-test.echo'] || []).length)).toBe(0);
   });
 
   test('platform-test settings panel loads bundle content returned as raw string', async ({ page }) => {
     await openPluginManager(page);
-    const card = page.locator('.plugin-card').filter({ hasText: 'verstak.platform-test' });
-    await expect(card).toBeVisible({ timeout: 10000 });
-    await expect(card).toContainText('1 settingsPanels');
+
+    const pluginCard = page.locator('.plugin-card').filter({ hasText: 'verstak.platform-test' });
+    await pluginCard.locator('button.btn-settings').click();
+
+    // The card is a short path into the settings window, not a second place
+    // where plugin settings live.
+    const content = page.locator('[data-settings-content]');
+    await expect(content).toBeVisible();
+    await expect(content).toContainText('Platform Test Settings');
+    await expect(content.locator('.host-state.error')).toHaveCount(0);
   });
 });
