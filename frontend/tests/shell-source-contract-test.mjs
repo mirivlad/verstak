@@ -59,6 +59,27 @@ assertExcludes(
 
 assertIncludes(
   wailsMock,
+  "plugins/trash/frontend/src/index.js?raw",
+  'E2E should exercise the real official Trash frontend bundle',
+);
+assertIncludes(
+  wailsMock,
+  'Promise.resolve(trashSource)',
+  'E2E Trash asset loading should return the real official source',
+);
+assertExcludes(
+  wailsMock,
+  'function trashPluginBundle()',
+  'E2E should not maintain a divergent synthetic Trash implementation',
+);
+assertExcludes(
+  wailsMock,
+  'Promise.resolve(trashPluginBundle())',
+  'E2E Trash asset loader should never return a synthetic Trash bundle',
+);
+
+assertIncludes(
+  wailsMock,
   "plugins/file-preview/frontend/src/index.js?raw",
   'E2E should exercise the real shipped File Preview frontend bundle',
 );
