@@ -7,6 +7,18 @@
 import defaultEditorSource from '../../../../../verstak-official-plugins/plugins/default-editor/frontend/src/index.js?raw';
 import filesSource from '../../../../../verstak-official-plugins/plugins/files/frontend/src/index.js?raw';
 import filesManifest from '../../../../../verstak-official-plugins/plugins/files/plugin.json';
+import platformTestManifest from '../../../../../verstak-official-plugins/plugins/platform-test/plugin.json';
+import defaultEditorManifest from '../../../../../verstak-official-plugins/plugins/default-editor/plugin.json';
+import trashManifest from '../../../../../verstak-official-plugins/plugins/trash/plugin.json';
+import notesManifest from '../../../../../verstak-official-plugins/plugins/notes/plugin.json';
+import syncManifest from '../../../../../verstak-official-plugins/plugins/sync/plugin.json';
+import activityManifest from '../../../../../verstak-official-plugins/plugins/activity/plugin.json';
+import journalManifest from '../../../../../verstak-official-plugins/plugins/journal/plugin.json';
+import browserInboxManifest from '../../../../../verstak-official-plugins/plugins/browser-inbox/plugin.json';
+import todoManifest from '../../../../../verstak-official-plugins/plugins/todo/plugin.json';
+import secretsManifest from '../../../../../verstak-official-plugins/plugins/secrets/plugin.json';
+import importManifest from '../../../../../verstak-official-plugins/plugins/import/plugin.json';
+import searchManifest from '../../../../../verstak-official-plugins/plugins/search/plugin.json';
 import notesSource from '../../../../../verstak-official-plugins/plugins/notes/frontend/src/index.js?raw';
 import browserInboxSource from '../../../../../verstak-official-plugins/plugins/browser-inbox/frontend/src/index.js?raw';
 import secretsSource from '../../../../../verstak-official-plugins/plugins/secrets/frontend/src/index.js?raw';
@@ -30,288 +42,40 @@ import importStyle from '../../../../../verstak-official-plugins/plugins/import/
   if (window.__wailsMockReady) return;
 
   // ── Mutable state ──────────────────────────────────────────────────
-  var pluginStates = {
-    'verstak.platform-test': {
+  function makePluginState(manifest, slug) {
+    return {
       status: 'loaded',
       enabled: true,
-      manifest: {
-        schemaVersion: 1,
-        id: 'verstak.platform-test',
-        name: 'Platform Test',
-        version: '0.1.0',
-        apiVersion: '0.1.0',
-        description: 'Runtime test plugin for verifying the Verstak platform.',
-        source: 'official',
-        icon: '🧪',
-        provides: ['verstak/platform-test/v1', 'verstak/diagnostics/v1'],
-        requires: ['verstak/core/plugin-manager/v1', 'verstak/core/capability-registry/v1'],
-        optionalRequires: ['verstak/core/vault/v1', 'verstak/core/sync/v1', 'verstak/core/files/v1', 'verstak/core/workbench/v1'],
-        permissions: ['vault.read', 'events.publish', 'events.subscribe', 'ui.register', 'commands.register', 'storage.namespace', 'files.read', 'files.write', 'files.delete', 'files.openExternal', 'workbench.open'],
-        frontend: { entry: 'frontend/dist/index.js' },
-        contributes: {
-          views: [
-            { id: 'verstak.platform-test.diagnostics', title: 'Platform Diagnostics', icon: '🧪', component: 'DiagnosticsPanel' }
-          ],
-          commands: [
-            { id: 'verstak.platform-test.run-tests', title: 'Run Platform Tests', handler: 'runAllTests' },
-            { id: 'verstak.platform-test.show-version', title: 'Show Version Info', handler: 'showVersion' }
-          ],
-          sidebarItems: [
-            { id: 'verstak.platform-test.sidebar', title: 'Platform Test', icon: '🧪', view: 'verstak.platform-test.diagnostics', position: 100 }
-          ],
-          statusBarItems: [
-            { id: 'verstak.platform-test.status', label: '🧪 All Tests Pass', position: 'right', handler: 'openDiagnostics' }
-          ],
-          settingsPanels: [
-            { id: 'verstak.platform-test.settings', title: 'Platform Test Settings', icon: '🧪', component: 'PlatformTestSettings' }
-          ],
-          openProviders: [
-            {
-              id: 'verstak.platform-test.markdown-diagnostic',
-              title: 'Platform Test Markdown Diagnostic',
-              priority: 10,
-              component: 'MarkdownDiagnosticProvider',
-              supports: [
-                { kind: 'vault-file', extensions: ['.md', '.markdown'], contexts: ['generic-markdown', 'notes-markdown'] }
-              ]
-            }
-          ]
-        }
-      },
-      rootPath: '/tmp/verstak-test/plugins/platform-test',
+      manifest: JSON.parse(JSON.stringify(manifest)),
+      rootPath: '/tmp/verstak-test/plugins/' + slug,
       error: ''
-    },
-    'verstak.default-editor': {
-      status: 'loaded',
-      enabled: true,
-      manifest: {
-        schemaVersion: 1,
-        id: 'verstak.default-editor',
-        name: 'Default Editor',
-        version: '0.1.0',
-        apiVersion: '0.1.0',
-        description: 'Built-in text and markdown editor/viewer.',
-        source: 'official',
-        icon: 'edit',
-        provides: ['verstak/default-editor/v1'],
-        requires: ['verstak/core/files/v1', 'verstak/core/workbench/v1'],
-        permissions: ['files.read', 'files.write', 'workbench.open'],
-        frontend: { entry: 'frontend/dist/index.js' },
-        contributes: {
-          openProviders: [
-            {
-              id: 'verstak.default-editor.text',
-              title: 'Default Text Editor',
-              priority: 50,
-              component: 'DefaultEditor',
-              supports: [
-                { kind: 'vault-file', extensions: ['.txt', '.log', '.conf', '.ini', '.toml', '.yaml', '.yml', '.json', '.csv'], mime: ['text/plain', 'application/json'], contexts: ['generic-text'] }
-              ]
-            },
-            {
-              id: 'verstak.default-editor.markdown',
-              title: 'Default Markdown Editor',
-              priority: 50,
-              component: 'DefaultEditor',
-              supports: [
-                { kind: 'vault-file', extensions: ['.md', '.markdown'], contexts: ['generic-markdown'] }
-              ]
-            },
-            {
-              id: 'verstak.default-editor.notes-markdown',
-              title: 'Default Notes Markdown Editor',
-              priority: 50,
-              component: 'DefaultEditor',
-              supports: [
-                { kind: 'vault-file', extensions: ['.md', '.markdown'], contexts: ['notes-markdown'] }
-              ]
-            }
-          ]
-        }
-      },
-      rootPath: '/tmp/verstak-test/plugins/default-editor',
-      error: ''
-    },
-    'verstak.files': {
-      status: 'loaded',
-      enabled: true,
-      manifest: filesManifest,
-      rootPath: '/tmp/verstak-test/plugins/files',
-      error: ''
-    },
-    'verstak.trash': makeTrashPluginState(),
-    'verstak.notes': {
-      status: 'loaded',
-      enabled: true,
-      manifest: {
-        schemaVersion: 1,
-        id: 'verstak.notes',
-        name: 'Notes',
-        version: '0.1.0',
-        apiVersion: '0.1.0',
-        description: 'Deal-scoped notes manager.',
-        source: 'official',
-        icon: 'edit',
-        provides: ['verstak/notes/v1'],
-        requires: ['verstak/core/files/v1', 'verstak/core/workbench/v1'],
-        permissions: ['files.read', 'files.write', 'files.delete', 'events.subscribe', 'workbench.open', 'ui.register'],
-        frontend: { entry: 'frontend/dist/index.js' },
-        contributes: {
-          workspaceItems: [{ id: 'verstak.notes.workspace', title: 'Notes', icon: 'edit', order: 10, component: 'NotesView' }]
-        }
-      },
-      rootPath: '/tmp/verstak-test/plugins/notes',
-      error: ''
-    },
-    'verstak.sync': {
-      status: 'loaded',
-      enabled: true,
-      manifest: {
-        schemaVersion: 1,
-        id: 'verstak.sync',
-        name: 'Sync',
-        version: '0.1.0',
-        apiVersion: '0.1.0',
-        description: 'Synchronize vault data across devices.',
-        source: 'official',
-        icon: 'refresh-cw',
-        provides: ['verstak/sync/v1', 'verstak/sync.status/v1'],
-        requires: ['verstak/core/files/v1'],
-        permissions: ['files.read', 'files.write', 'network.remote', 'storage.namespace', 'sync.participate', 'ui.register'],
-        frontend: { entry: 'frontend/dist/index.js' },
-        contributes: {
-          settingsPanels: [{ id: 'verstak.sync.settings', title: 'Sync', component: 'SyncSettings' }],
-          statusBarItems: [{ id: 'verstak.sync.status', label: 'Sync', position: 'right', handler: 'SyncStatusBar' }]
-        }
-      },
-      rootPath: '/tmp/verstak-test/plugins/sync',
-      error: ''
-    },
-    'verstak.activity': {
-      status: 'loaded',
-      enabled: true,
-      manifest: {
-        schemaVersion: 1,
-        id: 'verstak.activity',
-        name: 'Activity',
-        version: '0.1.0',
-        apiVersion: '0.1.0',
-        description: 'Deal-scoped activity log for public plugin events.',
-        source: 'official',
-        icon: 'activity',
-        provides: ['activity.log', 'activity.provider', 'activity.reconstruction'],
-        permissions: ['events.subscribe', 'storage.namespace', 'ui.register', 'commands.register'],
-        frontend: { entry: 'frontend/dist/index.js' },
-        contributes: {
-          commands: [{ id: 'verstak.activity.suggestWorklog', title: 'List Possible Journal Entries', handler: 'verstak.activity.suggestWorklog' }, { id: 'verstak.activity.listBrowserActivity', title: 'List Browser Activity', handler: 'verstak.activity.listBrowserActivity' }, { id: 'verstak.activity.assignBrowserActivity', title: 'Attach Browser Activity to a Deal', handler: 'verstak.activity.assignBrowserActivity' }],
-          worklogProviders: [{ id: 'verstak.activity.worklog', label: 'Activity', handler: 'verstak.activity.suggestWorklog' }],
-          views: [{ id: 'verstak.activity.view', title: 'Activity', icon: 'activity', component: 'ActivityView' }],
-          sidebarItems: [{ id: 'verstak.activity.sidebar', title: 'Activity', icon: 'activity', view: 'verstak.activity.view', position: 20 }],
-          workspaceItems: [{ id: 'verstak.activity.workspace', title: 'Activity', icon: 'activity', order: 40, component: 'ActivityView' }]
-        }
-      },
-      rootPath: '/tmp/verstak-test/plugins/activity',
-      error: ''
-    },
-    'verstak.journal': {
-      status: 'loaded',
-      enabled: true,
-      manifest: {
-        schemaVersion: 1,
-        id: 'verstak.journal',
-        name: 'Journal',
-        version: '0.1.0',
-        apiVersion: '0.1.0',
-        description: 'Deal-scoped journal with user-authored entries and optional Activity links.',
-        source: 'official',
-        icon: 'book-open',
-        provides: ['worklog', 'journal', 'report.worklog'],
-        permissions: ['events.publish', 'files.read', 'files.write', 'storage.namespace', 'ui.register'],
-        frontend: { entry: 'frontend/dist/index.js' },
-        contributes: {
-          views: [{ id: 'verstak.journal.view', title: 'Journal', icon: 'book-open', component: 'JournalView' }],
-          sidebarItems: [{ id: 'verstak.journal.sidebar', title: 'Journal', icon: 'book-open', view: 'verstak.journal.view', position: 30 }],
-          workspaceItems: [{ id: 'verstak.journal.workspace', title: 'Journal', icon: 'book-open', order: 70, component: 'JournalView' }]
-        }
-      },
-      rootPath: '/tmp/verstak-test/plugins/journal',
-      error: ''
-    },
-    'verstak.browser-inbox': {
-      status: 'loaded',
-      enabled: true,
-      manifest: {
-        schemaVersion: 1,
-        id: 'verstak.browser-inbox',
-        name: 'Browser',
-        version: '0.1.0',
-        apiVersion: '0.1.0',
-        description: 'Global browser materials with explicit Deal assignment.',
-        source: 'official',
-        icon: 'inbox',
-        provides: ['browser.inbox'],
-        permissions: ['events.subscribe', 'files.read', 'storage.namespace', 'ui.register'],
-        frontend: { entry: 'frontend/dist/index.js' },
-        contributes: {
-          views: [{ id: 'verstak.browser-inbox.view', title: 'Browser', icon: 'inbox', component: 'BrowserInboxView' }],
-          sidebarItems: [{ id: 'verstak.browser-inbox.sidebar', title: 'Browser', icon: 'inbox', view: 'verstak.browser-inbox.view', position: 30 }],
-          workspaceItems: [{ id: 'verstak.browser-inbox.workspace', title: 'Browser', icon: 'inbox', order: 50, component: 'BrowserInboxView' }]
-        }
-      },
-      rootPath: '/tmp/verstak-test/plugins/browser-inbox',
-      error: ''
-    },
-    'verstak.todo': makeTodoPluginState(),
-    'verstak.secrets': makeSecretsPluginState(),
-    'verstak.import': makeImportPluginState(),
-    'verstak.search': {
-      status: 'loaded',
-      enabled: true,
-      manifest: {
-        schemaVersion: 1,
-        id: 'verstak.search',
-        name: 'Search',
-        version: '0.1.0',
-        apiVersion: '0.1.0',
-        description: 'Deal-scoped vault text search provider.',
-        source: 'official',
-        icon: 'search',
-        provides: ['verstak/search/v1', 'search.provider'],
-        requires: ['verstak/core/files/v1', 'verstak/core/workbench/v1'],
-        permissions: ['files.read', 'workbench.open', 'storage.namespace', 'ui.register', 'events.subscribe', 'commands.register'],
-        frontend: { entry: 'frontend/dist/index.js' },
-        contributes: {
-          workspaceItems: [{ id: 'verstak.search.workspace', title: 'Search', icon: 'search', order: 90, component: 'SearchView' }],
-          commands: [{ id: 'verstak.search.searchVaultText', title: 'Search Vault Text', handler: 'verstak.search.searchVaultText' }],
-          searchProviders: [{ id: 'verstak.search.vault-text', label: 'Vault Text Search', handler: 'verstak.search.searchVaultText' }]
-        }
-      },
-      rootPath: '/tmp/verstak-test/plugins/search',
-      error: ''
-    }
-  };
+    };
+  }
 
-  var overviewProviderDefs = {
-    'verstak.notes': { id: 'verstak.notes.overview', handler: 'verstak.notes.provideOverview', label: 'Notes' },
-    'verstak.activity': { id: 'verstak.activity.overview', handler: 'verstak.activity.provideOverview', label: 'Activity' },
-    'verstak.browser-inbox': { id: 'verstak.browser-inbox.overview', handler: 'verstak.browser-inbox.provideOverview', label: 'Browser' },
-    'verstak.journal': { id: 'verstak.journal.overview', handler: 'verstak.journal.provideOverview', label: 'Journal' },
-    'verstak.todo': { id: 'verstak.todo.overview', handler: 'verstak.todo.provideOverview', label: 'Todo' }
-  };
-  Object.keys(overviewProviderDefs).forEach(function (pluginId) {
-    var state = pluginStates[pluginId];
-    if (!state || !state.manifest) return;
-    var manifest = state.manifest;
-    var provider = overviewProviderDefs[pluginId];
-    manifest.permissions = manifest.permissions || [];
-    if (manifest.permissions.indexOf('commands.register') === -1) manifest.permissions.push('commands.register');
-    manifest.contributes = manifest.contributes || {};
-    manifest.contributes.commands = manifest.contributes.commands || [];
-    if (!manifest.contributes.commands.some(function (item) { return item.id === provider.handler; })) {
-      manifest.contributes.commands.push({ id: provider.handler, title: 'Provide Overview Signals', handler: provider.handler });
-    }
-    manifest.contributes.overviewProviders = [{ id: provider.id, label: provider.label, handler: provider.handler }];
-  });
+  function makeDefaultPluginStates() {
+    var fixtures = [
+      [platformTestManifest, 'platform-test'],
+      [defaultEditorManifest, 'default-editor'],
+      [filesManifest, 'files'],
+      [trashManifest, 'trash'],
+      [notesManifest, 'notes'],
+      [syncManifest, 'sync'],
+      [activityManifest, 'activity'],
+      [journalManifest, 'journal'],
+      [browserInboxManifest, 'browser-inbox'],
+      [todoManifest, 'todo'],
+      [secretsManifest, 'secrets'],
+      [importManifest, 'import'],
+      [searchManifest, 'search']
+    ];
+    var states = {};
+    fixtures.forEach(function (fixture) {
+      states[fixture[0].id] = makePluginState(fixture[0], fixture[1]);
+    });
+    return states;
+  }
+
+  var pluginStates = makeDefaultPluginStates();
 
   var realOverviewPluginCatalogs = {
     'verstak.notes': { en: notesEnCatalog, ru: notesRuCatalog },
@@ -347,14 +111,6 @@ import importStyle from '../../../../../verstak-official-plugins/plugins/import/
     'verstak.search.searchVaultText': 'Искать текст в хранилище',
     'verstak.search.vault-text': 'Поиск по тексту хранилища'
   };
-  Object.keys(pluginStates).forEach(function (pluginId) {
-    var manifest = pluginStates[pluginId].manifest;
-    manifest.localization = {
-      defaultLocale: 'en',
-      locales: { en: 'locales/en.json', ru: 'locales/ru.json' }
-    };
-  });
-
   function mockPluginCatalog(pluginId, locale) {
     var realCatalog = realOverviewPluginCatalogs[pluginId] && realOverviewPluginCatalogs[pluginId][locale];
     if (realCatalog) return Object.assign({}, realCatalog);
@@ -614,121 +370,6 @@ function cloneJson(value) {
       'Project/project-only.txt': { type: 'file', content: 'project file', modifiedAt: new Date().toISOString() },
       'Test': { type: 'folder', modifiedAt: new Date().toISOString() },
       'Test/test-only.txt': { type: 'file', content: 'test file', modifiedAt: new Date().toISOString() }
-    };
-  }
-
-  function makeTrashPluginState() {
-    return {
-      status: 'loaded',
-      enabled: true,
-      manifest: {
-        schemaVersion: 1,
-        id: 'verstak.trash',
-        name: 'Trash',
-        version: '0.1.0',
-        apiVersion: '0.1.0',
-        description: 'Global vault trash manager for deleted files and folders.',
-        source: 'official',
-        icon: 'trash',
-        provides: ['trash.management'],
-        requires: ['verstak/core/files/v1'],
-        permissions: ['files.delete', 'files.write', 'ui.register'],
-        frontend: { entry: 'frontend/dist/index.js' },
-        contributes: {
-          views: [{ id: 'verstak.trash.view', title: 'Trash', icon: 'trash', component: 'TrashView' }],
-          sidebarItems: [{ id: 'verstak.trash.sidebar', title: 'Trash', icon: 'trash', view: 'verstak.trash.view', position: 40 }]
-        }
-      },
-      rootPath: '/tmp/verstak-test/plugins/trash',
-      error: ''
-    };
-  }
-
-  function makeTodoPluginState() {
-    return {
-      status: 'loaded',
-      enabled: true,
-      manifest: {
-        schemaVersion: 1,
-        id: 'verstak.todo',
-        name: 'Todos',
-        version: '0.1.0',
-        apiVersion: '0.1.0',
-        description: 'Global and Deal-scoped todo tracking with due and reminder metadata.',
-        source: 'official',
-        icon: 'list-todo',
-        provides: ['todo.list', 'todo.workspace'],
-        requires: ['verstak/core/notifications/v1'],
-        permissions: ['events.subscribe', 'files.read', 'storage.namespace', 'ui.register', 'notifications.schedule'],
-        frontend: { entry: 'frontend/dist/index.js' },
-        contributes: {
-          views: [{ id: 'verstak.todo.view', title: 'Todos', icon: 'list-todo', component: 'TodoView' }],
-          sidebarItems: [{ id: 'verstak.todo.sidebar', title: 'Todos', icon: 'list-todo', view: 'verstak.todo.view', position: 35 }],
-          workspaceItems: [{ id: 'verstak.todo.workspace', title: 'Todos', icon: 'list-todo', order: 30, component: 'TodoView' }]
-        }
-      },
-      rootPath: '/tmp/verstak-test/plugins/todo',
-      error: ''
-    };
-  }
-
-  function makeSecretsPluginState() {
-    return {
-      status: 'loaded',
-      enabled: true,
-      manifest: {
-        schemaVersion: 1,
-        id: 'verstak.secrets',
-        name: 'Secrets',
-        version: '0.1.0',
-        apiVersion: '0.1.0',
-        description: 'Encrypted global and Deal-scoped secret manager.',
-        source: 'official',
-        icon: 'key-round',
-        provides: ['secret-store', 'secrets.read-ui', 'secrets.write-ui'],
-        permissions: ['files.read', 'secrets.read', 'secrets.write', 'ui.register'],
-        frontend: { entry: 'frontend/src/index.js' },
-        contributes: {
-          views: [{ id: 'verstak.secrets.view', title: 'Secrets', icon: 'key-round', component: 'SecretsView' }],
-          sidebarItems: [{ id: 'verstak.secrets.sidebar', title: 'Secrets', icon: 'key-round', view: 'verstak.secrets.view', position: 45 }],
-          openProviders: [{
-            id: 'verstak.secrets.secret',
-            title: 'Secrets',
-            priority: 100,
-            component: 'SecretsView',
-            supports: [{ kind: 'secret', modes: ['view'] }]
-          }],
-          workspaceItems: [{ id: 'verstak.secrets.workspace', title: 'Secrets', icon: 'key-round', order: 60, component: 'SecretsView' }]
-        }
-      },
-      rootPath: '/tmp/verstak-test/plugins/secrets',
-      error: ''
-    };
-  }
-
-  function makeImportPluginState() {
-    return {
-      status: 'loaded',
-      enabled: true,
-      manifest: {
-        schemaVersion: 1,
-        id: 'verstak.import',
-        name: 'Import',
-        version: '0.1.0',
-        apiVersion: '0.1.0',
-        description: 'Review and import current DokuWiki or Obsidian content.',
-        source: 'official',
-        icon: 'archive-restore',
-        provides: ['verstak/import/v1'],
-        requires: ['verstak/core/import/v1'],
-        permissions: ['imports.readExternal', 'imports.apply', 'storage.namespace', 'ui.register'],
-        frontend: { entry: 'frontend/dist/index.js', style: 'frontend/dist/style.css' },
-        contributes: {
-          settingsPanels: [{ id: 'verstak.import.settings', title: 'Import', component: 'ImportSettings' }]
-        }
-      },
-      rootPath: '/tmp/verstak-test/plugins/import',
-      error: ''
     };
   }
 
@@ -2738,46 +2379,46 @@ function cloneJson(value) {
       return Promise.resolve([{ pushed: 0, pulled: 0, serverSequence: syncState.serverSequence }, '']);
     },
     GetPluginAssetContent: function (pluginId, assetPath) {
-      if (pluginId === 'verstak.platform-test' && assetPath === 'frontend/dist/index.js') {
+      if (pluginId === platformTestManifest.id && assetPath === platformTestManifest.frontend.entry) {
         return Promise.resolve(platformTestBundle());
       }
-      if (pluginId === 'verstak.default-editor') {
+      if (pluginId === defaultEditorManifest.id && assetPath === defaultEditorManifest.frontend.entry) {
         return Promise.resolve(defaultEditorSource);
       }
-      if (pluginId === 'verstak.files' && assetPath === filesManifest.frontend.entry) {
+      if (pluginId === filesManifest.id && assetPath === filesManifest.frontend.entry) {
         return Promise.resolve(filesSource);
       }
-      if (pluginId === 'verstak.trash' && assetPath === 'frontend/dist/index.js') {
+      if (pluginId === trashManifest.id && assetPath === trashManifest.frontend.entry) {
         return Promise.resolve(trashPluginBundle());
       }
-      if (pluginId === 'verstak.notes' && assetPath === 'frontend/dist/index.js') {
+      if (pluginId === notesManifest.id && assetPath === notesManifest.frontend.entry) {
         return Promise.resolve(notesSource);
       }
-      if (pluginId === 'verstak.sync' && assetPath === 'frontend/dist/index.js') {
+      if (pluginId === syncManifest.id && assetPath === syncManifest.frontend.entry) {
         return Promise.resolve(syncPluginBundle());
       }
-      if (pluginId === 'verstak.activity') {
+      if (pluginId === activityManifest.id && assetPath === activityManifest.frontend.entry) {
         return Promise.resolve(activitySource);
       }
-      if (pluginId === 'verstak.journal' && assetPath === 'frontend/dist/index.js') {
+      if (pluginId === journalManifest.id && assetPath === journalManifest.frontend.entry) {
         return Promise.resolve(journalSource);
       }
-      if (pluginId === 'verstak.browser-inbox' && assetPath === 'frontend/dist/index.js') {
+      if (pluginId === browserInboxManifest.id && assetPath === browserInboxManifest.frontend.entry) {
         return Promise.resolve(browserInboxSource);
       }
-      if (pluginId === 'verstak.todo' && assetPath === 'frontend/dist/index.js') {
+      if (pluginId === todoManifest.id && assetPath === todoManifest.frontend.entry) {
         return Promise.resolve(todoSource);
       }
-      if (pluginId === 'verstak.secrets') {
+      if (pluginId === secretsManifest.id && assetPath === secretsManifest.frontend.entry) {
         return Promise.resolve(secretsSource);
       }
-      if (pluginId === 'verstak.search' && assetPath === 'frontend/dist/index.js') {
+      if (pluginId === searchManifest.id && assetPath === searchManifest.frontend.entry) {
         return Promise.resolve(searchPluginBundle());
       }
-      if (pluginId === 'verstak.import' && assetPath === 'frontend/dist/index.js') {
+      if (pluginId === importManifest.id && assetPath === importManifest.frontend.entry) {
         return Promise.resolve(importSource);
       }
-      if (pluginId === 'verstak.import' && assetPath === 'frontend/dist/style.css') {
+      if (pluginId === importManifest.id && assetPath === importManifest.frontend.style) {
         return Promise.resolve(importStyle);
       }
       return Promise.resolve('');
@@ -3417,266 +3058,7 @@ function cloneJson(value) {
   // ── Test helpers (exposed for Playwright) ──────────────────────────
   window.__wailsMock = {
     reset: function () {
-      pluginStates = {
-        'verstak.platform-test': {
-          status: 'loaded',
-          enabled: true,
-          manifest: {
-            schemaVersion: 1,
-            id: 'verstak.platform-test',
-            name: 'Platform Test',
-            version: '0.1.0',
-            apiVersion: '0.1.0',
-            description: 'Runtime test plugin for verifying the Verstak platform.',
-            source: 'official',
-            icon: '🧪',
-            provides: ['verstak/platform-test/v1', 'verstak/diagnostics/v1'],
-            requires: ['verstak/core/plugin-manager/v1', 'verstak/core/capability-registry/v1'],
-            optionalRequires: ['verstak/core/vault/v1', 'verstak/core/sync/v1', 'verstak/core/files/v1', 'verstak/core/workbench/v1'],
-            permissions: ['vault.read', 'events.publish', 'events.subscribe', 'ui.register', 'commands.register', 'storage.namespace', 'files.read', 'files.write', 'files.delete', 'files.openExternal', 'workbench.open'],
-            frontend: { entry: 'frontend/dist/index.js' },
-            contributes: {
-              views: [
-                { id: 'verstak.platform-test.diagnostics', title: 'Platform Diagnostics', icon: '🧪', component: 'DiagnosticsPanel' }
-              ],
-              commands: [
-                { id: 'verstak.platform-test.run-tests', title: 'Run Platform Tests', handler: 'runAllTests' },
-                { id: 'verstak.platform-test.show-version', title: 'Show Version Info', handler: 'showVersion' }
-              ],
-              sidebarItems: [
-                { id: 'verstak.platform-test.sidebar', title: 'Platform Test', icon: '🧪', view: 'verstak.platform-test.diagnostics', position: 100 }
-              ],
-              statusBarItems: [
-                { id: 'verstak.platform-test.status', label: '🧪 All Tests Pass', position: 'right', handler: 'openDiagnostics' }
-              ],
-              settingsPanels: [
-                { id: 'verstak.platform-test.settings', title: 'Platform Test Settings', icon: '🧪', component: 'PlatformTestSettings' }
-              ],
-              openProviders: [
-                {
-                  id: 'verstak.platform-test.markdown-diagnostic',
-                  title: 'Platform Test Markdown Diagnostic',
-                  priority: 10,
-                  component: 'MarkdownDiagnosticProvider',
-                  supports: [
-                    { kind: 'vault-file', extensions: ['.md', '.markdown'], contexts: ['generic-markdown', 'notes-markdown'] }
-                  ]
-                }
-              ]
-            }
-          },
-          rootPath: '/tmp/verstak-test/plugins/platform-test',
-          error: ''
-        },
-        'verstak.default-editor': {
-          status: 'loaded',
-          enabled: true,
-          manifest: {
-            schemaVersion: 1,
-            id: 'verstak.default-editor',
-            name: 'Default Editor',
-            version: '0.1.0',
-            apiVersion: '0.1.0',
-            description: 'Built-in text and markdown editor/viewer.',
-            source: 'official',
-            icon: 'edit',
-            provides: ['verstak/default-editor/v1'],
-            requires: ['verstak/core/files/v1', 'verstak/core/workbench/v1'],
-            permissions: ['files.read', 'files.write', 'workbench.open'],
-            frontend: { entry: 'frontend/dist/index.js' },
-            contributes: {
-              openProviders: [
-                {
-                  id: 'verstak.default-editor.text',
-                  title: 'Default Text Editor',
-                  priority: 50,
-                  component: 'DefaultEditor',
-                  supports: [
-                    { kind: 'vault-file', extensions: ['.txt', '.log', '.conf', '.ini', '.toml', '.yaml', '.yml', '.json', '.csv'], mime: ['text/plain', 'application/json'], contexts: ['generic-text'] }
-                  ]
-                },
-                {
-                  id: 'verstak.default-editor.markdown',
-                  title: 'Default Markdown Editor',
-                  priority: 50,
-                  component: 'DefaultEditor',
-                  supports: [
-                    { kind: 'vault-file', extensions: ['.md', '.markdown'], contexts: ['generic-markdown'] }
-                  ]
-                },
-                {
-                  id: 'verstak.default-editor.notes-markdown',
-                  title: 'Default Notes Markdown Editor',
-                  priority: 50,
-                  component: 'DefaultEditor',
-                  supports: [
-                    { kind: 'vault-file', extensions: ['.md', '.markdown'], contexts: ['notes-markdown'] }
-                  ]
-                }
-              ]
-            }
-          },
-          rootPath: '/tmp/verstak-test/plugins/default-editor',
-          error: ''
-        },
-        'verstak.files': {
-          status: 'loaded',
-          enabled: true,
-          manifest: filesManifest,
-          rootPath: '/tmp/verstak-test/plugins/files',
-          error: ''
-        },
-        'verstak.trash': makeTrashPluginState(),
-        'verstak.notes': {
-          status: 'loaded',
-          enabled: true,
-          manifest: {
-            schemaVersion: 1,
-            id: 'verstak.notes',
-            name: 'Notes',
-            version: '0.1.0',
-            apiVersion: '0.1.0',
-            description: 'Deal-scoped notes manager.',
-            source: 'official',
-            icon: 'edit',
-            provides: ['verstak/notes/v1'],
-            requires: ['verstak/core/files/v1', 'verstak/core/workbench/v1'],
-            permissions: ['files.read', 'files.write', 'files.delete', 'events.subscribe', 'workbench.open', 'ui.register'],
-            frontend: { entry: 'frontend/dist/index.js' },
-            contributes: {
-              workspaceItems: [{ id: 'verstak.notes.workspace', title: 'Notes', icon: 'edit', order: 10, component: 'NotesView' }]
-            }
-          },
-          rootPath: '/tmp/verstak-test/plugins/notes',
-          error: ''
-        },
-        'verstak.sync': {
-          status: 'loaded',
-          enabled: true,
-          manifest: {
-            schemaVersion: 1,
-            id: 'verstak.sync',
-            name: 'Sync',
-            version: '0.1.0',
-            apiVersion: '0.1.0',
-            description: 'Synchronize vault data across devices.',
-            source: 'official',
-            icon: 'refresh-cw',
-            provides: ['verstak/sync/v1', 'verstak/sync.status/v1'],
-            requires: ['verstak/core/files/v1'],
-            permissions: ['files.read', 'files.write', 'network.remote', 'storage.namespace', 'sync.participate', 'ui.register'],
-            frontend: { entry: 'frontend/dist/index.js' },
-            contributes: {
-              settingsPanels: [{ id: 'verstak.sync.settings', title: 'Sync', component: 'SyncSettings' }],
-              statusBarItems: [{ id: 'verstak.sync.status', label: 'Sync', position: 'right', handler: 'SyncStatusBar' }]
-            }
-          },
-          rootPath: '/tmp/verstak-test/plugins/sync',
-          error: ''
-        },
-        'verstak.activity': {
-          status: 'loaded',
-          enabled: true,
-          manifest: {
-            schemaVersion: 1,
-            id: 'verstak.activity',
-            name: 'Activity',
-            version: '0.1.0',
-            apiVersion: '0.1.0',
-            description: 'Deal-scoped activity log for public plugin events.',
-            source: 'official',
-            icon: 'activity',
-            provides: ['activity.log', 'activity.provider', 'activity.reconstruction'],
-            permissions: ['events.subscribe', 'storage.namespace', 'ui.register', 'commands.register'],
-            frontend: { entry: 'frontend/dist/index.js' },
-            contributes: {
-              commands: [{ id: 'verstak.activity.suggestWorklog', title: 'List Possible Journal Entries', handler: 'verstak.activity.suggestWorklog' }, { id: 'verstak.activity.listBrowserActivity', title: 'List Browser Activity', handler: 'verstak.activity.listBrowserActivity' }, { id: 'verstak.activity.assignBrowserActivity', title: 'Attach Browser Activity to a Deal', handler: 'verstak.activity.assignBrowserActivity' }],
-              worklogProviders: [{ id: 'verstak.activity.worklog', label: 'Activity', handler: 'verstak.activity.suggestWorklog' }],
-              views: [{ id: 'verstak.activity.view', title: 'Activity', icon: 'activity', component: 'ActivityView' }],
-              sidebarItems: [{ id: 'verstak.activity.sidebar', title: 'Activity', icon: 'activity', view: 'verstak.activity.view', position: 20 }],
-              workspaceItems: [{ id: 'verstak.activity.workspace', title: 'Activity', icon: 'activity', order: 40, component: 'ActivityView' }]
-            }
-          },
-          rootPath: '/tmp/verstak-test/plugins/activity',
-          error: ''
-        },
-        'verstak.journal': {
-          status: 'loaded',
-          enabled: true,
-          manifest: {
-            schemaVersion: 1,
-            id: 'verstak.journal',
-            name: 'Journal',
-            version: '0.1.0',
-            apiVersion: '0.1.0',
-            description: 'Deal-scoped journal with user-authored entries and optional Activity links.',
-            source: 'official',
-            icon: 'book-open',
-            provides: ['worklog', 'journal', 'report.worklog'],
-            permissions: ['events.publish', 'files.read', 'files.write', 'storage.namespace', 'ui.register'],
-            frontend: { entry: 'frontend/dist/index.js' },
-            contributes: {
-              views: [{ id: 'verstak.journal.view', title: 'Journal', icon: 'book-open', component: 'JournalView' }],
-              sidebarItems: [{ id: 'verstak.journal.sidebar', title: 'Journal', icon: 'book-open', view: 'verstak.journal.view', position: 30 }],
-              workspaceItems: [{ id: 'verstak.journal.workspace', title: 'Journal', icon: 'book-open', order: 70, component: 'JournalView' }]
-            }
-          },
-          rootPath: '/tmp/verstak-test/plugins/journal',
-          error: ''
-        },
-        'verstak.browser-inbox': {
-          status: 'loaded',
-          enabled: true,
-          manifest: {
-            schemaVersion: 1,
-            id: 'verstak.browser-inbox',
-            name: 'Browser',
-            version: '0.1.0',
-            apiVersion: '0.1.0',
-            description: 'Global browser materials with explicit Deal assignment.',
-            source: 'official',
-            icon: 'inbox',
-            provides: ['browser.inbox'],
-            permissions: ['events.subscribe', 'files.read', 'storage.namespace', 'ui.register'],
-            frontend: { entry: 'frontend/dist/index.js' },
-            contributes: {
-              views: [{ id: 'verstak.browser-inbox.view', title: 'Browser', icon: 'inbox', component: 'BrowserInboxView' }],
-              sidebarItems: [{ id: 'verstak.browser-inbox.sidebar', title: 'Browser', icon: 'inbox', view: 'verstak.browser-inbox.view', position: 30 }],
-              workspaceItems: [{ id: 'verstak.browser-inbox.workspace', title: 'Browser', icon: 'inbox', order: 50, component: 'BrowserInboxView' }]
-            }
-          },
-          rootPath: '/tmp/verstak-test/plugins/browser-inbox',
-          error: ''
-        },
-        'verstak.todo': makeTodoPluginState(),
-        'verstak.secrets': makeSecretsPluginState(),
-        'verstak.import': makeImportPluginState(),
-        'verstak.search': {
-          status: 'loaded',
-          enabled: true,
-          manifest: {
-            schemaVersion: 1,
-            id: 'verstak.search',
-            name: 'Search',
-            version: '0.1.0',
-            apiVersion: '0.1.0',
-            description: 'Deal-scoped vault text search provider.',
-            source: 'official',
-            icon: 'search',
-            provides: ['verstak/search/v1', 'search.provider'],
-            requires: ['verstak/core/files/v1', 'verstak/core/workbench/v1'],
-            permissions: ['files.read', 'workbench.open', 'storage.namespace', 'ui.register', 'events.subscribe', 'commands.register'],
-            frontend: { entry: 'frontend/dist/index.js' },
-            contributes: {
-              workspaceItems: [{ id: 'verstak.search.workspace', title: 'Search', icon: 'search', order: 90, component: 'SearchView' }],
-              commands: [{ id: 'verstak.search.searchVaultText', title: 'Search Vault Text', handler: 'verstak.search.searchVaultText' }],
-              searchProviders: [{ id: 'verstak.search.vault-text', label: 'Vault Text Search', handler: 'verstak.search.searchVaultText' }]
-            }
-          },
-          rootPath: '/tmp/verstak-test/plugins/search',
-          error: ''
-        }
-      };
+      pluginStates = makeDefaultPluginStates();
       vaultStatus = { status: 'open', path: '/tmp/verstak-test/vault', vaultId: 'test-vault-001' };
       vaultPluginState = { enabledPlugins: ['verstak.platform-test', 'verstak.default-editor', 'verstak.files', 'verstak.notes', 'verstak.sync', 'verstak.activity', 'verstak.journal', 'verstak.browser-inbox', 'verstak.search'], disabledPlugins: [], desiredPlugins: [{ id: 'verstak.platform-test', version: '0.1.0', source: 'official' }, { id: 'verstak.default-editor', version: '0.1.0', source: 'official' }, { id: 'verstak.files', version: '0.1.0', source: 'official' }, { id: 'verstak.notes', version: '0.1.0', source: 'official' }, { id: 'verstak.sync', version: '0.1.0', source: 'official' }, { id: 'verstak.activity', version: '0.1.0', source: 'official' }, { id: 'verstak.journal', version: '0.1.0', source: 'official' }, { id: 'verstak.browser-inbox', version: '0.1.0', source: 'official' }, { id: 'verstak.search', version: '0.1.0', source: 'official' }] };
       vaultPluginState.enabledPlugins.push('verstak.trash');

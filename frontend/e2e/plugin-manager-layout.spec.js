@@ -84,7 +84,10 @@ test.describe('E: Plugin Manager layout', () => {
 
     const risk = page.locator('[data-plugin-manager-summary="risk"]');
     await expect(risk).toBeVisible();
-    await expect(risk.locator('[data-plugin-risk-summary="elevated-permissions"]')).toContainText('8');
+    const elevatedCards = page.locator('.plugin-card').filter({ has: page.locator('.tag.dangerous') });
+    const elevatedCount = await elevatedCards.count();
+    expect(elevatedCount).toBeGreaterThan(0);
+    await expect(risk.locator('[data-plugin-risk-summary="elevated-permissions"]')).toContainText(String(elevatedCount));
     await expect(risk).toContainText('elevated permissions');
   });
 

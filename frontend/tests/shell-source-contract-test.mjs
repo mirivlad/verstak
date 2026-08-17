@@ -41,11 +41,6 @@ assertIncludes(
 );
 assertIncludes(
   wailsMock,
-  'manifest: filesManifest',
-  'E2E Files plugin state should use the real official manifest',
-);
-assertIncludes(
-  wailsMock,
   "assetPath === filesManifest.frontend.entry",
   'E2E Files bundle should be loaded through the entry declared by the real manifest',
 );
@@ -58,6 +53,57 @@ assertExcludes(
   wailsMock,
   'function filesPluginBundle()',
   'E2E should not maintain a divergent synthetic Files implementation',
+);
+
+const officialManifestFixtures = [
+  ['platform-test', 'platformTestManifest'],
+  ['default-editor', 'defaultEditorManifest'],
+  ['files', 'filesManifest'],
+  ['trash', 'trashManifest'],
+  ['notes', 'notesManifest'],
+  ['sync', 'syncManifest'],
+  ['activity', 'activityManifest'],
+  ['journal', 'journalManifest'],
+  ['browser-inbox', 'browserInboxManifest'],
+  ['todo', 'todoManifest'],
+  ['secrets', 'secretsManifest'],
+  ['import', 'importManifest'],
+  ['search', 'searchManifest'],
+];
+for (const [slug, binding] of officialManifestFixtures) {
+  assertIncludes(
+    wailsMock,
+    `plugins/${slug}/plugin.json`,
+    `E2E should import the real official manifest for ${slug}`,
+  );
+  assertIncludes(
+    wailsMock,
+    `[${binding}, '${slug}']`,
+    `E2E plugin state should be built from the real ${slug} manifest`,
+  );
+  assertIncludes(
+    wailsMock,
+    `pluginId === ${binding}.id && assetPath === ${binding}.frontend.entry`,
+    `E2E asset loading should follow the real ${slug} frontend entry`,
+  );
+}
+for (const staleFactory of [
+  'makeTrashPluginState',
+  'makeTodoPluginState',
+  'makeSecretsPluginState',
+  'makeImportPluginState',
+  'overviewProviderDefs',
+]) {
+  assertExcludes(
+    wailsMock,
+    staleFactory,
+    `E2E should not reconstruct official manifest metadata through ${staleFactory}`,
+  );
+}
+assertIncludes(
+  wailsMock,
+  'pluginStates = makeDefaultPluginStates();',
+  'E2E reset should restore fresh clones from the same official manifests',
 );
 
 assertIncludes(
