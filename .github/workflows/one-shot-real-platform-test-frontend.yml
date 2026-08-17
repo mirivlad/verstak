@@ -1,0 +1,77 @@
+name: one-shot-real-platform-test-frontend
+
+on:
+  push:
+    branches:
+      - audit/official-plugin-runtime-alignment
+
+permissions:
+  contents: write
+
+concurrency:
+  group: one-shot-real-platform-test-frontend
+  cancel-in-progress: true
+
+jobs:
+  migrate:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: audit/official-plugin-runtime-alignment
+
+      - name: Check out current official plugins
+        uses: actions/checkout@v4
+        with:
+          repository: mirivlad/verstak-official-plugins
+          ref: main
+          path: verstak-official-plugins
+
+      - name: Put official plugins beside desktop
+        run: mv verstak-official-plugins ../verstak-official-plugins
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        run: npm ci --no-audit --no-fund
+        working-directory: frontend
+
+      - name: Build current official plugins
+        run: bash ../verstak-official-plugins/scripts/build.sh
+
+      - name: Apply real Platform Test frontend migration
+        run: python3 .github/scripts/patch_real_platform_test_frontend.py
+
+      - name: Build frontend
+        run: npm run build
+        working-directory: frontend
+
+      - name: Run shell source contract
+        run: node frontend/tests/shell-source-contract-test.mjs
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+        working-directory: frontend
+
+      - name: Run Platform Test E2E
+        run: npx playwright test e2e/plugin-api-bridge.spec.js e2e/plugin-manager-layout.spec.js e2e/plugin-localization.spec.js --config playwright.config.js
+        working-directory: frontend
+
+      - name: Run full E2E
+        run: npm run test:e2e
+        working-directory: frontend
+
+      - name: Commit permanent Platform Test migration
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add frontend/src/lib/test/wails-mock.js frontend/tests/shell-source-contract-test.mjs
+          git diff --cached --check
+          git diff --cached --quiet && exit 0
+          git commit -m "test: use real Platform Test frontend in E2E"
+          git push origin HEAD:audit/official-plugin-runtime-alignment
