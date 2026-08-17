@@ -85,7 +85,8 @@ text = replace_once(
     "file preview real locale catalog",
 )
 
-# Replace both hand-maintained vault inventories: initial state and reset().
+# Replace both hand-maintained default vault inventories: initial state and
+# reset(). Runtime EnablePlugin/test helpers are allowed to mutate the arrays.
 initial_start = text.index("  var vaultPluginState = {")
 initial_end = text.index("  var appSettings = {", initial_start)
 text = text[:initial_start] + "  var vaultPluginState = makeDefaultVaultPluginState();\n" + text[initial_end:]
@@ -105,8 +106,12 @@ asset_addition = asset_anchor + """      if (pluginId === filePreviewManifest.id
 """
 text = replace_once(text, asset_anchor, asset_addition, "file preview asset loader")
 
-if "vaultPluginState.enabledPlugins.push(" in text:
-    raise SystemExit("manual vault plugin inventory still present")
+for stale_inventory in (
+    "  var vaultPluginState = { enabledPlugins:",
+    "      vaultPluginState = { enabledPlugins:",
+):
+    if stale_inventory in text:
+        raise SystemExit("manual default vault plugin inventory still present")
 path.write_text(text)
 
 # Lock the single-catalog model and File Preview's real bundle into the source
@@ -151,11 +156,9 @@ assertIncludes(
   'desiredPlugins: officialPluginFixtures.map(',
   'E2E vault desired plugins should be projected from the official fixture catalog',
 );
-assertExcludes(
-  wailsMock,
-  'vaultPluginState.enabledPlugins.push(',
-  'E2E should not maintain a second incremental official plugin inventory',
-);
+if ((wailsMock.match(/vaultPluginState = makeDefaultVaultPluginState\\(\\);/g) || []).length !== 2) {
+  throw new Error('E2E initial and reset vault plugin inventories should come from the canonical official fixture catalog');
+}
 
 """
 text = replace_once(text, anchor, addition, "single official fixture catalog guard")
