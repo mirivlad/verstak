@@ -54,9 +54,8 @@ func NewService(vaultDir string, bus *events.Bus) *Service {
 }
 
 // Initialize performs the initial scan and reconciliation, then migrates any
-// still-relevant folder appearance left by the retired official plugin into
-// the core-owned metadata layout. Appearance migration is cosmetic and
-// best-effort, so it never blocks opening a vault.
+// still-relevant folder appearance left by the retired official plugin. The
+// migration is cosmetic and best-effort, so it never blocks opening a vault.
 func (s *Service) Initialize() error {
 	if err := s.fullReconcile(); err != nil {
 		return err
@@ -266,31 +265,39 @@ func (s *Service) fullReconcile() error {
 	// Merge reconciler warnings into scan for tree building.
 	scan.Warnings = append(scan.Warnings, result.Warnings...)
 
-	// Build tree.
-	tree := BuildTree(scan, result.Snapshot, s.currentWS)
+	order, err := ReadOrderState(s.vaultDir)
+	if err != nil {
+		scan.Warnings = append(scan.Warnings, TreeDiagnostic{
+			Level:   "warning",
+			Code:    "workspace-tree-order-invalid",
+			Message: err.Error(),
+			Path:    filepath.ToSlash(filepath.Join(".verstak", "workspace-tree", "order.json")),
+		})
+		order = emptyOrderState()
+	}
 
-	// Persist snapshot if changed.
-	if result.Changed {
-		if err := WriteSnapshotAtomic(s.vaultDir, result.Snapshot); err != nil {
-			return err
-		}
+	// Build tree.
+	s.revision++
+	tree := BuildTree(scan, s.currentWS, s.revision, order)
+
+	// Write new snapshot.
+	if err := WriteSnapshot(s.vaultDir, &result.Snapshot); err != nil {
+		return err
 	}
 
 	// Update state.
 	s.mu.Lock()
-	s.snapshot = result.Snapshot
+	s.snapshot = &result.Snapshot
 	s.scan = scan
 	s.tree = tree
-	s.revision++
-	if s.tree != nil {
-		s.tree.Revision = s.revision
-	}
 	s.mu.Unlock()
-	return nil
-}
 
-func (s *Service) isInternalMutation() bool {
-	return atomic.LoadInt32(&s.internalMutations) > 0
+	// Publish events.
+	for _, evt := range result.Events {
+		s.publish(evt)
+	}
+
+	return nil
 }
 
 func (s *Service) scheduleDebounce() {
@@ -302,5 +309,20 @@ func (s *Service) scheduleDebounce() {
 	}
 	s.debounceTimer = time.AfterFunc(s.debounceInterval, func() {
 		_ = s.fullReconcile()
+	})
+}
+
+func (s *Service) isInternalMutation() bool {
+	return atomic.LoadInt32(&s.internalMutations) > 0
+}
+
+func (s *Service) publish(event ReconEvent) {
+	if s.eventBus == nil {
+		return
+	}
+	s.eventBus.Publish(events.Event{
+		Name:      event.Name,
+		Timestamp: time.Now().UTC().Format(time.RFC3339Nano),
+		Payload:   event.Payload,
 	})
 }
