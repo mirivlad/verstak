@@ -5,6 +5,13 @@ on:
     branches: ['**']
   pull_request:
   workflow_dispatch:
+  # The sibling official plugins are pinned to `main` below, not to a commit, so
+  # this repository's own checks describe a moving dependency. Nothing here runs
+  # when that dependency changes. The plugins repository now runs the desktop
+  # icon contract on its own pull requests, which catches the known drift at the
+  # source; this nightly run is the backstop for the drift nobody predicted.
+  schedule:
+    - cron: '0 3 * * *'
 
 permissions:
   contents: read
