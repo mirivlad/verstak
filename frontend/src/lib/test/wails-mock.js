@@ -6,6 +6,7 @@
  */
 import defaultEditorSource from '../../../../../verstak-official-plugins/plugins/default-editor/frontend/src/index.js?raw';
 import filesSource from '../../../../../verstak-official-plugins/plugins/files/frontend/src/index.js?raw';
+import filesManifest from '../../../../../verstak-official-plugins/plugins/files/plugin.json';
 import notesSource from '../../../../../verstak-official-plugins/plugins/notes/frontend/src/index.js?raw';
 import browserInboxSource from '../../../../../verstak-official-plugins/plugins/browser-inbox/frontend/src/index.js?raw';
 import secretsSource from '../../../../../verstak-official-plugins/plugins/secrets/frontend/src/index.js?raw';
@@ -134,24 +135,7 @@ import importStyle from '../../../../../verstak-official-plugins/plugins/import/
     'verstak.files': {
       status: 'loaded',
       enabled: true,
-      manifest: {
-        schemaVersion: 1,
-        id: 'verstak.files',
-        name: 'Files',
-        version: '0.1.0',
-        apiVersion: '0.1.0',
-        description: 'Minimal vault file navigator.',
-        source: 'official',
-        icon: 'folder',
-        provides: ['verstak/files/v1'],
-        requires: ['verstak/core/files/v1', 'verstak/core/workbench/v1'],
-        permissions: ['files.read', 'files.write', 'files.delete', 'files.openExternal', 'workbench.open', 'ui.register'],
-        frontend: { entry: 'frontend/dist/index.js' },
-    contributes: {
-      views: [{ id: 'verstak.files.view', title: 'Files', icon: 'folder', component: 'FilesView' }],
-      workspaceItems: [{ id: 'verstak.files.workspace', title: 'Files', icon: 'folder', order: 20, component: 'FilesView' }]
-    }
-      },
+      manifest: filesManifest,
       rootPath: '/tmp/verstak-test/plugins/files',
       error: ''
     },
@@ -2760,7 +2744,7 @@ function cloneJson(value) {
       if (pluginId === 'verstak.default-editor') {
         return Promise.resolve(defaultEditorSource);
       }
-      if (pluginId === 'verstak.files' && assetPath === 'frontend/dist/index.js') {
+      if (pluginId === 'verstak.files' && assetPath === filesManifest.frontend.entry) {
         return Promise.resolve(filesSource);
       }
       if (pluginId === 'verstak.trash' && assetPath === 'frontend/dist/index.js') {
@@ -3538,24 +3522,7 @@ function cloneJson(value) {
         'verstak.files': {
           status: 'loaded',
           enabled: true,
-          manifest: {
-            schemaVersion: 1,
-            id: 'verstak.files',
-            name: 'Files',
-            version: '0.1.0',
-            apiVersion: '0.1.0',
-            description: 'Minimal vault file navigator.',
-            source: 'official',
-            icon: 'folder',
-            provides: ['verstak/files/v1'],
-            requires: ['verstak/core/files/v1', 'verstak/core/workbench/v1'],
-            permissions: ['files.read', 'files.write', 'files.delete', 'files.openExternal', 'workbench.open', 'ui.register'],
-            frontend: { entry: 'frontend/dist/index.js' },
-            contributes: {
-              views: [{ id: 'verstak.files.view', title: 'Files', icon: 'folder', component: 'FilesView' }],
-              workspaceItems: [{ id: 'verstak.files.workspace', title: 'Files', icon: 'folder', order: 20, component: 'FilesView' }]
-            }
-          },
+          manifest: filesManifest,
           rootPath: '/tmp/verstak-test/plugins/files',
           error: ''
         },

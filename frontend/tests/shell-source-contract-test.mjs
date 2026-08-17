@@ -36,6 +36,21 @@ assertIncludes(
 );
 assertIncludes(
   wailsMock,
+  "plugins/files/plugin.json",
+  'E2E should exercise the real official Files manifest and permissions',
+);
+assertIncludes(
+  wailsMock,
+  'manifest: filesManifest',
+  'E2E Files plugin state should use the real official manifest',
+);
+assertIncludes(
+  wailsMock,
+  "assetPath === filesManifest.frontend.entry",
+  'E2E Files bundle should be loaded through the entry declared by the real manifest',
+);
+assertIncludes(
+  wailsMock,
   'Promise.resolve(filesSource)',
   'E2E Files asset loading should return the real official Files source',
 );
