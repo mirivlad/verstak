@@ -79,12 +79,21 @@ function collectShellNames() {
   return names;
 }
 
+// The sibling source repository is the only authority on which icons the
+// official plugins name. `verstak-desktop/plugins/` is a gitignored install
+// copy, so reading it makes the generated output depend on whatever happens to
+// be installed on this machine: a retired plugin left behind there pulls its
+// icon back into the core set, and a plugin not yet installed silently drops
+// out of it. Both produce a committed file that is "current" on one machine
+// and stale on another. The install copy stays usable as a fallback for a
+// lone desktop checkout, but never as the input to --check.
+const sourcePluginRoot = path.join(workspace, 'verstak-official-plugins', 'plugins');
+const installedPluginRoot = path.join(root, 'plugins');
+const usingInstalledFallback = !fs.existsSync(sourcePluginRoot) && fs.existsSync(installedPluginRoot);
+
 function collectPluginNames() {
   const names = new Set();
-  const pluginRoots = [
-    path.join(workspace, 'verstak-official-plugins', 'plugins'),
-    path.join(root, 'plugins'),
-  ];
+  const pluginRoots = fs.existsSync(sourcePluginRoot) ? [sourcePluginRoot] : [installedPluginRoot];
   for (const pluginRoot of pluginRoots) {
     if (!fs.existsSync(pluginRoot)) continue;
     for (const entry of fs.readdirSync(pluginRoot, { withFileTypes: true })) {
@@ -213,6 +222,12 @@ const targets = [
 
 if (checkOnly) {
   let stale = false;
+  if (usingInstalledFallback) {
+    console.error('❌ verstak-official-plugins is not checked out next to this repository');
+    console.error(`   expected: ${sourcePluginRoot}`);
+    console.error('   --check will not judge generated assets against the local install copy');
+    process.exit(1);
+  }
   for (const [file, content] of targets) {
     const current = fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : '';
     if (current !== content) {
