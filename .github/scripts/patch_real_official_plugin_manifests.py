@@ -124,6 +124,18 @@ path.write_text(text)
 # quietly return later.
 path = Path("frontend/tests/shell-source-contract-test.mjs")
 text = path.read_text()
+old_files_state_guard = """assertIncludes(
+  wailsMock,
+  'manifest: filesManifest',
+  'E2E Files plugin state should use the real official manifest',
+);
+"""
+text = replace_once(
+    text,
+    old_files_state_guard,
+    "",
+    "legacy Files manifest state guard",
+)
 anchor = """assertExcludes(
   wailsMock,
   'function filesPluginBundle()',
