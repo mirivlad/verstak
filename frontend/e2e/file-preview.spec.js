@@ -1,20 +1,14 @@
 import { test, expect } from '@playwright/test';
-import { waitForAppReady, setupConsoleCollector, resetMockState } from './helpers.js';
+import { waitForAppReady, setupConsoleCollector, resetMockState, openPluginManager } from './helpers.js';
 
 const PIXEL_PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9ZQmcAAAAASUVORK5CYII=';
-
-async function openPluginManager(page) {
-  await page.locator('[data-status-action="settings"]').click();
-  await expect(page.locator('[data-settings-window]')).toBeVisible({ timeout: 10000 });
-  await page.locator('[data-settings-action="plugins"]').click();
-  await expect(page.locator('.plugin-manager')).toBeVisible({ timeout: 10000 });
-}
+const PIXEL_PATH = 'Project/pixel.png';
 
 async function openImage(page) {
-  await page.evaluate(async (dataBase64) => {
+  await page.evaluate(async ({ dataBase64, path }) => {
     const writeErr = await window.go.api.App.WriteVaultFileBytes(
       'verstak.files',
-      'Project/Files/pixel.png',
+      path,
       dataBase64,
       { createIfMissing: true, overwrite: true },
     );
@@ -22,13 +16,13 @@ async function openImage(page) {
 
     const [result, openErr] = await window.go.api.App.OpenWorkbenchResource('verstak.platform-test', {
       kind: 'vault-file',
-      path: 'Project/Files/pixel.png',
+      path,
       extension: '.png',
       context: { sourceView: 'files' },
     });
     if (openErr) throw new Error(openErr);
     window.dispatchEvent(new CustomEvent('verstak:workbench-opened', { detail: result }));
-  }, PIXEL_PNG);
+  }, { dataBase64: PIXEL_PNG, path: PIXEL_PATH });
 }
 
 test.describe('Shipped File Preview plugin', () => {
@@ -57,14 +51,14 @@ test.describe('Shipped File Preview plugin', () => {
 
     const preview = page.locator('[data-plugin-id="verstak.file-preview"]');
     await expect(preview).toBeVisible({ timeout: 10000 });
-    await expect(preview).toHaveAttribute('data-preview-path', 'Project/Files/pixel.png');
+    await expect(preview).toHaveAttribute('data-preview-path', PIXEL_PATH);
     const image = preview.locator('[data-preview-image="true"]');
     await expect(image).toBeVisible({ timeout: 10000 });
     await expect(image).toHaveAttribute('src', /^data:image\/png;base64,/);
 
     await preview.locator('[data-action="open-external"]').click();
     await expect.poll(() => page.evaluate(() => window.__wailsMockExternalOpens)).toEqual([
-      { action: 'open', path: 'Project/Files/pixel.png' },
+      { action: 'open', path: PIXEL_PATH },
     ]);
   });
 
