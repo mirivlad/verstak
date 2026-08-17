@@ -235,61 +235,75 @@
   }
   async function loadFolderAppearance(folderId) {
     try {
-      // Check local cache first
       if (appearanceCache[folderId]) {
         folderIconId = appearanceCache[folderId].iconId || '';
         folderColor = appearanceCache[folderId].colorId || '';
         return;
       }
-      const api = window.createPluginAPI('verstak.folder-appearance');
-      if (api && api.folders && api.folders.getAppearance) {
-        const a = await api.folders.getAppearance(folderId);
-        folderIconId = a.iconId || '';
-        folderColor = a.colorId || '';
-        appearanceCache[folderId] = { iconId: folderIconId, colorId: folderColor };
-        appearanceCache = appearanceCache;
-      }
+      const appearance = await App.GetFolderAppearance(folderId);
+      if (appearance?.error) return;
+      folderIconId = appearance?.icon || '';
+      folderColor = appearance?.color || '';
+      appearanceCache = {
+        ...appearanceCache,
+        [folderId]: { iconId: folderIconId, colorId: folderColor },
+      };
     } catch {}
   }
   function closeModal() { if (!formBusy) modal = null; }
   async function loadAppearanceMap() {
     try {
-      const api = window.createPluginAPI('verstak.folder-appearance');
-      if (!api || !api.folders || !api.folders.getAppearance) return;
-      // Collect all folder UUIDs from tree
       const uuids = [];
       function walk(roots) {
-        for (const r of roots) {
-          if (r.kind === 'folder') { uuids.push(r.id); if (r.children) walk(r.children); }
+        for (const node of roots || []) {
+          if (node.kind === 'folder') {
+            uuids.push(node.id);
+            walk(node.children);
+          }
         }
       }
       walk(tree.roots);
-      // Load each appearance
       const next = {};
-      for (const uuid of uuids) {
+      for (const folderId of uuids) {
         try {
-          const a = await api.folders.getAppearance(uuid);
-          if (a && (a.iconId || a.colorId)) { next[uuid] = a; }
+          const appearance = await App.GetFolderAppearance(folderId);
+          if (!appearance?.error && (appearance?.icon || appearance?.color)) {
+            next[folderId] = {
+              iconId: appearance.icon || '',
+              colorId: appearance.color || '',
+            };
+          }
         } catch {}
       }
-      appearanceCache = { ...appearanceCache, ...next };
-      appearanceCache = appearanceCache; // trigger reactivity
+      appearanceCache = next;
     } catch {}
   }
 
-  async function doCreateFolder() { const n = formName.trim(); if (!n) { formError = tr('workspaceTree.nameRequired'); return; } formBusy = true; const r = await App.CreateFolderV2(formParentId || '', n); if (r?.error) { formError = r.error; formBusy = false; return; } if (formParentId) { expandedIds['folder:' + formParentId] = true; saveExpanded(); }
-  const fid = r?.id;
-  if (fid && (folderIconId || folderColor)) {
-    try {
-      const api = window.createPluginAPI('verstak.folder-appearance');
-      if (api && api.folders && api.folders.setAppearance) {
-        await api.folders.setAppearance(fid, { iconId: folderIconId, colorId: folderColor });
-      }
-    } catch {}
+  async function doCreateFolder() {
+    const n = formName.trim();
+    if (!n) { formError = tr('workspaceTree.nameRequired'); return; }
+    formBusy = true;
+    const r = await App.CreateFolderV2(formParentId || '', n);
+    if (r?.error) { formError = r.error; formBusy = false; return; }
+    if (formParentId) {
+      expandedIds['folder:' + formParentId] = true;
+      saveExpanded();
+    }
+    const fid = r?.id;
+    if (fid) {
+      const appearanceError = await App.SetFolderAppearance(fid, {
+        icon: folderIconId,
+        color: folderColor,
+      });
+      if (appearanceError) { formError = appearanceError; formBusy = false; return; }
+      appearanceCache = {
+        ...appearanceCache,
+        [fid]: { iconId: folderIconId, colorId: folderColor },
+      };
+    }
+    modal = null;
+    await loadTree();
   }
-    appearanceCache[fid] = { iconId: folderIconId, colorId: folderColor };
-  appearanceCache = appearanceCache;
-  appearanceCache = { ...appearanceCache, [fid]: { iconId: folderIconId, colorId: folderColor } }; appearanceCache = appearanceCache; modal = null; await loadTree(); }
   async function doCreateWorkspace() {
     const n = formName.trim();
     if (!n) { formError = tr('workspaceTree.nameRequired'); return; }
@@ -320,16 +334,15 @@
       const err = await App.RenameFolderV2(modal.id, n);
       if (err) { formError = err; formBusy = false; return; }
     }
-    // Always save appearance (even if name unchanged)
-    try {
-      const api = window.createPluginAPI('verstak.folder-appearance');
-      if (api && api.folders && api.folders.setAppearance) {
-        await api.folders.setAppearance(modal.id, { iconId: folderIconId, colorId: folderColor });
-      }
-    } catch {}
-    // Update local appearance cache
-    appearanceCache = { ...appearanceCache, [modal.id]: { iconId: folderIconId, colorId: folderColor } };
-    appearanceCache = appearanceCache;
+    const appearanceError = await App.SetFolderAppearance(modal.id, {
+      icon: folderIconId,
+      color: folderColor,
+    });
+    if (appearanceError) { formError = appearanceError; formBusy = false; return; }
+    appearanceCache = {
+      ...appearanceCache,
+      [modal.id]: { iconId: folderIconId, colorId: folderColor },
+    };
     modal = null;
     await loadTree();
   }

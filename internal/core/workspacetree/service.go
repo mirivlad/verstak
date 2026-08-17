@@ -53,9 +53,15 @@ func NewService(vaultDir string, bus *events.Bus) *Service {
 	}
 }
 
-// Initialize performs the initial scan and reconciliation.
+// Initialize performs the initial scan and reconciliation, then migrates any
+// still-relevant folder appearance left by the retired official plugin. The
+// migration is cosmetic and best-effort, so it never blocks opening a vault.
 func (s *Service) Initialize() error {
-	return s.fullReconcile()
+	if err := s.fullReconcile(); err != nil {
+		return err
+	}
+	s.migrateLegacyFolderAppearance()
+	return nil
 }
 
 // GetTree returns the current tree snapshot.
