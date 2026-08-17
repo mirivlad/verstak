@@ -19,11 +19,11 @@ text = replace_once(
     "Platform Test source import",
 )
 
-# Remove exactly this top-level helper regardless of which helper currently
-# follows it. The synthetic bundle body is assembled from strings, so the next
-# top-level two-space `function` marker is the stable boundary.
+# Platform Test is the final synthetic frontend helper before the mock bridge
+# API section, so use that named section boundary rather than guessing which
+# helper function should follow it.
 start = text.index("  function platformTestBundle() {\n")
-end = text.index("\n  function ", start + len("  function platformTestBundle() {\n"))
+end = text.index("\n\n  // ── Mock API", start)
 text = text[:start] + text[end:]
 
 text = replace_once(
