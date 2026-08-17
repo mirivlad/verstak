@@ -1,4 +1,5 @@
 from pathlib import Path
+import subprocess
 
 
 def replace_once(text, old, new, label):
@@ -7,6 +8,36 @@ def replace_once(text, old, new, label):
         raise SystemExit(f"{label} anchor count: {count}")
     return text.replace(old, new, 1)
 
+
+# The branch briefly carried an obsolete full-file service.go replacement.
+# Restore the current main implementation first, then apply the one intended
+# Initialize() change. This keeps unrelated workspace-tree evolution intact.
+path = Path("internal/core/workspacetree/service.go")
+text = subprocess.check_output(
+    ["git", "show", "origin/main:internal/core/workspacetree/service.go"],
+    text=True,
+)
+text = replace_once(
+    text,
+    """// Initialize performs the initial scan and reconciliation.
+func (s *Service) Initialize() error {
+	return s.fullReconcile()
+}
+""",
+    """// Initialize performs the initial scan and reconciliation, then migrates any
+// still-relevant folder appearance left by the retired official plugin. The
+// migration is cosmetic and best-effort, so it never blocks opening a vault.
+func (s *Service) Initialize() error {
+	if err := s.fullReconcile(); err != nil {
+		return err
+	}
+	s.migrateLegacyFolderAppearance()
+	return nil
+}
+""",
+    "workspace-tree initialize migration",
+)
+path.write_text(text)
 
 # Wails API: UI writes are exact replacements, including clearing icon/color.
 path = Path("internal/api/app.go")
@@ -117,7 +148,7 @@ new = """  async function loadAppearanceMap() {
 """
 text = replace_once(text, old, new, "load folder appearance map")
 
-create_start = text.index("  async function doCreateFolder() {") if "  async function doCreateFolder() {" in text else text.index("  async function doCreateFolder() { const")
+create_start = text.index("  async function doCreateFolder() {")
 create_end = text.index("  async function doCreateWorkspace() {", create_start)
 new_create = """  async function doCreateFolder() {
     const n = formName.trim();
