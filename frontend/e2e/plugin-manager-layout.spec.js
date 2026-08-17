@@ -76,9 +76,10 @@ test.describe('E: Plugin Manager layout', () => {
   test('plugin manager summarizes plugin health and elevated permissions before the list', async ({ page }) => {
     await openPluginManager(page);
 
+    const loadedCount = await page.locator('.plugin-card').count();
     const health = page.locator('[data-plugin-manager-summary="health"]');
     await expect(health).toBeVisible();
-    await expect(health.locator('[data-plugin-status-summary="loaded"]')).toContainText('13');
+    await expect(health.locator('[data-plugin-status-summary="loaded"]')).toContainText(String(loadedCount));
     await expect(health.locator('[data-plugin-status-summary="failed"]')).toContainText('0');
     await expect(health.locator('[data-plugin-status-summary="disabled"]')).toContainText('0');
 
@@ -95,6 +96,7 @@ test.describe('E: Plugin Manager layout', () => {
     await setPluginStatus(page, 'verstak.todo', 'disabled', false);
     await page.evaluate(() => window.__wailsMock.addSyntheticPlugins(1, 'third-party'));
     await openPluginManager(page);
+    const totalPluginCount = await page.locator('.plugin-card').count();
 
     const results = page.locator('[data-plugin-filter-results]');
     await expect(results).toContainText('Showing');
@@ -138,7 +140,7 @@ test.describe('E: Plugin Manager layout', () => {
     await expect(page.locator('[data-plugin-filter-empty]')).toBeVisible();
 
     await page.locator('[data-plugin-filter-reset]').click();
-    await expect(page.locator('.plugin-card')).toHaveCount(14);
+    await expect(page.locator('.plugin-card')).toHaveCount(totalPluginCount);
   });
 
   test('workspace selection keeps exactly one active node', async ({ page }) => {

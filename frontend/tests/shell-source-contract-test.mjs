@@ -57,9 +57,39 @@ assertExcludes(
   'E2E should not maintain a divergent synthetic Files implementation',
 );
 
+assertIncludes(
+  wailsMock,
+  "plugins/file-preview/frontend/src/index.js?raw",
+  'E2E should exercise the real shipped File Preview frontend bundle',
+);
+assertIncludes(
+  wailsMock,
+  'Promise.resolve(filePreviewSource)',
+  'E2E File Preview asset loading should return the real official source',
+);
+assertIncludes(
+  wailsMock,
+  'var officialPluginFixtures = [',
+  'E2E should define one canonical official plugin fixture catalog',
+);
+assertIncludes(
+  wailsMock,
+  'enabledPlugins: officialPluginFixtures.map(',
+  'E2E vault enabled plugins should be projected from the official fixture catalog',
+);
+assertIncludes(
+  wailsMock,
+  'desiredPlugins: officialPluginFixtures.map(',
+  'E2E vault desired plugins should be projected from the official fixture catalog',
+);
+if ((wailsMock.match(/vaultPluginState = makeDefaultVaultPluginState\(\);/g) || []).length !== 2) {
+  throw new Error('E2E initial and reset vault plugin inventories should come from the canonical official fixture catalog');
+}
+
 const officialManifestFixtures = [
   ['platform-test', 'platformTestManifest'],
   ['default-editor', 'defaultEditorManifest'],
+  ['file-preview', 'filePreviewManifest'],
   ['files', 'filesManifest'],
   ['trash', 'trashManifest'],
   ['notes', 'notesManifest'],
