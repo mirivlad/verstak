@@ -146,6 +146,25 @@ assertIncludes(
   'E2E Sync should serve the stylesheet its manifest declares',
 );
 
+// The four plugins above were the last asset loader entries still executing a
+// second implementation. These names were the functions behind them, plus the
+// ones already orphaned by earlier migrations. A single grep is cheaper than
+// discovering months later that one grew back because a test was easier to
+// satisfy with a stub than with the shipped code.
+for (const dead of [
+  'defaultEditorBundle',
+  'simplePluginBundle',
+  'syncPluginBundle',
+  'browserInboxBundle',
+  'todoBundle',
+]) {
+  assertExcludes(
+    wailsMock,
+    dead,
+    `E2E should not reintroduce the synthetic ${dead} implementation`,
+  );
+}
+
 assertIncludes(
   wailsMock,
   'var officialPluginFixtures = [',
