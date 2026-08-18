@@ -59,6 +59,69 @@ assertExcludes(
 
 assertIncludes(
   wailsMock,
+  "plugins/trash/frontend/src/index.js?raw",
+  'E2E should exercise the real official Trash frontend bundle',
+);
+assertIncludes(
+  wailsMock,
+  'Promise.resolve(trashSource)',
+  'E2E Trash asset loading should return the real official source',
+);
+assertExcludes(
+  wailsMock,
+  'function trashPluginBundle()',
+  'E2E should not maintain a divergent synthetic Trash implementation',
+);
+assertExcludes(
+  wailsMock,
+  'Promise.resolve(trashPluginBundle())',
+  'E2E Trash asset loader should never return a synthetic Trash bundle',
+);
+
+assertIncludes(
+  wailsMock,
+  "plugins/search/frontend/src/index.js?raw",
+  'E2E should exercise the real official Search frontend bundle',
+);
+assertIncludes(
+  wailsMock,
+  'Promise.resolve(searchSource)',
+  'E2E Search asset loading should return the real official source',
+);
+assertExcludes(
+  wailsMock,
+  'function searchPluginBundle()',
+  'E2E should not maintain a divergent synthetic Search implementation',
+);
+assertExcludes(
+  wailsMock,
+  'Promise.resolve(searchPluginBundle())',
+  'E2E Search asset loader should never return a synthetic Search bundle',
+);
+
+assertIncludes(
+  wailsMock,
+  "plugins/platform-test/frontend/src/index.js?raw",
+  'E2E should exercise the real official Platform Test frontend bundle',
+);
+assertIncludes(
+  wailsMock,
+  'Promise.resolve(platformTestSource)',
+  'E2E Platform Test asset loading should return the real official source',
+);
+assertExcludes(
+  wailsMock,
+  'function platformTestBundle()',
+  'E2E should not maintain a divergent synthetic Platform Test implementation',
+);
+assertExcludes(
+  wailsMock,
+  'Promise.resolve(platformTestBundle())',
+  'E2E Platform Test asset loader should never return a synthetic Platform Test bundle',
+);
+
+assertIncludes(
+  wailsMock,
   "plugins/file-preview/frontend/src/index.js?raw",
   'E2E should exercise the real shipped File Preview frontend bundle',
 );
@@ -67,6 +130,41 @@ assertIncludes(
   'Promise.resolve(filePreviewSource)',
   'E2E File Preview asset loading should return the real official source',
 );
+assertIncludes(
+  wailsMock,
+  "plugins/sync/frontend/dist/index.js?raw",
+  'E2E should exercise the real official Sync frontend bundle',
+);
+assertIncludes(
+  wailsMock,
+  'Promise.resolve(syncSource)',
+  'E2E Sync asset loading should return the real official build output',
+);
+assertIncludes(
+  wailsMock,
+  'Promise.resolve(syncStyle)',
+  'E2E Sync should serve the stylesheet its manifest declares',
+);
+
+// The four plugins above were the last asset loader entries still executing a
+// second implementation. These names were the functions behind them, plus the
+// ones already orphaned by earlier migrations. A single grep is cheaper than
+// discovering months later that one grew back because a test was easier to
+// satisfy with a stub than with the shipped code.
+for (const dead of [
+  'defaultEditorBundle',
+  'simplePluginBundle',
+  'syncPluginBundle',
+  'browserInboxBundle',
+  'todoBundle',
+]) {
+  assertExcludes(
+    wailsMock,
+    dead,
+    `E2E should not reintroduce the synthetic ${dead} implementation`,
+  );
+}
+
 assertIncludes(
   wailsMock,
   'var officialPluginFixtures = [',
