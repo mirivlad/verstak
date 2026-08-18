@@ -148,9 +148,10 @@ export function PluginCloseImportSource(arg1:string,arg2:string):Promise<string>
 export function PluginListImportEntries(arg1:string,arg2:string,arg3:string):Promise<importservice.EntryPage|string>;
 
 export function PluginListWorkspaces(arg1:string):Promise<Array<api.PluginWorkspaceDTO>|string>;
-export function PluginResolveWorkspacePath(arg1:string,arg2:string):Promise<Record<string, any>|string>;
 
 export function PluginReadImportText(arg1:string,arg2:string,arg3:string):Promise<string|string>;
+
+export function PluginResolveWorkspacePath(arg1:string,arg2:string):Promise<Record<string, any>|string>;
 
 export function PluginRotateBrowserReceiverToken(arg1:string):Promise<Record<string, string>|string>;
 
