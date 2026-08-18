@@ -190,6 +190,24 @@ export namespace api {
 	        this.component = source["component"];
 	    }
 	}
+	export class FlatOverviewProvider {
+	    pluginId: string;
+	    id: string;
+	    label: string;
+	    handler: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new FlatOverviewProvider(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.pluginId = source["pluginId"];
+	        this.id = source["id"];
+	        this.label = source["label"];
+	        this.handler = source["handler"];
+	    }
+	}
 	export class FlatWorklogProvider {
 	    pluginId: string;
 	    id: string;
@@ -271,6 +289,7 @@ export namespace api {
 	    commands: FlatCommand[];
 	    searchProviders: FlatSearchProvider[];
 	    worklogProviders: FlatWorklogProvider[];
+	    overviewProviders: FlatOverviewProvider[];
 	    settingsPanels: FlatSettingsPanel[];
 	    sidebarItems: FlatSidebarItem[];
 	    statusBarItems: FlatStatusBarItem[];
@@ -290,6 +309,7 @@ export namespace api {
 	        this.commands = this.convertValues(source["commands"], FlatCommand);
 	        this.searchProviders = this.convertValues(source["searchProviders"], FlatSearchProvider);
 	        this.worklogProviders = this.convertValues(source["worklogProviders"], FlatWorklogProvider);
+	        this.overviewProviders = this.convertValues(source["overviewProviders"], FlatOverviewProvider);
 	        this.settingsPanels = this.convertValues(source["settingsPanels"], FlatSettingsPanel);
 	        this.sidebarItems = this.convertValues(source["sidebarItems"], FlatSidebarItem);
 	        this.statusBarItems = this.convertValues(source["statusBarItems"], FlatStatusBarItem);
@@ -336,6 +356,7 @@ export namespace api {
 	        this.lastError = source["lastError"];
 	    }
 	}
+	
 	
 	
 	
@@ -1115,6 +1136,22 @@ export namespace plugin {
 		    return a;
 		}
 	}
+	export class ContributionOverviewProvider {
+	    id: string;
+	    label: string;
+	    handler: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new ContributionOverviewProvider(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.label = source["label"];
+	        this.handler = source["handler"];
+	    }
+	}
 	export class ContributionSearchProvider {
 	    id: string;
 	    label: string;
@@ -1252,6 +1289,7 @@ export namespace plugin {
 	    searchProviders?: ContributionSearchProvider[];
 	    activityProviders?: ContributionActivityProvider[];
 	    worklogProviders?: ContributionWorklogProvider[];
+	    overviewProviders?: ContributionOverviewProvider[];
 	    statusBarItems?: ContributionStatusBarItem[];
 	    openProviders?: ContributionOpenProvider[];
 	    workspaceItems?: ContributionWorkspaceItem[];
@@ -1272,6 +1310,7 @@ export namespace plugin {
 	        this.searchProviders = this.convertValues(source["searchProviders"], ContributionSearchProvider);
 	        this.activityProviders = this.convertValues(source["activityProviders"], ContributionActivityProvider);
 	        this.worklogProviders = this.convertValues(source["worklogProviders"], ContributionWorklogProvider);
+	        this.overviewProviders = this.convertValues(source["overviewProviders"], ContributionOverviewProvider);
 	        this.statusBarItems = this.convertValues(source["statusBarItems"], ContributionStatusBarItem);
 	        this.openProviders = this.convertValues(source["openProviders"], ContributionOpenProvider);
 	        this.workspaceItems = this.convertValues(source["workspaceItems"], ContributionWorkspaceItem);
