@@ -44,6 +44,11 @@ import todoEnCatalog from '../../../../../verstak-official-plugins/plugins/todo/
 import todoRuCatalog from '../../../../../verstak-official-plugins/plugins/todo/locales/ru.json';
 import importSource from '../../../../../verstak-official-plugins/plugins/import/frontend/dist/index.js?raw';
 import importStyle from '../../../../../verstak-official-plugins/plugins/import/frontend/dist/style.css?raw';
+// Sync ships built output rather than raw source, so its manifest entry points
+// at frontend/dist. Running the E2E therefore needs the official plugins built
+// first, exactly as CI already does before this suite.
+import syncSource from '../../../../../verstak-official-plugins/plugins/sync/frontend/dist/index.js?raw';
+import syncStyle from '../../../../../verstak-official-plugins/plugins/sync/frontend/dist/style.css?raw';
 
 (function () {
   if (window.__wailsMockReady) return;
@@ -1998,7 +2003,10 @@ function cloneJson(value) {
         return Promise.resolve(notesSource);
       }
       if (pluginId === syncManifest.id && assetPath === syncManifest.frontend.entry) {
-        return Promise.resolve(syncPluginBundle());
+        return Promise.resolve(syncSource);
+      }
+      if (pluginId === syncManifest.id && assetPath === syncManifest.frontend.style) {
+        return Promise.resolve(syncStyle);
       }
       if (pluginId === activityManifest.id && assetPath === activityManifest.frontend.entry) {
         return Promise.resolve(activitySource);

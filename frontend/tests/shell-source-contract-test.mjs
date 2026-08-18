@@ -132,6 +132,22 @@ assertIncludes(
 );
 assertIncludes(
   wailsMock,
+  "plugins/sync/frontend/dist/index.js?raw",
+  'E2E should exercise the real official Sync frontend bundle',
+);
+assertIncludes(
+  wailsMock,
+  'Promise.resolve(syncSource)',
+  'E2E Sync asset loading should return the real official build output',
+);
+assertIncludes(
+  wailsMock,
+  'Promise.resolve(syncStyle)',
+  'E2E Sync should serve the stylesheet its manifest declares',
+);
+
+assertIncludes(
+  wailsMock,
   'var officialPluginFixtures = [',
   'E2E should define one canonical official plugin fixture catalog',
 );

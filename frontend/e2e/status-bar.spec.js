@@ -22,8 +22,12 @@ test.describe('Status Bar host', () => {
     await expect(statusBar.locator('.vault-status')).toContainText('vault');
     await expect(statusBar.locator('[data-status-item-id="verstak.platform-test.status"]')).toContainText('All Tests Pass');
     const sync = statusBar.locator('[data-plugin-status-handler="SyncStatusBar"]');
-    await expect(sync.locator('.mock-sync-status')).toContainText('Synced');
-    await sync.locator('.mock-sync-status').click();
+    // The shipped SyncStatusBar derives this from the status it reads back
+    // through the plugin API. The mock vault has no sync configured, so
+    // "Not configured" is the real plugin reporting real state — the synthetic
+    // bundle this replaced rendered a hardcoded "Synced" no matter what.
+    await expect(sync.locator('.sync-status-bar')).toContainText('Not configured');
+    await sync.locator('.sync-status-bar').click();
     await expect(page.locator('[data-settings-window]')).toBeVisible();
     const statusBox = await statusBar.boundingBox();
     expect(statusBox.height).toBeLessThanOrEqual(36);
