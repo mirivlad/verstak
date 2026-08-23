@@ -13,24 +13,25 @@ import (
 
 // Manifest represents a Verstak plugin.json manifest.
 type Manifest struct {
-	SchemaVersion    int                 `json:"schemaVersion"`
-	ID               string              `json:"id"`
-	Name             string              `json:"name"`
-	Version          string              `json:"version"`
-	APIVersion       string              `json:"apiVersion"`
-	Description      string              `json:"description,omitempty"`
-	Source           string              `json:"source,omitempty"`
-	Icon             string              `json:"icon,omitempty"`
-	Localization     *LocalizationConfig `json:"localization,omitempty"`
-	Provides         []string            `json:"provides"`
-	Requires         []string            `json:"requires,omitempty"`
-	OptionalRequires []string            `json:"optionalRequires,omitempty"`
-	Permissions      []string            `json:"permissions"`
-	Frontend         *FrontendConfig     `json:"frontend,omitempty"`
-	Backend          *BackendConfig      `json:"backend,omitempty"`
-	Migrations       *MigrationConfig    `json:"migrations,omitempty"`
-	Contributes      *Contributions      `json:"contributes,omitempty"`
-	Sync             *SyncConfig         `json:"sync,omitempty"`
+	SchemaVersion        int                          `json:"schemaVersion"`
+	ID                   string                       `json:"id"`
+	Name                 string                       `json:"name"`
+	Version              string                       `json:"version"`
+	APIVersion           string                       `json:"apiVersion"`
+	Description          string                       `json:"description,omitempty"`
+	Source               string                       `json:"source,omitempty"`
+	Icon                 string                       `json:"icon,omitempty"`
+	Localization         *LocalizationConfig          `json:"localization,omitempty"`
+	Provides             []string                     `json:"provides"`
+	Requires             []string                     `json:"requires,omitempty"`
+	OptionalRequires     []string                     `json:"optionalRequires,omitempty"`
+	CapabilityOperations map[string]map[string]string `json:"capabilityOperations,omitempty"`
+	Permissions          []string                     `json:"permissions"`
+	Frontend             *FrontendConfig              `json:"frontend,omitempty"`
+	Backend              *BackendConfig               `json:"backend,omitempty"`
+	Migrations           *MigrationConfig             `json:"migrations,omitempty"`
+	Contributes          *Contributions               `json:"contributes,omitempty"`
+	Sync                 *SyncConfig                  `json:"sync,omitempty"`
 }
 
 // LocalizationConfig declares plugin-owned UI message catalogs.
@@ -290,6 +291,36 @@ func ValidateManifest(m *Manifest) []string {
 	}
 	if len(m.Permissions) == 0 {
 		errs.add("permissions must have at least one permission")
+	}
+	provided := make(map[string]struct{}, len(m.Provides))
+	for _, name := range m.Provides {
+		provided[name] = struct{}{}
+	}
+	declaredCommands := make(map[string]struct{})
+	if m.Contributes != nil {
+		for _, command := range m.Contributes.Commands {
+			declaredCommands[command.ID] = struct{}{}
+		}
+	}
+	for capabilityName, operations := range m.CapabilityOperations {
+		if _, ok := provided[capabilityName]; !ok {
+			errs.add("capabilityOperations[%q] must reference a capability declared in provides", capabilityName)
+		}
+		if len(operations) == 0 {
+			errs.add("capabilityOperations[%q] must declare at least one operation", capabilityName)
+		}
+		for operation, commandID := range operations {
+			if strings.TrimSpace(operation) == "" {
+				errs.add("capabilityOperations[%q] contains an empty operation name", capabilityName)
+			}
+			if strings.TrimSpace(commandID) == "" {
+				errs.add("capabilityOperations[%q][%q] must reference a command", capabilityName, operation)
+				continue
+			}
+			if _, ok := declaredCommands[commandID]; !ok {
+				errs.add("capabilityOperations[%q][%q] references undeclared command %q", capabilityName, operation, commandID)
+			}
+		}
 	}
 	if m.Localization != nil {
 		if !isValidLocaleTag(m.Localization.DefaultLocale) {
