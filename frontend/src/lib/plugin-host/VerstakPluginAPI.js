@@ -493,6 +493,16 @@ export function createPluginAPI(pluginId) {
         return callBackend(pluginId, 'capabilities.list', function() {
           return App.ListPluginCapabilities(pluginId);
         });
+      },
+      invoke: async function(capId, operation, args) {
+        assertActive('capabilities.invoke(' + capId + ':' + operation + ')');
+        const resolved = await callBackend(pluginId, 'capabilities.invoke(' + capId + ':' + operation + ')', function() {
+          return App.ResolvePluginCapabilityOperation(pluginId, capId, operation);
+        });
+        if (!resolved || !resolved.pluginId || !resolved.commandId) {
+          throw new Error('[plugin:' + pluginId + '] capabilities.invoke(' + capId + ':' + operation + ') failed: invalid capability resolution');
+        }
+        return executePluginCommand(resolved.pluginId, resolved.commandId, args || {});
       }
     },
 
