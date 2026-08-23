@@ -58,6 +58,7 @@ async function start() {
     // fixture. Keep that compatibility seam isolated and backed by the real
     // official plugin manifests/bundle instead of duplicating provider logic.
     await import('./lib/test/search-provider-mock.js');
+    await import('./lib/test/capability-operation-mock.js');
   }
 
   if (!backendAvailable()) {
