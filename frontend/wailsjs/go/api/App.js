@@ -130,6 +130,10 @@ export function GetPluginCapability(arg1, arg2) {
   return window['go']['api']['App']['GetPluginCapability'](arg1, arg2);
 }
 
+export function ResolvePluginCapabilityOperation(arg1, arg2, arg3) {
+  return window['go']['api']['App']['ResolvePluginCapabilityOperation'](arg1, arg2, arg3);
+}
+
 export function GetPluginFrontendInfo(arg1) {
   return window['go']['api']['App']['GetPluginFrontendInfo'](arg1);
 }
