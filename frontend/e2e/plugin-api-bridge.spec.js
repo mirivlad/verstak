@@ -151,6 +151,57 @@ test.describe('D: Plugin API bridge', () => {
     expect(result.readError).toContain('not-found: Project/bridge-trash.txt');
   });
 
+  test('capability invoke resolves provider and rejects undeclared consumers', async ({ page }) => {
+    const result = await page.evaluate(async () => {
+      window.__wailsMock.addSyntheticPlugins(3);
+      const ids = [
+        'verstak.synthetic-layout-01',
+        'verstak.synthetic-layout-02',
+        'verstak.synthetic-layout-03'
+      ];
+      const providerState = window.__wailsMock.getPluginState(ids[0]);
+      const consumerState = window.__wailsMock.getPluginState(ids[1]);
+      const rogueState = window.__wailsMock.getPluginState(ids[2]);
+      const capability = 'test/notes/v1';
+
+      providerState.manifest.provides = [capability];
+      providerState.manifest.capabilityOperations = { [capability]: { list: 'test.notes.list' } };
+      providerState.manifest.permissions = ['commands.register'];
+      providerState.manifest.contributes.commands = [
+        { id: 'test.notes.list', title: 'List notes', handler: 'test.notes.list' }
+      ];
+      consumerState.manifest.optionalRequires = [capability];
+      rogueState.manifest.optionalRequires = [];
+
+      const provider = window.createPluginAPI(ids[0]);
+      await provider.commands.register('test.notes.list', async (args) => ({
+        projectId: args.projectId,
+        notes: ['README']
+      }));
+      const consumer = window.createPluginAPI(ids[1]);
+      const handled = await consumer.capabilities.invoke(capability, 'list', { projectId: 'tos' });
+
+      let rogueError = '';
+      const rogue = window.createPluginAPI(ids[2]);
+      try {
+        await rogue.capabilities.invoke(capability, 'list', { projectId: 'tos' });
+      } catch (error) {
+        rogueError = String(error && error.message || error);
+      }
+
+      provider.dispose();
+      consumer.dispose();
+      rogue.dispose();
+      return { handled, rogueError };
+    });
+
+    expect(result.handled.status).toBe('handled');
+    expect(result.handled.pluginId).toBe('verstak.synthetic-layout-01');
+    expect(result.handled.commandId).toBe('test.notes.list');
+    expect(result.handled.result).toEqual({ projectId: 'tos', notes: ['README'] });
+    expect(result.rogueError).toContain('capability dependency not declared');
+  });
+
   test('backend plugin events are dispatched to subscribed frontend handlers', async ({ page }) => {
     const result = await page.evaluate(async () => {
       const api = window.createPluginAPI('verstak.platform-test');
