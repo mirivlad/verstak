@@ -171,6 +171,7 @@ var builtInTemplates = map[string]templateDefinition{
 		Description: "Project planning with todos, journal, activity, and browser captures.",
 		Version:     1,
 		Features: map[string]bool{
+			"projects":      true,
 			"files":         true,
 			"notes":         true,
 			"todo":          true,
@@ -183,7 +184,7 @@ var builtInTemplates = map[string]templateDefinition{
 			"files": "Files",
 		},
 		Files:          map[string]string{},
-		WorkspaceTools: []string{"verstak.notes", "verstak.files", "verstak.todo", "verstak.journal", "verstak.activity", "verstak.browser-inbox"},
+		WorkspaceTools: []string{"verstak.projects", "verstak.notes", "verstak.files", "verstak.todo", "verstak.journal", "verstak.activity", "verstak.browser-inbox"},
 		Selectable:     true,
 		Order:          20,
 	},
