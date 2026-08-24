@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - 'release-notes/v0.1.4.md'
+      - 'scripts/publish-github-release.sh'
       - '.github/workflows/release-v0.1.4.yml'
 
 permissions:
