@@ -265,3 +265,31 @@ test.describe('D: Plugin API bridge', () => {
     await expect(content.locator('.host-state.error')).toHaveCount(0);
   });
 });
+
+test.describe('D2: workspace tree plugin API', () => {
+  test('workspaces.tree exposes the complete read-only Deal hierarchy', async ({ page }) => {
+    await resetMockState(page);
+    await page.goto('/');
+    await waitForAppReady(page);
+    const result = await page.evaluate(async () => {
+      window.__wailsMock.setWorkspaceTreeV2({
+        roots: [{
+          key: 'folder:projects', kind: 'folder', id: 'folder-projects', name: 'Projects', path: 'Projects',
+          children: [
+            { key: 'workspace:a', kind: 'workspace', id: 'deal-a', name: 'Same', path: 'Projects/Same', children: [] },
+            { key: 'workspace:b', kind: 'workspace', id: 'deal-b', name: 'Nested', path: 'Projects/Nested', children: [] },
+          ],
+        }],
+        currentWorkspaceId: 'deal-b', revision: 9, warnings: [],
+      });
+      const api = window.createPluginAPI('verstak.projects');
+      const tree = await api.workspaces.tree();
+      api.dispose();
+      return tree;
+    });
+    expect(result.currentWorkspaceId).toBe('deal-b');
+    expect(result.revision).toBe(9);
+    expect(result.roots[0].kind).toBe('folder');
+    expect(result.roots[0].children.map((node) => node.id)).toEqual(['deal-a', 'deal-b']);
+  });
+});

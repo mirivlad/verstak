@@ -1,6 +1,5 @@
 <script>
   import { onMount, onDestroy } from 'svelte';
-  import * as App from '../../../wailsjs/go/api/App';
   import Icon from '../ui/Icon.svelte';
   import { i18n } from '../i18n/index.js';
 
@@ -105,36 +104,6 @@
     }
   }
 
-  function unpackBackendResult(result) {
-    if (Array.isArray(result) && result.length === 2 && (typeof result[1] === 'string' || result[1] == null)) {
-      if (result[1]) throw new Error(result[1]);
-      return result[0];
-    }
-    return result;
-  }
-
-  // The shell already owns the canonical UUID Deal tree. Expose that same
-  // read-only snapshot through the public plugin API instead of forcing a
-  // plugin to infer Deal structure by walking vault files. `workspaces.list`
-  // remains intentionally filtered to Deals where that plugin contributes a
-  // workspace tool; `tree` is the discovery counterpart.
-  function attachWorkspaceTreeAPI(api) {
-    if (!api?.workspaces || typeof api.workspaces.tree === 'function') return api;
-    api.workspaces.tree = async function() {
-      const snapshot = unpackBackendResult(await App.GetWorkspaceTreeV2());
-      if (!snapshot || !Array.isArray(snapshot.roots)) {
-        return { roots: [], currentWorkspaceId: '', revision: 0, warnings: [] };
-      }
-      return {
-        roots: snapshot.roots,
-        currentWorkspaceId: snapshot.currentWorkspaceId || '',
-        revision: Number(snapshot.revision || 0),
-        warnings: Array.isArray(snapshot.warnings) ? snapshot.warnings : []
-      };
-    };
-    return api;
-  }
-
   async function loadAndMount(pId, compId, nextPropsKey) {
     // If same plugin+component and already mounted, skip
     if (currentPluginId === pId && currentComponent === compId && currentPropsKey === nextPropsKey && loadState === 'loaded') {
@@ -187,9 +156,8 @@
         return;
       }
 
-      // Create API. The Deal-tree addition is a shell-owned public read API,
-      // not a plugin-specific privileged path.
-      const api = attachWorkspaceTreeAPI(createPluginAPI(pId));
+      // Create API
+      const api = createPluginAPI(pId);
       currentAPI = api;
 
       // Mount component
