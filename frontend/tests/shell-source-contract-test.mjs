@@ -191,6 +191,7 @@ const officialManifestFixtures = [
   ['files', 'filesManifest'],
   ['trash', 'trashManifest'],
   ['notes', 'notesManifest'],
+  ['projects', 'projectsManifest'],
   ['sync', 'syncManifest'],
   ['activity', 'activityManifest'],
   ['journal', 'journalManifest'],
