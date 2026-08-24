@@ -299,9 +299,9 @@ function cloneJson(value) {
         name: 'Project',
         description: 'Project planning with todos, journal, activity, and browser captures.',
         version: 1,
-        workspaceTools: ['verstak.notes', 'verstak.files', 'verstak.todo', 'verstak.journal', 'verstak.activity', 'verstak.browser-inbox'],
+        workspaceTools: ['verstak.projects', 'verstak.notes', 'verstak.files', 'verstak.todo', 'verstak.journal', 'verstak.activity', 'verstak.browser-inbox'],
         folders: ['Notes', 'Files'],
-        features: { files: true, notes: true, todo: true, journal: true, activity: true, 'browser-inbox': true },
+        features: { projects: true, files: true, notes: true, todo: true, journal: true, activity: true, 'browser-inbox': true },
       },
       {
         id: 'writing',
