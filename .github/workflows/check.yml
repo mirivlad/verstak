@@ -25,15 +25,16 @@ jobs:
           ref: feat/projects-template
       - name: Apply prepared Projects template patch once
         run: |
-          if git apply --check .github/projects-template.patch; then
-            git apply --index .github/projects-template.patch
-            git config user.name "github-actions[bot]"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git commit -m "feat: enable Projects in project workspace template"
-            git push origin HEAD:feat/projects-template
-          else
+          if git apply --reverse --check .github/projects-template.patch 2>/dev/null; then
             echo "Patch already applied; nothing to bootstrap."
+            exit 0
           fi
+          git apply --check .github/projects-template.patch
+          git apply --index .github/projects-template.patch
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "feat: enable Projects in project workspace template"
+          git push origin HEAD:feat/projects-template
 
   check:
     runs-on: ubuntu-latest
