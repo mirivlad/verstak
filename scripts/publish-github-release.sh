@@ -63,6 +63,12 @@ if "$GIT_BIN" rev-parse -q --verify "refs/tags/$VERSION" >/dev/null; then
     exit 1
   fi
 else
+  if [[ -z "$("$GIT_BIN" config --get user.name || true)" ]]; then
+    "$GIT_BIN" config user.name "${VERSTAK_RELEASE_GIT_NAME:-github-actions[bot]}"
+  fi
+  if [[ -z "$("$GIT_BIN" config --get user.email || true)" ]]; then
+    "$GIT_BIN" config user.email "${VERSTAK_RELEASE_GIT_EMAIL:-41898282+github-actions[bot]@users.noreply.github.com}"
+  fi
   "$GIT_BIN" tag -a "$VERSION" -m "Release $VERSION"
   "$GIT_BIN" push origin "refs/tags/$VERSION"
 fi
