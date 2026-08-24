@@ -1,0 +1,126 @@
+diff --git a/frontend/e2e/plugin-api-bridge.spec.js b/frontend/e2e/plugin-api-bridge.spec.js
+index 68c93eca6b460ab3b9a3478ed590bd6fa5f8e4d6..471ffdc6f15b859976a096307088c45df3d6de94 100644
+--- a/frontend/e2e/plugin-api-bridge.spec.js
++++ b/frontend/e2e/plugin-api-bridge.spec.js
+@@ -265,3 +265,31 @@ test.describe('D: Plugin API bridge', () => {
+     await expect(content.locator('.host-state.error')).toHaveCount(0);
+   });
+ });
++
++test.describe('D2: workspace tree plugin API', () => {
++  test('workspaces.tree exposes the complete read-only Deal hierarchy', async ({ page }) => {
++    await resetMockState(page);
++    await page.goto('/');
++    await waitForAppReady(page);
++    const result = await page.evaluate(async () => {
++      window.__wailsMock.setWorkspaceTreeV2({
++        roots: [{
++          key: 'folder:projects', kind: 'folder', id: 'folder-projects', name: 'Projects', path: 'Projects',
++          children: [
++            { key: 'workspace:a', kind: 'workspace', id: 'deal-a', name: 'Same', path: 'Projects/Same', children: [] },
++            { key: 'workspace:b', kind: 'workspace', id: 'deal-b', name: 'Nested', path: 'Projects/Nested', children: [] },
++          ],
++        }],
++        currentWorkspaceId: 'deal-b', revision: 9, warnings: [],
++      });
++      const api = window.createPluginAPI('verstak.projects');
++      const tree = await api.workspaces.tree();
++      api.dispose();
++      return tree;
++    });
++    expect(result.currentWorkspaceId).toBe('deal-b');
++    expect(result.revision).toBe(9);
++    expect(result.roots[0].kind).toBe('folder');
++    expect(result.roots[0].children.map((node) => node.id)).toEqual(['deal-a', 'deal-b']);
++  });
++});
+diff --git a/frontend/src/lib/plugin-host/PluginBundleHost.svelte b/frontend/src/lib/plugin-host/PluginBundleHost.svelte
+index 123a681af5f131056889decb654ace9370791171..679de0509f751dd5ee5a0bc5436e577d2a77674d 100644
+--- a/frontend/src/lib/plugin-host/PluginBundleHost.svelte
++++ b/frontend/src/lib/plugin-host/PluginBundleHost.svelte
+@@ -1,6 +1,5 @@
+ <script>
+   import { onMount, onDestroy } from 'svelte';
+-  import * as App from '../../../wailsjs/go/api/App';
+   import Icon from '../ui/Icon.svelte';
+   import { i18n } from '../i18n/index.js';
+ 
+@@ -105,36 +104,6 @@
+     }
+   }
+ 
+-  function unpackBackendResult(result) {
+-    if (Array.isArray(result) && result.length === 2 && (typeof result[1] === 'string' || result[1] == null)) {
+-      if (result[1]) throw new Error(result[1]);
+-      return result[0];
+-    }
+-    return result;
+-  }
+-
+-  // The shell already owns the canonical UUID Deal tree. Expose that same
+-  // read-only snapshot through the public plugin API instead of forcing a
+-  // plugin to infer Deal structure by walking vault files. `workspaces.list`
+-  // remains intentionally filtered to Deals where that plugin contributes a
+-  // workspace tool; `tree` is the discovery counterpart.
+-  function attachWorkspaceTreeAPI(api) {
+-    if (!api?.workspaces || typeof api.workspaces.tree === 'function') return api;
+-    api.workspaces.tree = async function() {
+-      const snapshot = unpackBackendResult(await App.GetWorkspaceTreeV2());
+-      if (!snapshot || !Array.isArray(snapshot.roots)) {
+-        return { roots: [], currentWorkspaceId: '', revision: 0, warnings: [] };
+-      }
+-      return {
+-        roots: snapshot.roots,
+-        currentWorkspaceId: snapshot.currentWorkspaceId || '',
+-        revision: Number(snapshot.revision || 0),
+-        warnings: Array.isArray(snapshot.warnings) ? snapshot.warnings : []
+-      };
+-    };
+-    return api;
+-  }
+-
+   async function loadAndMount(pId, compId, nextPropsKey) {
+     // If same plugin+component and already mounted, skip
+     if (currentPluginId === pId && currentComponent === compId && currentPropsKey === nextPropsKey && loadState === 'loaded') {
+@@ -187,9 +156,8 @@
+         return;
+       }
+ 
+-      // Create API. The Deal-tree addition is a shell-owned public read API,
+-      // not a plugin-specific privileged path.
+-      const api = attachWorkspaceTreeAPI(createPluginAPI(pId));
++      // Create API
++      const api = createPluginAPI(pId);
+       currentAPI = api;
+ 
+       // Mount component
+diff --git a/frontend/src/lib/plugin-host/VerstakPluginAPI.js b/frontend/src/lib/plugin-host/VerstakPluginAPI.js
+index 327d104bbd3db0611a86153067d8a3e2f145bc02..417a198165c3474b9e329329304352baf576813d 100644
+--- a/frontend/src/lib/plugin-host/VerstakPluginAPI.js
++++ b/frontend/src/lib/plugin-host/VerstakPluginAPI.js
+@@ -720,6 +720,25 @@ export function createPluginAPI(pluginId) {
+           return App.PluginListWorkspaces(pluginId);
+         });
+       },
++      // Read-only user-visible Deal/folder hierarchy. Unlike list(), this is
++      // intentionally not filtered by whether this plugin contributes a tool
++      // to a Deal; stable Deal UUIDs are platform identity, not plugin state.
++      tree: function() {
++        assertActive('workspaces.tree');
++        return callBackend(pluginId, 'workspaces.tree', function() {
++          return App.GetWorkspaceTreeV2();
++        }).then(function(snapshot) {
++          if (!snapshot || !Array.isArray(snapshot.roots)) {
++            return { roots: [], currentWorkspaceId: '', revision: 0, warnings: [] };
++          }
++          return {
++            roots: snapshot.roots,
++            currentWorkspaceId: snapshot.currentWorkspaceId || '',
++            revision: Number(snapshot.revision || 0),
++            warnings: Array.isArray(snapshot.warnings) ? snapshot.warnings : []
++          };
++        });
++      },
+       resolvePath: function(relativePath) {
+         assertActive('workspaces.resolvePath');
+         return callBackend(pluginId, 'workspaces.resolvePath', function() {
