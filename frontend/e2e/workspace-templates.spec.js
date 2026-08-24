@@ -53,9 +53,10 @@ test.describe('Workspace templates', () => {
       };
     })).toEqual({
       templateId: 'project',
-      tools: ['verstak.notes', 'verstak.files', 'verstak.todo', 'verstak.journal', 'verstak.activity', 'verstak.browser-inbox'],
+      tools: ['verstak.projects', 'verstak.notes', 'verstak.files', 'verstak.todo', 'verstak.journal', 'verstak.activity', 'verstak.browser-inbox'],
     });
 
+    await expect(page.getByRole('tab', { name: 'Project' })).toBeVisible();
     await expect(page.getByRole('tab', { name: 'Todos' })).toBeVisible();
     await expect(page.getByRole('tab', { name: 'Journal' })).toBeVisible();
     await expect(page.getByRole('tab', { name: 'Secrets' })).toHaveCount(0);
@@ -84,6 +85,7 @@ test.describe('Workspace templates', () => {
       const metadata = Array.isArray(result) ? result[0] : result;
       return metadata.workspaceTools;
     })).toEqual([
+      'verstak.projects',
       'verstak.notes',
       'verstak.todo',
       'verstak.journal',
@@ -97,7 +99,7 @@ test.describe('Workspace templates', () => {
     const before = await page.evaluate(async () => (await window.go.api.App.GetWorkspaceTreeV2()).roots.length);
     const modal = await openCreateModal(page);
     await modal.locator('[data-workspace-template]').selectOption('custom');
-    await expect(modal.locator('[data-workspace-tool]')).toHaveCount(8);
+    await expect(modal.locator('[data-workspace-tool]')).toHaveCount(9);
     await expect(modal.locator('[data-workspace-tool][aria-pressed="true"]')).toHaveCount(0);
     await expect(modal.locator('[data-workspace-tool="verstak.default-editor"]')).toHaveCount(0);
     await modal.locator('[data-workspace-name]').fill('CancelledDeal');

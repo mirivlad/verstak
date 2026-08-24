@@ -3417,6 +3417,7 @@ func workspaceHasTool(vaultPath, workspaceID, pluginID string) bool {
 func toolsFromWorkspaceFeatures(features map[string]bool) []string {
 	tools := []string{"verstak.notes", "verstak.files"}
 	for feature, pluginID := range map[string]string{
+		"projects":      "verstak.projects",
 		"journal":       "verstak.journal",
 		"activity":      "verstak.activity",
 		"browser-inbox": "verstak.browser-inbox",
