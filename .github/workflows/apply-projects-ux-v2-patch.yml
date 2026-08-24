@@ -1,11 +1,9 @@
 name: apply-projects-ux-v2-patch
 
 on:
-  push:
+  pull_request:
     branches:
-      - projects-ux-v2
-    paths:
-      - '.github/workflows/apply-projects-ux-v2-patch.yml'
+      - main
   workflow_dispatch:
 
 permissions:
@@ -13,6 +11,7 @@ permissions:
 
 jobs:
   apply:
+    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.head.ref == 'projects-ux-v2'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -28,7 +27,7 @@ jobs:
           EXPECTED=de9e20173d6bf87527005bc0a6010e0b866bf41cdacdc3d694b530a9a693fa11
           ACTUAL="$(sha256sum "$PATCH" | awk '{print $1}')"
           test "$ACTUAL" = "$EXPECTED"
-          test "$(git rev-parse HEAD~1)" = "206eb6fb28c515ad9ca9fb302e67e3071a758492"
+          test "$(git rev-parse HEAD~2)" = "206eb6fb28c515ad9ca9fb302e67e3071a758492"
           git apply --check "$PATCH"
           git apply "$PATCH"
           git config user.name "github-actions[bot]"
