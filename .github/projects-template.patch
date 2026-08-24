@@ -1,0 +1,89 @@
+diff --git a/internal/core/workspacetree/lifecycle.go b/internal/core/workspacetree/lifecycle.go
+--- a/internal/core/workspacetree/lifecycle.go
++++ b/internal/core/workspacetree/lifecycle.go
+@@ -498,7 +498,7 @@ func marshalWorkspaceMetadataV2(workspaceID, workspaceName, templateID string, w
+ 
+ var templateRegistry = map[string]templateDef{
+ 	"default":        {ID: "default", Name: "General", Selectable: true, Order: 10, WorkspaceTools: []string{"verstak.notes", "verstak.files", "verstak.journal", "verstak.activity", "verstak.browser-inbox"}},
+-	"project":        {ID: "project", Name: "Project", Selectable: true, Order: 20, WorkspaceTools: []string{"verstak.notes", "verstak.files", "verstak.todo", "verstak.journal", "verstak.activity", "verstak.browser-inbox"}},
++	"project":        {ID: "project", Name: "Project", Selectable: true, Order: 20, WorkspaceTools: []string{"verstak.projects", "verstak.notes", "verstak.files", "verstak.todo", "verstak.journal", "verstak.activity", "verstak.browser-inbox"}},
+ 	"writing":        {ID: "writing", Name: "Writing", Selectable: true, Order: 30, WorkspaceTools: []string{"verstak.notes", "verstak.files", "verstak.journal"}},
+ 	"admin":          {ID: "admin", Name: "Admin", Selectable: true, Order: 40, WorkspaceTools: []string{"verstak.notes", "verstak.files", "verstak.secrets", "verstak.todo", "verstak.journal"}},
+ 	"minimal":        {ID: "minimal", Name: "Minimal", Selectable: true, Order: 50, WorkspaceTools: []string{"verstak.notes", "verstak.files"}},
+diff --git a/internal/core/workspace/manager.go b/internal/core/workspace/manager.go
+--- a/internal/core/workspace/manager.go
++++ b/internal/core/workspace/manager.go
+@@ -171,6 +171,7 @@ var builtInTemplates = map[string]templateDefinition{
+ 		Description: "Project planning with todos, journal, activity, and browser captures.",
+ 		Version:     1,
+ 		Features: map[string]bool{
++			"projects":      true,
+ 			"files":         true,
+ 			"notes":         true,
+ 			"todo":          true,
+@@ -183,7 +184,7 @@ var builtInTemplates = map[string]templateDefinition{
+ 			"files": "Files",
+ 		},
+ 		Files:          map[string]string{},
+-		WorkspaceTools: []string{"verstak.notes", "verstak.files", "verstak.todo", "verstak.journal", "verstak.activity", "verstak.browser-inbox"},
++		WorkspaceTools: []string{"verstak.projects", "verstak.notes", "verstak.files", "verstak.todo", "verstak.journal", "verstak.activity", "verstak.browser-inbox"},
+ 		Selectable:     true,
+ 		Order:          20,
+ 	},
+diff --git a/internal/api/app.go b/internal/api/app.go
+--- a/internal/api/app.go
++++ b/internal/api/app.go
+@@ -3417,6 +3417,7 @@ func workspaceHasTool(vaultPath, workspaceID, pluginID string) bool {
+ func toolsFromWorkspaceFeatures(features map[string]bool) []string {
+ 	tools := []string{"verstak.notes", "verstak.files"}
+ 	for feature, pluginID := range map[string]string{
++		"projects":      "verstak.projects",
+ 		"journal":       "verstak.journal",
+ 		"activity":      "verstak.activity",
+ 		"browser-inbox": "verstak.browser-inbox",
+diff --git a/frontend/src/lib/test/wails-mock.js b/frontend/src/lib/test/wails-mock.js
+--- a/frontend/src/lib/test/wails-mock.js
++++ b/frontend/src/lib/test/wails-mock.js
+@@ -299,9 +299,9 @@ function cloneJson(value) {
+         name: 'Project',
+         description: 'Project planning with todos, journal, activity, and browser captures.',
+         version: 1,
+-        workspaceTools: ['verstak.notes', 'verstak.files', 'verstak.todo', 'verstak.journal', 'verstak.activity', 'verstak.browser-inbox'],
++        workspaceTools: ['verstak.projects', 'verstak.notes', 'verstak.files', 'verstak.todo', 'verstak.journal', 'verstak.activity', 'verstak.browser-inbox'],
+         folders: ['Notes', 'Files'],
+-        features: { files: true, notes: true, todo: true, journal: true, activity: true, 'browser-inbox': true },
++        features: { projects: true, files: true, notes: true, todo: true, journal: true, activity: true, 'browser-inbox': true },
+       },
+       {
+diff --git a/frontend/e2e/workspace-templates.spec.js b/frontend/e2e/workspace-templates.spec.js
+--- a/frontend/e2e/workspace-templates.spec.js
++++ b/frontend/e2e/workspace-templates.spec.js
+@@ -53,9 +53,10 @@ test.describe('Workspace templates', () => {
+       };
+     })).toEqual({
+       templateId: 'project',
+-      tools: ['verstak.notes', 'verstak.files', 'verstak.todo', 'verstak.journal', 'verstak.activity', 'verstak.browser-inbox'],
++      tools: ['verstak.projects', 'verstak.notes', 'verstak.files', 'verstak.todo', 'verstak.journal', 'verstak.activity', 'verstak.browser-inbox'],
+     });
+ 
++    await expect(page.getByRole('tab', { name: 'Project' })).toBeVisible();
+     await expect(page.getByRole('tab', { name: 'Todos' })).toBeVisible();
+     await expect(page.getByRole('tab', { name: 'Journal' })).toBeVisible();
+     await expect(page.getByRole('tab', { name: 'Secrets' })).toHaveCount(0);
+@@ -84,6 +85,7 @@ test.describe('Workspace templates', () => {
+       const metadata = Array.isArray(result) ? result[0] : result;
+       return metadata.workspaceTools;
+     })).toEqual([
++      'verstak.projects',
+       'verstak.notes',
+       'verstak.todo',
+       'verstak.journal',
+@@ -97,7 +99,7 @@ test.describe('Workspace templates', () => {
+     const before = await page.evaluate(async () => (await window.go.api.App.GetWorkspaceTreeV2()).roots.length);
+     const modal = await openCreateModal(page);
+     await modal.locator('[data-workspace-template]').selectOption('custom');
+-    await expect(modal.locator('[data-workspace-tool]')).toHaveCount(8);
++    await expect(modal.locator('[data-workspace-tool]')).toHaveCount(9);
+     await expect(modal.locator('[data-workspace-tool][aria-pressed="true"]')).toHaveCount(0);
+     await expect(modal.locator('[data-workspace-tool="verstak.default-editor"]')).toHaveCount(0);
+     await modal.locator('[data-workspace-name]').fill('CancelledDeal');
