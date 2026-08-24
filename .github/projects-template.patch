@@ -44,7 +44,7 @@ diff --git a/internal/api/app.go b/internal/api/app.go
 diff --git a/frontend/src/lib/test/wails-mock.js b/frontend/src/lib/test/wails-mock.js
 --- a/frontend/src/lib/test/wails-mock.js
 +++ b/frontend/src/lib/test/wails-mock.js
-@@ -299,9 +299,9 @@ function cloneJson(value) {
+@@ -299,8 +299,8 @@ function cloneJson(value) {
          name: 'Project',
          description: 'Project planning with todos, journal, activity, and browser captures.',
          version: 1,
@@ -70,7 +70,7 @@ diff --git a/frontend/e2e/workspace-templates.spec.js b/frontend/e2e/workspace-t
      await expect(page.getByRole('tab', { name: 'Todos' })).toBeVisible();
      await expect(page.getByRole('tab', { name: 'Journal' })).toBeVisible();
      await expect(page.getByRole('tab', { name: 'Secrets' })).toHaveCount(0);
-@@ -84,6 +85,7 @@ test.describe('Workspace templates', () => {
+@@ -84,7 +85,8 @@ test.describe('Workspace templates', () => {
        const metadata = Array.isArray(result) ? result[0] : result;
        return metadata.workspaceTools;
      })).toEqual([
