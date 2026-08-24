@@ -720,6 +720,25 @@ export function createPluginAPI(pluginId) {
           return App.PluginListWorkspaces(pluginId);
         });
       },
+      // Read-only user-visible Deal/folder hierarchy. Unlike list(), this is
+      // intentionally not filtered by whether this plugin contributes a tool
+      // to a Deal; stable Deal UUIDs are platform identity, not plugin state.
+      tree: function() {
+        assertActive('workspaces.tree');
+        return callBackend(pluginId, 'workspaces.tree', function() {
+          return App.GetWorkspaceTreeV2();
+        }).then(function(snapshot) {
+          if (!snapshot || !Array.isArray(snapshot.roots)) {
+            return { roots: [], currentWorkspaceId: '', revision: 0, warnings: [] };
+          }
+          return {
+            roots: snapshot.roots,
+            currentWorkspaceId: snapshot.currentWorkspaceId || '',
+            revision: Number(snapshot.revision || 0),
+            warnings: Array.isArray(snapshot.warnings) ? snapshot.warnings : []
+          };
+        });
+      },
       resolvePath: function(relativePath) {
         assertActive('workspaces.resolvePath');
         return callBackend(pluginId, 'workspaces.resolvePath', function() {
