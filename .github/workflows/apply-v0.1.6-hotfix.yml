@@ -1,0 +1,33 @@
+name: apply-v0.1.6-hotfix
+
+on:
+  push:
+    branches:
+      - hotfix/v0.1.6-apply
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Apply verified hotfix to main
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp .github/hotfix/v0.1.6.patch /tmp/v0.1.6.patch
+          git fetch origin main
+          git checkout -B main origin/main
+          git apply --check /tmp/v0.1.6.patch
+          git apply /tmp/v0.1.6.patch
+          git diff --check
+          git config user.name "Mirivlad"
+          git config user.email "mirivlad@gmail.com"
+          git add frontend internal
+          git commit -m "fix: allow editing Deal tools"
+          git push origin HEAD:main
