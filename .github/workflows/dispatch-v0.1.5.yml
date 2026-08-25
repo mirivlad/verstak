@@ -1,0 +1,29 @@
+name: Dispatch v0.1.5 release
+
+on:
+  push:
+    branches: [release-v0.1.5-dispatch]
+    paths:
+      - '.github/workflows/dispatch-v0.1.5.yml'
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Dispatch canonical release workflow
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail-with-body -L \
+            -X POST \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/workflows/release.yml/dispatches" \
+            -d '{"ref":"main","inputs":{"version":"v0.1.5","official_plugins_ref":"63c85a5e30a7bc3d014defa3b2aae7d0e33527e3","publish":"true"}}'
