@@ -1,0 +1,33 @@
+name: apply-v0.1.6-e2e
+
+on:
+  push:
+    branches:
+      - hotfix/v0.1.6-e2e
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Apply verified E2E fix to main
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp .github/hotfix/v0.1.6-e2e.patch /tmp/v0.1.6-e2e.patch
+          git fetch origin main
+          git checkout -B main origin/main
+          git apply --check /tmp/v0.1.6-e2e.patch
+          git apply /tmp/v0.1.6-e2e.patch
+          git diff --check
+          git config user.name "Mirivlad"
+          git config user.email "mirivlad@gmail.com"
+          git add frontend/e2e/projects.spec.js frontend/src/lib/test/wails-mock.js
+          git commit -m "test: align Projects E2E with Deal navigation"
+          git push origin HEAD:main
