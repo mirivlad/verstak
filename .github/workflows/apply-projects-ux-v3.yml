@@ -1,0 +1,33 @@
+name: Apply Projects UX v3
+
+on:
+  push:
+    branches: [projects-ux-v3-apply]
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Verify and apply patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "fd688e55571903d04c45e649efd06187c89629f55acf16e9a82ffa81665ae9e8  .github/projects-ux-v3.patch" | sha256sum -c -
+          git apply --check .github/projects-ux-v3.patch
+          git apply .github/projects-ux-v3.patch
+          rm .github/projects-ux-v3.patch .github/workflows/apply-projects-ux-v3.yml
+      - name: Commit result
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "projects: integrate Deal scoped project navigation"
+          git push origin HEAD:projects-ux-v3-apply
