@@ -1,0 +1,520 @@
+diff --git a/frontend/e2e/workspace-templates.spec.js b/frontend/e2e/workspace-templates.spec.js
+index e617b53..ec322fb 100644
+--- a/frontend/e2e/workspace-templates.spec.js
++++ b/frontend/e2e/workspace-templates.spec.js
+@@ -95,6 +95,34 @@ test.describe('Workspace templates', () => {
+     ]);
+   });
+ 
++  test('existing Deal can add Projects through Edit Deal and updates its tabs immediately', async ({ page }) => {
++    const create = await openCreateModal(page);
++    await create.locator('[data-workspace-name]').fill('AddProjectsLater');
++    await create.getByRole('button', { name: 'Create Deal' }).click();
++
++    await expect(page.getByRole('tab', { name: 'Project' })).toHaveCount(0);
++    const deal = page.locator('.wt-node').filter({ hasText: 'AddProjectsLater' });
++    await deal.click({ button: 'right' });
++    await page.getByRole('button', { name: 'Edit Deal' }).click();
++
++    const edit = page.locator('[data-workspace-edit-modal]');
++    await expect(edit).toBeVisible();
++    await expect(edit.locator('[data-workspace-edit-name]')).toHaveValue('AddProjectsLater');
++    const projects = edit.locator('[data-workspace-edit-tool="verstak.projects"]');
++    await expect(projects).toHaveAttribute('aria-pressed', 'false');
++    await projects.click();
++    await expect(projects).toHaveAttribute('aria-pressed', 'true');
++    await edit.getByRole('button', { name: 'Save' }).click();
++
++    await expect(edit).toBeHidden();
++    await expect(page.getByRole('tab', { name: 'Project' })).toBeVisible();
++    await expect.poll(async () => page.evaluate(async () => {
++      const result = await window.go.api.App.GetWorkspaceMetadata('AddProjectsLater');
++      const metadata = Array.isArray(result) ? result[0] : result;
++      return metadata.workspaceTools.includes('verstak.projects');
++    })).toBe(true);
++  });
++
+   test('Custom shows every eligible workspace plugin and cancel does not mutate the tree', async ({ page }) => {
+     const before = await page.evaluate(async () => (await window.go.api.App.GetWorkspaceTreeV2()).roots.length);
+     const modal = await openCreateModal(page);
+diff --git a/frontend/src/lib/i18n/catalogs/en.js b/frontend/src/lib/i18n/catalogs/en.js
+index a69b8e4..a9175fa 100644
+--- a/frontend/src/lib/i18n/catalogs/en.js
++++ b/frontend/src/lib/i18n/catalogs/en.js
+@@ -161,6 +161,9 @@ export default {
+   'workspaceTree.rename': 'Rename Deal',
+   'workspaceTree.renameFolder': 'Rename folder',
+   'workspaceTree.renameDeal': 'Rename Deal',
++  'workspaceTree.editDeal': 'Edit Deal',
++  'workspaceTree.editDealLoadError': 'Could not load Deal settings.',
++  'workspaceTree.editDealSaveError': 'Could not save Deal settings.',
+   'workspaceTree.moveFolder': 'Move folder',
+   'workspaceTree.moveDeal': 'Move Deal',
+   'workspaceTree.trash': 'Move Deal to trash',
+diff --git a/frontend/src/lib/i18n/catalogs/ru.js b/frontend/src/lib/i18n/catalogs/ru.js
+index e07cd96..21ae733 100644
+--- a/frontend/src/lib/i18n/catalogs/ru.js
++++ b/frontend/src/lib/i18n/catalogs/ru.js
+@@ -161,6 +161,9 @@ export default {
+   'workspaceTree.rename': 'Переименовать',
+   'workspaceTree.renameFolder': 'Переименовать папку',
+   'workspaceTree.renameDeal': 'Переименовать Дело',
++  'workspaceTree.editDeal': 'Редактировать Дело',
++  'workspaceTree.editDealLoadError': 'Не удалось загрузить настройки Дела.',
++  'workspaceTree.editDealSaveError': 'Не удалось сохранить настройки Дела.',
+   'workspaceTree.moveFolder': 'Переместить папку',
+   'workspaceTree.moveDeal': 'Переместить Дело',
+   'workspaceTree.trash': 'Переместить Дело в корзину',
+diff --git a/frontend/src/lib/shell/WorkspaceHost.svelte b/frontend/src/lib/shell/WorkspaceHost.svelte
+index b254b42..6e70ece 100644
+--- a/frontend/src/lib/shell/WorkspaceHost.svelte
++++ b/frontend/src/lib/shell/WorkspaceHost.svelte
+@@ -98,6 +98,7 @@
+     });
+     window.addEventListener('verstak:workspace-open-tool', handleWorkspaceOpenTool);
+     window.addEventListener('verstak:plugins-changed', handlePluginsChanged);
++    window.addEventListener('verstak:workspace-tools-changed', handleWorkspaceToolsChanged);
+   });
+ 
+   onDestroy(() => {
+@@ -105,6 +106,7 @@
+     if (workspaceRequestTimer) clearTimeout(workspaceRequestTimer);
+     window.removeEventListener('verstak:workspace-open-tool', handleWorkspaceOpenTool);
+     window.removeEventListener('verstak:plugins-changed', handlePluginsChanged);
++    window.removeEventListener('verstak:workspace-tools-changed', handleWorkspaceToolsChanged);
+   });
+ 
+   // An empty state that only describes the emptiness leaves the user to work
+@@ -144,6 +146,7 @@
+       // Template metadata can derive the intended tool set from its features.
+       const f = metadata.features || {};
+       allowed = ['verstak.notes', 'verstak.files'];
++      if (f.projects) allowed.push('verstak.projects');
+       if (f.journal) allowed.push('verstak.journal');
+       if (f.activity) allowed.push('verstak.activity');
+       if (f['browser-inbox']) allowed.push('verstak.browser-inbox');
+@@ -247,6 +250,12 @@
+     if (selectedWorkspaceName) loadTools();
+   }
+ 
++  function handleWorkspaceToolsChanged(event) {
++    const targetWorkspaceID = event?.detail?.workspaceId || '';
++    if (targetWorkspaceID && workspaceId && targetWorkspaceID !== workspaceId) return;
++    if (workspaceRootPath) loadWorkspaceMetadata(workspaceRootPath);
++  }
++
+   async function loadTools() {
+     try {
+       toolsLoaded = false;
+diff --git a/frontend/src/lib/shell/WorkspaceTree.svelte b/frontend/src/lib/shell/WorkspaceTree.svelte
+index bcb4316..6c62d6e 100644
+--- a/frontend/src/lib/shell/WorkspaceTree.svelte
++++ b/frontend/src/lib/shell/WorkspaceTree.svelte
+@@ -224,6 +224,21 @@
+ 
+   async function openCreateWorkspace(pid) { await loadTemplates(); modal = { type: 'create-workspace', parentId: pid }; formName = ''; formParentId = pid || ''; formTemplateId = templates[0]?.id || 'default'; resetTemplateTools(); formError = ''; formBusy = false; }
+   function openRename(kind, id, name) { modal = { type: 'rename', kind, id }; formName = name; formError = ''; formBusy = false; }
++  async function openEditWorkspace(id, name) {
++    await loadTemplates();
++    modal = { type: 'edit-workspace', id, origName: name };
++    formName = name; formError = ''; formBusy = false;
++    selectedWorkspaceTools = [];
++    try {
++      const ws = await App.GetWorkspaceByID(id);
++      const response = await App.GetWorkspaceMetadata(ws?.rootPath || name);
++      const [metadata, err] = resultOrError(response, null);
++      if (err) { formError = tr('workspaceTree.editDealLoadError'); return; }
++      selectedWorkspaceTools = workspaceToolsFromMetadata(metadata);
++    } catch {
++      formError = tr('workspaceTree.editDealLoadError');
++    }
++  }
+   function openTrash(kind, id, name) { modal = { type: 'trash', kind, id, name }; formBusy = false; }
+   function openEditFolder(id, name) {
+     modal = { type: 'edit-folder', id, origName: name };
+@@ -250,6 +265,25 @@
+       };
+     } catch {}
+   }
++  function workspaceToolsFromMetadata(metadata) {
++    if (Array.isArray(metadata?.workspaceTools)) return [...metadata.workspaceTools];
++    const eligible = eligibleWorkspacePlugins().map((item) => item.manifest.id);
++    if (!metadata?.createdFromTemplate) return eligible;
++    const features = metadata.features || {};
++    const allowed = new Set(['verstak.notes', 'verstak.files']);
++    if (features.projects) allowed.add('verstak.projects');
++    if (features.journal) allowed.add('verstak.journal');
++    if (features.activity) allowed.add('verstak.activity');
++    if (features['browser-inbox']) allowed.add('verstak.browser-inbox');
++    if (features.todo) allowed.add('verstak.todo');
++    if (features.secrets) allowed.add('verstak.secrets');
++    return eligible.filter((pluginId) => allowed.has(pluginId));
++  }
++
++  function resultOrError(response, fallbackValue) {
++    if (Array.isArray(response) && typeof response[1] === 'string') return [response[0] || fallbackValue, response[1] || ''];
++    return typeof response === 'string' ? [fallbackValue, response] : [response || fallbackValue, ''];
++  }
+   function closeModal() { if (!formBusy) modal = null; }
+   async function loadAppearanceMap() {
+     try {
+@@ -346,6 +380,30 @@
+     modal = null;
+     await loadTree();
+   }
++  async function doEditWorkspace() {
++    const n = formName.trim();
++    if (!n) { formError = tr('workspaceTree.nameRequired'); return; }
++    const workspaceID = modal.id;
++    const originalName = modal.origName || '';
++    formBusy = true;
++    let renamed = false;
++    if (n !== originalName) {
++      const renameError = await App.RenameWorkspaceV2(workspaceID, n);
++      if (renameError) { formError = renameError; formBusy = false; return; }
++      renamed = true;
++    }
++    const toolsError = await App.UpdateWorkspaceV2Tools(workspaceID, selectedWorkspaceTools);
++    if (toolsError) {
++      if (renamed) await App.RenameWorkspaceV2(workspaceID, originalName).catch(() => {});
++      formError = tr('workspaceTree.editDealSaveError');
++      formBusy = false;
++      return;
++    }
++    modal = null;
++    await loadTree();
++    window.dispatchEvent(new CustomEvent('verstak:workspace-tools-changed', { detail: { workspaceId: workspaceID } }));
++    if (activeWid === workspaceID) await selectWorkspace(workspaceID);
++  }
+   async function doMove() { formBusy = true; let err = modal.kind === 'folder' ? await App.MoveFolderV2(modal.id, formParentId || '') : await App.MoveWorkspaceV2(modal.id, formParentId || ''); if (err) { formError = err; formBusy = false; return; } modal = null; await loadTree(); }
+   async function doTrash() { formBusy = true; if (modal.kind === 'folder') await App.TrashFolderV2(modal.id); else { await App.TrashWorkspaceV2(modal.id); if (activeWid === modal.id) activeWid = ''; } modal = null; await loadTree(); }
+ 
+@@ -840,6 +898,7 @@
+         <button class="vt-menu-item danger vt-ctx-i vt-ctx-d" on:click={() => { const {id: i, name: n} = ctxMenu; closeCtx(); openTrash('folder', i, n); }}>{tr('workspaceTree.trashFolder')}</button>
+       {:else}
+         <button class="vt-menu-item vt-ctx-i" on:click={() => { const i = ctxMenu.id; closeCtx(); selectWorkspace(i); }}>{tr('workspaceTree.open')}</button>
++        <button class="vt-menu-item vt-ctx-i" on:click={() => { const {id: i, name: n} = ctxMenu; closeCtx(); openEditWorkspace(i, n); }}>{tr('workspaceTree.editDeal')}</button>
+         <button class="vt-menu-item vt-ctx-i" on:click={() => { const {id: i, name: n} = ctxMenu; closeCtx(); openRename('workspace', i, n); }}>{tr('workspaceTree.renameDeal')}</button>
+         <button class="vt-menu-item danger vt-ctx-i vt-ctx-d" on:click={() => { const {id: i, name: n} = ctxMenu; closeCtx(); openTrash('workspace', i, n); }}>{tr('workspaceTree.trashDeal')}</button>
+       {/if}
+@@ -949,6 +1008,27 @@
+   <svelte:fragment slot="actions"><button class="vt-button secondary vt-btn" on:click={closeModal} disabled={formBusy}>{tr('common.cancel')}</button><button class="vt-button primary vt-btn-p" on:click={doCreateWorkspace} disabled={formBusy}>{tr('workspaceTree.create')}</button></svelte:fragment>
+ </Modal>
+ 
++<Modal title={tr('workspaceTree.editDeal')} show={modal?.type === 'edit-workspace'} on:close={closeModal} wide data-workspace-edit-modal>
++  <label class="vt-field"><span>{tr('workspaceTree.name')}</span><input class="vt-input" data-workspace-edit-name type="text" bind:value={formName} disabled={formBusy} on:keydown={(e) => e.key === 'Enter' && doEditWorkspace()} /></label>
++  <div class="vt-template-info">
++    <div class="vt-template-tools" data-workspace-edit-tools>
++      <span class="vt-template-tools-label">{tr('workspaceTree.tools')}</span>
++      <div class="vt-template-tool-grid">
++        {#each eligibleWorkspacePlugins() as plugin}
++          {@const pt = plugin.manifest.id}
++          {@const issue = pluginIssue(pt)}
++          <button type="button" class="vt-tool-choice" class:vt-tool-selected={selectedWorkspaceTools.includes(pt)} class:vt-tool-unavailable={!pluginAvailable(pt)} aria-pressed={selectedWorkspaceTools.includes(pt)} on:click={() => toggleWorkspaceTool(pt)} title={pt} data-workspace-edit-tool={pt} data-template-tool-status={issue.reason ? 'unavailable' : 'available'}>
++            <span>{issue.name}</span>
++            <span class="vt-tool-status">{issue.reason || tr('workspaceTree.templateAvailable')}</span>
++          </button>
++        {/each}
++      </div>
++    </div>
++  </div>
++  {#if formError}<p class="vt-inline-alert error vt-ferr" data-workspace-edit-error>{formError}</p>{/if}
++  <svelte:fragment slot="actions"><button class="vt-button secondary vt-btn" on:click={closeModal} disabled={formBusy}>{tr('common.cancel')}</button><button class="vt-button primary vt-btn-p" on:click={doEditWorkspace} disabled={formBusy}>{tr('common.save')}</button></svelte:fragment>
++</Modal>
++
+ <Modal title={tr('workspaceTree.rename')} show={modal?.type === 'rename'} on:close={closeModal}>
+   <label class="vt-field"><span>{tr('workspaceTree.newName')}</span><input class="vt-input wt-rename" type="text" bind:value={formName} disabled={formBusy} on:keydown={(e) => e.key === 'Enter' && doRename()} /></label>
+   {#if formError}<p class="vt-inline-alert error vt-ferr">{formError}</p>{/if}
+diff --git a/frontend/src/lib/test/wails-mock.js b/frontend/src/lib/test/wails-mock.js
+index a499da1..b67f595 100644
+--- a/frontend/src/lib/test/wails-mock.js
++++ b/frontend/src/lib/test/wails-mock.js
+@@ -1659,6 +1659,37 @@ function cloneJson(value) {
+       workspaceTree.nodes.push(node);
+       return Promise.resolve({ id: node.workspaceId || node.id, name: norm.path, rootPath: norm.path });
+     },
++    UpdateWorkspaceV2Tools: function (workspaceID, workspaceTools) {
++      var found = workspaceTree.nodes.find(function (node) { return (node.workspaceId || node.id) === workspaceID; });
++      if (!found) return Promise.resolve('workspace not found: ' + workspaceID);
++      var eligible = allPlugins().filter(function (plugin) {
++        return (plugin.manifest && plugin.manifest.contributes && plugin.manifest.contributes.workspaceItems || []).length > 0;
++      }).map(function (plugin) { return plugin.manifest.id; });
++      var tools = Array.isArray(workspaceTools) ? workspaceTools.filter(function (toolID, index, values) {
++        return toolID && values.indexOf(toolID) === index;
++      }) : [];
++      var invalid = tools.find(function (toolID) { return eligible.indexOf(toolID) === -1; });
++      if (invalid) return Promise.resolve('workspace tool is not available: ' + invalid);
++      var rootPath = found.rootPath || found.name || found.id;
++      var metadata = Object.assign({}, workspaceMetadata[rootPath] || genericWorkspaceMetadata(rootPath));
++      metadata.workspaceTools = tools.slice();
++      metadata.features = {};
++      metadata.folders = {};
++      tools.forEach(function (toolID) {
++        var key = toolID.replace('verstak.', '');
++        metadata.features[key] = true;
++        if (key === 'notes') metadata.folders.notes = 'Notes';
++        if (key === 'files') metadata.folders.files = 'Files';
++        if (key === 'secrets') metadata.folders.secrets = 'Secrets';
++      });
++      Object.keys(metadata.folders).forEach(function (key) {
++        var folder = metadata.folders[key];
++        if (!vaultFiles[rootPath + '/' + folder]) vaultFiles[rootPath + '/' + folder] = { type: 'folder', modifiedAt: new Date().toISOString() };
++      });
++      metadata.updatedAt = new Date().toISOString();
++      workspaceMetadata[rootPath] = metadata;
++      return Promise.resolve('');
++    },
+     CreateFolderV2: function (parentFolderID, name) {
+       return Promise.resolve({ id: 'folder-' + Math.random().toString(36).slice(2, 10), name: name, path: name });
+     },
+diff --git a/frontend/wailsjs/go/api/App.d.ts b/frontend/wailsjs/go/api/App.d.ts
+index 2d8343b..b7e5ff1 100755
+--- a/frontend/wailsjs/go/api/App.d.ts
++++ b/frontend/wailsjs/go/api/App.d.ts
+@@ -271,6 +271,8 @@ export function UpdateWorkbenchPreferences(arg1:workbench.Preferences):Promise<s
+ 
+ export function UpdateWorkspaceMetadata(arg1:string,arg2:workspace.MetadataPatch):Promise<workspace.Metadata|string>;
+ 
++export function UpdateWorkspaceV2Tools(arg1:string,arg2:Array<string>):Promise<string>;
++
+ export function WriteFrontendLog(arg1:string,arg2:string):Promise<void>;
+ 
+ export function WritePluginDataJSON(arg1:string,arg2:string,arg3:Record<string, any>):Promise<string>;
+diff --git a/frontend/wailsjs/go/api/App.js b/frontend/wailsjs/go/api/App.js
+index 9b4ee3e..575cb89 100755
+--- a/frontend/wailsjs/go/api/App.js
++++ b/frontend/wailsjs/go/api/App.js
+@@ -518,6 +518,10 @@ export function UpdateWorkspaceMetadata(arg1, arg2) {
+   return window['go']['api']['App']['UpdateWorkspaceMetadata'](arg1, arg2);
+ }
+ 
++export function UpdateWorkspaceV2Tools(arg1, arg2) {
++  return window['go']['api']['App']['UpdateWorkspaceV2Tools'](arg1, arg2);
++}
++
+ export function WriteFrontendLog(arg1, arg2) {
+   return window['go']['api']['App']['WriteFrontendLog'](arg1, arg2);
+ }
+diff --git a/internal/api/app.go b/internal/api/app.go
+index fda1d5d..b047800 100644
+--- a/internal/api/app.go
++++ b/internal/api/app.go
+@@ -3558,6 +3558,33 @@ func (a *App) CreateWorkspaceV2WithTools(parentFolderID, name, templateID string
+ 	}
+ }
+ 
++// UpdateWorkspaceV2Tools replaces the exact tool set for an existing Deal.
++func (a *App) UpdateWorkspaceV2Tools(workspaceID string, workspaceTools []string) string {
++	if a.treeV2 == nil {
++		return "not initialized"
++	}
++	eligible := make(map[string]bool)
++	for _, installed := range a.plugins {
++		if installed.Manifest.Contributes != nil && len(installed.Manifest.Contributes.WorkspaceItems) > 0 {
++			eligible[installed.Manifest.ID] = true
++		}
++	}
++	for _, toolID := range workspaceTools {
++		if !eligible[toolID] {
++			return fmt.Sprintf("workspace tool is not available: %s", toolID)
++		}
++	}
++	if err := a.treeV2.UpdateWorkspaceTools(workspaceID, workspaceTools, func() error {
++		if a.fileWatcher != nil {
++			return a.fileWatcher.RefreshBaseline()
++		}
++		return nil
++	}); err != nil {
++		return err.Error()
++	}
++	return ""
++}
++
+ func (a *App) RenameFolderV2(folderID, newName string) string {
+ 	if a.treeV2 == nil {
+ 		return "not initialized"
+diff --git a/internal/api/app_test.go b/internal/api/app_test.go
+index 8ce5847..26944d2 100644
+--- a/internal/api/app_test.go
++++ b/internal/api/app_test.go
+@@ -3150,6 +3150,23 @@ func TestCreateWorkspaceV2WithToolsValidatesAndPersistsExactSelection(t *testing
+ 	if len(metadata.WorkspaceTools) != 2 || metadata.WorkspaceTools[0] != "todo.plugin" || metadata.WorkspaceTools[1] != "files.plugin" {
+ 		t.Fatalf("workspaceTools = %#v", metadata.WorkspaceTools)
+ 	}
++
++	if errText := app.UpdateWorkspaceV2Tools(workspaceID, []string{"files.plugin"}); errText != "" {
++		t.Fatalf("update tools: %s", errText)
++	}
++	data, err = os.ReadFile(filepath.Join(root, ".verstak", "workspaces", "uuid-"+workspaceID+".json"))
++	if err != nil {
++		t.Fatal(err)
++	}
++	if err := json.Unmarshal(data, &metadata); err != nil {
++		t.Fatal(err)
++	}
++	if len(metadata.WorkspaceTools) != 1 || metadata.WorkspaceTools[0] != "files.plugin" {
++		t.Fatalf("updated workspaceTools = %#v", metadata.WorkspaceTools)
++	}
++	if errText := app.UpdateWorkspaceV2Tools(workspaceID, []string{"system.component"}); !strings.Contains(errText, "workspace tool") {
++		t.Fatalf("unexpected update validation response: %q", errText)
++	}
+ }
+ 
+ func TestSyncNowAppliesEveryPullPageInOrder(t *testing.T) {
+diff --git a/internal/core/workspacetree/lifecycle.go b/internal/core/workspacetree/lifecycle.go
+index 556cf02..44302d1 100644
+--- a/internal/core/workspacetree/lifecycle.go
++++ b/internal/core/workspacetree/lifecycle.go
+@@ -89,6 +89,64 @@ func (s *Service) CreateWorkspace(parentFolderID, name, templateID string, refre
+ 
+ // CreateWorkspaceWithTools creates a workspace with an explicit definitive tool set.
+ func (s *Service) CreateWorkspaceWithTools(parentFolderID, name, templateID string, workspaceTools []string, refreshBaseline func() error) (ScannedWorkspace, error) {
++	return s.createWorkspace(parentFolderID, name, templateID, normalizeWorkspaceTools(workspaceTools), refreshBaseline)
++}
++
++// UpdateWorkspaceTools replaces the definitive workspace tool set without deleting
++// provider data. Folders required by newly enabled tools are created if missing.
++func (s *Service) UpdateWorkspaceTools(workspaceID string, workspaceTools []string, refreshBaseline func() error) error {
++	ws, ok := s.GetWorkspaceByID(workspaceID)
++	if !ok {
++		return fmt.Errorf("workspace not found: %s", workspaceID)
++	}
++	tools := normalizeWorkspaceTools(workspaceTools)
++
++	s.mu.Lock()
++	vaultDir := s.vaultDir
++	s.mu.Unlock()
++	workspaceDir := filepath.Join(vaultDir, filepath.FromSlash(ws.RootPath))
++	if err := applyWorkspaceToolFolders(workspaceDir, tools); err != nil {
++		return err
++	}
++
++	metadataPath := filepath.Join(vaultDir, ".verstak", "workspaces", "uuid-"+workspaceID+".json")
++	metadata := map[string]interface{}{}
++	if data, err := os.ReadFile(metadataPath); err == nil {
++		if err := json.Unmarshal(data, &metadata); err != nil {
++			return err
++		}
++	} else if !os.IsNotExist(err) {
++		return err
++	}
++	metadata["workspaceId"] = workspaceID
++	metadata["workspaceName"] = ws.Name
++	metadata["features"] = toolsToFeatures(tools)
++	metadata["folders"] = toolsToFolders(tools)
++	metadata["workspaceTools"] = tools
++	metadata["updatedAt"] = time.Now().UTC().Format(time.RFC3339Nano)
++
++	data, err := json.MarshalIndent(metadata, "", "  ")
++	if err != nil {
++		return err
++	}
++	if err := os.MkdirAll(filepath.Dir(metadataPath), 0o755); err != nil {
++		return err
++	}
++	tmp := metadataPath + ".tmp"
++	if err := os.WriteFile(tmp, data, 0o600); err != nil {
++		return err
++	}
++	if err := os.Rename(tmp, metadataPath); err != nil {
++		_ = os.Remove(tmp)
++		return err
++	}
++	if refreshBaseline != nil {
++		return refreshBaseline()
++	}
++	return nil
++}
++
++func normalizeWorkspaceTools(workspaceTools []string) []string {
+ 	tools := make([]string, 0, len(workspaceTools))
+ 	seen := make(map[string]bool, len(workspaceTools))
+ 	for _, toolID := range workspaceTools {
+@@ -99,7 +157,7 @@ func (s *Service) CreateWorkspaceWithTools(parentFolderID, name, templateID stri
+ 		seen[toolID] = true
+ 		tools = append(tools, toolID)
+ 	}
+-	return s.createWorkspace(parentFolderID, name, templateID, tools, refreshBaseline)
++	return tools
+ }
+ 
+ func (s *Service) createWorkspace(parentFolderID, name, templateID string, workspaceTools []string, refreshBaseline func() error) (ScannedWorkspace, error) {
+@@ -533,6 +591,8 @@ func toolsToFeatures(tools []string) map[string]bool {
+ 		switch t {
+ 		case "verstak.files":
+ 			f["files"] = true
++		case "verstak.projects":
++			f["projects"] = true
+ 		case "verstak.notes":
+ 			f["notes"] = true
+ 		case "verstak.journal":
+diff --git a/internal/core/workspacetree/lifecycle_test.go b/internal/core/workspacetree/lifecycle_test.go
+index ad15710..43ad3e5 100644
+--- a/internal/core/workspacetree/lifecycle_test.go
++++ b/internal/core/workspacetree/lifecycle_test.go
+@@ -107,6 +107,65 @@ func TestCreateWorkspaceWithToolsPersistsExactSelection(t *testing.T) {
+ 	}
+ }
+ 
++func TestUpdateWorkspaceToolsPersistsExactSelectionWithoutDeletingProviderData(t *testing.T) {
++	vault := t.TempDir()
++	if err := os.MkdirAll(filepath.Join(vault, ".verstak"), 0o755); err != nil {
++		t.Fatal(err)
++	}
++	if err := os.WriteFile(filepath.Join(vault, ".verstak", "vault.json"), []byte(`{"schemaVersion":1}`), 0o600); err != nil {
++		t.Fatal(err)
++	}
++	svc := NewService(vault, nil)
++	if err := svc.Initialize(); err != nil {
++		t.Fatal(err)
++	}
++
++	ws, err := svc.CreateWorkspaceWithTools("", "Editable", "admin", []string{"verstak.files", "verstak.secrets"}, noopRefresh)
++	if err != nil {
++		t.Fatal(err)
++	}
++	secretFile := filepath.Join(vault, "Editable", "Secrets", "keep.txt")
++	if err := os.WriteFile(secretFile, []byte("keep"), 0o600); err != nil {
++		t.Fatal(err)
++	}
++
++	if err := svc.UpdateWorkspaceTools(ws.ID, []string{"verstak.projects", "verstak.notes", "verstak.projects"}, noopRefresh); err != nil {
++		t.Fatal(err)
++	}
++
++	data, err := os.ReadFile(filepath.Join(vault, ".verstak", "workspaces", "uuid-"+ws.ID+".json"))
++	if err != nil {
++		t.Fatal(err)
++	}
++	var metadata struct {
++		WorkspaceTools      []string               `json:"workspaceTools"`
++		Features            map[string]bool        `json:"features"`
++		Folders             map[string]string      `json:"folders"`
++		CreatedFromTemplate map[string]interface{} `json:"createdFromTemplate"`
++	}
++	if err := json.Unmarshal(data, &metadata); err != nil {
++		t.Fatal(err)
++	}
++	if len(metadata.WorkspaceTools) != 2 || metadata.WorkspaceTools[0] != "verstak.projects" || metadata.WorkspaceTools[1] != "verstak.notes" {
++		t.Fatalf("workspaceTools = %#v", metadata.WorkspaceTools)
++	}
++	if !metadata.Features["projects"] || !metadata.Features["notes"] || metadata.Features["secrets"] {
++		t.Fatalf("features = %#v", metadata.Features)
++	}
++	if metadata.Folders["notes"] != "Notes" {
++		t.Fatalf("folders = %#v", metadata.Folders)
++	}
++	if metadata.CreatedFromTemplate["templateId"] != "admin" {
++		t.Fatalf("template snapshot was not preserved: %#v", metadata.CreatedFromTemplate)
++	}
++	if _, err := os.Stat(filepath.Join(vault, "Editable", "Notes")); err != nil {
++		t.Fatal("newly enabled Notes folder missing:", err)
++	}
++	if content, err := os.ReadFile(secretFile); err != nil || string(content) != "keep" {
++		t.Fatalf("disabled tool data was removed: content=%q err=%v", string(content), err)
++	}
++}
++
+ func TestCreateWorkspaceInNestedFolder(t *testing.T) {
+ 	vault := t.TempDir()
+ 	svc := NewService(vault, nil)
