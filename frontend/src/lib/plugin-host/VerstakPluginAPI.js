@@ -465,6 +465,29 @@ export function createPluginAPI(pluginId) {
       registerHandler: function(handler) {
         assertActive('navigation.registerHandler');
         return trackCleanup(registerNavigationHandler(pluginId, handler));
+      },
+      // Workspace navigation is a host concern. Plugins supply stable target
+      // identity and optional opaque state instead of dispatching shell-private
+      // DOM events themselves. WorkspaceHost already transports toolRequest to
+      // the mounted contribution, so this remains provider/component agnostic.
+      openWorkspace: function(request) {
+        assertActive('navigation.openWorkspace');
+        request = request || {};
+        const workspaceId = String(request.workspaceId || '').trim();
+        const workspaceRootPath = String(request.workspaceRootPath || '').trim();
+        const workspaceItemId = String(request.workspaceItemId || '').trim();
+        if (!workspaceId && !workspaceRootPath) {
+          throw new Error('navigation.openWorkspace requires workspaceId or workspaceRootPath');
+        }
+        window.dispatchEvent(new CustomEvent('verstak:workspace-selected', {
+          detail: {
+            workspaceId: workspaceId,
+            workspaceName: workspaceRootPath,
+            workspaceRootPath: workspaceRootPath,
+            workspaceItemId: workspaceItemId,
+            toolRequest: request.toolRequest || null
+          }
+        }));
       }
     },
 
