@@ -224,6 +224,21 @@
 
   async function openCreateWorkspace(pid) { await loadTemplates(); modal = { type: 'create-workspace', parentId: pid }; formName = ''; formParentId = pid || ''; formTemplateId = templates[0]?.id || 'default'; resetTemplateTools(); formError = ''; formBusy = false; }
   function openRename(kind, id, name) { modal = { type: 'rename', kind, id }; formName = name; formError = ''; formBusy = false; }
+  async function openEditWorkspace(id, name) {
+    await loadTemplates();
+    modal = { type: 'edit-workspace', id, origName: name };
+    formName = name; formError = ''; formBusy = false;
+    selectedWorkspaceTools = [];
+    try {
+      const ws = await App.GetWorkspaceByID(id);
+      const response = await App.GetWorkspaceMetadata(ws?.rootPath || name);
+      const [metadata, err] = resultOrError(response, null);
+      if (err) { formError = tr('workspaceTree.editDealLoadError'); return; }
+      selectedWorkspaceTools = workspaceToolsFromMetadata(metadata);
+    } catch {
+      formError = tr('workspaceTree.editDealLoadError');
+    }
+  }
   function openTrash(kind, id, name) { modal = { type: 'trash', kind, id, name }; formBusy = false; }
   function openEditFolder(id, name) {
     modal = { type: 'edit-folder', id, origName: name };
@@ -249,6 +264,25 @@
         [folderId]: { iconId: folderIconId, colorId: folderColor },
       };
     } catch {}
+  }
+  function workspaceToolsFromMetadata(metadata) {
+    if (Array.isArray(metadata?.workspaceTools)) return [...metadata.workspaceTools];
+    const eligible = eligibleWorkspacePlugins().map((item) => item.manifest.id);
+    if (!metadata?.createdFromTemplate) return eligible;
+    const features = metadata.features || {};
+    const allowed = new Set(['verstak.notes', 'verstak.files']);
+    if (features.projects) allowed.add('verstak.projects');
+    if (features.journal) allowed.add('verstak.journal');
+    if (features.activity) allowed.add('verstak.activity');
+    if (features['browser-inbox']) allowed.add('verstak.browser-inbox');
+    if (features.todo) allowed.add('verstak.todo');
+    if (features.secrets) allowed.add('verstak.secrets');
+    return eligible.filter((pluginId) => allowed.has(pluginId));
+  }
+
+  function resultOrError(response, fallbackValue) {
+    if (Array.isArray(response) && typeof response[1] === 'string') return [response[0] || fallbackValue, response[1] || ''];
+    return typeof response === 'string' ? [fallbackValue, response] : [response || fallbackValue, ''];
   }
   function closeModal() { if (!formBusy) modal = null; }
   async function loadAppearanceMap() {
@@ -345,6 +379,30 @@
     };
     modal = null;
     await loadTree();
+  }
+  async function doEditWorkspace() {
+    const n = formName.trim();
+    if (!n) { formError = tr('workspaceTree.nameRequired'); return; }
+    const workspaceID = modal.id;
+    const originalName = modal.origName || '';
+    formBusy = true;
+    let renamed = false;
+    if (n !== originalName) {
+      const renameError = await App.RenameWorkspaceV2(workspaceID, n);
+      if (renameError) { formError = renameError; formBusy = false; return; }
+      renamed = true;
+    }
+    const toolsError = await App.UpdateWorkspaceV2Tools(workspaceID, selectedWorkspaceTools);
+    if (toolsError) {
+      if (renamed) await App.RenameWorkspaceV2(workspaceID, originalName).catch(() => {});
+      formError = tr('workspaceTree.editDealSaveError');
+      formBusy = false;
+      return;
+    }
+    modal = null;
+    await loadTree();
+    window.dispatchEvent(new CustomEvent('verstak:workspace-tools-changed', { detail: { workspaceId: workspaceID } }));
+    if (activeWid === workspaceID) await selectWorkspace(workspaceID);
   }
   async function doMove() { formBusy = true; let err = modal.kind === 'folder' ? await App.MoveFolderV2(modal.id, formParentId || '') : await App.MoveWorkspaceV2(modal.id, formParentId || ''); if (err) { formError = err; formBusy = false; return; } modal = null; await loadTree(); }
   async function doTrash() { formBusy = true; if (modal.kind === 'folder') await App.TrashFolderV2(modal.id); else { await App.TrashWorkspaceV2(modal.id); if (activeWid === modal.id) activeWid = ''; } modal = null; await loadTree(); }
@@ -840,6 +898,7 @@
         <button class="vt-menu-item danger vt-ctx-i vt-ctx-d" on:click={() => { const {id: i, name: n} = ctxMenu; closeCtx(); openTrash('folder', i, n); }}>{tr('workspaceTree.trashFolder')}</button>
       {:else}
         <button class="vt-menu-item vt-ctx-i" on:click={() => { const i = ctxMenu.id; closeCtx(); selectWorkspace(i); }}>{tr('workspaceTree.open')}</button>
+        <button class="vt-menu-item vt-ctx-i" on:click={() => { const {id: i, name: n} = ctxMenu; closeCtx(); openEditWorkspace(i, n); }}>{tr('workspaceTree.editDeal')}</button>
         <button class="vt-menu-item vt-ctx-i" on:click={() => { const {id: i, name: n} = ctxMenu; closeCtx(); openRename('workspace', i, n); }}>{tr('workspaceTree.renameDeal')}</button>
         <button class="vt-menu-item danger vt-ctx-i vt-ctx-d" on:click={() => { const {id: i, name: n} = ctxMenu; closeCtx(); openTrash('workspace', i, n); }}>{tr('workspaceTree.trashDeal')}</button>
       {/if}
@@ -947,6 +1006,27 @@
   {/if}
   {#if formError}<p class="vt-inline-alert error vt-ferr" data-workspace-create-error>{formError}</p>{/if}
   <svelte:fragment slot="actions"><button class="vt-button secondary vt-btn" on:click={closeModal} disabled={formBusy}>{tr('common.cancel')}</button><button class="vt-button primary vt-btn-p" on:click={doCreateWorkspace} disabled={formBusy}>{tr('workspaceTree.create')}</button></svelte:fragment>
+</Modal>
+
+<Modal title={tr('workspaceTree.editDeal')} show={modal?.type === 'edit-workspace'} on:close={closeModal} wide data-workspace-edit-modal>
+  <label class="vt-field"><span>{tr('workspaceTree.name')}</span><input class="vt-input" data-workspace-edit-name type="text" bind:value={formName} disabled={formBusy} on:keydown={(e) => e.key === 'Enter' && doEditWorkspace()} /></label>
+  <div class="vt-template-info">
+    <div class="vt-template-tools" data-workspace-edit-tools>
+      <span class="vt-template-tools-label">{tr('workspaceTree.tools')}</span>
+      <div class="vt-template-tool-grid">
+        {#each eligibleWorkspacePlugins() as plugin}
+          {@const pt = plugin.manifest.id}
+          {@const issue = pluginIssue(pt)}
+          <button type="button" class="vt-tool-choice" class:vt-tool-selected={selectedWorkspaceTools.includes(pt)} class:vt-tool-unavailable={!pluginAvailable(pt)} aria-pressed={selectedWorkspaceTools.includes(pt)} on:click={() => toggleWorkspaceTool(pt)} title={pt} data-workspace-edit-tool={pt} data-template-tool-status={issue.reason ? 'unavailable' : 'available'}>
+            <span>{issue.name}</span>
+            <span class="vt-tool-status">{issue.reason || tr('workspaceTree.templateAvailable')}</span>
+          </button>
+        {/each}
+      </div>
+    </div>
+  </div>
+  {#if formError}<p class="vt-inline-alert error vt-ferr" data-workspace-edit-error>{formError}</p>{/if}
+  <svelte:fragment slot="actions"><button class="vt-button secondary vt-btn" on:click={closeModal} disabled={formBusy}>{tr('common.cancel')}</button><button class="vt-button primary vt-btn-p" on:click={doEditWorkspace} disabled={formBusy}>{tr('common.save')}</button></svelte:fragment>
 </Modal>
 
 <Modal title={tr('workspaceTree.rename')} show={modal?.type === 'rename'} on:close={closeModal}>

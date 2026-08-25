@@ -95,6 +95,34 @@ test.describe('Workspace templates', () => {
     ]);
   });
 
+  test('existing Deal can add Projects through Edit Deal and updates its tabs immediately', async ({ page }) => {
+    const create = await openCreateModal(page);
+    await create.locator('[data-workspace-name]').fill('AddProjectsLater');
+    await create.getByRole('button', { name: 'Create Deal' }).click();
+
+    await expect(page.getByRole('tab', { name: 'Project' })).toHaveCount(0);
+    const deal = page.locator('.wt-node').filter({ hasText: 'AddProjectsLater' });
+    await deal.click({ button: 'right' });
+    await page.getByRole('button', { name: 'Edit Deal' }).click();
+
+    const edit = page.locator('[data-workspace-edit-modal]');
+    await expect(edit).toBeVisible();
+    await expect(edit.locator('[data-workspace-edit-name]')).toHaveValue('AddProjectsLater');
+    const projects = edit.locator('[data-workspace-edit-tool="verstak.projects"]');
+    await expect(projects).toHaveAttribute('aria-pressed', 'false');
+    await projects.click();
+    await expect(projects).toHaveAttribute('aria-pressed', 'true');
+    await edit.getByRole('button', { name: 'Save' }).click();
+
+    await expect(edit).toBeHidden();
+    await expect(page.getByRole('tab', { name: 'Project' })).toBeVisible();
+    await expect.poll(async () => page.evaluate(async () => {
+      const result = await window.go.api.App.GetWorkspaceMetadata('AddProjectsLater');
+      const metadata = Array.isArray(result) ? result[0] : result;
+      return metadata.workspaceTools.includes('verstak.projects');
+    })).toBe(true);
+  });
+
   test('Custom shows every eligible workspace plugin and cancel does not mutate the tree', async ({ page }) => {
     const before = await page.evaluate(async () => (await window.go.api.App.GetWorkspaceTreeV2()).roots.length);
     const modal = await openCreateModal(page);

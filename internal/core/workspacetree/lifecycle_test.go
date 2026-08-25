@@ -107,6 +107,65 @@ func TestCreateWorkspaceWithToolsPersistsExactSelection(t *testing.T) {
 	}
 }
 
+func TestUpdateWorkspaceToolsPersistsExactSelectionWithoutDeletingProviderData(t *testing.T) {
+	vault := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(vault, ".verstak"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(vault, ".verstak", "vault.json"), []byte(`{"schemaVersion":1}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	svc := NewService(vault, nil)
+	if err := svc.Initialize(); err != nil {
+		t.Fatal(err)
+	}
+
+	ws, err := svc.CreateWorkspaceWithTools("", "Editable", "admin", []string{"verstak.files", "verstak.secrets"}, noopRefresh)
+	if err != nil {
+		t.Fatal(err)
+	}
+	secretFile := filepath.Join(vault, "Editable", "Secrets", "keep.txt")
+	if err := os.WriteFile(secretFile, []byte("keep"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := svc.UpdateWorkspaceTools(ws.ID, []string{"verstak.projects", "verstak.notes", "verstak.projects"}, noopRefresh); err != nil {
+		t.Fatal(err)
+	}
+
+	data, err := os.ReadFile(filepath.Join(vault, ".verstak", "workspaces", "uuid-"+ws.ID+".json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var metadata struct {
+		WorkspaceTools      []string               `json:"workspaceTools"`
+		Features            map[string]bool        `json:"features"`
+		Folders             map[string]string      `json:"folders"`
+		CreatedFromTemplate map[string]interface{} `json:"createdFromTemplate"`
+	}
+	if err := json.Unmarshal(data, &metadata); err != nil {
+		t.Fatal(err)
+	}
+	if len(metadata.WorkspaceTools) != 2 || metadata.WorkspaceTools[0] != "verstak.projects" || metadata.WorkspaceTools[1] != "verstak.notes" {
+		t.Fatalf("workspaceTools = %#v", metadata.WorkspaceTools)
+	}
+	if !metadata.Features["projects"] || !metadata.Features["notes"] || metadata.Features["secrets"] {
+		t.Fatalf("features = %#v", metadata.Features)
+	}
+	if metadata.Folders["notes"] != "Notes" {
+		t.Fatalf("folders = %#v", metadata.Folders)
+	}
+	if metadata.CreatedFromTemplate["templateId"] != "admin" {
+		t.Fatalf("template snapshot was not preserved: %#v", metadata.CreatedFromTemplate)
+	}
+	if _, err := os.Stat(filepath.Join(vault, "Editable", "Notes")); err != nil {
+		t.Fatal("newly enabled Notes folder missing:", err)
+	}
+	if content, err := os.ReadFile(secretFile); err != nil || string(content) != "keep" {
+		t.Fatalf("disabled tool data was removed: content=%q err=%v", string(content), err)
+	}
+}
+
 func TestCreateWorkspaceInNestedFolder(t *testing.T) {
 	vault := t.TempDir()
 	svc := NewService(vault, nil)

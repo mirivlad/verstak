@@ -89,6 +89,64 @@ func (s *Service) CreateWorkspace(parentFolderID, name, templateID string, refre
 
 // CreateWorkspaceWithTools creates a workspace with an explicit definitive tool set.
 func (s *Service) CreateWorkspaceWithTools(parentFolderID, name, templateID string, workspaceTools []string, refreshBaseline func() error) (ScannedWorkspace, error) {
+	return s.createWorkspace(parentFolderID, name, templateID, normalizeWorkspaceTools(workspaceTools), refreshBaseline)
+}
+
+// UpdateWorkspaceTools replaces the definitive workspace tool set without deleting
+// provider data. Folders required by newly enabled tools are created if missing.
+func (s *Service) UpdateWorkspaceTools(workspaceID string, workspaceTools []string, refreshBaseline func() error) error {
+	ws, ok := s.GetWorkspaceByID(workspaceID)
+	if !ok {
+		return fmt.Errorf("workspace not found: %s", workspaceID)
+	}
+	tools := normalizeWorkspaceTools(workspaceTools)
+
+	s.mu.Lock()
+	vaultDir := s.vaultDir
+	s.mu.Unlock()
+	workspaceDir := filepath.Join(vaultDir, filepath.FromSlash(ws.RootPath))
+	if err := applyWorkspaceToolFolders(workspaceDir, tools); err != nil {
+		return err
+	}
+
+	metadataPath := filepath.Join(vaultDir, ".verstak", "workspaces", "uuid-"+workspaceID+".json")
+	metadata := map[string]interface{}{}
+	if data, err := os.ReadFile(metadataPath); err == nil {
+		if err := json.Unmarshal(data, &metadata); err != nil {
+			return err
+		}
+	} else if !os.IsNotExist(err) {
+		return err
+	}
+	metadata["workspaceId"] = workspaceID
+	metadata["workspaceName"] = ws.Name
+	metadata["features"] = toolsToFeatures(tools)
+	metadata["folders"] = toolsToFolders(tools)
+	metadata["workspaceTools"] = tools
+	metadata["updatedAt"] = time.Now().UTC().Format(time.RFC3339Nano)
+
+	data, err := json.MarshalIndent(metadata, "", "  ")
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(metadataPath), 0o755); err != nil {
+		return err
+	}
+	tmp := metadataPath + ".tmp"
+	if err := os.WriteFile(tmp, data, 0o600); err != nil {
+		return err
+	}
+	if err := os.Rename(tmp, metadataPath); err != nil {
+		_ = os.Remove(tmp)
+		return err
+	}
+	if refreshBaseline != nil {
+		return refreshBaseline()
+	}
+	return nil
+}
+
+func normalizeWorkspaceTools(workspaceTools []string) []string {
 	tools := make([]string, 0, len(workspaceTools))
 	seen := make(map[string]bool, len(workspaceTools))
 	for _, toolID := range workspaceTools {
@@ -99,7 +157,7 @@ func (s *Service) CreateWorkspaceWithTools(parentFolderID, name, templateID stri
 		seen[toolID] = true
 		tools = append(tools, toolID)
 	}
-	return s.createWorkspace(parentFolderID, name, templateID, tools, refreshBaseline)
+	return tools
 }
 
 func (s *Service) createWorkspace(parentFolderID, name, templateID string, workspaceTools []string, refreshBaseline func() error) (ScannedWorkspace, error) {
@@ -533,6 +591,8 @@ func toolsToFeatures(tools []string) map[string]bool {
 		switch t {
 		case "verstak.files":
 			f["files"] = true
+		case "verstak.projects":
+			f["projects"] = true
 		case "verstak.notes":
 			f["notes"] = true
 		case "verstak.journal":

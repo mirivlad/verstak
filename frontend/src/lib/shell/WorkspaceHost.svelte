@@ -98,6 +98,7 @@
     });
     window.addEventListener('verstak:workspace-open-tool', handleWorkspaceOpenTool);
     window.addEventListener('verstak:plugins-changed', handlePluginsChanged);
+    window.addEventListener('verstak:workspace-tools-changed', handleWorkspaceToolsChanged);
   });
 
   onDestroy(() => {
@@ -105,6 +106,7 @@
     if (workspaceRequestTimer) clearTimeout(workspaceRequestTimer);
     window.removeEventListener('verstak:workspace-open-tool', handleWorkspaceOpenTool);
     window.removeEventListener('verstak:plugins-changed', handlePluginsChanged);
+    window.removeEventListener('verstak:workspace-tools-changed', handleWorkspaceToolsChanged);
   });
 
   // An empty state that only describes the emptiness leaves the user to work
@@ -144,6 +146,7 @@
       // Template metadata can derive the intended tool set from its features.
       const f = metadata.features || {};
       allowed = ['verstak.notes', 'verstak.files'];
+      if (f.projects) allowed.push('verstak.projects');
       if (f.journal) allowed.push('verstak.journal');
       if (f.activity) allowed.push('verstak.activity');
       if (f['browser-inbox']) allowed.push('verstak.browser-inbox');
@@ -245,6 +248,12 @@
 
   function handlePluginsChanged() {
     if (selectedWorkspaceName) loadTools();
+  }
+
+  function handleWorkspaceToolsChanged(event) {
+    const targetWorkspaceID = event?.detail?.workspaceId || '';
+    if (targetWorkspaceID && workspaceId && targetWorkspaceID !== workspaceId) return;
+    if (workspaceRootPath) loadWorkspaceMetadata(workspaceRootPath);
   }
 
   async function loadTools() {
