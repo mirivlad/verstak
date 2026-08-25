@@ -24,6 +24,8 @@
   let requestedTargetWorkspaceRoot = '';
   let activeToolRequest = null;
   let requestedWorkspaceRoot = '';
+  let workspaceRequestGeneration = 0;
+  let workspaceRequestTimer = null;
   let locale = i18n.getLocale();
   let unsubscribeLocale = null;
   $: tr = ((activeLocale) => (key, params, fallback) => {
@@ -45,7 +47,7 @@
   $: workspaceTitle = selectedWorkspace?.title || selectedWorkspace?.name || selectedWorkspace?.id || selectedWorkspaceName;
 
   // If flat nodes lookup failed but we have a UUID, resolve via backend.
-  $: if (!selectedWorkspace && selectedWorkspaceId && workspaceRootPath) {
+  $: if (!selectedWorkspace && selectedWorkspaceId) {
     resolveWorkspaceByUUID(selectedWorkspaceId);
   }
   $: if (workspaceRootPath !== metadataWorkspaceRoot) {
@@ -59,13 +61,10 @@
   $: if (workspaceRootPath !== requestedWorkspaceRoot) {
     requestedWorkspaceRoot = workspaceRootPath;
     activeToolRequest = null;
-    if (requestedTargetWorkspaceRoot && requestedTargetWorkspaceRoot !== workspaceRootPath) {
-      requestedWorkspaceItemId = '';
-      requestedToolRequest = null;
-      requestedTargetWorkspaceRoot = '';
-    } else if (!requestedTargetWorkspaceRoot) {
-      requestedToolRequest = null;
-    }
+    // A targeted request may arrive while UUID -> root resolution is still in
+    // flight. Keep it until its target becomes current; requestWorkspaceItem()
+    // gives it a short TTL so a failed navigation cannot activate much later.
+    if (!requestedTargetWorkspaceRoot) requestedToolRequest = null;
   }
   $: displayedTools = selectedWorkspace ? [overviewTool, ...workspaceTools] : [];
   $: activeTool = displayedTools.find(tool => toolKey(tool) === activeToolKey) || displayedTools[0] || null;
@@ -84,6 +83,8 @@
       requestedWorkspaceItemId = '';
       requestedToolRequest = null;
       requestedTargetWorkspaceRoot = '';
+      if (workspaceRequestTimer) { clearTimeout(workspaceRequestTimer); workspaceRequestTimer = null; }
+      workspaceRequestGeneration += 1;
       selectTool(match, toolRequest);
     }
   }
@@ -101,6 +102,7 @@
 
   onDestroy(() => {
     if (unsubscribeLocale) unsubscribeLocale();
+    if (workspaceRequestTimer) clearTimeout(workspaceRequestTimer);
     window.removeEventListener('verstak:workspace-open-tool', handleWorkspaceOpenTool);
     window.removeEventListener('verstak:plugins-changed', handlePluginsChanged);
   });
@@ -211,12 +213,24 @@
     requestedWorkspaceItemId = String(workspaceItemId || '').trim();
     requestedToolRequest = toolRequest;
     requestedTargetWorkspaceRoot = String(targetWorkspaceRoot || '').trim();
+    workspaceRequestGeneration += 1;
+    const generation = workspaceRequestGeneration;
+    if (workspaceRequestTimer) clearTimeout(workspaceRequestTimer);
+    workspaceRequestTimer = setTimeout(() => {
+      if (generation !== workspaceRequestGeneration || !requestedWorkspaceItemId) return;
+      requestedWorkspaceItemId = '';
+      requestedToolRequest = null;
+      requestedTargetWorkspaceRoot = '';
+      workspaceRequestTimer = null;
+    }, 5000);
     if (requestedTargetWorkspaceRoot && requestedTargetWorkspaceRoot !== workspaceRootPath) return;
     const match = findWorkspaceItem(requestedWorkspaceItemId);
     if (match) {
       requestedWorkspaceItemId = '';
       requestedToolRequest = null;
       requestedTargetWorkspaceRoot = '';
+      if (workspaceRequestTimer) { clearTimeout(workspaceRequestTimer); workspaceRequestTimer = null; }
+      workspaceRequestGeneration += 1;
       selectTool(match, toolRequest);
     }
   }

@@ -338,6 +338,8 @@
   function onWorkspaceSelected(e) {
     const name = e.detail?.workspaceName || e.detail?.workspaceRootPath || '';
     const id = e.detail?.workspaceId || '';
+    const workspaceItemId = e.detail?.workspaceItemId || '';
+    const toolRequest = e.detail?.toolRequest || null;
     debug.log('[App] onWorkspaceSelected:', name, id);
     selectedWorkspaceName = name;
     selectedWorkspaceId = id;
@@ -351,6 +353,20 @@
       currentView = 'workspace';
       emitWorkspaceActive(selectedWorkspaceName);
       pushNavigation();
+      if (workspaceItemId) {
+        // The source plugin view is destroyed by the navigation above. Relay
+        // its tool request from the persistent shell after WorkspaceHost has
+        // mounted, rather than asking the source API to survive that teardown.
+        tick().then(() => {
+          window.dispatchEvent(new CustomEvent('verstak:workspace-open-tool', {
+            detail: {
+              workspaceItemId,
+              workspaceRootPath: name,
+              toolRequest,
+            },
+          }));
+        });
+      }
     }
   }
 
