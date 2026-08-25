@@ -265,3 +265,76 @@ test.describe('D: Plugin API bridge', () => {
     await expect(content.locator('.host-state.error')).toHaveCount(0);
   });
 });
+
+test.describe('D2: workspace tree plugin API', () => {
+  test('workspaces.tree exposes the complete read-only Deal hierarchy', async ({ page }) => {
+    await resetMockState(page);
+    await page.goto('/');
+    await waitForAppReady(page);
+    const result = await page.evaluate(async () => {
+      window.__wailsMock.setWorkspaceTreeV2({
+        roots: [{
+          key: 'folder:projects', kind: 'folder', id: 'folder-projects', name: 'Projects', path: 'Projects',
+          children: [
+            { key: 'workspace:a', kind: 'workspace', id: 'deal-a', name: 'Same', path: 'Projects/Same', children: [] },
+            { key: 'workspace:b', kind: 'workspace', id: 'deal-b', name: 'Nested', path: 'Projects/Nested', children: [] },
+          ],
+        }],
+        currentWorkspaceId: 'deal-b', revision: 9, warnings: [],
+      });
+      const api = window.createPluginAPI('verstak.projects');
+      const tree = await api.workspaces.tree();
+      api.dispose();
+      return tree;
+    });
+    expect(result.currentWorkspaceId).toBe('deal-b');
+    expect(result.revision).toBe(9);
+    expect(result.roots[0].kind).toBe('folder');
+    expect(result.roots[0].children.map((node) => node.id)).toEqual(['deal-a', 'deal-b']);
+  });
+
+  test('navigation.openWorkspace selects Deal and forwards opaque tool state', async ({ page }) => {
+    await resetMockState(page);
+    await page.goto('/');
+    await waitForAppReady(page);
+    const result = await page.evaluate(async () => {
+      const events = [];
+      const selected = (event) => events.push({ name: event.type, detail: event.detail });
+      const opened = (event) => events.push({ name: event.type, detail: event.detail });
+      window.addEventListener('verstak:workspace-selected', selected);
+      window.addEventListener('verstak:workspace-open-tool', opened);
+      const api = window.createPluginAPI('verstak.projects');
+      api.navigation.openWorkspace({
+        workspaceId: 'deal-42',
+        workspaceRootPath: 'Projects/Workbench',
+        workspaceItemId: 'verstak.projects.workspace',
+        toolRequest: { projectId: 'project-7' },
+      });
+      api.dispose();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      window.removeEventListener('verstak:workspace-selected', selected);
+      window.removeEventListener('verstak:workspace-open-tool', opened);
+      return events;
+    });
+
+    expect(result).toHaveLength(2);
+    expect(result[0]).toEqual({
+      name: 'verstak:workspace-selected',
+      detail: {
+        workspaceId: 'deal-42',
+        workspaceName: 'Projects/Workbench',
+        workspaceRootPath: 'Projects/Workbench',
+        workspaceItemId: 'verstak.projects.workspace',
+        toolRequest: { projectId: 'project-7' },
+      },
+    });
+    expect(result[1]).toEqual({
+      name: 'verstak:workspace-open-tool',
+      detail: {
+        workspaceItemId: 'verstak.projects.workspace',
+        workspaceRootPath: 'Projects/Workbench',
+        toolRequest: { projectId: 'project-7' },
+      },
+    });
+  });
+});

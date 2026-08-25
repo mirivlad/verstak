@@ -465,6 +465,29 @@ export function createPluginAPI(pluginId) {
       registerHandler: function(handler) {
         assertActive('navigation.registerHandler');
         return trackCleanup(registerNavigationHandler(pluginId, handler));
+      },
+      // Workspace navigation is a host concern. Plugins supply stable target
+      // identity and optional opaque state instead of dispatching shell-private
+      // DOM events themselves. WorkspaceHost already transports toolRequest to
+      // the mounted contribution, so this remains provider/component agnostic.
+      openWorkspace: function(request) {
+        assertActive('navigation.openWorkspace');
+        request = request || {};
+        const workspaceId = String(request.workspaceId || '').trim();
+        const workspaceRootPath = String(request.workspaceRootPath || '').trim();
+        const workspaceItemId = String(request.workspaceItemId || '').trim();
+        if (!workspaceId && !workspaceRootPath) {
+          throw new Error('navigation.openWorkspace requires workspaceId or workspaceRootPath');
+        }
+        window.dispatchEvent(new CustomEvent('verstak:workspace-selected', {
+          detail: {
+            workspaceId: workspaceId,
+            workspaceName: workspaceRootPath,
+            workspaceRootPath: workspaceRootPath,
+            workspaceItemId: workspaceItemId,
+            toolRequest: request.toolRequest || null
+          }
+        }));
       }
     },
 
@@ -718,6 +741,25 @@ export function createPluginAPI(pluginId) {
         assertActive('workspaces.list');
         return callBackend(pluginId, 'workspaces.list', function() {
           return App.PluginListWorkspaces(pluginId);
+        });
+      },
+      // Read-only user-visible Deal/folder hierarchy. Unlike list(), this is
+      // intentionally not filtered by whether this plugin contributes a tool
+      // to a Deal; stable Deal UUIDs are platform identity, not plugin state.
+      tree: function() {
+        assertActive('workspaces.tree');
+        return callBackend(pluginId, 'workspaces.tree', function() {
+          return App.GetWorkspaceTreeV2();
+        }).then(function(snapshot) {
+          if (!snapshot || !Array.isArray(snapshot.roots)) {
+            return { roots: [], currentWorkspaceId: '', revision: 0, warnings: [] };
+          }
+          return {
+            roots: snapshot.roots,
+            currentWorkspaceId: snapshot.currentWorkspaceId || '',
+            revision: Number(snapshot.revision || 0),
+            warnings: Array.isArray(snapshot.warnings) ? snapshot.warnings : []
+          };
         });
       },
       resolvePath: function(relativePath) {
