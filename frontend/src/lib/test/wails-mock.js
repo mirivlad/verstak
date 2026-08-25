@@ -259,6 +259,23 @@ import syncStyle from '../../../../../verstak-official-plugins/plugins/sync/fron
     return { roots: roots, currentWorkspaceId: current ? current.id : '', revision: 1, warnings: [] };
   }
 
+  function findWorkspaceNodeV2(id) {
+    var wanted = String(id || '');
+    var found = null;
+    function walk(nodes) {
+      (nodes || []).some(function (node) {
+        if (node.kind === 'workspace' && String(node.id || '') === wanted) {
+          found = node;
+          return true;
+        }
+        return walk(node.children || []);
+      });
+      return !!found;
+    }
+    walk(workspaceTreeV2Snapshot().roots);
+    return found;
+  }
+
   function applyAppSettingsPatch(patch) {
   appSettings = Object.assign({}, appSettings, patch || {});
   if (patch && patch.language) localStorage.setItem('verstak-test-language', patch.language);
@@ -1587,6 +1604,10 @@ function cloneJson(value) {
       return Promise.resolve([out, '']);
     },
     GetWorkspaceByID: function (id) {
+      var v2 = findWorkspaceNodeV2(id);
+      if (v2) {
+        return Promise.resolve({ id: v2.id, name: v2.name, rootPath: v2.path || v2.rootPath || v2.name });
+      }
       for (var i = 0; i < workspaceTree.nodes.length; i++) {
         var n = workspaceTree.nodes[i];
         if (n.workspaceId === id || n.id === id) {
@@ -1599,6 +1620,12 @@ function cloneJson(value) {
       return Promise.resolve(null);
     },
     SetCurrentWorkspaceV2: function (id) {
+      var v2 = findWorkspaceNodeV2(id);
+      if (v2) {
+        if (workspaceTreeV2Override) workspaceTreeV2Override.currentWorkspaceId = v2.id;
+        workspaceTree.currentNodeId = v2.path || v2.name || v2.id;
+        return Promise.resolve('');
+      }
       var found = workspaceTree.nodes.find(function (node) { return (node.workspaceId || node.id) === id; });
       if (!found) return Promise.resolve('workspace not found: ' + id);
       workspaceTree.currentNodeId = found.id;

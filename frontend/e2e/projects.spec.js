@@ -80,13 +80,21 @@ test.describe('Projects UX v2', () => {
 
     const projectCard = page.locator('[data-project-id]').filter({ hasText: 'Projects UX v2' });
     await expect(projectCard).toBeVisible();
-    await expect(page.locator('[data-project-linked-deal]')).toContainText('Projects/Creatures2.0');
+    await expect(projectCard).toContainText('Projects/Creatures2.0');
 
+    let createdProjectId = '';
     await expect.poll(async () => {
       const records = await readProjects(page);
       const project = records.find((item) => item.name === 'Projects UX v2');
+      createdProjectId = project?.id || '';
       return project ? `${project.workspaceId}|${project.workspaceRootPath}` : '';
     }).toBe('deal-creatures|Projects/Creatures2.0');
+
+    // Global Projects is a portfolio. Selecting a card must navigate to its
+    // owning Deal and open that exact project in the Deal contribution.
+    await projectCard.click();
+    await expect(page.locator('[data-project-action="edit"]')).toBeVisible();
+    await expect(page.locator('.projects-header-name')).toHaveText('Projects UX v2');
 
     await page.locator('[data-project-action="edit"]').click();
     const editModal = page.locator('[data-project-modal]');
@@ -99,13 +107,15 @@ test.describe('Projects UX v2', () => {
     const secondModal = page.locator('[data-project-modal]');
     await secondModal.locator('[data-project-field="name"]').fill('Other project');
     await secondModal.locator('[data-project-save]').click();
-    await expect(page.locator('[data-project-id]').filter({ hasText: 'Other project' })).toBeVisible();
+    await expect(page.locator('.projects-header-name')).toHaveText('Other project');
 
-    await projectCard.click();
-    await expect(page.locator('[data-project-linked-deal]')).toContainText('Projects/Creatures2.0');
-    await page.locator('[data-project-id]').filter({ hasText: 'Other project' }).click();
-    await projectCard.click();
-    await expect(page.locator('[data-project-linked-deal]')).toContainText('Projects/Creatures2.0');
+    const switcher = page.locator('[data-project-switcher]');
+    await expect(switcher).toBeVisible();
+    await switcher.selectOption(createdProjectId);
+    await expect(page.locator('.projects-header-name')).toHaveText('Projects UX v2');
+    await switcher.selectOption({ label: 'Other project' });
+    await switcher.selectOption(createdProjectId);
+    await expect(page.locator('.projects-header-name')).toHaveText('Projects UX v2');
 
     const tabs = await page.locator('[data-project-tab]').allTextContents();
     expect(tabs).toEqual(['Overview', 'Milestones', 'Tasks', 'Notes', 'Files', 'Activity', 'Links']);
@@ -162,6 +172,15 @@ test.describe('Projects UX v2', () => {
     const legacy = records.find((item) => item.id === 'legacy-project');
     expect(legacy.events.some((event) => event.type === 'project.linked' && String(event.to).includes('Archive/Creatures2.0'))).toBe(true);
     expect(legacy.events.some((event) => event.type === 'project.updated')).toBe(false);
-    await expect(page.locator('[data-project-linked-deal]')).toContainText('Archive/Creatures2.0');
+
+    // Relinking moves the project outside the current Deal. Return to the
+    // portfolio, verify its new owner there, then open the new Deal context.
+    await openProjects(page);
+    const movedCard = page.locator('[data-project-id="legacy-project"]');
+    await expect(movedCard).toContainText('Archive/Creatures2.0');
+    await movedCard.click();
+    await expect(page.locator('.projects-header-name')).toHaveText('Creatures research');
+    await page.locator('[data-project-action="edit"]').click();
+    await expect(page.locator('[data-project-modal] [data-deal-picker-toggle]')).toContainText('Archive/Creatures2.0');
   });
 });
