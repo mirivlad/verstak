@@ -3558,6 +3558,33 @@ func (a *App) CreateWorkspaceV2WithTools(parentFolderID, name, templateID string
 	}
 }
 
+// UpdateWorkspaceV2Tools replaces the exact tool set for an existing Deal.
+func (a *App) UpdateWorkspaceV2Tools(workspaceID string, workspaceTools []string) string {
+	if a.treeV2 == nil {
+		return "not initialized"
+	}
+	eligible := make(map[string]bool)
+	for _, installed := range a.plugins {
+		if installed.Manifest.Contributes != nil && len(installed.Manifest.Contributes.WorkspaceItems) > 0 {
+			eligible[installed.Manifest.ID] = true
+		}
+	}
+	for _, toolID := range workspaceTools {
+		if !eligible[toolID] {
+			return fmt.Sprintf("workspace tool is not available: %s", toolID)
+		}
+	}
+	if err := a.treeV2.UpdateWorkspaceTools(workspaceID, workspaceTools, func() error {
+		if a.fileWatcher != nil {
+			return a.fileWatcher.RefreshBaseline()
+		}
+		return nil
+	}); err != nil {
+		return err.Error()
+	}
+	return ""
+}
+
 func (a *App) RenameFolderV2(folderID, newName string) string {
 	if a.treeV2 == nil {
 		return "not initialized"

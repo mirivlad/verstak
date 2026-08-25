@@ -1659,6 +1659,37 @@ function cloneJson(value) {
       workspaceTree.nodes.push(node);
       return Promise.resolve({ id: node.workspaceId || node.id, name: norm.path, rootPath: norm.path });
     },
+    UpdateWorkspaceV2Tools: function (workspaceID, workspaceTools) {
+      var found = workspaceTree.nodes.find(function (node) { return (node.workspaceId || node.id) === workspaceID; });
+      if (!found) return Promise.resolve('workspace not found: ' + workspaceID);
+      var eligible = allPlugins().filter(function (plugin) {
+        return (plugin.manifest && plugin.manifest.contributes && plugin.manifest.contributes.workspaceItems || []).length > 0;
+      }).map(function (plugin) { return plugin.manifest.id; });
+      var tools = Array.isArray(workspaceTools) ? workspaceTools.filter(function (toolID, index, values) {
+        return toolID && values.indexOf(toolID) === index;
+      }) : [];
+      var invalid = tools.find(function (toolID) { return eligible.indexOf(toolID) === -1; });
+      if (invalid) return Promise.resolve('workspace tool is not available: ' + invalid);
+      var rootPath = found.rootPath || found.name || found.id;
+      var metadata = Object.assign({}, workspaceMetadata[rootPath] || genericWorkspaceMetadata(rootPath));
+      metadata.workspaceTools = tools.slice();
+      metadata.features = {};
+      metadata.folders = {};
+      tools.forEach(function (toolID) {
+        var key = toolID.replace('verstak.', '');
+        metadata.features[key] = true;
+        if (key === 'notes') metadata.folders.notes = 'Notes';
+        if (key === 'files') metadata.folders.files = 'Files';
+        if (key === 'secrets') metadata.folders.secrets = 'Secrets';
+      });
+      Object.keys(metadata.folders).forEach(function (key) {
+        var folder = metadata.folders[key];
+        if (!vaultFiles[rootPath + '/' + folder]) vaultFiles[rootPath + '/' + folder] = { type: 'folder', modifiedAt: new Date().toISOString() };
+      });
+      metadata.updatedAt = new Date().toISOString();
+      workspaceMetadata[rootPath] = metadata;
+      return Promise.resolve('');
+    },
     CreateFolderV2: function (parentFolderID, name) {
       return Promise.resolve({ id: 'folder-' + Math.random().toString(36).slice(2, 10), name: name, path: name });
     },

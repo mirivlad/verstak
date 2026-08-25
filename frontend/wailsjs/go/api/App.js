@@ -518,6 +518,10 @@ export function UpdateWorkspaceMetadata(arg1, arg2) {
   return window['go']['api']['App']['UpdateWorkspaceMetadata'](arg1, arg2);
 }
 
+export function UpdateWorkspaceV2Tools(arg1, arg2) {
+  return window['go']['api']['App']['UpdateWorkspaceV2Tools'](arg1, arg2);
+}
+
 export function WriteFrontendLog(arg1, arg2) {
   return window['go']['api']['App']['WriteFrontendLog'](arg1, arg2);
 }

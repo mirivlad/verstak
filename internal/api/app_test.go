@@ -3150,6 +3150,23 @@ func TestCreateWorkspaceV2WithToolsValidatesAndPersistsExactSelection(t *testing
 	if len(metadata.WorkspaceTools) != 2 || metadata.WorkspaceTools[0] != "todo.plugin" || metadata.WorkspaceTools[1] != "files.plugin" {
 		t.Fatalf("workspaceTools = %#v", metadata.WorkspaceTools)
 	}
+
+	if errText := app.UpdateWorkspaceV2Tools(workspaceID, []string{"files.plugin"}); errText != "" {
+		t.Fatalf("update tools: %s", errText)
+	}
+	data, err = os.ReadFile(filepath.Join(root, ".verstak", "workspaces", "uuid-"+workspaceID+".json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(data, &metadata); err != nil {
+		t.Fatal(err)
+	}
+	if len(metadata.WorkspaceTools) != 1 || metadata.WorkspaceTools[0] != "files.plugin" {
+		t.Fatalf("updated workspaceTools = %#v", metadata.WorkspaceTools)
+	}
+	if errText := app.UpdateWorkspaceV2Tools(workspaceID, []string{"system.component"}); !strings.Contains(errText, "workspace tool") {
+		t.Fatalf("unexpected update validation response: %q", errText)
+	}
 }
 
 func TestSyncNowAppliesEveryPullPageInOrder(t *testing.T) {

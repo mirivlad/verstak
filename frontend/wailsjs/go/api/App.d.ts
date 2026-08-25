@@ -271,6 +271,8 @@ export function UpdateWorkbenchPreferences(arg1:workbench.Preferences):Promise<s
 
 export function UpdateWorkspaceMetadata(arg1:string,arg2:workspace.MetadataPatch):Promise<workspace.Metadata|string>;
 
+export function UpdateWorkspaceV2Tools(arg1:string,arg2:Array<string>):Promise<string>;
+
 export function WriteFrontendLog(arg1:string,arg2:string):Promise<void>;
 
 export function WritePluginDataJSON(arg1:string,arg2:string,arg3:Record<string, any>):Promise<string>;
