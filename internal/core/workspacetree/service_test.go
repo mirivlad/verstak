@@ -1,6 +1,7 @@
 package workspacetree
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
@@ -29,6 +30,113 @@ func TestServiceGetByID(t *testing.T) {
 	ws, ok := svc.GetWorkspaceByID(wsID)
 	if !ok || ws.Name != "Project" {
 		t.Fatalf("GetWorkspaceByID = %+v, %v", ws, ok)
+	}
+}
+
+func TestServiceInitializeRestoresCurrentWorkspaceUUID(t *testing.T) {
+	vault := t.TempDir()
+	wsID := testUUID("svc-current-uuid")
+	createWS(t, vault, "Clients/Acme", wsID)
+	if err := os.MkdirAll(filepath.Join(vault, ".verstak"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(vault, ".verstak", "workspace-ui.json"), []byte(`{"schemaVersion":2,"currentWorkspaceId":"`+wsID+`","updatedAt":"2026-08-29T00:00:00Z"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	svc := NewService(vault, nil)
+	if err := svc.Initialize(); err != nil {
+		t.Fatal(err)
+	}
+	if got := svc.GetCurrentWorkspaceID(); got != wsID {
+		t.Fatalf("current workspace = %q, want %q", got, wsID)
+	}
+	if got := svc.GetTree().CurrentWorkspaceID; got != wsID {
+		t.Fatalf("tree current workspace = %q, want %q", got, wsID)
+	}
+}
+
+func TestServiceInitializeMigratesLegacyCurrentWorkspacePath(t *testing.T) {
+	vault := t.TempDir()
+	wsID := testUUID("svc-current-legacy")
+	createWS(t, vault, "Clients/Acme", wsID)
+	if err := os.MkdirAll(filepath.Join(vault, ".verstak"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	uiPath := filepath.Join(vault, ".verstak", "workspace-ui.json")
+	if err := os.WriteFile(uiPath, []byte(`{"selectedWorkspace":"Clients/Acme","updatedAt":"2026-08-20T00:00:00Z"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	svc := NewService(vault, nil)
+	if err := svc.Initialize(); err != nil {
+		t.Fatal(err)
+	}
+	if got := svc.GetCurrentWorkspaceID(); got != wsID {
+		t.Fatalf("current workspace = %q, want %q", got, wsID)
+	}
+	data, err := os.ReadFile(uiPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var state struct {
+		SchemaVersion      int    `json:"schemaVersion"`
+		CurrentWorkspaceID string `json:"currentWorkspaceId"`
+		SelectedWorkspace  string `json:"selectedWorkspace"`
+	}
+	if err := json.Unmarshal(data, &state); err != nil {
+		t.Fatal(err)
+	}
+	if state.SchemaVersion != 2 || state.CurrentWorkspaceID != wsID || state.SelectedWorkspace != "" {
+		t.Fatalf("migrated state = %#v", state)
+	}
+}
+
+func TestSetCurrentWorkspaceIDPersistsCanonicalState(t *testing.T) {
+	vault := t.TempDir()
+	wsID := testUUID("svc-current-persist")
+	createWS(t, vault, "Clients/Acme", wsID)
+	svc := NewService(vault, nil)
+	if err := svc.Initialize(); err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.SetCurrentWorkspaceID(wsID); err != nil {
+		t.Fatal(err)
+	}
+
+	restarted := NewService(vault, nil)
+	if err := restarted.Initialize(); err != nil {
+		t.Fatal(err)
+	}
+	if got := restarted.GetCurrentWorkspaceID(); got != wsID {
+		t.Fatalf("restarted current workspace = %q, want %q", got, wsID)
+	}
+}
+
+func TestTrashCurrentWorkspacePersistsClearedSelection(t *testing.T) {
+	vault := t.TempDir()
+	wsID := testUUID("svc-current-trash")
+	createWS(t, vault, "Project", wsID)
+	svc := NewService(vault, nil)
+	if err := svc.Initialize(); err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.SetCurrentWorkspaceID(wsID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.TrashWorkspace(wsID, nil); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(filepath.Join(vault, ".verstak", "workspace-ui.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var state workspaceUIState
+	if err := json.Unmarshal(data, &state); err != nil {
+		t.Fatal(err)
+	}
+	if state.CurrentWorkspaceID != "" || state.SchemaVersion != workspaceUIStateSchemaVersion {
+		t.Fatalf("workspace UI state = %#v", state)
 	}
 }
 

@@ -98,9 +98,8 @@
       const [workspaces, err] = resultOrError(await App.ListWorkspaces(), []);
       if (err || !workspaces || workspaces.length === 0) {
         workspaceNodes = [];
-        selectedWorkspaceName = '';
+        clearWorkspaceSelection();
         currentView = 'workspace-empty';
-        emitWorkspaceActive('');
         return;
       }
 
@@ -112,10 +111,14 @@
         currentWorkspace = null;
       }
       const currentName = workspaceName(currentWorkspace);
-      const selected = workspaces.find((workspace) => workspaceName(workspace) === currentName) || workspaces[0];
+      const currentId = String(currentWorkspace?.workspaceId || currentWorkspace?.id || '');
+      const selected = workspaces.find((workspace) => String(workspace?.id || workspace?.workspaceId || '') === currentId)
+        || workspaces.find((workspace) => workspaceName(workspace) === currentName)
+        || workspaces[0];
       selectedWorkspaceName = workspaceName(selected);
-      if (selectedWorkspaceName) {
-        try { await App.SetCurrentWorkspace(selectedWorkspaceName); } catch {}
+      selectedWorkspaceId = String(selected?.id || selected?.workspaceId || '');
+      if (selectedWorkspaceId) {
+        try { await App.SetCurrentWorkspaceV2(selectedWorkspaceId); } catch {}
         currentView = 'workspace';
       } else {
         currentView = 'workspace-empty';
@@ -124,9 +127,8 @@
     } catch (e) {
       debug.log('[App] openDefaultWorkspaceRoute ERROR', String(e));
       workspaceNodes = [];
-      selectedWorkspaceName = '';
+      clearWorkspaceSelection();
       currentView = 'workspace-empty';
-      emitWorkspaceActive('');
     }
   }
 
@@ -139,6 +141,7 @@
       activeSettingsPanelId,
       openedResource,
       selectedWorkspaceName,
+      selectedWorkspaceId,
       activeWorkspaceToolKey,
     };
   }
@@ -166,6 +169,7 @@
     activeSettingsPanelId = snapshot.activeSettingsPanelId;
     openedResource = snapshot.openedResource;
     selectedWorkspaceName = snapshot.selectedWorkspaceName;
+    selectedWorkspaceId = snapshot.selectedWorkspaceId || '';
     activeWorkspaceToolKey = snapshot.activeWorkspaceToolKey || '';
     emitWorkspaceActive(currentView === 'workspace' ? selectedWorkspaceName : '');
     applyingNavigation = false;

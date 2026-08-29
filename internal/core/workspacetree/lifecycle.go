@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/google/uuid"
@@ -227,7 +228,9 @@ func (s *Service) createWorkspace(parentFolderID, name, templateID string, works
 	}
 
 	// Select the new workspace.
-	s.SetCurrentWorkspace(wsID)
+	if err := s.SetCurrentWorkspaceID(wsID); err != nil {
+		return ScannedWorkspace{}, err
+	}
 
 	ws, _ := s.GetWorkspaceByID(wsID)
 	return ws, nil
@@ -497,21 +500,55 @@ func applyWorkspaceToolFolders(workspaceDir string, workspaceTools []string) err
 }
 
 var templateRegistry = map[string]templateDef{
-	"default":        {ID: "default", Name: "General", Selectable: true, Order: 10, WorkspaceTools: []string{"verstak.notes", "verstak.files", "verstak.journal", "verstak.activity", "verstak.browser-inbox"}},
-	"project":        {ID: "project", Name: "Project", Selectable: true, Order: 20, WorkspaceTools: []string{"verstak.projects", "verstak.notes", "verstak.files", "verstak.todo", "verstak.journal", "verstak.activity", "verstak.browser-inbox"}},
-	"writing":        {ID: "writing", Name: "Writing", Selectable: true, Order: 30, WorkspaceTools: []string{"verstak.notes", "verstak.files", "verstak.journal"}},
-	"admin":          {ID: "admin", Name: "Admin", Selectable: true, Order: 40, WorkspaceTools: []string{"verstak.notes", "verstak.files", "verstak.secrets", "verstak.todo", "verstak.journal"}},
-	"minimal":        {ID: "minimal", Name: "Minimal", Selectable: true, Order: 50, WorkspaceTools: []string{"verstak.notes", "verstak.files"}},
-	"client-project": {ID: "client-project", Name: "Client Project", Selectable: false, WorkspaceTools: []string{"verstak.notes", "verstak.files", "verstak.secrets"}},
+	"default":        {ID: "default", Name: "General", Description: "Everyday workspace with notes, files, journal, activity, and browser captures.", Version: 2, Selectable: true, Order: 10, WorkspaceTools: []string{"verstak.notes", "verstak.files", "verstak.journal", "verstak.activity", "verstak.browser-inbox"}},
+	"project":        {ID: "project", Name: "Project", Description: "Project planning with todos, journal, activity, and browser captures.", Version: 1, Selectable: true, Order: 20, WorkspaceTools: []string{"verstak.projects", "verstak.notes", "verstak.files", "verstak.todo", "verstak.journal", "verstak.activity", "verstak.browser-inbox"}},
+	"writing":        {ID: "writing", Name: "Writing", Description: "Focused notes, files, and journal workspace for documentation and writing.", Version: 1, Selectable: true, Order: 30, WorkspaceTools: []string{"verstak.notes", "verstak.files", "verstak.journal"}},
+	"admin":          {ID: "admin", Name: "Admin", Description: "Infrastructure workspace with secrets, todos, and journal.", Version: 1, Selectable: true, Order: 40, WorkspaceTools: []string{"verstak.notes", "verstak.files", "verstak.secrets", "verstak.todo", "verstak.journal"}},
+	"minimal":        {ID: "minimal", Name: "Minimal", Description: "Only notes and files for a lightweight workspace.", Version: 1, Selectable: true, Order: 50, WorkspaceTools: []string{"verstak.notes", "verstak.files"}},
+	"client-project": {ID: "client-project", Name: "Client Project", Description: "Legacy client project template retained for existing integrations.", Version: 1, Selectable: false, WorkspaceTools: []string{"verstak.notes", "verstak.files", "verstak.secrets"}},
 }
 
 // templateDefinition mirrors the built-in template structure from workspace package.
 type templateDef struct {
 	ID             string
 	Name           string
+	Description    string
+	Version        int
 	WorkspaceTools []string
 	Selectable     bool
 	Order          int
+}
+
+// DealTemplateSummary is the temporary read model for built-in recipes until
+// the Templates plugin owns CRUD persistence.
+type DealTemplateSummary struct {
+	ID             string
+	Name           string
+	Description    string
+	Version        int
+	WorkspaceTools []string
+}
+
+// ListDealTemplates returns selectable recipes in stable UI order.
+func ListDealTemplates() []DealTemplateSummary {
+	definitions := make([]templateDef, 0, len(templateRegistry))
+	for _, definition := range templateRegistry {
+		if definition.Selectable {
+			definitions = append(definitions, definition)
+		}
+	}
+	sort.Slice(definitions, func(i, j int) bool { return definitions[i].Order < definitions[j].Order })
+	result := make([]DealTemplateSummary, 0, len(definitions))
+	for _, definition := range definitions {
+		result = append(result, DealTemplateSummary{
+			ID:             definition.ID,
+			Name:           definition.Name,
+			Description:    definition.Description,
+			Version:        definition.Version,
+			WorkspaceTools: append([]string(nil), definition.WorkspaceTools...),
+		})
+	}
+	return result
 }
 
 // resolveTemplateTools returns the workspaceTools list for a template ID.
@@ -572,12 +609,18 @@ func toolsToFolders(tools []string) map[string]string {
 // SetCurrentWorkspaceID sets the current workspace by UUID.
 func (s *Service) SetCurrentWorkspaceID(id string) error {
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	if s.scan != nil {
 		if _, ok := s.scan.Workspaces[id]; !ok && id != "" {
+			s.mu.Unlock()
 			return fmt.Errorf("workspace not found: %s", id)
 		}
 	}
+	s.mu.Unlock()
+	if err := s.writeWorkspaceUIState(id); err != nil {
+		return err
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	s.currentWS = id
 	if s.tree != nil {
 		s.tree.CurrentWorkspaceID = id

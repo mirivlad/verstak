@@ -57,18 +57,18 @@ func (s *Service) TrashWorkspace(workspaceID string, refreshBaseline func() erro
 	if !ok {
 		return TrashEntry{}, fmt.Errorf("workspace not found: %s", workspaceID)
 	}
+	wasCurrent := s.GetCurrentWorkspaceID() == workspaceID
 
-	// If this was the current workspace, clear it.
-	s.mu.Lock()
-	if s.currentWS == workspaceID {
-		s.currentWS = ""
-		if s.tree != nil {
-			s.tree.CurrentWorkspaceID = ""
+	entry, err := s.trashEntity(vaultDir, "workspace", ws.ID, ws.RootPath, refreshBaseline)
+	if err != nil {
+		return TrashEntry{}, err
+	}
+	if wasCurrent {
+		if err := s.SetCurrentWorkspaceID(""); err != nil {
+			return TrashEntry{}, err
 		}
 	}
-	s.mu.Unlock()
-
-	return s.trashEntity(vaultDir, "workspace", ws.ID, ws.RootPath, refreshBaseline)
+	return entry, nil
 }
 
 func (s *Service) trashEntity(vaultDir, entityType, entityID, relPath string, refreshBaseline func() error) (TrashEntry, error) {

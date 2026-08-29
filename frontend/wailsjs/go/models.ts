@@ -1763,6 +1763,7 @@ export namespace workspace {
 	export class MetadataPatch {
 	    features?: Record<string, boolean>;
 	    folders?: Record<string, string>;
+	    workspaceTools?: string[];
 	
 	    static createFrom(source: any = {}) {
 	        return new MetadataPatch(source);
@@ -1772,6 +1773,7 @@ export namespace workspace {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.features = source["features"];
 	        this.folders = source["folders"];
+	        this.workspaceTools = source["workspaceTools"];
 	    }
 	}
 	
@@ -1890,4 +1892,3 @@ export namespace workspacetree {
 	}
 
 }
-

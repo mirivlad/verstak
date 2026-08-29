@@ -2,6 +2,7 @@ package workspacetree
 
 import (
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -60,6 +61,9 @@ func (s *Service) Initialize() error {
 	if err := s.fullReconcile(); err != nil {
 		return err
 	}
+	if err := s.restoreCurrentWorkspace(); err != nil {
+		return err
+	}
 	s.migrateLegacyFolderAppearance()
 	return nil
 }
@@ -83,6 +87,56 @@ func (s *Service) GetWorkspaceByID(id string) (ScannedWorkspace, bool) {
 	}
 	ws, ok := s.scan.Workspaces[id]
 	return ws, ok
+}
+
+// ListWorkspaces returns every Deal in deterministic path order, including
+// Deals organized below folders.
+func (s *Service) ListWorkspaces() []ScannedWorkspace {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	workspaces := make([]ScannedWorkspace, 0)
+	if s.scan != nil {
+		workspaces = make([]ScannedWorkspace, 0, len(s.scan.Workspaces))
+		for _, workspace := range s.scan.Workspaces {
+			workspaces = append(workspaces, workspace)
+		}
+	}
+	sort.Slice(workspaces, func(i, j int) bool {
+		return workspaces[i].RootPath < workspaces[j].RootPath
+	})
+	return workspaces
+}
+
+// ResolveWorkspace resolves a Deal UUID or path. A bare name is accepted only
+// when it identifies exactly one Deal.
+func (s *Service) ResolveWorkspace(reference string) (ScannedWorkspace, bool) {
+	reference = strings.Trim(strings.TrimSpace(filepath.ToSlash(reference)), "/")
+	if reference == "" {
+		return ScannedWorkspace{}, false
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.scan == nil {
+		return ScannedWorkspace{}, false
+	}
+	if workspace, ok := s.scan.Workspaces[reference]; ok {
+		return workspace, true
+	}
+	var nameMatch ScannedWorkspace
+	matchedName := false
+	for _, workspace := range s.scan.Workspaces {
+		if workspace.RootPath == reference {
+			return workspace, true
+		}
+		if workspace.Name == reference {
+			if matchedName {
+				return ScannedWorkspace{}, false
+			}
+			nameMatch = workspace
+			matchedName = true
+		}
+	}
+	return nameMatch, matchedName
 }
 
 // GetFolderByID returns a folder by its UUID.
@@ -134,16 +188,6 @@ func (s *Service) ResolveWorkspaceForPath(relPath string) (workspaceID, workspac
 // RescanWorkspaceTree triggers an immediate full reconciliation.
 func (s *Service) RescanWorkspaceTree() error {
 	return s.fullReconcile()
-}
-
-// SetCurrentWorkspace updates the current workspace ID without a filesystem scan.
-func (s *Service) SetCurrentWorkspace(id string) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.currentWS = id
-	if s.tree != nil {
-		s.tree.CurrentWorkspaceID = id
-	}
 }
 
 // OnFileChanged is called by the file watcher when any file changes.
@@ -287,6 +331,7 @@ func (s *Service) fullReconcile() error {
 
 	// Update state.
 	s.mu.Lock()
+	s.currentWS = tree.CurrentWorkspaceID
 	s.snapshot = &result.Snapshot
 	s.scan = scan
 	s.tree = tree

@@ -84,8 +84,9 @@ type workspaceIdentityMarker struct {
 
 // MetadataPatch updates metadata fields without replacing unspecified fields.
 type MetadataPatch struct {
-	Features map[string]bool   `json:"features,omitempty"`
-	Folders  map[string]string `json:"folders,omitempty"`
+	Features       map[string]bool   `json:"features,omitempty"`
+	Folders        map[string]string `json:"folders,omitempty"`
+	WorkspaceTools []string          `json:"workspaceTools,omitempty"`
 }
 
 // TrashResult describes a workspace moved into the internal trash area.
