@@ -82,25 +82,25 @@ func TestCreateWorkspaceWithToolsPersistsExactSelection(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var metadata struct {
-		WorkspaceTools []string          `json:"workspaceTools"`
-		Features       map[string]bool   `json:"features"`
-		Folders        map[string]string `json:"folders"`
-	}
+	var metadata DealMetadata
 	if err := json.Unmarshal(data, &metadata); err != nil {
 		t.Fatal(err)
+	}
+	if metadata.SchemaVersion != DealMetadataSchemaVersion || metadata.WorkspaceID != ws.ID {
+		t.Fatalf("metadata identity/version = %#v", metadata)
 	}
 	if len(metadata.WorkspaceTools) != 2 || metadata.WorkspaceTools[0] != "verstak.files" || metadata.WorkspaceTools[1] != "verstak.secrets" {
 		t.Fatalf("workspaceTools = %#v", metadata.WorkspaceTools)
 	}
-	if metadata.Features["notes"] || !metadata.Features["files"] || !metadata.Features["secrets"] {
-		t.Fatalf("features = %#v", metadata.Features)
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(data, &raw); err != nil {
+		t.Fatal(err)
 	}
-	if _, ok := metadata.Folders["notes"]; ok {
-		t.Fatalf("inactive Notes folder recorded in metadata: %#v", metadata.Folders)
+	if _, ok := raw["features"]; ok {
+		t.Fatalf("legacy features persisted in v2 metadata: %s", data)
 	}
-	if metadata.Folders["files"] != "Files" || metadata.Folders["secrets"] != "Secrets" {
-		t.Fatalf("folders = %#v", metadata.Folders)
+	if _, ok := raw["folders"]; ok {
+		t.Fatalf("legacy folders persisted in v2 metadata: %s", data)
 	}
 	if _, err := os.Stat(filepath.Join(vault, "AdminFiles", "Secrets")); err != nil {
 		t.Fatal("selected Secrets tool folder missing:", err)
@@ -137,25 +137,17 @@ func TestUpdateWorkspaceToolsPersistsExactSelectionWithoutDeletingProviderData(t
 	if err != nil {
 		t.Fatal(err)
 	}
-	var metadata struct {
-		WorkspaceTools      []string               `json:"workspaceTools"`
-		Features            map[string]bool        `json:"features"`
-		Folders             map[string]string      `json:"folders"`
-		CreatedFromTemplate map[string]interface{} `json:"createdFromTemplate"`
-	}
+	var metadata DealMetadata
 	if err := json.Unmarshal(data, &metadata); err != nil {
 		t.Fatal(err)
 	}
 	if len(metadata.WorkspaceTools) != 2 || metadata.WorkspaceTools[0] != "verstak.projects" || metadata.WorkspaceTools[1] != "verstak.notes" {
 		t.Fatalf("workspaceTools = %#v", metadata.WorkspaceTools)
 	}
-	if !metadata.Features["projects"] || !metadata.Features["notes"] || metadata.Features["secrets"] {
-		t.Fatalf("features = %#v", metadata.Features)
+	if metadata.SchemaVersion != DealMetadataSchemaVersion {
+		t.Fatalf("schemaVersion = %d", metadata.SchemaVersion)
 	}
-	if metadata.Folders["notes"] != "Notes" {
-		t.Fatalf("folders = %#v", metadata.Folders)
-	}
-	if metadata.CreatedFromTemplate["templateId"] != "admin" {
+	if metadata.CreatedFromTemplate == nil || metadata.CreatedFromTemplate.TemplateID != "admin" {
 		t.Fatalf("template snapshot was not preserved: %#v", metadata.CreatedFromTemplate)
 	}
 	if _, err := os.Stat(filepath.Join(vault, "Editable", "Notes")); err != nil {
