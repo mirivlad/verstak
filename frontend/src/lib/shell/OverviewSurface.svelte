@@ -4,6 +4,7 @@
   import { i18n } from '../i18n/index.js';
 
   export let workspaceRootPath = '';
+  export let workspaceId = '';
   export let availableTools = [];
   export let overviewProviders = [];
 
@@ -11,7 +12,7 @@
   let loading = true;
   let activeFilter = 'all';
   let providerResults = [];
-  let loadedWorkspaceRoot = '';
+  let loadedWorkspaceId = '';
   let loadedProviderKey = '';
   let locale = i18n.getLocale();
   let unsubscribeLocale = null;
@@ -42,13 +43,13 @@
     unsubscribeLocale = i18n.subscribe((nextLocale) => {
       const changed = locale !== nextLocale;
       locale = nextLocale;
-      if (changed && workspaceRootPath) loadOverview();
+      if (changed && workspaceId) loadOverview();
     });
   });
 
   onDestroy(() => unsubscribeLocale?.());
 
-  $: if (workspaceRootPath && (workspaceRootPath !== loadedWorkspaceRoot || providerKey !== loadedProviderKey)) {
+  $: if (workspaceId && (workspaceId !== loadedWorkspaceId || providerKey !== loadedProviderKey)) {
     loadOverview();
   }
 
@@ -58,9 +59,9 @@
   }
 
   async function loadOverview() {
-    const workspaceAtStart = String(workspaceRootPath || '').trim();
+    const workspaceAtStart = String(workspaceId || '').trim();
     const providerKeyAtStart = providerKey;
-    loadedWorkspaceRoot = workspaceAtStart;
+    loadedWorkspaceId = workspaceAtStart;
     loadedProviderKey = providerKeyAtStart;
     loading = true;
 
@@ -68,7 +69,8 @@
       if (!provider?.pluginId || !provider?.handler) return null;
       try {
         const response = await executePluginCommand(provider.pluginId, provider.handler, {
-          workspaceRootPath: workspaceAtStart,
+          scope: { kind: 'deal', workspaceId: workspaceAtStart },
+          workspaceRootPath,
         });
         return {
           pluginId: provider.pluginId,
@@ -81,7 +83,7 @@
       }
     }));
 
-    if (workspaceAtStart !== String(workspaceRootPath || '').trim() || providerKeyAtStart !== providerKey) return;
+    if (workspaceAtStart !== String(workspaceId || '').trim() || providerKeyAtStart !== providerKey) return;
     providerResults = rows.filter(Boolean);
     loading = false;
   }

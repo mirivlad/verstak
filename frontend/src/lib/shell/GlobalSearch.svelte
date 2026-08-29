@@ -138,6 +138,8 @@
     const nodes = collectWorkspaceNodes(Array.isArray(tree.roots) ? tree.roots : []);
     nodes.forEach(node => {
       const workspaceRootPath = workspaceName(node);
+      const workspaceId = String(node.workspaceId || '').trim();
+      if (!workspaceId) return;
       next.push({
         type: 'Workspace',
         typeLabel: tr('search.type.workspace'),
@@ -145,7 +147,7 @@
         subtitle: tr('search.type.workspace'),
         keywords: `${node.id || ''} ${node.path || node.rootPath || ''}`,
         rank: 10,
-        action: { kind: 'workspace', workspaceRootPath },
+        action: { kind: 'workspace', workspaceId, workspaceRootPath },
       });
     });
 
@@ -194,8 +196,8 @@
     const action = item?.action;
     if (!action) return '';
     if (action.kind === 'resource') return `resource:${action.resource?.kind || ''}:${action.resource?.path || ''}`;
-    if (action.kind === 'workspace') return `workspace:${action.workspaceRootPath || ''}`;
-    if (action.kind === 'workspace-item') return `workspace-item:${action.workspaceRootPath || ''}:${action.workspaceItemId || ''}:${JSON.stringify(action.toolRequest || {})}`;
+    if (action.kind === 'workspace') return `workspace:${action.workspaceId || ''}`;
+    if (action.kind === 'workspace-item') return `workspace-item:${action.workspaceId || ''}:${action.workspaceItemId || ''}:${JSON.stringify(action.toolRequest || {})}`;
     if (action.kind === 'view') return `view:${action.pluginId || ''}:${action.viewId || ''}`;
     return '';
   }
@@ -313,22 +315,23 @@
     if (!action) return;
 
     if (action.kind === 'workspace') {
+      const workspaceId = String(action.workspaceId || '');
       const workspaceRootPath = String(action.workspaceRootPath || '');
-      if (!workspaceRootPath) return;
+      if (!workspaceId && !workspaceRootPath) return;
       window.dispatchEvent(new CustomEvent('verstak:workspace-selected', {
-        detail: { workspaceName: workspaceRootPath, workspaceRootPath }
+        detail: workspaceId ? { workspaceId } : { workspaceName: workspaceRootPath, workspaceRootPath }
       }));
       return;
     }
 
     if (action.kind === 'workspace-item') {
+      const workspaceId = String(action.workspaceId || '');
       const workspaceRootPath = String(action.workspaceRootPath || '');
-      if (!workspaceRootPath || !action.workspaceItemId) return;
+      if ((!workspaceId && !workspaceRootPath) || !action.workspaceItemId) return;
       window.dispatchEvent(new CustomEvent('verstak:workspace-selected', {
-        detail: { workspaceName: workspaceRootPath, workspaceRootPath }
-      }));
-      window.dispatchEvent(new CustomEvent('verstak:workspace-open-tool', {
-        detail: { workspaceRootPath, workspaceItemId: action.workspaceItemId, toolRequest: action.toolRequest || null }
+        detail: workspaceId
+          ? { workspaceId, workspaceItemId: action.workspaceItemId, toolRequest: action.toolRequest || null }
+          : { workspaceName: workspaceRootPath, workspaceRootPath, workspaceItemId: action.workspaceItemId, toolRequest: action.toolRequest || null }
       }));
       return;
     }

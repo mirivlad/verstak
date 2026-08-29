@@ -22,6 +22,7 @@
   let requestedWorkspaceItemId = '';
   let requestedToolRequest = null;
   let requestedTargetWorkspaceRoot = '';
+  let requestedTargetWorkspaceId = '';
   let activeToolRequest = null;
   let requestedWorkspaceRoot = '';
   let workspaceRequestGeneration = 0;
@@ -64,7 +65,7 @@
     // A targeted request may arrive while UUID -> root resolution is still in
     // flight. Keep it until its target becomes current; requestWorkspaceItem()
     // gives it a short TTL so a failed navigation cannot activate much later.
-    if (!requestedTargetWorkspaceRoot) requestedToolRequest = null;
+    if (!requestedTargetWorkspaceRoot && !requestedTargetWorkspaceId) requestedToolRequest = null;
   }
   $: displayedTools = selectedWorkspace ? [overviewTool, ...workspaceTools] : [];
   $: activeTool = displayedTools.find(tool => toolKey(tool) === activeToolKey) || displayedTools[0] || null;
@@ -76,13 +77,14 @@
       detail: { title: workspaceTitle }
     }));
   }
-  $: if (requestedWorkspaceItemId && workspaceTools.length > 0 && (!requestedTargetWorkspaceRoot || requestedTargetWorkspaceRoot === workspaceRootPath)) {
+  $: if (requestedWorkspaceItemId && workspaceTools.length > 0 && (!requestedTargetWorkspaceId || requestedTargetWorkspaceId === workspaceId) && (!requestedTargetWorkspaceRoot || requestedTargetWorkspaceRoot === workspaceRootPath)) {
     const match = findWorkspaceItem(requestedWorkspaceItemId);
     if (match) {
       const toolRequest = requestedToolRequest;
       requestedWorkspaceItemId = '';
       requestedToolRequest = null;
       requestedTargetWorkspaceRoot = '';
+      requestedTargetWorkspaceId = '';
       if (workspaceRequestTimer) { clearTimeout(workspaceRequestTimer); workspaceRequestTimer = null; }
       workspaceRequestGeneration += 1;
       selectTool(match, toolRequest);
@@ -212,10 +214,11 @@
     return workspaceTools.find(tool => tool?.id === id) || null;
   }
 
-  function requestWorkspaceItem(workspaceItemId, toolRequest = null, targetWorkspaceRoot = '') {
+  function requestWorkspaceItem(workspaceItemId, toolRequest = null, targetWorkspaceRoot = '', targetWorkspaceId = '') {
     requestedWorkspaceItemId = String(workspaceItemId || '').trim();
     requestedToolRequest = toolRequest;
     requestedTargetWorkspaceRoot = String(targetWorkspaceRoot || '').trim();
+    requestedTargetWorkspaceId = String(targetWorkspaceId || '').trim();
     workspaceRequestGeneration += 1;
     const generation = workspaceRequestGeneration;
     if (workspaceRequestTimer) clearTimeout(workspaceRequestTimer);
@@ -224,14 +227,16 @@
       requestedWorkspaceItemId = '';
       requestedToolRequest = null;
       requestedTargetWorkspaceRoot = '';
+      requestedTargetWorkspaceId = '';
       workspaceRequestTimer = null;
     }, 5000);
-    if (requestedTargetWorkspaceRoot && requestedTargetWorkspaceRoot !== workspaceRootPath) return;
+    if ((requestedTargetWorkspaceId && requestedTargetWorkspaceId !== workspaceId) || (requestedTargetWorkspaceRoot && requestedTargetWorkspaceRoot !== workspaceRootPath)) return;
     const match = findWorkspaceItem(requestedWorkspaceItemId);
     if (match) {
       requestedWorkspaceItemId = '';
       requestedToolRequest = null;
       requestedTargetWorkspaceRoot = '';
+      requestedTargetWorkspaceId = '';
       if (workspaceRequestTimer) { clearTimeout(workspaceRequestTimer); workspaceRequestTimer = null; }
       workspaceRequestGeneration += 1;
       selectTool(match, toolRequest);
@@ -239,11 +244,11 @@
   }
 
   function openWorkspaceTool(event) {
-    requestWorkspaceItem(event?.detail?.workspaceItemId, event?.detail?.toolRequest || null, event?.detail?.workspaceRootPath || '');
+    requestWorkspaceItem(event?.detail?.workspaceItemId, event?.detail?.toolRequest || null, event?.detail?.workspaceRootPath || '', event?.detail?.workspaceId || '');
   }
 
   function handleWorkspaceOpenTool(event) {
-    requestWorkspaceItem(event?.detail?.workspaceItemId, event?.detail?.toolRequest || null, event?.detail?.workspaceRootPath || '');
+    requestWorkspaceItem(event?.detail?.workspaceItemId, event?.detail?.toolRequest || null, event?.detail?.workspaceRootPath || '', event?.detail?.workspaceId || '');
   }
 
   function handlePluginsChanged() {
@@ -305,6 +310,7 @@
           {#if activeTool.shell}
             <OverviewSurface
               {workspaceRootPath}
+              {workspaceId}
               availableTools={displayedTools}
               {overviewProviders}
               on:openTool={openWorkspaceTool}
