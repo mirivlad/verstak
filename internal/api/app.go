@@ -26,6 +26,7 @@ import (
 	"github.com/verstak/verstak-desktop/internal/core/buildinfo"
 	"github.com/verstak/verstak-desktop/internal/core/capability"
 	"github.com/verstak/verstak-desktop/internal/core/contribution"
+	"github.com/verstak/verstak-desktop/internal/core/dealmigration"
 	"github.com/verstak/verstak-desktop/internal/core/events"
 	"github.com/verstak/verstak-desktop/internal/core/externalopen"
 	corefiles "github.com/verstak/verstak-desktop/internal/core/files"
@@ -2737,6 +2738,25 @@ func (a *App) rebindSyncService() {
 		return
 	}
 	a.syncSvc = syncsvc.NewService(a.vault.GetVaultPath(), "")
+}
+
+// preflightDealMigration is intentionally internal: foundation builds can
+// surface an actionable diagnostic without ever preparing or applying the
+// one-shot migration. Task 12 wires activation only after every target schema
+// has registered its transform bundle.
+func (a *App) preflightDealMigration(ctx context.Context) (dealmigration.Ledger, error) {
+	if a == nil || a.vault == nil || a.vault.GetVaultStatus() != vault.StatusOpen {
+		return dealmigration.Ledger{}, fmt.Errorf("vault is not open")
+	}
+	runner := dealmigration.NewRunner(a.vault.GetVaultPath())
+	if err := runner.Preflight(ctx); err != nil {
+		return dealmigration.Ledger{}, err
+	}
+	ledger, err := runner.ReadLedger()
+	if errors.Is(err, os.ErrNotExist) {
+		return dealmigration.Ledger{}, nil
+	}
+	return ledger, err
 }
 
 func (a *App) rebindImportService() error {
