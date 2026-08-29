@@ -365,6 +365,7 @@
           window.dispatchEvent(new CustomEvent('verstak:workspace-open-tool', {
             detail: {
               workspaceItemId,
+              workspaceId: id,
               workspaceRootPath: name,
               toolRequest,
             },
