@@ -29,6 +29,14 @@ function unpack(result) {
   return [result, ''];
 }
 
+const dealWorkspaceIdPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const dealScopedProviderCapabilities = new Set([
+  'verstak/notes/v2',
+  'verstak/files/v2',
+  'verstak/todo/v2',
+  'verstak/activity/v2',
+]);
+
 async function callBackend(pluginId, label, fn) {
   try {
     const [value, err] = unpack(await fn());
@@ -470,14 +478,23 @@ export function createPluginAPI(pluginId) {
       // identity and optional opaque state instead of dispatching shell-private
       // DOM events themselves. WorkspaceHost already transports toolRequest to
       // the mounted contribution, so this remains provider/component agnostic.
-      openWorkspace: function(request) {
+      openWorkspace: async function(request) {
         assertActive('navigation.openWorkspace');
         request = request || {};
         const workspaceId = String(request.workspaceId || '').trim();
-        const workspaceRootPath = String(request.workspaceRootPath || '').trim();
         const workspaceItemId = String(request.workspaceItemId || '').trim();
-        if (!workspaceId && !workspaceRootPath) {
-          throw new Error('navigation.openWorkspace requires workspaceId or workspaceRootPath');
+        if (!dealWorkspaceIdPattern.test(workspaceId)) {
+          throw new Error('navigation.openWorkspace requires workspaceId UUID');
+        }
+        await callBackendErrorString(pluginId, 'navigation.openWorkspace', function() {
+          return App.SetCurrentWorkspaceV2(workspaceId);
+        });
+        const workspace = await callBackend(pluginId, 'navigation.openWorkspace', function() {
+          return App.GetWorkspaceByID(workspaceId);
+        });
+        const workspaceRootPath = String(workspace?.rootPath || '').trim();
+        if (!workspace || workspace.id !== workspaceId || !workspaceRootPath) {
+          throw new Error('[plugin:' + pluginId + '] navigation.openWorkspace failed: workspaceId was not resolved by host');
         }
         window.dispatchEvent(new CustomEvent('verstak:workspace-selected', {
           detail: {
@@ -519,13 +536,17 @@ export function createPluginAPI(pluginId) {
       },
       invoke: async function(capId, operation, args) {
         assertActive('capabilities.invoke(' + capId + ':' + operation + ')');
+        const request = args || {};
         const resolved = await callBackend(pluginId, 'capabilities.invoke(' + capId + ':' + operation + ')', function() {
+          if (dealScopedProviderCapabilities.has(capId)) {
+            return App.ResolveDealCapabilityOperation(pluginId, capId, operation, request);
+          }
           return App.ResolvePluginCapabilityOperation(pluginId, capId, operation);
         });
         if (!resolved || !resolved.pluginId || !resolved.commandId) {
           throw new Error('[plugin:' + pluginId + '] capabilities.invoke(' + capId + ':' + operation + ') failed: invalid capability resolution');
         }
-        return executePluginCommand(resolved.pluginId, resolved.commandId, args || {});
+        return executePluginCommand(resolved.pluginId, resolved.commandId, request);
       }
     },
 

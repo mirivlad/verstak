@@ -298,15 +298,18 @@ test.describe('D2: workspace tree plugin API', () => {
     await page.goto('/');
     await waitForAppReady(page);
     const result = await page.evaluate(async () => {
+      window.__wailsMock.setWorkspaceTreeV2({
+        roots: [{ key: 'workspace:deal-42', kind: 'workspace', id: '11111111-1111-4111-8111-111111111111', name: 'Workbench', path: 'Projects/Workbench', children: [] }],
+        currentWorkspaceId: '11111111-1111-4111-8111-111111111111', revision: 10, warnings: [],
+      });
       const events = [];
       const selected = (event) => events.push({ name: event.type, detail: event.detail });
       const opened = (event) => events.push({ name: event.type, detail: event.detail });
       window.addEventListener('verstak:workspace-selected', selected);
       window.addEventListener('verstak:workspace-open-tool', opened);
       const api = window.createPluginAPI('verstak.projects');
-      api.navigation.openWorkspace({
-        workspaceId: 'deal-42',
-        workspaceRootPath: 'Projects/Workbench',
+      await api.navigation.openWorkspace({
+        workspaceId: '11111111-1111-4111-8111-111111111111',
         workspaceItemId: 'verstak.projects.workspace',
         toolRequest: { projectId: 'project-7' },
       });
@@ -321,7 +324,7 @@ test.describe('D2: workspace tree plugin API', () => {
     expect(result[0]).toEqual({
       name: 'verstak:workspace-selected',
       detail: {
-        workspaceId: 'deal-42',
+        workspaceId: '11111111-1111-4111-8111-111111111111',
         workspaceName: 'Projects/Workbench',
         workspaceRootPath: 'Projects/Workbench',
         workspaceItemId: 'verstak.projects.workspace',
@@ -336,5 +339,23 @@ test.describe('D2: workspace tree plugin API', () => {
         toolRequest: { projectId: 'project-7' },
       },
     });
+  });
+
+  test('navigation.openWorkspace rejects a non-UUID Deal identity', async ({ page }) => {
+    await resetMockState(page);
+    await page.goto('/');
+    await waitForAppReady(page);
+    const error = await page.evaluate(async () => {
+      const api = window.createPluginAPI('verstak.projects');
+      try {
+        await api.navigation.openWorkspace({ workspaceId: 'Projects/Workbench' });
+        return '';
+      } catch (err) {
+        return String(err.message || err);
+      } finally {
+        api.dispose();
+      }
+    });
+    expect(error).toContain('workspaceId');
   });
 });

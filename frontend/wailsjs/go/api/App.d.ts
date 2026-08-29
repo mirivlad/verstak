@@ -79,6 +79,8 @@ export function GetPluginCapability(arg1:string,arg2:string):Promise<Record<stri
 
 export function ResolvePluginCapabilityOperation(arg1:string,arg2:string,arg3:string):Promise<Record<string, any>|string>;
 
+export function ResolveDealCapabilityOperation(arg1:string,arg2:string,arg3:string,arg4:Record<string, any>):Promise<Record<string, any>|string>;
+
 export function GetPluginFrontendInfo(arg1:string):Promise<Record<string, any>>;
 
 export function GetPluginLocalization(arg1:string,arg2:string):Promise<Record<string, string>|string>;

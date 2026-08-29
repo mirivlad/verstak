@@ -134,6 +134,10 @@ export function ResolvePluginCapabilityOperation(arg1, arg2, arg3) {
   return window['go']['api']['App']['ResolvePluginCapabilityOperation'](arg1, arg2, arg3);
 }
 
+export function ResolveDealCapabilityOperation(arg1, arg2, arg3, arg4) {
+  return window['go']['api']['App']['ResolveDealCapabilityOperation'](arg1, arg2, arg3, arg4);
+}
+
 export function GetPluginFrontendInfo(arg1) {
   return window['go']['api']['App']['GetPluginFrontendInfo'](arg1);
 }

@@ -37,4 +37,34 @@ if (app && helpers) {
       commandId
     }, ''];
   };
+
+  app.ResolveDealCapabilityOperation = async function(pluginId, capabilityName, operation, request) {
+    const allowed = {
+      'verstak/notes/v2': ['list', 'create', 'open'],
+      'verstak/files/v2': ['list', 'create', 'open'],
+      'verstak/todo/v2': ['list', 'create', 'setStatus'],
+      'verstak/activity/v2': ['list', 'search'],
+    };
+    if (!allowed[capabilityName] || allowed[capabilityName].indexOf(operation) === -1) {
+      return [{}, 'Deal capability operation is not available'];
+    }
+    const scope = request && request.scope;
+    if (!scope || scope.kind !== 'deal') return [{}, 'DealScope.kind must be deal'];
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(scope.workspaceId || ''))) {
+      return [{}, 'DealScope.workspaceId must be a UUID'];
+    }
+    const consumer = helpers.getPluginState(pluginId);
+    if (!consumer || !consumer.manifest || consumer.manifest.apiVersion !== '0.1.0') {
+      return [{}, 'Deal capability host API is incompatible'];
+    }
+    const resolved = await app.ResolvePluginCapabilityOperation(pluginId, capabilityName, operation);
+    const value = Array.isArray(resolved) ? resolved[0] : resolved;
+    const err = Array.isArray(resolved) ? resolved[1] : '';
+    if (err) return [value, err];
+    const provider = helpers.getPluginState(value.pluginId);
+    if (!provider || !provider.manifest || provider.manifest.apiVersion !== '0.1.0') {
+      return [{}, 'Deal capability host API is incompatible'];
+    }
+    return [value, ''];
+  };
 }
