@@ -99,6 +99,12 @@ func NewRunner(vaultDir string, options ...Option) *Runner {
 	return runner
 }
 
+// NewDealOnlyRunner assembles the complete one-shot migration. Calling it is
+// harmless; migration still requires an explicit Run invocation.
+func NewDealOnlyRunner(vaultDir string) *Runner {
+	return NewRunner(vaultDir, WithTransform(NewProviderDataTransform()))
+}
+
 func (r *Runner) Preflight(context.Context) error {
 	if !filepath.IsAbs(r.vaultDir) {
 		return fmt.Errorf("%w: vault path must be absolute", ErrUnsafeInput)

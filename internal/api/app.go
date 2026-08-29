@@ -2748,7 +2748,7 @@ func (a *App) preflightDealMigration(ctx context.Context) (dealmigration.Ledger,
 	if a == nil || a.vault == nil || a.vault.GetVaultStatus() != vault.StatusOpen {
 		return dealmigration.Ledger{}, fmt.Errorf("vault is not open")
 	}
-	runner := dealmigration.NewRunner(a.vault.GetVaultPath())
+	runner := dealmigration.NewDealOnlyRunner(a.vault.GetVaultPath())
 	if err := runner.Preflight(ctx); err != nil {
 		return dealmigration.Ledger{}, err
 	}
