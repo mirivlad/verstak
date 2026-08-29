@@ -1,10 +1,12 @@
 package dealmigration
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -109,5 +111,70 @@ func TestProviderDataTransformMovesContentToDealUUIDAndDropsProjectScope(t *test
 	projects := readMigrationJSON(t, vault, ".verstak/plugin-settings/verstak.projects/settings.json")
 	if projects["projects:global"].([]any)[0].(map[string]any)["id"] != "project-1" {
 		t.Fatalf("legacy Projects source was unexpectedly changed: %#v", projects)
+	}
+}
+
+func TestProviderDataTransformMapsLegacyWorkspaceRootToCurrentDealUUID(t *testing.T) {
+	vault := t.TempDir()
+	workspaceID := "0181c5b6-7a13-7c45-9e0e-07e0d3119da3"
+	writeMigrationJSON(t, vault, "Clients/Acme/.verstak/workspace.json", map[string]any{
+		"schemaVersion": 1,
+		"workspaceId":   workspaceID,
+	})
+	writeMigrationJSON(t, vault, ".verstak/plugin-data/verstak.activity/activity-events.ndjson", []any{
+		map[string]any{"activityId": "activity-known", "workspaceRootPath": "Clients/Acme", "summary": "Keep mapped activity"},
+		map[string]any{"activityId": "activity-unknown", "workspaceRootPath": "Archive/Gone", "summary": "Keep unassigned activity"},
+		map[string]any{"activityId": "activity-noncanonical", "workspaceRootPath": "./Clients/Acme", "summary": "Keep exact-path activity unassigned"},
+	})
+
+	runner := NewDealOnlyRunner(vault)
+	if err := runner.Run(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+
+	data, err := os.ReadFile(filepath.Join(vault, ".verstak/plugin-data/verstak.activity/activity-events.ndjson"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	lines := bytes.Split(bytes.TrimSpace(data), []byte{'\n'})
+	if len(lines) != 3 {
+		t.Fatalf("activity line count = %d, want 3", len(lines))
+	}
+	var known, unknown, noncanonical map[string]any
+	if err := json.Unmarshal(lines[0], &known); err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(lines[1], &unknown); err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(lines[2], &noncanonical); err != nil {
+		t.Fatal(err)
+	}
+	if known["workspaceId"] != workspaceID || known["workspaceRootPath"] != "Clients/Acme" || known["summary"] != "Keep mapped activity" {
+		t.Fatalf("known activity was not preserved and mapped: %#v", known)
+	}
+	if _, ok := unknown["workspaceId"]; ok || unknown["workspaceRootPath"] != "Archive/Gone" || unknown["summary"] != "Keep unassigned activity" {
+		t.Fatalf("unknown activity must remain unassigned and preserved: %#v", unknown)
+	}
+	if _, ok := noncanonical["workspaceId"]; ok || noncanonical["workspaceRootPath"] != "./Clients/Acme" || noncanonical["summary"] != "Keep exact-path activity unassigned" {
+		t.Fatalf("noncanonical activity must remain unassigned and preserved: %#v", noncanonical)
+	}
+}
+
+func TestCurrentWorkspaceRootIDsRejectsSymlinkMarker(t *testing.T) {
+	vault := t.TempDir()
+	outside := t.TempDir()
+	workspaceID := "0181c5b6-7a13-7c45-9e0e-07e0d3119da3"
+	writeMigrationJSON(t, outside, "workspace.json", map[string]any{"schemaVersion": 1, "workspaceId": workspaceID})
+	markerDir := filepath.Join(vault, "Clients", "Acme", ".verstak")
+	if err := os.MkdirAll(markerDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Join(outside, "workspace.json"), filepath.Join(markerDir, "workspace.json")); err != nil {
+		t.Skipf("symlink unavailable: %v", err)
+	}
+	_, err := currentWorkspaceRootIDs(vault)
+	if err == nil || !strings.Contains(err.Error(), "symlink") {
+		t.Fatalf("symlink marker error = %v, want rejection", err)
 	}
 }

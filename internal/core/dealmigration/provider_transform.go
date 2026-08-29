@@ -30,6 +30,10 @@ func migrateProviderData(ctx context.Context, vault string) error {
 	if err != nil {
 		return err
 	}
+	rootToWorkspace, err := currentWorkspaceRootIDs(vault)
+	if err != nil {
+		return err
+	}
 	for _, root := range []string{
 		filepath.Join(vault, ".verstak", "plugin-settings"),
 		filepath.Join(vault, ".verstak", "plugin-data"),
@@ -55,12 +59,57 @@ func migrateProviderData(ctx context.Context, vault string) error {
 			if pluginID == legacyProjectsPluginID {
 				return nil
 			}
-			return migrateProviderFile(path, projectToWorkspace)
+			return migrateProviderFile(path, projectToWorkspace, rootToWorkspace)
 		}); err != nil {
 			return fmt.Errorf("migrate provider data: %w", err)
 		}
 	}
 	return nil
+}
+
+// currentWorkspaceRootIDs is migration-only lookup data from canonical Deal
+// markers. Paths are retained as display data, never as runtime scope.
+func currentWorkspaceRootIDs(vault string) (map[string]string, error) {
+	mapping := map[string]string{}
+	err := filepath.WalkDir(vault, func(path string, entry fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if entry.IsDir() || entry.Name() != "workspace.json" || filepath.Base(filepath.Dir(path)) != ".verstak" {
+			return nil
+		}
+		if entry.Type()&fs.ModeSymlink != 0 {
+			return fmt.Errorf("reject symlink Deal marker %s", filepath.ToSlash(path))
+		}
+		workspaceDir := filepath.Dir(filepath.Dir(path))
+		rel, err := filepath.Rel(vault, workspaceDir)
+		if err != nil {
+			return err
+		}
+		root := filepath.ToSlash(filepath.Clean(rel))
+		if root == "." || strings.HasPrefix(root, ".verstak/") {
+			return nil
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		var marker struct {
+			WorkspaceID string `json:"workspaceId"`
+		}
+		if err := json.Unmarshal(data, &marker); err != nil {
+			return fmt.Errorf("decode Deal marker %s: %w", filepath.ToSlash(rel), err)
+		}
+		if !isUUID(marker.WorkspaceID) {
+			return fmt.Errorf("invalid Deal UUID in marker %s", filepath.ToSlash(rel))
+		}
+		mapping[root] = marker.WorkspaceID
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("scan Deal markers: %w", err)
+	}
+	return mapping, nil
 }
 
 func legacyProjectWorkspaceIDs(vault string) (map[string]string, error) {
@@ -89,7 +138,7 @@ func legacyProjectWorkspaceIDs(vault string) (map[string]string, error) {
 	return mapping, nil
 }
 
-func migrateProviderFile(path string, projectToWorkspace map[string]string) error {
+func migrateProviderFile(path string, projectToWorkspace, rootToWorkspace map[string]string) error {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return err
@@ -103,7 +152,7 @@ func migrateProviderFile(path string, projectToWorkspace map[string]string) erro
 		delete(settings, "notes:projectScopes")
 		delete(settings, "files:projectScopes")
 	}
-	migrateProviderValue(value, projectToWorkspace)
+	migrateProviderValue(value, projectToWorkspace, rootToWorkspace)
 	encoded, err := encodeProviderValue(value, isNDJSON)
 	if err != nil {
 		return fmt.Errorf("encode %s: %w", path, err)
@@ -168,11 +217,11 @@ func encodeProviderValue(value any, ndjson bool) ([]byte, error) {
 	return output.Bytes(), nil
 }
 
-func migrateProviderValue(value any, projectToWorkspace map[string]string) {
+func migrateProviderValue(value any, projectToWorkspace, rootToWorkspace map[string]string) {
 	switch item := value.(type) {
 	case []any:
 		for _, child := range item {
-			migrateProviderValue(child, projectToWorkspace)
+			migrateProviderValue(child, projectToWorkspace, rootToWorkspace)
 		}
 	case map[string]any:
 		projectID := stringValue(item["projectId"])
@@ -183,8 +232,11 @@ func migrateProviderValue(value any, projectToWorkspace map[string]string) {
 		if workspaceID := projectToWorkspace[projectID]; workspaceID != "" && stringValue(item["workspaceId"]) == "" {
 			item["workspaceId"] = workspaceID
 		}
+		if workspaceID := rootToWorkspace[stringValue(item["workspaceRootPath"])]; workspaceID != "" && stringValue(item["workspaceId"]) == "" {
+			item["workspaceId"] = workspaceID
+		}
 		for _, child := range item {
-			migrateProviderValue(child, projectToWorkspace)
+			migrateProviderValue(child, projectToWorkspace, rootToWorkspace)
 		}
 	}
 }
