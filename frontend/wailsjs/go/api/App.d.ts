@@ -201,6 +201,8 @@ export function ReadPluginDataJSON(arg1:string,arg2:string):Promise<Record<strin
 
 export function ReadPluginDataNDJSON(arg1:string,arg2:string):Promise<Array<Record<string, any>>>;
 
+export function ReadPluginDealConfig(arg1:string,arg2:string):Promise<Record<string, any>|string>;
+
 export function ReadPluginSetting(arg1:string,arg2:string):Promise<any>;
 
 export function ReadPluginSettings(arg1:string):Promise<Record<string, any>|string>;
@@ -280,6 +282,8 @@ export function WriteFrontendLog(arg1:string,arg2:string):Promise<void>;
 export function WritePluginDataJSON(arg1:string,arg2:string,arg3:Record<string, any>):Promise<string>;
 
 export function WritePluginDataNDJSON(arg1:string,arg2:string,arg3:Array<Record<string, any>>):Promise<string>;
+
+export function WritePluginDealConfig(arg1:string,arg2:string,arg3:Record<string, any>):Promise<string>;
 
 export function WritePluginSetting(arg1:string,arg2:string,arg3:any):Promise<string>;
 

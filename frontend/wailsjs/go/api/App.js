@@ -378,6 +378,10 @@ export function ReadPluginDataNDJSON(arg1, arg2) {
   return window['go']['api']['App']['ReadPluginDataNDJSON'](arg1, arg2);
 }
 
+export function ReadPluginDealConfig(arg1, arg2) {
+  return window['go']['api']['App']['ReadPluginDealConfig'](arg1, arg2);
+}
+
 export function ReadPluginSetting(arg1, arg2) {
   return window['go']['api']['App']['ReadPluginSetting'](arg1, arg2);
 }
@@ -536,6 +540,10 @@ export function WritePluginDataJSON(arg1, arg2, arg3) {
 
 export function WritePluginDataNDJSON(arg1, arg2, arg3) {
   return window['go']['api']['App']['WritePluginDataNDJSON'](arg1, arg2, arg3);
+}
+
+export function WritePluginDealConfig(arg1, arg2, arg3) {
+  return window['go']['api']['App']['WritePluginDealConfig'](arg1, arg2, arg3);
 }
 
 export function WritePluginSetting(arg1, arg2, arg3) {
