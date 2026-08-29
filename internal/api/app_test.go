@@ -3229,6 +3229,20 @@ func TestWorkspaceV2LifecyclePublishesEventsAndRecordsSync(t *testing.T) {
 	}
 }
 
+func TestDealMigrationPreflightIsDiagnosticOnly(t *testing.T) {
+	app, root := newFilesTestApp(t, []string{"files.read"})
+	ledger, err := app.preflightDealMigration(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ledger.State != "" {
+		t.Fatalf("unexpected migration ledger = %#v", ledger)
+	}
+	if _, err := os.Stat(filepath.Join(root, ".verstak", "migrations")); !os.IsNotExist(err) {
+		t.Fatalf("preflight activated migration state: %v", err)
+	}
+}
+
 func TestSyncNowAppliesEveryPullPageInOrder(t *testing.T) {
 	app, root := newSyncFilesTestApp(t, []string{"files.read", "files.write", "files.delete"}, "local-device")
 	server := newLocalHTTPTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
