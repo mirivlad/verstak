@@ -3,6 +3,7 @@ package dealmigration
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"io/fs"
@@ -16,6 +17,8 @@ import (
 const (
 	legacyProjectsPluginID = "verstak.projects"
 	projectsSettingsKey    = "projects:global"
+	activityPluginID       = "verstak.activity"
+	activityRawDataName    = "activity-events"
 )
 
 // NewProviderDataTransform returns the one-shot provider-content conversion.
@@ -64,7 +67,155 @@ func migrateProviderData(ctx context.Context, vault string) error {
 			return fmt.Errorf("migrate provider data: %w", err)
 		}
 	}
-	return nil
+	return migrateLegacyActivitySettings(vault)
+}
+
+// migrateLegacyActivitySettings retires path-keyed Activity settings after
+// their content has been copied into the provider's canonical raw records.
+func migrateLegacyActivitySettings(vault string) error {
+	settingsPath := filepath.Join(vault, ".verstak", "plugin-settings", activityPluginID, "settings.json")
+	settingsData, err := os.ReadFile(settingsPath)
+	if os.IsNotExist(err) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	var settings map[string]any
+	if err := json.Unmarshal(settingsData, &settings); err != nil {
+		return fmt.Errorf("decode legacy Activity settings: %w", err)
+	}
+	legacyEvents := []any{}
+	changed := false
+	for key, value := range settings {
+		if key == "events" || key == "events:global" || strings.HasPrefix(key, "events:workspace:") {
+			records, ok := value.([]any)
+			if !ok {
+				return fmt.Errorf("legacy Activity event key %s must contain an array", key)
+			}
+			legacyEvents = append(legacyEvents, records...)
+			delete(settings, key)
+			changed = true
+			continue
+		}
+		if strings.HasPrefix(key, "work-session-candidates:workspace:") || strings.HasPrefix(key, "work-session-dismissals:workspace:") {
+			delete(settings, key)
+			changed = true
+		}
+	}
+	if len(legacyEvents) > 0 {
+		rawPath := filepath.Join(vault, ".verstak", "plugin-data", activityPluginID, activityRawDataName+".ndjson")
+		rawData, err := os.ReadFile(rawPath)
+		if err != nil && !os.IsNotExist(err) {
+			return err
+		}
+		rawRecords := []any{}
+		if err == nil {
+			value, err := decodeProviderValue(rawData, true)
+			if err != nil {
+				return fmt.Errorf("decode Activity raw records: %w", err)
+			}
+			var ok bool
+			rawRecords, ok = value.([]any)
+			if !ok {
+				return fmt.Errorf("Activity raw records must be an array")
+			}
+		}
+		rawRecords = mergeActivityRecords(rawRecords, legacyEvents)
+		encoded, err := encodeProviderValue(rawRecords, true)
+		if err != nil {
+			return err
+		}
+		if err := os.MkdirAll(filepath.Dir(rawPath), 0o700); err != nil {
+			return err
+		}
+		if err := writeFileAtomically(rawPath, encoded); err != nil {
+			return err
+		}
+	}
+	if !changed {
+		return nil
+	}
+	encoded, err := json.MarshalIndent(settings, "", "  ")
+	if err != nil {
+		return err
+	}
+	if bytes.Equal(settingsData, encoded) {
+		return nil
+	}
+	return writeFileAtomically(settingsPath, encoded)
+}
+
+func mergeActivityRecords(existing, legacy []any) []any {
+	byActivityID := map[string]int{}
+	seenWithoutID := map[string]bool{}
+	merged := make([]any, 0, len(existing)+len(legacy))
+	for _, records := range [][]any{existing, legacy} {
+		for _, record := range records {
+			item, _ := record.(map[string]any)
+			activityID := stringValue(item["activityId"])
+			if activityID != "" {
+				if index, ok := byActivityID[activityID]; ok {
+					if previous, ok := merged[index].(map[string]any); ok && item != nil {
+						merged[index] = mergeActivityRecord(previous, item)
+					}
+					continue
+				}
+				byActivityID[activityID] = len(merged)
+			} else if fingerprint := activityRecordFingerprint(record); fingerprint != "" {
+				if seenWithoutID[fingerprint] {
+					continue
+				}
+				seenWithoutID[fingerprint] = true
+			}
+			merged = append(merged, record)
+		}
+	}
+	return merged
+}
+
+func mergeActivityRecord(primary, secondary map[string]any) map[string]any {
+	merged := make(map[string]any, len(primary)+len(secondary))
+	for key, value := range primary {
+		merged[key] = value
+	}
+	for key, value := range secondary {
+		current, exists := merged[key]
+		if !exists || emptyActivityValue(current) {
+			merged[key] = value
+			continue
+		}
+		currentMap, currentIsMap := current.(map[string]any)
+		valueMap, valueIsMap := value.(map[string]any)
+		if currentIsMap && valueIsMap {
+			merged[key] = mergeActivityRecord(currentMap, valueMap)
+		}
+	}
+	return merged
+}
+
+func emptyActivityValue(value any) bool {
+	switch item := value.(type) {
+	case nil:
+		return true
+	case string:
+		return item == ""
+	case []any:
+		return len(item) == 0
+	case map[string]any:
+		return len(item) == 0
+	default:
+		return false
+	}
+}
+
+func activityRecordFingerprint(record any) string {
+	data, err := json.Marshal(record)
+	if err != nil {
+		return ""
+	}
+	sum := sha256.Sum256(data)
+	return fmt.Sprintf("%x", sum[:])
 }
 
 // currentWorkspaceRootIDs is migration-only lookup data from canonical Deal

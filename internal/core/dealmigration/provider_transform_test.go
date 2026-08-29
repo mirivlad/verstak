@@ -178,3 +178,110 @@ func TestCurrentWorkspaceRootIDsRejectsSymlinkMarker(t *testing.T) {
 		t.Fatalf("symlink marker error = %v, want rejection", err)
 	}
 }
+
+func TestProviderDataTransformMovesLegacyActivitySettingsIntoRawDealRecords(t *testing.T) {
+	vault := t.TempDir()
+	workspaceID := "0181c5b6-7a13-7c45-9e0e-07e0d3119da3"
+	writeMigrationJSON(t, vault, "Clients/Acme/.verstak/workspace.json", map[string]any{
+		"schemaVersion": 1,
+		"workspaceId":   workspaceID,
+	})
+	writeMigrationJSON(t, vault, ".verstak/plugin-settings/verstak.activity/settings.json", map[string]any{
+		"events:workspace:Clients%2FAcme": []any{
+			map[string]any{"activityId": "settings-activity", "workspaceRootPath": "Clients/Acme", "summary": "Preserve settings activity"},
+		},
+		"work-session-candidates:workspace:Clients%2FAcme": []any{"derived-candidate"},
+		"work-session-dismissals:workspace:Clients%2FAcme": []any{"derived-dismissal"},
+		"browser-activity-rules-v1":                        []any{map[string]any{"pattern": "example.test", "workspaceId": workspaceID, "workspaceRootPath": "Clients/Acme"}},
+	})
+
+	runner := NewDealOnlyRunner(vault)
+	if err := runner.Run(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+
+	data, err := os.ReadFile(filepath.Join(vault, ".verstak/plugin-data/verstak.activity/activity-events.ndjson"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var record map[string]any
+	if err := json.Unmarshal(bytes.TrimSpace(data), &record); err != nil {
+		t.Fatal(err)
+	}
+	if record["activityId"] != "settings-activity" || record["workspaceId"] != workspaceID || record["summary"] != "Preserve settings activity" {
+		t.Fatalf("legacy Activity record was not preserved in raw Deal data: %#v", record)
+	}
+	settings := readMigrationJSON(t, vault, ".verstak/plugin-settings/verstak.activity/settings.json")
+	for _, key := range []string{"events:workspace:Clients%2FAcme", "work-session-candidates:workspace:Clients%2FAcme", "work-session-dismissals:workspace:Clients%2FAcme"} {
+		if _, ok := settings[key]; ok {
+			t.Fatalf("legacy Activity runtime key survived migration: %s", key)
+		}
+	}
+	if _, ok := settings["browser-activity-rules-v1"]; !ok {
+		t.Fatal("Activity rules were unexpectedly removed")
+	}
+}
+
+func TestMigrateLegacyActivitySettingsMergesSameActivityWithoutDroppingFields(t *testing.T) {
+	vault := t.TempDir()
+	writeMigrationJSON(t, vault, ".verstak/plugin-data/verstak.activity/activity-events.ndjson", []any{
+		map[string]any{"activityId": "same", "title": "Raw title", "payload": map[string]any{"raw": true}},
+	})
+	writeMigrationJSON(t, vault, ".verstak/plugin-settings/verstak.activity/settings.json", map[string]any{
+		"events:global": []any{map[string]any{"activityId": "same", "summary": "Legacy summary", "payload": map[string]any{"legacy": true}}},
+	})
+
+	if err := migrateLegacyActivitySettings(vault); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(filepath.Join(vault, ".verstak/plugin-data/verstak.activity/activity-events.ndjson"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var record map[string]any
+	if err := json.Unmarshal(bytes.TrimSpace(data), &record); err != nil {
+		t.Fatal(err)
+	}
+	payload := record["payload"].(map[string]any)
+	if record["title"] != "Raw title" || record["summary"] != "Legacy summary" || payload["raw"] != true || payload["legacy"] != true {
+		t.Fatalf("same Activity record lost fields while merging: %#v", record)
+	}
+}
+
+func TestMigrateLegacyActivitySettingsDeduplicatesIdlessRecordsAfterInterruptedRetry(t *testing.T) {
+	vault := t.TempDir()
+	settingsPath := ".verstak/plugin-settings/verstak.activity/settings.json"
+	legacy := map[string]any{"events:global": []any{map[string]any{"type": "note.saved", "summary": "No generated ID"}}}
+	writeMigrationJSON(t, vault, settingsPath, legacy)
+	if err := migrateLegacyActivitySettings(vault); err != nil {
+		t.Fatal(err)
+	}
+	// Recreate the pre-removal source as if the process stopped after writing
+	// raw data and before removing legacy settings.
+	writeMigrationJSON(t, vault, settingsPath, legacy)
+	if err := migrateLegacyActivitySettings(vault); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(filepath.Join(vault, ".verstak/plugin-data/verstak.activity/activity-events.ndjson"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if lines := bytes.Split(bytes.TrimSpace(data), []byte{'\n'}); len(lines) != 1 {
+		t.Fatalf("id-less Activity record count = %d, want 1", len(lines))
+	}
+}
+
+func TestMigrateLegacyActivitySettingsRejectsMalformedEventValue(t *testing.T) {
+	vault := t.TempDir()
+	settingsPath := ".verstak/plugin-settings/verstak.activity/settings.json"
+	writeMigrationJSON(t, vault, settingsPath, map[string]any{"events:global": map[string]any{"activityId": "not-an-array"}})
+
+	err := migrateLegacyActivitySettings(vault)
+	if err == nil || !strings.Contains(err.Error(), "events:global") {
+		t.Fatalf("malformed event error = %v, want key-specific failure", err)
+	}
+	settings := readMigrationJSON(t, vault, settingsPath)
+	if _, ok := settings["events:global"]; !ok {
+		t.Fatal("malformed Activity events were deleted")
+	}
+}
