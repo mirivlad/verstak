@@ -764,6 +764,29 @@ export function createPluginAPI(pluginId) {
           return App.PluginListWorkspaces(pluginId);
         });
       },
+      readToolConfig: function(workspaceId) {
+        assertActive('workspaces.readToolConfig');
+        workspaceId = String(workspaceId || '').trim();
+        if (!dealWorkspaceIdPattern.test(workspaceId)) {
+          return Promise.reject(new Error('workspaces.readToolConfig requires workspaceId UUID'));
+        }
+        return callBackend(pluginId, 'workspaces.readToolConfig', function() {
+          return App.ReadPluginDealConfig(pluginId, workspaceId);
+        });
+      },
+      writeToolConfig: function(workspaceId, config) {
+        assertActive('workspaces.writeToolConfig');
+        workspaceId = String(workspaceId || '').trim();
+        if (!dealWorkspaceIdPattern.test(workspaceId)) {
+          return Promise.reject(new Error('workspaces.writeToolConfig requires workspaceId UUID'));
+        }
+        if (!config || typeof config !== 'object' || Array.isArray(config)) {
+          return Promise.reject(new Error('workspaces.writeToolConfig requires an object config'));
+        }
+        return callBackendErrorString(pluginId, 'workspaces.writeToolConfig', function() {
+          return App.WritePluginDealConfig(pluginId, workspaceId, config);
+        });
+      },
       // Read-only user-visible Deal/folder hierarchy. Unlike list(), this is
       // intentionally not filtered by whether this plugin contributes a tool
       // to a Deal; stable Deal UUIDs are platform identity, not plugin state.

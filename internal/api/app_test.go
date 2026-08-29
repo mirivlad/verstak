@@ -4187,6 +4187,62 @@ func TestDealAuthorityListsAndSelectsNestedWorkspaceWithoutLegacyManager(t *test
 	}
 }
 
+func TestPluginDealToolConfigIsNamespacedByPluginAndDealUUID(t *testing.T) {
+	app, vaultDir := newFilesTestApp(t, []string{"storage.namespace"})
+	app.plugins[0].Manifest.ID = "verstak.projects"
+	workspaceID := "d80c23f4-0f87-43d5-8424-b01d4865b2c0"
+	workspaceDir := filepath.Join(vaultDir, "Clients", "Acme")
+	if err := os.MkdirAll(workspaceDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := workspacetree.WriteWorkspaceMarker(workspaceDir, workspaceID); err != nil {
+		t.Fatal(err)
+	}
+	app.treeV2 = workspacetree.NewService(vaultDir, nil)
+	if err := app.treeV2.Initialize(); err != nil {
+		t.Fatal(err)
+	}
+	if err := app.treeV2.WriteDealMetadata(workspacetree.DealMetadata{
+		SchemaVersion:  workspacetree.DealMetadataSchemaVersion,
+		WorkspaceID:    workspaceID,
+		WorkspaceName:  "Acme",
+		WorkspaceTools: []string{"verstak.projects"},
+		ToolConfig: map[string]json.RawMessage{
+			"verstak.other": json.RawMessage(`{"keep":true}`),
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	if config, errText := app.ReadPluginDealConfig("verstak.projects", workspaceID); errText != "" || len(config) != 0 {
+		t.Fatalf("initial Project Meta = %#v, error = %q", config, errText)
+	}
+	if errText := app.WritePluginDealConfig("verstak.projects", workspaceID, map[string]interface{}{
+		"status": "active", "tags": []interface{}{"client"},
+	}); errText != "" {
+		t.Fatal(errText)
+	}
+	config, errText := app.ReadPluginDealConfig("verstak.projects", workspaceID)
+	if errText != "" || config["status"] != "active" {
+		t.Fatalf("stored Project Meta = %#v, error = %q", config, errText)
+	}
+	metadata, err := app.treeV2.ReadDealMetadata(workspaceID, "Clients/Acme")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(metadata.ToolConfig["verstak.other"]) != `{"keep":true}` {
+		t.Fatalf("other plugin config was overwritten: %#v", metadata.ToolConfig)
+	}
+	if string(metadata.ToolConfig["verstak.projects"]) != `{"status":"active","tags":["client"]}` {
+		t.Fatalf("Project Meta was not stored under its plugin namespace: %#v", metadata.ToolConfig)
+	}
+
+	app.plugins[0].Manifest.Permissions = nil
+	if _, errText := app.ReadPluginDealConfig("verstak.projects", workspaceID); !strings.Contains(errText, "storage.namespace") {
+		t.Fatalf("missing namespace permission error = %q", errText)
+	}
+}
+
 func TestWorkspaceIdentityAPIListsAndRepairsDuplicates(t *testing.T) {
 	app, vaultDir := newFilesTestApp(t, []string{"files.read"})
 	app.treeV2 = workspacetree.NewService(vaultDir, nil)

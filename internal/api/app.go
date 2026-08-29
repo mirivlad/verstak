@@ -3201,6 +3201,69 @@ func (a *App) GetWorkspaceMetadataByUUID(workspaceID string) (workspace.Metadata
 	return legacyWorkspaceMetadata(meta), ""
 }
 
+// ReadPluginDealConfig returns only the calling plugin's namespaced Deal
+// metadata. It intentionally does not expose another plugin's ToolConfig.
+func (a *App) ReadPluginDealConfig(pluginID, workspaceID string) (map[string]interface{}, string) {
+	if _, err := a.requirePluginAccess(pluginID, "storage.namespace"); err != nil {
+		return map[string]interface{}{}, err.Error()
+	}
+	if a.treeV2 == nil {
+		return map[string]interface{}{}, "workspace not initialized"
+	}
+	item, ok := a.treeV2.GetWorkspaceByID(strings.TrimSpace(workspaceID))
+	if !ok {
+		return map[string]interface{}{}, "workspace not found"
+	}
+	metadata, err := a.treeV2.ReadDealMetadata(item.ID, item.RootPath)
+	if err != nil {
+		return map[string]interface{}{}, err.Error()
+	}
+	raw := metadata.ToolConfig[pluginID]
+	if len(raw) == 0 {
+		return map[string]interface{}{}, ""
+	}
+	var config map[string]interface{}
+	if err := json.Unmarshal(raw, &config); err != nil || config == nil {
+		if err == nil {
+			err = errors.New("config must be an object")
+		}
+		return map[string]interface{}{}, fmt.Sprintf("decode Deal config: %v", err)
+	}
+	return config, ""
+}
+
+// WritePluginDealConfig atomically replaces the calling plugin's own config
+// namespace in canonical Deal metadata while retaining every other namespace.
+func (a *App) WritePluginDealConfig(pluginID, workspaceID string, config map[string]interface{}) string {
+	if _, err := a.requirePluginAccess(pluginID, "storage.namespace"); err != nil {
+		return err.Error()
+	}
+	if a.treeV2 == nil {
+		return "workspace not initialized"
+	}
+	item, ok := a.treeV2.GetWorkspaceByID(strings.TrimSpace(workspaceID))
+	if !ok {
+		return "workspace not found"
+	}
+	encoded, err := json.Marshal(config)
+	if err != nil {
+		return fmt.Sprintf("encode Deal config: %v", err)
+	}
+	metadata, err := a.treeV2.ReadDealMetadata(item.ID, item.RootPath)
+	if err != nil {
+		return err.Error()
+	}
+	if metadata.ToolConfig == nil {
+		metadata.ToolConfig = make(map[string]json.RawMessage)
+	}
+	metadata.ToolConfig[pluginID] = append(json.RawMessage(nil), encoded...)
+	metadata.UpdatedAt = ""
+	if err := a.treeV2.WriteDealMetadata(metadata); err != nil {
+		return err.Error()
+	}
+	return ""
+}
+
 // UpdateWorkspaceMetadata merges metadata for an existing workspace.
 func (a *App) UpdateWorkspaceMetadata(name string, patch workspace.MetadataPatch) (workspace.Metadata, string) {
 	if a.treeV2 == nil {

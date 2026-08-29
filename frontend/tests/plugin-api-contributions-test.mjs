@@ -3,6 +3,7 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 const pluginData = {};
+const dealConfigs = {};
 const scheduledNotifications = [];
 
 globalThis.window = {
@@ -37,6 +38,15 @@ globalThis.window = {
         WritePluginDataJSON: (pluginId, name, data) => {
           pluginData[pluginId] = pluginData[pluginId] || {};
           pluginData[pluginId][name] = Object.assign({}, data || {});
+          return Promise.resolve('');
+        },
+        ReadPluginDealConfig: (pluginId, workspaceId) => Promise.resolve([
+          Object.assign({}, (dealConfigs[pluginId] && dealConfigs[pluginId][workspaceId]) || {}),
+          '',
+        ]),
+        WritePluginDealConfig: (pluginId, workspaceId, config) => {
+          dealConfigs[pluginId] = dealConfigs[pluginId] || {};
+          dealConfigs[pluginId][workspaceId] = Object.assign({}, config || {});
           return Promise.resolve('');
         },
         GetPluginFrontendInfo: (pluginId) => Promise.resolve(
@@ -101,6 +111,15 @@ const api = apiModule.createPluginAPI('verstak.files');
 
 if (!api.contributions || typeof api.contributions.list !== 'function') {
   throw new Error('api.contributions.list is missing');
+}
+if (!api.workspaces || typeof api.workspaces.readToolConfig !== 'function' || typeof api.workspaces.writeToolConfig !== 'function') {
+  throw new Error('api.workspaces Deal tool config contract is missing');
+}
+const dealId = '0181c5b6-7a13-4c45-9e0e-07e0d3119da3';
+await api.workspaces.writeToolConfig(dealId, { status: 'active' });
+const dealConfig = await api.workspaces.readToolConfig(dealId);
+if (dealConfig.status !== 'active' || dealConfigs['verstak.files']?.[dealId]?.status !== 'active') {
+  throw new Error(`Deal tool config did not stay in the caller namespace: ${JSON.stringify(dealConfigs)}`);
 }
 if (!api.commands || typeof api.commands.executeFor !== 'function') {
   throw new Error('api.commands.executeFor is missing');
