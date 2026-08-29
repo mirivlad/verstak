@@ -11,7 +11,7 @@ import (
 	corefiles "github.com/verstak/verstak-desktop/internal/core/files"
 	"github.com/verstak/verstak-desktop/internal/core/plugin"
 	"github.com/verstak/verstak-desktop/internal/core/storage"
-	"github.com/verstak/verstak-desktop/internal/core/workspace"
+	"github.com/verstak/verstak-desktop/internal/core/workspacetree"
 )
 
 func TestSyncNowAgainstRealServerTwoVaults(t *testing.T) {
@@ -26,13 +26,13 @@ func TestSyncNowAgainstRealServerTwoVaults(t *testing.T) {
 
 	appA, rootA := newSyncFilesTestApp(t, []string{"files.read", "files.write", "files.delete"}, deviceA)
 	appB, rootB := newSyncFilesTestApp(t, []string{"files.read", "files.write", "files.delete"}, deviceB)
-	appA.workspace = workspace.NewManager(rootA)
-	appB.workspace = workspace.NewManager(rootB)
-	if err := appA.workspace.Load(); err != nil {
-		t.Fatalf("load workspace A: %v", err)
+	appA.treeV2 = workspacetree.NewService(rootA, nil)
+	appB.treeV2 = workspacetree.NewService(rootB, nil)
+	if err := appA.treeV2.Initialize(); err != nil {
+		t.Fatalf("initialize Deal tree A: %v", err)
 	}
-	if err := appB.workspace.Load(); err != nil {
-		t.Fatalf("load workspace B: %v", err)
+	if err := appB.treeV2.Initialize(); err != nil {
+		t.Fatalf("initialize Deal tree B: %v", err)
 	}
 	if err := appA.syncSvc.SetState(serverURL, apiKeyA); err != nil {
 		t.Fatalf("appA SetState: %v", err)
@@ -166,7 +166,7 @@ func TestSyncNowAgainstRealServerTwoVaults(t *testing.T) {
 	}
 	expectSyncCounts(t, appA, 1, 1)
 	expectSyncCounts(t, appB, 0, 1)
-	if _, err := appB.workspace.GetWorkspaceIdentity("Renamed Deal"); err == nil {
+	if _, ok := appB.treeV2.ResolveWorkspace("Renamed Deal"); ok {
 		t.Fatal("trashed workspace is still active on appB")
 	}
 
@@ -314,11 +314,11 @@ func assertNoUnpushedOps(t *testing.T, app *App) {
 
 func assertWorkspaceIdentity(t *testing.T, app *App, name, wantID string) {
 	t.Helper()
-	identity, err := app.workspace.GetWorkspaceIdentity(name)
-	if err != nil {
-		t.Fatalf("GetWorkspaceIdentity(%s): %v", name, err)
+	identity, ok := app.treeV2.ResolveWorkspace(name)
+	if !ok {
+		t.Fatalf("Deal %s not found", name)
 	}
-	if identity.WorkspaceID != wantID {
-		t.Fatalf("workspace %s ID = %s, want %s", name, identity.WorkspaceID, wantID)
+	if identity.ID != wantID {
+		t.Fatalf("Deal %s ID = %s, want %s", name, identity.ID, wantID)
 	}
 }

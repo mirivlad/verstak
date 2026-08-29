@@ -26,7 +26,6 @@ import (
 	"github.com/verstak/verstak-desktop/internal/core/storage"
 	syncsvc "github.com/verstak/verstak-desktop/internal/core/sync"
 	"github.com/verstak/verstak-desktop/internal/core/vault"
-	"github.com/verstak/verstak-desktop/internal/core/workspace"
 	"github.com/verstak/verstak-desktop/internal/shell/debug"
 	"github.com/verstak/verstak-desktop/internal/shell/tray"
 )
@@ -86,18 +85,6 @@ func main() {
 	if vaultService.GetVaultStatus() == vault.StatusOpen {
 		if err := pluginStateMgr.Load(); err != nil {
 			log.Printf("[main] vault plugin state: %v", err)
-		}
-	}
-
-	// ─── Initialize Workspace ────────────────────────────────
-	var workspaceMgr *workspace.Manager
-	if vaultService.GetVaultStatus() == vault.StatusOpen {
-		workspaceMgr = workspace.NewManager(vaultService.GetVaultPath())
-		if err := workspaceMgr.Load(); err != nil {
-			log.Printf("[main] workspace: %v", err)
-			workspaceMgr = nil
-		} else {
-			log.Printf("[main] workspace loaded: %d nodes", len(workspaceMgr.GetTree().Nodes))
 		}
 	}
 
@@ -242,7 +229,7 @@ func main() {
 			return ""
 		})
 	}
-	app = api.NewApp(capRegistry, contribRegistry, permRegistry, eventBus, plugins, vaultService, storageService, filesService, appSettingsMgr, pluginStateMgr, workspaceMgr, syncService, browserReceiver, debugEnabled)
+	app = api.NewApp(capRegistry, contribRegistry, permRegistry, eventBus, plugins, vaultService, storageService, filesService, appSettingsMgr, pluginStateMgr, syncService, browserReceiver, debugEnabled)
 	app.SetNotificationService(notifications.New(vaultService, api.NewNativeNotificationSender(), time.Now))
 	trayController := tray.New(tray.NewNativeBackend(), tray.DefaultIcon())
 	trayController.SetReadyChangedHandler(app.SetTrayReady)

@@ -40,6 +40,7 @@ type legacyDealMetadata struct {
 	WorkspaceID         string              `json:"workspaceId"`
 	WorkspaceName       string              `json:"workspaceName"`
 	WorkspaceTools      []string            `json:"workspaceTools"`
+	Features            map[string]bool     `json:"features"`
 	CreatedFromTemplate *TemplateProvenance `json:"createdFromTemplate"`
 	UpdatedAt           string              `json:"updatedAt"`
 }
@@ -241,11 +242,15 @@ func decodeDealMetadata(data []byte, expectedWorkspaceID, fallbackName string) (
 		if err := json.Unmarshal(data, &legacy); err != nil {
 			return DealMetadata{}, fmt.Errorf("decode legacy Deal metadata: %w", err)
 		}
+		workspaceTools := legacy.WorkspaceTools
+		if workspaceTools == nil && legacy.CreatedFromTemplate != nil {
+			workspaceTools = toolsFromLegacyFeatures(legacy.Features)
+		}
 		metadata = DealMetadata{
 			SchemaVersion:       DealMetadataSchemaVersion,
 			WorkspaceID:         legacy.WorkspaceID,
 			WorkspaceName:       legacy.WorkspaceName,
-			WorkspaceTools:      legacy.WorkspaceTools,
+			WorkspaceTools:      workspaceTools,
 			ToolConfig:          map[string]json.RawMessage{},
 			CreatedFromTemplate: legacy.CreatedFromTemplate,
 			UpdatedAt:           legacy.UpdatedAt,
@@ -260,6 +265,9 @@ func decodeDealMetadata(data []byte, expectedWorkspaceID, fallbackName string) (
 	if metadata.UpdatedAt == "" {
 		metadata.UpdatedAt = time.Now().UTC().Format(time.RFC3339Nano)
 	}
+	if metadata.CreatedFromTemplate != nil && metadata.CreatedFromTemplate.AppliedAt == "" {
+		metadata.CreatedFromTemplate.AppliedAt = metadata.UpdatedAt
+	}
 	metadata.WorkspaceTools = normalizeWorkspaceTools(metadata.WorkspaceTools)
 	if metadata.ToolConfig == nil {
 		metadata.ToolConfig = map[string]json.RawMessage{}
@@ -268,6 +276,26 @@ func decodeDealMetadata(data []byte, expectedWorkspaceID, fallbackName string) (
 		return DealMetadata{}, err
 	}
 	return metadata, nil
+}
+
+func toolsFromLegacyFeatures(features map[string]bool) []string {
+	tools := []string{"verstak.notes", "verstak.files"}
+	for _, mapping := range []struct {
+		feature  string
+		pluginID string
+	}{
+		{feature: "projects", pluginID: "verstak.projects"},
+		{feature: "journal", pluginID: "verstak.journal"},
+		{feature: "activity", pluginID: "verstak.activity"},
+		{feature: "browser-inbox", pluginID: "verstak.browser-inbox"},
+		{feature: "todo", pluginID: "verstak.todo"},
+		{feature: "secrets", pluginID: "verstak.secrets"},
+	} {
+		if features[mapping.feature] {
+			tools = append(tools, mapping.pluginID)
+		}
+	}
+	return tools
 }
 
 func validateDealMetadata(metadata DealMetadata, expectedWorkspaceID string) error {

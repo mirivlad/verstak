@@ -1402,17 +1402,20 @@ func TestBrowserInboxWorkspaceReferenceSurvivesRenameAndTrash(t *testing.T) {
 	if err := v.CreateVault(t.TempDir()); err != nil {
 		t.Fatalf("CreateVault: %v", err)
 	}
-	manager := workspace.NewManager(v.GetVaultPath())
-	created, err := manager.CreateWorkspace("Project", "minimal")
+	tree := workspacetree.NewService(v.GetVaultPath(), nil)
+	if err := tree.Initialize(); err != nil {
+		t.Fatalf("Initialize: %v", err)
+	}
+	created, err := tree.CreateWorkspace("", "Project", "minimal", nil)
 	if err != nil {
 		t.Fatalf("CreateWorkspace: %v", err)
 	}
 	bus := events.NewBus()
 	app := &App{
-		eventBus:  bus,
-		storage:   storage.New(v),
-		vault:     v,
-		workspace: manager,
+		eventBus: bus,
+		storage:  storage.New(v),
+		vault:    v,
+		treeV2:   tree,
 		plugins: []plugin.Plugin{{
 			Manifest: plugin.Manifest{ID: browserInboxPluginID, Permissions: []string{"storage.namespace"}},
 			Status:   plugin.StatusLoaded,
@@ -2045,8 +2048,8 @@ func TestApplyRemoteOpSkipsLocalDevice(t *testing.T) {
 
 func TestApplyRemoteWorkspaceLifecyclePreservesDurableIdentity(t *testing.T) {
 	app, root := newSyncFilesTestApp(t, []string{"files.read", "files.write", "files.delete"}, "local-device")
-	app.workspace = workspace.NewManager(root)
-	if err := app.workspace.Load(); err != nil {
+	app.treeV2 = workspacetree.NewService(root, nil)
+	if err := app.treeV2.Initialize(); err != nil {
 		t.Fatal(err)
 	}
 	workspaceID := "5f0f96d9-61c8-4b6b-8c3a-a1b9a0f40002"
@@ -2054,11 +2057,13 @@ func TestApplyRemoteWorkspaceLifecyclePreservesDurableIdentity(t *testing.T) {
 		WorkspaceID: workspaceID,
 		Path:        "Remote",
 		Name:        "Remote",
-		Metadata: workspace.Metadata{
-			WorkspaceID:   workspaceID,
-			WorkspaceName: "Remote",
-			Folders:       map[string]string{"notes": "Notes"},
-			Features:      map[string]bool{"files": true},
+		Metadata: workspacetree.DealMetadata{
+			SchemaVersion:  workspacetree.DealMetadataSchemaVersion,
+			WorkspaceID:    workspaceID,
+			WorkspaceName:  "Remote",
+			WorkspaceTools: []string{"verstak.notes", "third.party"},
+			ToolConfig:     map[string]json.RawMessage{"third.party": json.RawMessage(`{"keep":true}`)},
+			UpdatedAt:      "2026-08-29T00:00:00Z",
 		},
 	}
 	encoded, err := json.Marshal(payload)
@@ -2072,8 +2077,11 @@ func TestApplyRemoteWorkspaceLifecyclePreservesDurableIdentity(t *testing.T) {
 	if err := app.applyRemoteOp(create); err != nil {
 		t.Fatalf("replay workspace create: %v", err)
 	}
-	if identity, err := app.workspace.GetWorkspaceIdentity("Remote"); err != nil || identity.WorkspaceID != workspaceID {
-		t.Fatalf("remote workspace identity = %+v err=%v", identity, err)
+	if identity, ok := app.treeV2.ResolveWorkspace("Remote"); !ok || identity.ID != workspaceID {
+		t.Fatalf("remote workspace identity = %+v found=%v", identity, ok)
+	}
+	if metadata, err := app.treeV2.ReadDealMetadata(workspaceID, "Remote"); err != nil || string(metadata.ToolConfig["third.party"]) != `{"keep":true}` {
+		t.Fatalf("remote workspace metadata = %+v err=%v", metadata, err)
 	}
 
 	payload.PreviousPath = "Remote"
@@ -2095,8 +2103,8 @@ func TestApplyRemoteWorkspaceLifecyclePreservesDurableIdentity(t *testing.T) {
 	if err := app.applyRemoteOp(restore); err != nil {
 		t.Fatalf("apply workspace restore: %v", err)
 	}
-	if identity, err := app.workspace.GetWorkspaceIdentity("Remote-Restored"); err != nil || identity.WorkspaceID != workspaceID {
-		t.Fatalf("restored workspace identity = %+v err=%v", identity, err)
+	if identity, ok := app.treeV2.ResolveWorkspace("Remote-Restored"); !ok || identity.ID != workspaceID {
+		t.Fatalf("restored workspace identity = %+v found=%v", identity, ok)
 	}
 }
 
@@ -3169,6 +3177,58 @@ func TestCreateWorkspaceV2WithToolsValidatesAndPersistsExactSelection(t *testing
 	}
 }
 
+func TestWorkspaceV2LifecyclePublishesEventsAndRecordsSync(t *testing.T) {
+	app, root := newSyncFilesTestApp(t, []string{"files.read"}, "local-device")
+	app.eventBus = events.NewBus()
+	app.treeV2 = workspacetree.NewService(root, app.eventBus)
+	if err := app.treeV2.Initialize(); err != nil {
+		t.Fatal(err)
+	}
+	received := map[string]map[string]interface{}{}
+	for _, eventName := range []string{workspaceCreatedEventName, workspaceRenamedEventName, workspaceTrashedEventName} {
+		name := eventName
+		app.eventBus.Subscribe(name, func(event events.Event) {
+			received[name], _ = event.Payload.(map[string]interface{})
+		})
+	}
+
+	created := app.CreateWorkspaceV2("", "Project", "minimal")
+	workspaceID := fmt.Sprint(created["id"])
+	if workspaceID == "" || created["error"] != nil {
+		t.Fatalf("create response = %#v", created)
+	}
+	if errText := app.RenameWorkspaceV2(workspaceID, "Renamed"); errText != "" {
+		t.Fatal(errText)
+	}
+	trashed := app.TrashWorkspaceV2(workspaceID)
+	if trashed["error"] != nil {
+		t.Fatalf("trash response = %#v", trashed)
+	}
+
+	if received[workspaceCreatedEventName]["workspaceId"] != workspaceID {
+		t.Fatalf("created event = %#v", received[workspaceCreatedEventName])
+	}
+	if received[workspaceRenamedEventName]["previousWorkspaceRootPath"] != "Project" {
+		t.Fatalf("renamed event = %#v", received[workspaceRenamedEventName])
+	}
+	if received[workspaceTrashedEventName]["workspaceId"] != workspaceID {
+		t.Fatalf("trashed event = %#v", received[workspaceTrashedEventName])
+	}
+	ops, err := app.syncSvc.GetUnpushedOps()
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantTypes := []string{syncsvc.OpCreate, syncsvc.OpRename, syncsvc.OpTrash}
+	if len(ops) != len(wantTypes) {
+		t.Fatalf("sync ops = %#v", ops)
+	}
+	for i, want := range wantTypes {
+		if ops[i].EntityType != syncsvc.EntityWorkspace || ops[i].EntityID != workspaceID || ops[i].OpType != want {
+			t.Fatalf("sync op %d = %#v", i, ops[i])
+		}
+	}
+}
+
 func TestSyncNowAppliesEveryPullPageInOrder(t *testing.T) {
 	app, root := newSyncFilesTestApp(t, []string{"files.read", "files.write", "files.delete"}, "local-device")
 	server := newLocalHTTPTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -3845,7 +3905,6 @@ func TestSetCurrentVaultInitializesWorkspaceWhenMissingAtStartup(t *testing.T) {
 		capRegistry: capability.NewRegistry(),
 		vault:       vaultService,
 		appSettings: settings,
-		workspace:   nil,
 	}
 
 	if errStr := app.SetCurrentVault(vaultParent); errStr != "" {
@@ -3930,9 +3989,9 @@ func TestSetCurrentVaultStartsLiveFileWatcher(t *testing.T) {
 
 func TestWorkspaceAPIUsesTopLevelFoldersAndMetadataSnapshot(t *testing.T) {
 	app, vaultDir := newFilesTestApp(t, []string{"files.read"})
-	app.workspace = workspace.NewManager(vaultDir)
-	if err := app.workspace.Load(); err != nil {
-		t.Fatalf("workspace Load: %v", err)
+	app.treeV2 = workspacetree.NewService(vaultDir, nil)
+	if err := app.treeV2.Initialize(); err != nil {
+		t.Fatalf("workspace tree Initialize: %v", err)
 	}
 
 	ws, errStr := app.CreateWorkspace("Project", "client-project")
@@ -3977,11 +4036,7 @@ func TestWorkspaceAPIUsesTopLevelFoldersAndMetadataSnapshot(t *testing.T) {
 }
 
 func TestWorkspaceAPIListsSelectableTemplates(t *testing.T) {
-	app, vaultDir := newFilesTestApp(t, []string{"files.read"})
-	app.workspace = workspace.NewManager(vaultDir)
-	if err := app.workspace.Load(); err != nil {
-		t.Fatalf("workspace Load: %v", err)
-	}
+	app, _ := newFilesTestApp(t, []string{"files.read"})
 
 	templates, errStr := app.ListWorkspaceTemplates()
 	if errStr != "" {
@@ -3997,10 +4052,10 @@ func TestWorkspaceAPIListsSelectableTemplates(t *testing.T) {
 
 func TestWorkspaceAPIPublishesLifecycleEvents(t *testing.T) {
 	app, vaultDir := newFilesTestApp(t, []string{"files.read"})
-	app.workspace = workspace.NewManager(vaultDir)
 	app.eventBus = events.NewBus()
-	if err := app.workspace.Load(); err != nil {
-		t.Fatalf("workspace Load: %v", err)
+	app.treeV2 = workspacetree.NewService(vaultDir, app.eventBus)
+	if err := app.treeV2.Initialize(); err != nil {
+		t.Fatalf("workspace tree Initialize: %v", err)
 	}
 
 	received := map[string]map[string]interface{}{}
@@ -4065,10 +4120,63 @@ func TestWorkspaceAPIPublishesLifecycleEvents(t *testing.T) {
 	}
 }
 
+func TestDealAuthorityListsAndSelectsNestedWorkspaceWithoutLegacyManager(t *testing.T) {
+	vaultDir := t.TempDir()
+	workspaceID := "e66805cc-5188-58e7-ac40-9aa73042147c"
+	workspaceDir := filepath.Join(vaultDir, "Clients", "Acme")
+	if err := os.MkdirAll(workspaceDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := workspacetree.WriteWorkspaceMarker(workspaceDir, workspaceID); err != nil {
+		t.Fatal(err)
+	}
+	tree := workspacetree.NewService(vaultDir, nil)
+	if err := tree.Initialize(); err != nil {
+		t.Fatal(err)
+	}
+	if err := tree.WriteDealMetadata(workspacetree.DealMetadata{
+		SchemaVersion:  workspacetree.DealMetadataSchemaVersion,
+		WorkspaceID:    workspaceID,
+		WorkspaceName:  "Acme",
+		WorkspaceTools: []string{"verstak.notes", "third.party"},
+		ToolConfig:     map[string]json.RawMessage{"third.party": json.RawMessage(`{"keep":true}`)},
+		UpdatedAt:      "2026-08-29T00:00:00Z",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	app := &App{treeV2: tree, eventBus: events.NewBus()}
+
+	workspaces, errText := app.ListWorkspaces()
+	if errText != "" {
+		t.Fatal(errText)
+	}
+	if len(workspaces) != 1 || workspaces[0].ID != workspaceID || workspaces[0].RootPath != "Clients/Acme" {
+		t.Fatalf("workspaces = %#v", workspaces)
+	}
+	if errText := app.SetCurrentWorkspace("Clients/Acme"); errText != "" {
+		t.Fatal(errText)
+	}
+	current := app.GetCurrentWorkspace()
+	if current["workspaceId"] != workspaceID || current["rootPath"] != "Clients/Acme" {
+		t.Fatalf("current workspace = %#v", current)
+	}
+	if errText := app.SetCurrentWorkspaceNode(workspaceID); errText != "" {
+		t.Fatal(errText)
+	}
+
+	metadata, errText := app.GetWorkspaceMetadataByUUID(workspaceID)
+	if errText != "" {
+		t.Fatal(errText)
+	}
+	if metadata.WorkspaceID != workspaceID || !reflect.DeepEqual(metadata.WorkspaceTools, []string{"verstak.notes", "third.party"}) {
+		t.Fatalf("metadata = %#v", metadata)
+	}
+}
+
 func TestWorkspaceIdentityAPIListsAndRepairsDuplicates(t *testing.T) {
 	app, vaultDir := newFilesTestApp(t, []string{"files.read"})
-	app.workspace = workspace.NewManager(vaultDir)
-	if err := app.workspace.Load(); err != nil {
+	app.treeV2 = workspacetree.NewService(vaultDir, nil)
+	if err := app.treeV2.Initialize(); err != nil {
 		t.Fatal(err)
 	}
 	if _, errStr := app.CreateWorkspace("Original", "default"); errStr != "" {
@@ -4092,9 +4200,9 @@ func TestWorkspaceIdentityAPIListsAndRepairsDuplicates(t *testing.T) {
 
 func TestWorkspaceTrashRestoreAndPurgePublishIdentityLifecycle(t *testing.T) {
 	app, vaultDir := newFilesTestApp(t, []string{"files.read"})
-	app.workspace = workspace.NewManager(vaultDir)
 	app.eventBus = events.NewBus()
-	if err := app.workspace.Load(); err != nil {
+	app.treeV2 = workspacetree.NewService(vaultDir, app.eventBus)
+	if err := app.treeV2.Initialize(); err != nil {
 		t.Fatal(err)
 	}
 	received := map[string]map[string]interface{}{}
@@ -4132,8 +4240,8 @@ func TestWorkspaceTrashRestoreAndPurgePublishIdentityLifecycle(t *testing.T) {
 
 func TestMoveWorkspaceNodeCompatibilityIsUnsupported(t *testing.T) {
 	app, vaultDir := newFilesTestApp(t, []string{"files.read"})
-	app.workspace = workspace.NewManager(vaultDir)
-	if err := app.workspace.Load(); err != nil {
+	app.treeV2 = workspacetree.NewService(vaultDir, nil)
+	if err := app.treeV2.Initialize(); err != nil {
 		t.Fatalf("workspace Load: %v", err)
 	}
 	if _, errStr := app.CreateWorkspace("Project", "default"); errStr != "" {
@@ -4144,8 +4252,8 @@ func TestMoveWorkspaceNodeCompatibilityIsUnsupported(t *testing.T) {
 	}
 
 	errStr := app.MoveWorkspaceNode("Project", "Test")
-	if errStr == "" || !strings.Contains(errStr, "top-level only") {
-		t.Fatalf("MoveWorkspaceNode error = %q, want top-level only", errStr)
+	if errStr == "" || !strings.Contains(errStr, "unsupported") {
+		t.Fatalf("MoveWorkspaceNode error = %q, want unsupported", errStr)
 	}
 	if _, err := os.Stat(filepath.Join(vaultDir, "Test", "Project")); !os.IsNotExist(err) {
 		t.Fatalf("MoveWorkspaceNode created nested mapped workspace, stat err=%v", err)

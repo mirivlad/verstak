@@ -101,7 +101,6 @@ type App struct {
 	appSettings           *appsettings.Manager
 	pluginState           *pluginstate.Manager
 	workbench             *coreworkbench.Router
-	workspace             *workspace.Manager
 	treeV2                *workspacetree.Service
 	syncSvc               *syncsvc.Service
 	browserReceiver       *browserreceiver.Receiver
@@ -152,7 +151,6 @@ func NewApp(
 	filesService *corefiles.Service,
 	appSettingsMgr *appsettings.Manager,
 	pluginStateMgr *pluginstate.Manager,
-	workspaceMgr *workspace.Manager,
 	syncService *syncsvc.Service,
 	browserReceiverService *browserreceiver.Receiver,
 	debugEnabled bool,
@@ -170,7 +168,6 @@ func NewApp(
 		appSettings:           appSettingsMgr,
 		pluginState:           pluginStateMgr,
 		workbench:             coreworkbench.NewRouter(workbenchPrefsFromSettings(appSettingsMgr)),
-		workspace:             workspaceMgr,
 		syncSvc:               syncService,
 		browserReceiver:       browserReceiverService,
 		fileWatcher:           filewatcher.NewService(bus, 0),
@@ -543,19 +540,19 @@ func (a *App) annotateBrowserCaptureWorkspace(capture map[string]interface{}) {
 		}
 		return
 	}
-	if a.workspace == nil {
+	if a.treeV2 == nil {
 		capture["workspaceState"] = "unavailable"
 		return
 	}
-	identity, err := a.workspace.GetWorkspaceIdentity(workspaceRoot)
-	if err != nil {
+	identity, ok := a.treeV2.ResolveWorkspace(workspaceRoot)
+	if !ok {
 		capture["workspaceState"] = "unavailable"
 		return
 	}
-	capture["workspaceId"] = identity.WorkspaceID
+	capture["workspaceId"] = identity.ID
 	capture["workspaceRootPath"] = identity.RootPath
-	capture["workspaceName"] = identity.RootPath
-	capture["workspaceState"] = identity.State
+	capture["workspaceName"] = identity.Name
+	capture["workspaceState"] = "active"
 }
 
 func (a *App) updateBrowserInboxWorkspaceLifecycle(event events.Event) error {
@@ -830,18 +827,18 @@ func activityFromEvent(event events.Event) map[string]interface{} {
 func (a *App) activityFromEvent(event events.Event) map[string]interface{} {
 	activity := activityFromEvent(event)
 	workspaceRoot := firstPayloadText(activity, "workspaceRootPath")
-	if workspaceRoot == "" || a == nil || a.workspace == nil {
+	if workspaceRoot == "" || a == nil || a.treeV2 == nil {
 		activity["sessionScope"] = map[string]interface{}{"kind": "unassigned"}
 		return activity
 	}
-	identity, err := a.workspace.GetWorkspaceIdentity(workspaceRoot)
-	if err != nil {
+	identity, ok := a.treeV2.ResolveWorkspace(workspaceRoot)
+	if !ok {
 		activity["sessionScope"] = map[string]interface{}{"kind": "unassigned"}
 		return activity
 	}
-	activity["workspaceId"] = identity.WorkspaceID
+	activity["workspaceId"] = identity.ID
 	activity["workspaceRootPath"] = identity.RootPath
-	activity["sessionScope"] = map[string]interface{}{"kind": "workspace", "workspaceId": identity.WorkspaceID}
+	activity["sessionScope"] = map[string]interface{}{"kind": "workspace", "workspaceId": identity.ID}
 	return activity
 }
 
@@ -1184,8 +1181,8 @@ func (a *App) ReloadPlugins() (int, string) {
 		}
 	}
 
-	// Re-register workspace capability if workspace is initialized
-	if a.workspace != nil && a.workspace.IsInitialized() {
+	// Re-register workspace capability if the canonical Deal tree is initialized.
+	if a.treeV2 != nil {
 		if err := a.capRegistry.Register(capability.CorePluginID, []string{"verstak/core/workspace/v1"}); err != nil {
 			log.Printf("[api] ReloadPlugins: failed to re-register workspace capability: %v", err)
 		}
@@ -2086,10 +2083,10 @@ func (a *App) recordFileSyncPaths(paths ...string) error {
 }
 
 func (a *App) recordWorkspaceSyncOp(opType, workspaceID, path, previousPath, name string) error {
-	if a.syncSvc == nil || a.workspace == nil {
+	if a.syncSvc == nil || a.treeV2 == nil {
 		return nil
 	}
-	meta, err := a.workspace.GetWorkspaceMetadata(path)
+	meta, err := a.treeV2.ReadDealMetadata(workspaceID, path)
 	if err != nil && opType != syncsvc.OpTrash {
 		return err
 	}
@@ -2708,12 +2705,6 @@ func (a *App) SetCurrentVault(path string) string {
 			log.Printf("[api] SetCurrentVault: warning loading plugin state: %v", err)
 		}
 	}
-	// Load workspace for the vault. This also handles first-run startup,
-	// where no workspace manager exists until a vault is selected.
-	a.workspace = workspace.NewManager(vaultPath)
-	if err := a.workspace.Load(); err != nil {
-		log.Printf("[api] SetCurrentVault: warning loading workspace: %v", err)
-	}
 	// Stop old treeV2 before creating a new one (vault switch).
 	if a.treeV2 != nil {
 		a.treeV2.Stop()
@@ -2729,7 +2720,7 @@ func (a *App) SetCurrentVault(path string) string {
 		log.Printf("[api] SetCurrentVault: failed to register vault capability: %v", err)
 	}
 	// Register workspace capability
-	if a.workspace != nil && a.workspace.IsInitialized() {
+	if a.treeV2 != nil {
 		if err := a.capRegistry.Register("verstak-desktop", []string{"verstak/core/workspace/v1"}); err != nil {
 			log.Printf("[api] SetCurrentVault: failed to register workspace capability: %v", err)
 		}
@@ -2936,58 +2927,67 @@ func (a *App) recordSyncPathsLocked(paths []string) ([]string, error) {
 
 // ─── Workspace API ─────────────────────────────────────────
 
-// ListWorkspaces returns top-level physical workspace folders.
+// ListWorkspaces returns all Deals from the canonical UUID tree.
 func (a *App) ListWorkspaces() ([]workspace.Workspace, string) {
-	if a.workspace == nil {
+	if a.treeV2 == nil {
 		return nil, "workspace not initialized"
 	}
-	workspaces, err := a.workspace.ListWorkspaces()
-	if err != nil {
-		return nil, err.Error()
+	items := a.treeV2.ListWorkspaces()
+	workspaces := make([]workspace.Workspace, 0, len(items))
+	for _, item := range items {
+		workspaces = append(workspaces, workspace.Workspace{ID: item.ID, Name: item.Name, RootPath: item.RootPath})
 	}
 	return workspaces, ""
 }
 
 // ListWorkspaceTemplates returns selectable built-in workspace templates.
 func (a *App) ListWorkspaceTemplates() ([]workspace.WorkspaceTemplate, string) {
-	if a.workspace == nil {
-		return nil, "workspace not initialized"
+	definitions := workspacetree.ListDealTemplates()
+	result := make([]workspace.WorkspaceTemplate, 0, len(definitions))
+	for _, definition := range definitions {
+		result = append(result, workspace.WorkspaceTemplate{
+			ID: definition.ID, Name: definition.Name, Description: definition.Description,
+			Version: definition.Version, WorkspaceTools: definition.WorkspaceTools,
+		})
 	}
-	return a.workspace.ListWorkspaceTemplates(), ""
+	return result, ""
 }
 
 // ListWorkspaceIdentities returns durable workspace identities for relation-aware plugins.
 func (a *App) ListWorkspaceIdentities() ([]workspace.WorkspaceIdentity, string) {
-	if a.workspace == nil {
+	if a.treeV2 == nil {
 		return nil, "workspace not initialized"
 	}
-	identities, err := a.workspace.ListWorkspaceIdentities()
-	if err != nil {
-		return nil, err.Error()
+	items := a.treeV2.ListWorkspaces()
+	identities := make([]workspace.WorkspaceIdentity, 0, len(items))
+	for _, item := range items {
+		identities = append(identities, workspace.WorkspaceIdentity{WorkspaceID: item.ID, RootPath: item.RootPath, State: "active"})
 	}
 	return identities, ""
 }
 
 // RepairWorkspaceIdentity resolves a duplicated workspace marker without moving relations.
 func (a *App) RepairWorkspaceIdentity(keepName, regenerateName string) string {
-	if a.workspace == nil {
-		return "workspace not initialized"
-	}
-	if err := a.workspace.RepairWorkspaceIdentity(keepName, regenerateName); err != nil {
-		return err.Error()
-	}
-	return ""
+	return "legacy identity repair is retired; use Deal tree diagnostics"
 }
 
-// CreateWorkspace creates a top-level physical workspace folder.
+func (a *App) refreshWorkspaceBaseline() error {
+	if a.fileWatcher != nil {
+		return a.fileWatcher.RefreshBaseline()
+	}
+	return nil
+}
+
+// CreateWorkspace is a compatibility adapter for creating a root-level Deal.
 func (a *App) CreateWorkspace(name, templateID string) (workspace.Workspace, string) {
-	if a.workspace == nil {
+	if a.treeV2 == nil {
 		return workspace.Workspace{}, "workspace not initialized"
 	}
-	ws, err := a.workspace.CreateWorkspace(name, templateID)
+	ws, err := a.treeV2.CreateWorkspace("", name, templateID, a.refreshWorkspaceBaseline)
 	if err != nil {
 		return workspace.Workspace{}, err.Error()
 	}
+	result := workspace.Workspace{ID: ws.ID, Name: ws.Name, RootPath: ws.RootPath}
 	if err := a.recordWorkspaceSyncOp(syncsvc.OpCreate, ws.ID, ws.RootPath, "", ws.Name); err != nil {
 		return workspace.Workspace{}, err.Error()
 	}
@@ -2998,52 +2998,64 @@ func (a *App) CreateWorkspace(name, templateID string) (workspace.Workspace, str
 		"workspaceName":     ws.Name,
 		"templateId":        templateID,
 	})
-	return ws, ""
+	return result, ""
 }
 
-// RenameWorkspace physically renames a top-level workspace folder.
+// RenameWorkspace is a compatibility adapter accepting a Deal UUID or path.
 func (a *App) RenameWorkspace(oldName, newName string) string {
-	if a.workspace == nil {
+	if a.treeV2 == nil {
 		return "workspace not initialized"
 	}
-	if err := a.workspace.RenameWorkspace(oldName, newName); err != nil {
-		return err.Error()
+	current, ok := a.treeV2.ResolveWorkspace(oldName)
+	if !ok {
+		return "workspace not found"
 	}
-	identity, err := a.workspace.GetWorkspaceIdentity(newName)
+	updated, err := a.treeV2.RenameWorkspace(current.ID, newName, a.refreshWorkspaceBaseline)
 	if err != nil {
 		return err.Error()
 	}
-	if err := a.recordWorkspaceSyncOp(syncsvc.OpRename, identity.WorkspaceID, newName, oldName, newName); err != nil {
+	if err := a.recordWorkspaceSyncOp(syncsvc.OpRename, updated.ID, updated.RootPath, current.RootPath, updated.Name); err != nil {
 		return err.Error()
 	}
 	a.publishWorkspaceLifecycleEvent(workspaceRenamedEventName, map[string]interface{}{
 		"operation":                 "rename",
-		"workspaceId":               identity.WorkspaceID,
-		"workspaceRootPath":         newName,
-		"workspaceName":             newName,
-		"previousWorkspaceRootPath": oldName,
-		"previousWorkspaceName":     oldName,
+		"workspaceId":               updated.ID,
+		"workspaceRootPath":         updated.RootPath,
+		"workspaceName":             updated.Name,
+		"previousWorkspaceRootPath": current.RootPath,
+		"previousWorkspaceName":     current.Name,
 	})
 	return ""
 }
 
-// TrashWorkspace moves a top-level workspace folder to internal trash.
-func (a *App) TrashWorkspace(name string) (workspace.TrashResult, string) {
-	if a.workspace == nil {
+// TrashWorkspace is a compatibility adapter accepting a Deal UUID or path.
+func (a *App) TrashWorkspace(reference string) (workspace.TrashResult, string) {
+	if a.treeV2 == nil {
 		return workspace.TrashResult{}, "workspace not initialized"
 	}
-	result, err := a.workspace.TrashWorkspace(name)
+	current, ok := a.treeV2.ResolveWorkspace(reference)
+	if !ok {
+		return workspace.TrashResult{}, "workspace not found"
+	}
+	entry, err := a.treeV2.TrashWorkspace(current.ID, a.refreshWorkspaceBaseline)
 	if err != nil {
 		return workspace.TrashResult{}, err.Error()
 	}
-	if err := a.recordWorkspaceSyncOp(syncsvc.OpTrash, result.WorkspaceID, name, "", name); err != nil {
+	result := workspace.TrashResult{
+		WorkspaceID:  entry.EntityID,
+		OriginalPath: entry.OriginalPath,
+		TrashPath:    filepath.ToSlash(filepath.Join(".verstak", "trash", "tree", entry.TrashID)),
+		TrashID:      entry.TrashID,
+		DeletedAt:    entry.DeletedAt,
+	}
+	if err := a.recordWorkspaceSyncOp(syncsvc.OpTrash, result.WorkspaceID, current.RootPath, "", current.Name); err != nil {
 		return workspace.TrashResult{}, err.Error()
 	}
 	a.publishWorkspaceLifecycleEvent(workspaceTrashedEventName, map[string]interface{}{
 		"operation":         "trash",
 		"workspaceId":       result.WorkspaceID,
-		"workspaceRootPath": name,
-		"workspaceName":     name,
+		"workspaceRootPath": current.RootPath,
+		"workspaceName":     current.Name,
 		"trashId":           result.TrashID,
 		"trashPath":         result.TrashPath,
 		"deletedAt":         result.DeletedAt,
@@ -3053,13 +3065,24 @@ func (a *App) TrashWorkspace(name string) (workspace.TrashResult, string) {
 
 // RestoreWorkspaceTrash restores a trashed workspace and publishes its durable identity.
 func (a *App) RestoreWorkspaceTrash(trashID, targetName string) (workspace.Workspace, string) {
-	if a.workspace == nil {
+	if a.treeV2 == nil {
 		return workspace.Workspace{}, "workspace not initialized"
 	}
-	restored, err := a.workspace.RestoreWorkspaceTrash(trashID, targetName)
+	value, err := a.treeV2.RestoreTreeTrash(trashID, "", a.refreshWorkspaceBaseline)
 	if err != nil {
 		return workspace.Workspace{}, err.Error()
 	}
+	restored, ok := value.(workspacetree.ScannedWorkspace)
+	if !ok {
+		return workspace.Workspace{}, "trash entry is not a workspace"
+	}
+	if targetName = strings.TrimSpace(targetName); targetName != "" && targetName != restored.Name {
+		restored, err = a.treeV2.RenameWorkspace(restored.ID, targetName, a.refreshWorkspaceBaseline)
+		if err != nil {
+			return workspace.Workspace{}, err.Error()
+		}
+	}
+	result := workspace.Workspace{ID: restored.ID, Name: restored.Name, RootPath: restored.RootPath}
 	if err := a.recordWorkspaceSyncOp(syncsvc.OpRestore, restored.ID, restored.RootPath, "", restored.Name); err != nil {
 		return workspace.Workspace{}, err.Error()
 	}
@@ -3070,101 +3093,158 @@ func (a *App) RestoreWorkspaceTrash(trashID, targetName string) (workspace.Works
 		"workspaceName":     restored.Name,
 		"trashId":           trashID,
 	})
-	return restored, ""
+	return result, ""
 }
 
 // PurgeWorkspaceTrash permanently removes a trashed workspace and publishes its former identity.
 func (a *App) PurgeWorkspaceTrash(trashID string) string {
-	if a.workspace == nil {
+	if a.treeV2 == nil {
 		return "workspace not initialized"
 	}
-	identity, err := a.workspace.GetWorkspaceTrashIdentity(trashID)
+	entries, err := a.treeV2.ListTreeTrash()
 	if err != nil {
 		return err.Error()
 	}
-	if err := a.workspace.PurgeWorkspaceTrash(trashID); err != nil {
+	var entry workspacetree.TrashEntry
+	found := false
+	for _, candidate := range entries {
+		if candidate.TrashID == trashID && candidate.EntityType == "workspace" {
+			entry = candidate
+			found = true
+			break
+		}
+	}
+	if !found {
+		return "workspace trash entry not found"
+	}
+	if err := a.treeV2.PurgeTreeTrash(trashID); err != nil {
 		return err.Error()
 	}
 	a.publishWorkspaceLifecycleEvent(workspacePurgedEventName, map[string]interface{}{
 		"operation":         "purge",
-		"workspaceId":       identity.WorkspaceID,
-		"workspaceRootPath": identity.RootPath,
-		"workspaceName":     identity.RootPath,
+		"workspaceId":       entry.EntityID,
+		"workspaceRootPath": entry.OriginalPath,
+		"workspaceName":     filepath.Base(filepath.FromSlash(entry.OriginalPath)),
 		"trashId":           trashID,
 	})
 	return ""
 }
 
-// GetWorkspaceMetadata returns metadata or a generic fallback for a workspace.
-// name may be a workspace name or relative path.
+func legacyWorkspaceMetadata(metadata workspacetree.DealMetadata) workspace.Metadata {
+	legacy := workspace.Metadata{
+		WorkspaceID:    metadata.WorkspaceID,
+		WorkspaceName:  metadata.WorkspaceName,
+		WorkspaceTools: append([]string(nil), metadata.WorkspaceTools...),
+		UpdatedAt:      metadata.UpdatedAt,
+	}
+	if provenance := metadata.CreatedFromTemplate; provenance != nil {
+		legacy.CreatedFromTemplate = &workspace.TemplateSnapshot{
+			TemplateID:      provenance.TemplateID,
+			TemplateName:    provenance.TemplateName,
+			TemplateVersion: provenance.TemplateVersion,
+			AppliedAt:       provenance.AppliedAt,
+			WorkspaceTools:  append([]string(nil), metadata.WorkspaceTools...),
+		}
+	}
+	return legacy
+}
+
+// GetWorkspaceMetadata returns canonical metadata for a Deal reference.
 func (a *App) GetWorkspaceMetadata(name string) (workspace.Metadata, string) {
-	if a.workspace == nil {
+	if a.treeV2 == nil {
 		return workspace.Metadata{}, "workspace not initialized"
 	}
-	meta, err := a.workspace.GetWorkspaceMetadata(name)
+	item, ok := a.treeV2.ResolveWorkspace(name)
+	if !ok {
+		return workspace.Metadata{}, "workspace not found"
+	}
+	meta, err := a.treeV2.ReadDealMetadata(item.ID, item.RootPath)
 	if err != nil {
 		return workspace.Metadata{}, err.Error()
 	}
-	return meta, ""
+	return legacyWorkspaceMetadata(meta), ""
 }
 
 // GetWorkspaceMetadataByUUID returns metadata for a workspace by its durable UUID.
 func (a *App) GetWorkspaceMetadataByUUID(workspaceID string) (workspace.Metadata, string) {
-	if a.workspace == nil {
+	if a.treeV2 == nil {
 		return workspace.Metadata{}, "workspace not initialized"
 	}
-	meta, err := a.workspace.GetWorkspaceMetadataByUUID(workspaceID)
+	item, ok := a.treeV2.GetWorkspaceByID(workspaceID)
+	if !ok {
+		return workspace.Metadata{}, "workspace not found"
+	}
+	meta, err := a.treeV2.ReadDealMetadata(item.ID, item.RootPath)
 	if err != nil {
 		return workspace.Metadata{}, err.Error()
 	}
-	return meta, ""
+	return legacyWorkspaceMetadata(meta), ""
 }
 
 // UpdateWorkspaceMetadata merges metadata for an existing workspace.
 func (a *App) UpdateWorkspaceMetadata(name string, patch workspace.MetadataPatch) (workspace.Metadata, string) {
-	if a.workspace == nil {
+	if a.treeV2 == nil {
 		return workspace.Metadata{}, "workspace not initialized"
 	}
-	meta, err := a.workspace.UpdateWorkspaceMetadata(name, patch)
+	if len(patch.Features) > 0 || len(patch.Folders) > 0 {
+		return workspace.Metadata{}, "legacy feature/folder metadata is retired"
+	}
+	item, ok := a.treeV2.ResolveWorkspace(name)
+	if !ok {
+		return workspace.Metadata{}, "workspace not found"
+	}
+	meta, err := a.treeV2.ReadDealMetadata(item.ID, item.RootPath)
 	if err != nil {
 		return workspace.Metadata{}, err.Error()
 	}
-	return meta, ""
+	if patch.WorkspaceTools != nil {
+		meta.WorkspaceTools = append([]string(nil), patch.WorkspaceTools...)
+		meta.UpdatedAt = ""
+		if err := a.treeV2.WriteDealMetadata(meta); err != nil {
+			return workspace.Metadata{}, err.Error()
+		}
+	}
+	return legacyWorkspaceMetadata(meta), ""
 }
 
-// GetCurrentWorkspace returns the currently selected top-level workspace.
+// GetCurrentWorkspace returns the currently selected Deal.
 func (a *App) GetCurrentWorkspace() map[string]interface{} {
-	if a.workspace == nil {
+	if a.treeV2 == nil {
 		return map[string]interface{}{"status": "not initialized"}
 	}
-	node, err := a.workspace.GetCurrentNode()
-	if err != nil {
-		return map[string]interface{}{"error": err.Error()}
+	workspaceID := a.treeV2.GetCurrentWorkspaceID()
+	if workspaceID == "" {
+		return map[string]interface{}{"error": "no current workspace"}
 	}
-	identity, err := a.workspace.GetWorkspaceIdentity(node.Name)
-	if err != nil {
-		return map[string]interface{}{"error": err.Error()}
+	item, ok := a.treeV2.GetWorkspaceByID(workspaceID)
+	if !ok {
+		return map[string]interface{}{"error": "current workspace not found"}
 	}
 	return map[string]interface{}{
-		"id":          identity.WorkspaceID,
-		"workspaceId": identity.WorkspaceID,
-		"name":        node.Name,
-		"rootPath":    node.RootPath,
+		"id":          item.ID,
+		"workspaceId": item.ID,
+		"name":        item.Name,
+		"rootPath":    item.RootPath,
 	}
 }
 
-// SetCurrentWorkspace stores the selected top-level workspace name as UI state.
-func (a *App) SetCurrentWorkspace(name string) string {
-	if a.workspace == nil {
+// SetCurrentWorkspace is a compatibility adapter accepting a Deal UUID or path.
+func (a *App) SetCurrentWorkspace(reference string) string {
+	if a.treeV2 == nil {
 		return "workspace not initialized"
 	}
-	if err := a.workspace.SetCurrentNode(name); err != nil {
+	item, ok := a.treeV2.ResolveWorkspace(reference)
+	if !ok {
+		return "workspace not found"
+	}
+	if err := a.treeV2.SetCurrentWorkspaceID(item.ID); err != nil {
 		return err.Error()
 	}
 	a.publishWorkspaceLifecycleEvent(workspaceSelectedEventName, map[string]interface{}{
 		"operation":         "select",
-		"workspaceRootPath": name,
-		"workspaceName":     name,
+		"workspaceId":       item.ID,
+		"workspaceRootPath": item.RootPath,
+		"workspaceName":     item.Name,
 	})
 	return ""
 }
@@ -3172,108 +3252,120 @@ func (a *App) SetCurrentWorkspace(name string) string {
 // Deprecated: compatibility wrapper over the flat top-level folder workspace
 // model. Prefer ListWorkspaces.
 func (a *App) GetWorkspaceTree() map[string]interface{} {
-	if a.workspace == nil || !a.workspace.IsInitialized() {
+	if a.treeV2 == nil {
 		return map[string]interface{}{"status": "not initialized"}
 	}
-	tree := a.workspace.GetTree()
+	tree := a.treeV2.GetTree()
+	nodes := make([]workspace.WorkspaceNode, 0)
+	var appendNodes func([]workspacetree.TreeNode, string)
+	appendNodes = func(items []workspacetree.TreeNode, parentID string) {
+		for _, item := range items {
+			nodeType := workspace.TypeFolder
+			if item.Kind == "workspace" {
+				nodeType = workspace.TypeSpace
+			}
+			nodes = append(nodes, workspace.WorkspaceNode{
+				ID:       item.ID,
+				ParentID: parentID,
+				Type:     nodeType,
+				Title:    item.Name,
+				Name:     item.Name,
+				RootPath: item.Path,
+				Status:   workspace.StatusActive,
+			})
+			appendNodes(item.Children, item.ID)
+		}
+	}
+	appendNodes(tree.Roots, "")
 	return map[string]interface{}{
-		"schemaVersion": tree.SchemaVersion,
-		"nodes":         tree.Nodes,
-		"currentNodeId": tree.CurrentNodeID,
-		"updatedAt":     tree.UpdatedAt,
+		"schemaVersion": 2,
+		"nodes":         nodes,
+		"currentNodeId": tree.CurrentWorkspaceID,
 	}
 }
 
 // Deprecated: compatibility wrapper over the flat top-level folder workspace
 // model. Prefer CreateWorkspace.
 func (a *App) CreateWorkspaceNode(parentID, nodeType, title string) map[string]interface{} {
-	if a.workspace == nil {
+	if a.treeV2 == nil {
 		return map[string]interface{}{"error": "workspace not initialized"}
 	}
-	node, err := a.workspace.CreateNode(parentID, workspace.NodeType(nodeType), title)
+	if workspace.NodeType(nodeType) == workspace.TypeFolder {
+		folder, err := a.treeV2.CreateFolder(parentID, title, a.refreshWorkspaceBaseline)
+		if err != nil {
+			return map[string]interface{}{"error": err.Error()}
+		}
+		return map[string]interface{}{"id": folder.ID, "parentId": folder.ParentID, "type": string(workspace.TypeFolder), "title": folder.Name, "name": folder.Name, "rootPath": folder.Path, "status": string(workspace.StatusActive)}
+	}
+	deal, err := a.treeV2.CreateWorkspace(parentID, title, "default", a.refreshWorkspaceBaseline)
 	if err != nil {
 		return map[string]interface{}{"error": err.Error()}
 	}
-	return map[string]interface{}{
-		"id":        node.ID,
-		"parentId":  node.ParentID,
-		"type":      string(node.Type),
-		"title":     node.Title,
-		"name":      node.Name,
-		"rootPath":  node.RootPath,
-		"status":    string(node.Status),
-		"order":     node.Order,
-		"createdAt": node.CreatedAt,
-		"updatedAt": node.UpdatedAt,
-	}
+	return map[string]interface{}{"id": deal.ID, "parentId": parentID, "type": string(workspace.TypeSpace), "title": deal.Name, "name": deal.Name, "rootPath": deal.RootPath, "status": string(workspace.StatusActive)}
 }
 
 // Deprecated: compatibility wrapper over the flat top-level folder workspace
 // model. Prefer RenameWorkspace.
 func (a *App) RenameWorkspaceNode(id, title string) string {
-	if a.workspace == nil {
+	if a.treeV2 == nil {
 		return "workspace not initialized"
 	}
-	if err := a.workspace.RenameNode(id, title); err != nil {
-		return err.Error()
+	if _, ok := a.treeV2.GetWorkspaceByID(id); ok {
+		_, err := a.treeV2.RenameWorkspace(id, title, a.refreshWorkspaceBaseline)
+		if err != nil {
+			return err.Error()
+		}
+		return ""
 	}
-	return ""
+	if _, ok := a.treeV2.GetFolderByID(id); ok {
+		_, err := a.treeV2.RenameFolder(id, title, a.refreshWorkspaceBaseline)
+		if err != nil {
+			return err.Error()
+		}
+		return ""
+	}
+	return "workspace tree node not found"
 }
 
-// Deprecated: compatibility wrapper retained only to reject old nested tree
-// moves. The corrected workspace model is top-level folders only.
+// Deprecated: compatibility wrapper retained only to reject the retired node
+// API. Use PlaceWorkspaceTreeNodeV2 for UUID-based Deal tree placement.
 func (a *App) MoveWorkspaceNode(id, newParentID string) string {
-	if a.workspace == nil {
-		return "workspace not initialized"
-	}
-	if err := a.workspace.MoveNode(id, newParentID); err != nil {
-		return err.Error()
-	}
-	return ""
+	return "legacy workspace node moves are unsupported; use the Deal tree"
 }
 
 // Deprecated: compatibility wrapper over the flat top-level folder workspace
 // model. Prefer TrashWorkspace.
 func (a *App) ArchiveWorkspaceNode(id string) string {
-	if a.workspace == nil {
+	if a.treeV2 == nil {
 		return "workspace not initialized"
 	}
-	if err := a.workspace.ArchiveNode(id); err != nil {
-		return err.Error()
+	if _, ok := a.treeV2.GetWorkspaceByID(id); ok {
+		_, err := a.treeV2.TrashWorkspace(id, a.refreshWorkspaceBaseline)
+		if err != nil {
+			return err.Error()
+		}
+		return ""
 	}
-	return ""
+	if _, ok := a.treeV2.GetFolderByID(id); ok {
+		_, err := a.treeV2.TrashFolder(id, a.refreshWorkspaceBaseline)
+		if err != nil {
+			return err.Error()
+		}
+		return ""
+	}
+	return "workspace tree node not found"
 }
 
 // Deprecated: compatibility wrapper over the flat top-level folder workspace
 // model. Prefer GetCurrentWorkspace.
 func (a *App) GetCurrentWorkspaceNode() map[string]interface{} {
-	if a.workspace == nil {
-		return map[string]interface{}{"status": "not initialized"}
-	}
-	node, err := a.workspace.GetCurrentNode()
-	if err != nil {
-		return map[string]interface{}{"error": err.Error()}
-	}
-	return map[string]interface{}{
-		"id":       node.ID,
-		"type":     string(node.Type),
-		"title":    node.Title,
-		"name":     node.Name,
-		"rootPath": node.RootPath,
-		"status":   string(node.Status),
-	}
+	return a.GetCurrentWorkspace()
 }
 
 // Deprecated: compatibility wrapper over the flat top-level folder workspace
 // model. Prefer SetCurrentWorkspace.
 func (a *App) SetCurrentWorkspaceNode(id string) string {
-	if a.workspace == nil {
-		return "workspace not initialized"
-	}
-	if err := a.workspace.SetCurrentNode(id); err != nil {
-		return err.Error()
-	}
-	return ""
+	return a.SetCurrentWorkspace(id)
 }
 
 // ─── Workspace Tree V2 API ──────────────────────────────────
@@ -3365,7 +3457,7 @@ func (a *App) PluginListWorkspaces(pluginID string) ([]PluginWorkspaceDTO, strin
 	var collect func([]workspacetree.TreeNode)
 	collect = func(nodes []workspacetree.TreeNode) {
 		for _, node := range nodes {
-			if node.Kind == "workspace" && workspaceHasTool(a.vaultPath(), node.ID, pluginID) {
+			if node.Kind == "workspace" && a.workspaceHasTool(node.ID, pluginID) {
 				rows = append(rows, PluginWorkspaceDTO{ID: node.ID, Name: node.Name, RootPath: node.Path})
 			}
 			collect(node.Children)
@@ -3381,54 +3473,24 @@ func (a *App) PluginListWorkspaces(pluginID string) ([]PluginWorkspaceDTO, strin
 // that as "nothing is restricted" -- it shows every tool. Reading it here as
 // "no tools at all" made a Deal show the Journal tab and be invisible to the
 // Journal, which is most of a migrated vault.
-func workspaceHasTool(vaultPath, workspaceID, pluginID string) bool {
-	if vaultPath == "" || workspaceID == "" || pluginID == "" {
+func (a *App) workspaceHasTool(workspaceID, pluginID string) bool {
+	if a.treeV2 == nil || workspaceID == "" || pluginID == "" {
 		return false
 	}
-	data, err := os.ReadFile(filepath.Join(vaultPath, ".verstak", "workspaces", "uuid-"+workspaceID+".json"))
+	workspace, ok := a.treeV2.GetWorkspaceByID(workspaceID)
+	if !ok {
+		return false
+	}
+	metadata, err := a.treeV2.ReadDealMetadata(workspaceID, workspace.RootPath)
 	if err != nil {
 		return true
 	}
-	var metadata struct {
-		WorkspaceTools      []string        `json:"workspaceTools"`
-		CreatedFromTemplate json.RawMessage `json:"createdFromTemplate"`
-		Features            map[string]bool `json:"features"`
-	}
-	if err := json.Unmarshal(data, &metadata); err != nil {
-		return true
-	}
-	allowed := metadata.WorkspaceTools
-	if allowed == nil {
-		if len(metadata.CreatedFromTemplate) == 0 {
-			return true
-		}
-		allowed = toolsFromWorkspaceFeatures(metadata.Features)
-	}
-	for _, toolID := range allowed {
+	for _, toolID := range metadata.WorkspaceTools {
 		if toolID == pluginID {
 			return true
 		}
 	}
 	return false
-}
-
-// toolsFromWorkspaceFeatures reads the intended tool set out of template
-// metadata written before the tool list itself was recorded.
-func toolsFromWorkspaceFeatures(features map[string]bool) []string {
-	tools := []string{"verstak.notes", "verstak.files"}
-	for feature, pluginID := range map[string]string{
-		"projects":      "verstak.projects",
-		"journal":       "verstak.journal",
-		"activity":      "verstak.activity",
-		"browser-inbox": "verstak.browser-inbox",
-		"todo":          "verstak.todo",
-		"secrets":       "verstak.secrets",
-	} {
-		if features[feature] {
-			tools = append(tools, pluginID)
-		}
-	}
-	return tools
 }
 
 // GetWorkspaceByID returns a single workspace by its durable UUID.
@@ -3519,6 +3581,12 @@ func (a *App) CreateWorkspaceV2(parentFolderID, name, templateID string) map[str
 	if err != nil {
 		return map[string]interface{}{"error": err.Error()}
 	}
+	if err := a.recordWorkspaceSyncOp(syncsvc.OpCreate, ws.ID, ws.RootPath, "", ws.Name); err != nil {
+		return map[string]interface{}{"error": err.Error()}
+	}
+	a.publishWorkspaceLifecycleEvent(workspaceCreatedEventName, map[string]interface{}{
+		"operation": "create", "workspaceId": ws.ID, "workspaceRootPath": ws.RootPath, "workspaceName": ws.Name, "templateId": templateID,
+	})
 	return map[string]interface{}{
 		"id":       ws.ID,
 		"name":     ws.Name,
@@ -3551,6 +3619,12 @@ func (a *App) CreateWorkspaceV2WithTools(parentFolderID, name, templateID string
 	if err != nil {
 		return map[string]interface{}{"error": err.Error()}
 	}
+	if err := a.recordWorkspaceSyncOp(syncsvc.OpCreate, ws.ID, ws.RootPath, "", ws.Name); err != nil {
+		return map[string]interface{}{"error": err.Error()}
+	}
+	a.publishWorkspaceLifecycleEvent(workspaceCreatedEventName, map[string]interface{}{
+		"operation": "create", "workspaceId": ws.ID, "workspaceRootPath": ws.RootPath, "workspaceName": ws.Name, "templateId": templateID,
+	})
 	return map[string]interface{}{
 		"id":       ws.ID,
 		"name":     ws.Name,
@@ -3605,7 +3679,11 @@ func (a *App) RenameWorkspaceV2(workspaceID, newName string) string {
 	if a.treeV2 == nil {
 		return "not initialized"
 	}
-	_, err := a.treeV2.RenameWorkspace(workspaceID, newName, func() error {
+	previous, ok := a.treeV2.GetWorkspaceByID(workspaceID)
+	if !ok {
+		return "workspace not found"
+	}
+	updated, err := a.treeV2.RenameWorkspace(workspaceID, newName, func() error {
 		if a.fileWatcher != nil {
 			return a.fileWatcher.RefreshBaseline()
 		}
@@ -3614,6 +3692,13 @@ func (a *App) RenameWorkspaceV2(workspaceID, newName string) string {
 	if err != nil {
 		return err.Error()
 	}
+	if err := a.recordWorkspaceSyncOp(syncsvc.OpRename, updated.ID, updated.RootPath, previous.RootPath, updated.Name); err != nil {
+		return err.Error()
+	}
+	a.publishWorkspaceLifecycleEvent(workspaceRenamedEventName, map[string]interface{}{
+		"operation": "rename", "workspaceId": updated.ID, "workspaceRootPath": updated.RootPath, "workspaceName": updated.Name,
+		"previousWorkspaceRootPath": previous.RootPath, "previousWorkspaceName": previous.Name,
+	})
 	return ""
 }
 
@@ -3637,7 +3722,11 @@ func (a *App) MoveWorkspaceV2(workspaceID, targetParentFolderID string) string {
 	if a.treeV2 == nil {
 		return "not initialized"
 	}
-	_, err := a.treeV2.MoveWorkspace(workspaceID, targetParentFolderID, func() error {
+	previous, ok := a.treeV2.GetWorkspaceByID(workspaceID)
+	if !ok {
+		return "workspace not found"
+	}
+	updated, err := a.treeV2.MoveWorkspace(workspaceID, targetParentFolderID, func() error {
 		if a.fileWatcher != nil {
 			return a.fileWatcher.RefreshBaseline()
 		}
@@ -3646,6 +3735,13 @@ func (a *App) MoveWorkspaceV2(workspaceID, targetParentFolderID string) string {
 	if err != nil {
 		return err.Error()
 	}
+	if err := a.recordWorkspaceSyncOp(syncsvc.OpRename, updated.ID, updated.RootPath, previous.RootPath, updated.Name); err != nil {
+		return err.Error()
+	}
+	a.publishWorkspaceLifecycleEvent(workspaceRenamedEventName, map[string]interface{}{
+		"operation": "move", "workspaceId": updated.ID, "workspaceRootPath": updated.RootPath, "workspaceName": updated.Name,
+		"previousWorkspaceRootPath": previous.RootPath, "previousWorkspaceName": previous.Name,
+	})
 	return ""
 }
 
@@ -3699,6 +3795,10 @@ func (a *App) TrashWorkspaceV2(workspaceID string) map[string]interface{} {
 	if a.treeV2 == nil {
 		return map[string]interface{}{"error": "not initialized"}
 	}
+	previous, ok := a.treeV2.GetWorkspaceByID(workspaceID)
+	if !ok {
+		return map[string]interface{}{"error": "workspace not found"}
+	}
 	entry, err := a.treeV2.TrashWorkspace(workspaceID, func() error {
 		if a.fileWatcher != nil {
 			return a.fileWatcher.RefreshBaseline()
@@ -3708,12 +3808,21 @@ func (a *App) TrashWorkspaceV2(workspaceID string) map[string]interface{} {
 	if err != nil {
 		return map[string]interface{}{"error": err.Error()}
 	}
+	if err := a.recordWorkspaceSyncOp(syncsvc.OpTrash, entry.EntityID, previous.RootPath, "", previous.Name); err != nil {
+		return map[string]interface{}{"error": err.Error()}
+	}
+	trashPath := filepath.ToSlash(filepath.Join(".verstak", "trash", "tree", entry.TrashID))
+	a.publishWorkspaceLifecycleEvent(workspaceTrashedEventName, map[string]interface{}{
+		"operation": "trash", "workspaceId": entry.EntityID, "workspaceRootPath": previous.RootPath, "workspaceName": previous.Name,
+		"trashId": entry.TrashID, "trashPath": trashPath, "deletedAt": entry.DeletedAt,
+	})
 	return map[string]interface{}{
 		"trashId":      entry.TrashID,
 		"entityType":   entry.EntityType,
 		"entityId":     entry.EntityID,
 		"originalPath": entry.OriginalPath,
 		"deletedAt":    entry.DeletedAt,
+		"trashPath":    trashPath,
 	}
 }
 
@@ -3766,6 +3875,14 @@ func (a *App) SetCurrentWorkspaceV2(workspaceID string) string {
 	}
 	if err := a.treeV2.SetCurrentWorkspaceID(workspaceID); err != nil {
 		return err.Error()
+	}
+	if workspace, ok := a.treeV2.GetWorkspaceByID(workspaceID); ok {
+		a.publishWorkspaceLifecycleEvent(workspaceSelectedEventName, map[string]interface{}{
+			"operation":         "select",
+			"workspaceId":       workspace.ID,
+			"workspaceRootPath": workspace.RootPath,
+			"workspaceName":     workspace.Name,
+		})
 	}
 	return ""
 }
@@ -4990,11 +5107,11 @@ type syncFilePayload struct {
 }
 
 type syncWorkspacePayload struct {
-	WorkspaceID  string             `json:"workspaceId"`
-	Path         string             `json:"path"`
-	PreviousPath string             `json:"previousPath,omitempty"`
-	Name         string             `json:"name"`
-	Metadata     workspace.Metadata `json:"metadata"`
+	WorkspaceID  string                     `json:"workspaceId"`
+	Path         string                     `json:"path"`
+	PreviousPath string                     `json:"previousPath,omitempty"`
+	Name         string                     `json:"name"`
+	Metadata     workspacetree.DealMetadata `json:"metadata"`
 }
 
 type syncFolderPayload struct {
@@ -5049,7 +5166,7 @@ func parseSyncFolderPayload(payloadJSON string) (syncFolderPayload, error) {
 }
 
 func (a *App) applyRemoteWorkspaceOp(op syncsvc.Op, payload syncWorkspacePayload) error {
-	if a.workspace == nil {
+	if a.treeV2 == nil {
 		return fmt.Errorf("workspace service not initialized")
 	}
 	if payload.WorkspaceID != op.EntityID {
@@ -5057,15 +5174,14 @@ func (a *App) applyRemoteWorkspaceOp(op syncsvc.Op, payload syncWorkspacePayload
 	}
 	switch op.OpType {
 	case syncsvc.OpCreate:
-		_, err := a.workspace.CreateWorkspaceFromSync(payload.Path, payload.WorkspaceID, payload.Metadata)
+		_, err := a.treeV2.CreateWorkspaceFromSync(payload.Path, payload.WorkspaceID, payload.Metadata, a.refreshWorkspaceBaseline)
 		return err
 	case syncsvc.OpRename:
-		return a.workspace.RenameWorkspaceFromSync(payload.WorkspaceID, payload.PreviousPath, payload.Path)
+		return a.treeV2.ApplyPathFromSync("workspace:"+payload.WorkspaceID, payload.PreviousPath, payload.Path, a.refreshWorkspaceBaseline)
 	case syncsvc.OpTrash:
-		_, err := a.workspace.TrashWorkspaceFromSync(payload.WorkspaceID, payload.Path)
-		return err
+		return a.treeV2.TrashWorkspaceFromSync(payload.WorkspaceID, payload.Path, a.refreshWorkspaceBaseline)
 	case syncsvc.OpRestore:
-		_, err := a.workspace.RestoreWorkspaceFromSync(payload.WorkspaceID, payload.Path)
+		_, err := a.treeV2.RestoreWorkspaceFromSync(payload.WorkspaceID, payload.Path, a.refreshWorkspaceBaseline)
 		return err
 	default:
 		return fmt.Errorf("unsupported workspace sync op type: %s", op.OpType)
