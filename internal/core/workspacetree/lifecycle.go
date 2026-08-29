@@ -2,11 +2,11 @@ package workspacetree
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/google/uuid"
 )
@@ -109,35 +109,22 @@ func (s *Service) UpdateWorkspaceTools(workspaceID string, workspaceTools []stri
 		return err
 	}
 
-	metadataPath := filepath.Join(vaultDir, ".verstak", "workspaces", "uuid-"+workspaceID+".json")
-	metadata := map[string]interface{}{}
-	if data, err := os.ReadFile(metadataPath); err == nil {
-		if err := json.Unmarshal(data, &metadata); err != nil {
+	metadata, err := s.ReadDealMetadata(workspaceID, ws.RootPath)
+	if err != nil {
+		if !errors.Is(err, os.ErrNotExist) {
 			return err
 		}
-	} else if !os.IsNotExist(err) {
-		return err
+		metadata = DealMetadata{
+			SchemaVersion: DealMetadataSchemaVersion,
+			WorkspaceID:   workspaceID,
+			WorkspaceName: ws.Name,
+			ToolConfig:    map[string]json.RawMessage{},
+		}
 	}
-	metadata["workspaceId"] = workspaceID
-	metadata["workspaceName"] = ws.Name
-	metadata["features"] = toolsToFeatures(tools)
-	metadata["folders"] = toolsToFolders(tools)
-	metadata["workspaceTools"] = tools
-	metadata["updatedAt"] = time.Now().UTC().Format(time.RFC3339Nano)
-
-	data, err := json.MarshalIndent(metadata, "", "  ")
-	if err != nil {
-		return err
-	}
-	if err := os.MkdirAll(filepath.Dir(metadataPath), 0o755); err != nil {
-		return err
-	}
-	tmp := metadataPath + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o600); err != nil {
-		return err
-	}
-	if err := os.Rename(tmp, metadataPath); err != nil {
-		_ = os.Remove(tmp)
+	metadata.WorkspaceName = ws.Name
+	metadata.WorkspaceTools = tools
+	metadata.UpdatedAt = ""
+	if err := s.WriteDealMetadata(metadata); err != nil {
 		return err
 	}
 	if refreshBaseline != nil {
@@ -215,17 +202,25 @@ func (s *Service) createWorkspace(parentFolderID, name, templateID string, works
 		return ScannedWorkspace{}, err
 	}
 
-	// Write metadata with template features for UUID-keyed lookup.
-	if err := writeWorkspaceMetadataV2(stagingAbs, wsID, name, templateID, workspaceTools); err != nil {
-		// Non-fatal: workspace is created even if metadata write fails.
-		// The tree reconciliation will pick up the workspace marker.
+	metadata := newDealMetadata(wsID, name, templateID, workspaceTools)
+	if err := s.WriteDealMetadata(metadata); err != nil {
+		return ScannedWorkspace{}, err
 	}
+	metadataPath := canonicalDealMetadataPath(vaultDir, wsID)
+	metadataPublished := false
+	defer func() {
+		if metadataPublished {
+			return
+		}
+		_ = os.Remove(metadataPath)
+	}()
 
 	// Atomic rename.
 	if err := os.Rename(stagingAbs, childAbs); err != nil {
 		return ScannedWorkspace{}, err
 	}
 	_ = os.RemoveAll(stagingAbs)
+	metadataPublished = true
 
 	if err := s.EndInternalMutationAndRefreshBaseline(refreshBaseline); err != nil {
 		return ScannedWorkspace{}, err
@@ -344,6 +339,15 @@ func (s *Service) RenameWorkspace(workspaceID, newName string, refreshBaseline f
 	}
 
 	updated, _ := s.GetWorkspaceByID(workspaceID)
+	metadata, err := s.ReadDealMetadata(workspaceID, updated.RootPath)
+	if err != nil {
+		return ScannedWorkspace{}, err
+	}
+	metadata.WorkspaceName = updated.Name
+	metadata.UpdatedAt = ""
+	if err := s.WriteDealMetadata(metadata); err != nil {
+		return ScannedWorkspace{}, err
+	}
 	return updated, nil
 }
 
@@ -490,68 +494,6 @@ func applyWorkspaceToolFolders(workspaceDir string, workspaceTools []string) err
 		}
 	}
 	return nil
-}
-
-// writeWorkspaceMetadataV2 writes workspace metadata to the vault's workspace registry
-// keyed by the workspace UUID. This enables metadata lookup after move/rename.
-// workspaceTools is the definitive list of tool plugin IDs for this workspace.
-func writeWorkspaceMetadataV2(workspaceDir, workspaceID, workspaceName, templateID string, workspaceTools []string) error {
-	if workspaceID == "" {
-		return fmt.Errorf("workspace ID is required")
-	}
-	// Determine vault root: go up from workspaceDir until we find .verstak
-	vaultDir := workspaceDir
-	for {
-		if _, err := os.Stat(filepath.Join(vaultDir, ".verstak")); err == nil {
-			if _, err := os.Stat(filepath.Join(vaultDir, ".verstak", "vault.json")); err == nil {
-				break
-			}
-		}
-		parent := filepath.Dir(vaultDir)
-		if parent == vaultDir {
-			return fmt.Errorf("vault root not found")
-		}
-		vaultDir = parent
-	}
-
-	wsDir := filepath.Join(vaultDir, ".verstak", "workspaces")
-	if err := os.MkdirAll(wsDir, 0o755); err != nil {
-		return err
-	}
-
-	data, err := marshalWorkspaceMetadataV2(workspaceID, workspaceName, templateID, workspaceTools)
-	if err != nil {
-		return err
-	}
-	path := filepath.Join(wsDir, "uuid-"+workspaceID+".json")
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o600); err != nil {
-		return err
-	}
-	return os.Rename(tmp, path)
-}
-
-func marshalWorkspaceMetadataV2(workspaceID, workspaceName, templateID string, workspaceTools []string) ([]byte, error) {
-	if workspaceID == "" {
-		return nil, fmt.Errorf("workspace ID is required")
-	}
-	now := time.Now().UTC().Format(time.RFC3339Nano)
-	meta := map[string]interface{}{
-		"workspaceId":    workspaceID,
-		"workspaceName":  workspaceName,
-		"features":       toolsToFeatures(workspaceTools),
-		"folders":        toolsToFolders(workspaceTools),
-		"workspaceTools": workspaceTools,
-		"updatedAt":      now,
-	}
-	if templateID != "" {
-		meta["createdFromTemplate"] = map[string]interface{}{
-			"templateId": templateID,
-			"appliedAt":  now,
-		}
-	}
-
-	return json.MarshalIndent(meta, "", "  ")
 }
 
 var templateRegistry = map[string]templateDef{
