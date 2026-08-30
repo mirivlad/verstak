@@ -175,16 +175,16 @@ test.describe('D: Plugin API bridge', () => {
 
       const provider = window.createPluginAPI(ids[0]);
       await provider.commands.register('test.notes.list', async (args) => ({
-        projectId: args.projectId,
+        resourceId: args.resourceId,
         notes: ['README']
       }));
       const consumer = window.createPluginAPI(ids[1]);
-      const handled = await consumer.capabilities.invoke(capability, 'list', { projectId: 'tos' });
+      const handled = await consumer.capabilities.invoke(capability, 'list', { resourceId: 'tos' });
 
       let rogueError = '';
       const rogue = window.createPluginAPI(ids[2]);
       try {
-        await rogue.capabilities.invoke(capability, 'list', { projectId: 'tos' });
+        await rogue.capabilities.invoke(capability, 'list', { resourceId: 'tos' });
       } catch (error) {
         rogueError = String(error && error.message || error);
       }
@@ -198,7 +198,7 @@ test.describe('D: Plugin API bridge', () => {
     expect(result.handled.status).toBe('handled');
     expect(result.handled.pluginId).toBe('verstak.synthetic-layout-01');
     expect(result.handled.commandId).toBe('test.notes.list');
-    expect(result.handled.result).toEqual({ projectId: 'tos', notes: ['README'] });
+    expect(result.handled.result).toEqual({ resourceId: 'tos', notes: ['README'] });
     expect(result.rogueError).toContain('capability dependency not declared');
   });
 
