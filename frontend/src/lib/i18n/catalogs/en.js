@@ -242,6 +242,7 @@ export default {
   'search.indexing': 'Indexing...',
   'search.placeholder': 'Search',
   'search.global': 'Global search',
+  'search.activeDeal': 'Search in this Deal',
   'search.noResults': 'No results',
   'search.partial': 'Index incomplete — some results may be missing',
   'search.type.workspace': 'Deal',

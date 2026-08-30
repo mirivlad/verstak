@@ -36,6 +36,7 @@
   let tabPageDirection = 1;
   let tabLayoutGeneration = 0;
   let requestedTabPageToolKey = '';
+  let projectSection = 'project';
   let locale = i18n.getLocale();
   let unsubscribeLocale = null;
   $: tr = ((activeLocale) => (key, params, fallback) => {
@@ -67,6 +68,12 @@
   }
   $: workspaceTools = sortWorkspaceTools(filterWorkspaceTools(discoveredWorkspaceTools, workspaceMetadata));
   $: workspacePluginIds = new Set(workspaceTools.map(tool => tool?.pluginId).filter(Boolean));
+  $: projectWorkspaceTool = workspaceTools.find(tool => tool?.pluginId === 'verstak.projects') || null;
+  $: milestonesWorkspaceTool = workspaceTools.find(tool => tool?.pluginId === 'verstak.milestones') || null;
+  $: combinedProjectMilestones = Boolean(projectWorkspaceTool && milestonesWorkspaceTool);
+  $: combinedWorkspaceTools = combinedProjectMilestones
+    ? workspaceTools.filter(tool => toolKey(tool) !== toolKey(milestonesWorkspaceTool))
+    : workspaceTools;
   $: overviewProviders = (contributions.overviewProviders || []).filter(provider => workspacePluginIds.has(provider?.pluginId));
   $: if (workspaceRootPath !== requestedWorkspaceRoot) {
     requestedWorkspaceRoot = workspaceRootPath;
@@ -76,7 +83,7 @@
     // gives it a short TTL so a failed navigation cannot activate much later.
     if (!requestedTargetWorkspaceRoot && !requestedTargetWorkspaceId) requestedToolRequest = null;
   }
-  $: displayedTools = selectedWorkspace ? [overviewTool, ...workspaceTools] : [];
+  $: displayedTools = selectedWorkspace ? [overviewTool, ...combinedWorkspaceTools] : [];
   $: activeTool = displayedTools.find(tool => toolKey(tool) === activeToolKey) || displayedTools[0] || null;
   $: displayedToolsKey = displayedTools.map(toolKey).join('|');
   $: if (displayedToolsKey !== measuredToolsKey) {
@@ -218,7 +225,12 @@
   }
 
   function selectTool(tool, toolRequest = null) {
-    activeToolKey = toolKey(tool);
+    const visibleTool = combinedProjectMilestones && toolKey(tool) === toolKey(milestonesWorkspaceTool)
+      ? projectWorkspaceTool
+      : tool;
+    if (combinedProjectMilestones && toolKey(tool) === toolKey(milestonesWorkspaceTool)) projectSection = 'milestones';
+    else if (combinedProjectMilestones && toolKey(visibleTool) === toolKey(projectWorkspaceTool)) projectSection = 'project';
+    activeToolKey = toolKey(visibleTool);
     requestedTabPageToolKey = activeToolKey;
     scheduleTabLayout();
     activeToolRequest = toolRequest;
@@ -425,6 +437,26 @@
               {overviewProviders}
               on:openTool={openWorkspaceTool}
             />
+          {:else if combinedProjectMilestones && toolKey(activeTool) === toolKey(projectWorkspaceTool)}
+            <div class="workspace-project-composite">
+              <div class="workspace-project-sections" role="tablist" aria-label={activeTool.title || tr('workspace.tool')}>
+                <button class:is-active={projectSection === 'project'} data-workspace-project-section="project" type="button" role="tab" aria-selected={projectSection === 'project'} on:click={() => projectSection = 'project'}>{projectWorkspaceTool.title}</button>
+                <button class:is-active={projectSection === 'milestones'} data-workspace-project-section="milestones" type="button" role="tab" aria-selected={projectSection === 'milestones'} on:click={() => projectSection = 'milestones'}>{milestonesWorkspaceTool.title}</button>
+              </div>
+              {#if projectSection === 'project'}
+                <PluginBundleHost
+                  pluginId={projectWorkspaceTool.pluginId}
+                  componentId={projectWorkspaceTool.component}
+                  componentProps={{ workspaceName: selectedWorkspaceName, workspaceNodeId: selectedWorkspaceName, workspaceNode: selectedWorkspace, workspaceRootPath, workspaceId, toolRequest: activeToolRequest }}
+                />
+              {:else}
+                <PluginBundleHost
+                  pluginId={milestonesWorkspaceTool.pluginId}
+                  componentId={milestonesWorkspaceTool.component}
+                  componentProps={{ workspaceName: selectedWorkspaceName, workspaceNodeId: selectedWorkspaceName, workspaceNode: selectedWorkspace, workspaceRootPath, workspaceId, toolRequest: activeToolRequest }}
+                />
+              {/if}
+            </div>
           {:else}
             <PluginBundleHost
               pluginId={activeTool.pluginId}
@@ -555,6 +587,46 @@
     flex: 1;
     min-height: 0;
     overflow: hidden;
+  }
+
+  .workspace-project-composite {
+    height: 100%;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .workspace-project-sections {
+    display: flex;
+    gap: 0.25rem;
+    padding: var(--vt-space-2) var(--vt-space-3) 0;
+    border-bottom: 1px solid var(--vt-color-border);
+    background: var(--vt-color-surface-muted);
+    flex-shrink: 0;
+  }
+
+  .workspace-project-sections button {
+    min-height: 2rem;
+    padding: 0.35rem 0.7rem;
+    border: 1px solid transparent;
+    border-bottom: 0;
+    border-radius: var(--vt-radius-md) var(--vt-radius-md) 0 0;
+    background: transparent;
+    color: var(--vt-color-text-muted);
+    cursor: pointer;
+    font: inherit;
+    font-size: 0.8rem;
+  }
+
+  .workspace-project-sections button.is-active {
+    border-color: var(--vt-color-border);
+    background: var(--vt-color-background);
+    color: var(--vt-color-accent);
+  }
+
+  .workspace-project-composite :global(.plugin-bundle-host) {
+    flex: 1;
+    min-height: 0;
   }
 
   .workspace-empty {

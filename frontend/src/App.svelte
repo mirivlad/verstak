@@ -497,7 +497,7 @@
               <Icon name="x" size={18} />
             </button>
           {/if}
-          <GlobalSearch />
+          <GlobalSearch activeDealId={currentView === 'workspace' ? selectedWorkspaceId : ''} />
         </div>
       </header>
       <section class="content scroll-surface">

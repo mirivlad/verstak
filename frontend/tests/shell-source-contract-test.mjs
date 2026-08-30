@@ -239,7 +239,7 @@ assertIncludes(
 
 assertIncludes(
   app,
-  '<GlobalSearch />',
+  '<GlobalSearch activeDealId=',
   'App should expose global search in the main content header'
 );
 assertIncludes(
@@ -406,6 +406,16 @@ assertIncludes(
   'findWorkspaceItem(workspaceItemId)',
   'WorkspaceHost should resolve Overview navigation by exact workspace item id',
 );
+assertIncludes(
+  workspaceHost,
+  'combinedWorkspaceTools',
+  'WorkspaceHost should compose Milestones under Project when both Deal plugins are enabled',
+);
+assertIncludes(
+  workspaceHost,
+  'data-workspace-project-section',
+  'WorkspaceHost should expose Project and Milestones as internal sections',
+);
 assertExcludes(
   workspaceHost,
   "kind === 'browser-inbox'",
@@ -462,6 +472,21 @@ assertIncludes(
   globalSearch,
   'contributions.searchProviders || []',
   'GlobalSearch should discover Search providers from contribution metadata',
+);
+assertIncludes(
+  globalSearch,
+  "export let activeDealId = '';",
+  'GlobalSearch should receive the active Deal UUID from the shell',
+);
+assertIncludes(
+  globalSearch,
+  'data-global-search-deal-scope',
+  'GlobalSearch should offer a Deal-only scope toggle beside the global field',
+);
+assertIncludes(
+  globalSearch,
+  'scope: currentDealSearchScope()',
+  'GlobalSearch should pass the active Deal scope to provider commands',
 );
 assertIncludes(
   globalSearch,

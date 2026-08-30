@@ -13,7 +13,7 @@ test.describe('Project, Milestones and Git workspace UX', () => {
       const workspaceId = '11111111-1111-4111-8111-111111111111';
       await window.go.api.App.UpdateWorkspaceV2Tools(workspaceId, [
         'verstak.projects', 'verstak.notes', 'verstak.files', 'verstak.todo',
-        'verstak.milestones', 'verstak.git', 'verstak.activity',
+        'verstak.milestones', 'verstak.git',
       ]);
       window.dispatchEvent(new CustomEvent('verstak:workspace-tools-changed', { detail: { workspaceId } }));
     });
@@ -33,7 +33,8 @@ test.describe('Project, Milestones and Git workspace UX', () => {
     expect(projectSelectStyle.appearance).toBe('none');
     expect(projectSelectStyle.backgroundImage).not.toBe('none');
 
-    await page.getByRole('tab', { name: 'Milestones', exact: true }).click();
+    await expect(page.locator('.workspace-tab-list').getByRole('tab', { name: 'Milestones', exact: true })).toHaveCount(0);
+    await page.locator('[data-workspace-project-section="milestones"]').click();
     const milestones = page.locator('.milestones-shell');
     await expect(milestones).toBeVisible();
     expect((await milestones.boundingBox()).width).toBeGreaterThan(600);
