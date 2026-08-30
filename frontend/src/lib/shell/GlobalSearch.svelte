@@ -5,6 +5,8 @@
   import Icon from '../ui/Icon.svelte';
   import { i18n } from '../i18n/index.js';
 
+  export let activeDealId = '';
+
   const RESULT_LIMIT = 8;
   const RU = 'ёйцукенгшщзхъфывапролджэячсмитьбю';
   const EN = '`qwertyuiop[]asdfghjkl;\\zxcvbnm,.';
@@ -23,13 +25,16 @@
   let contextSeq = 0;
   let searchSeq = 0;
   let locale = i18n.getLocale();
+  let limitToActiveDeal = false;
 
   $: tr = ((activeLocale) => (key, params, fallback) => {
     void activeLocale;
     return i18n.t(key, params, fallback);
   })(locale);
 
-  $: scheduleSearch(query);
+  $: if (!activeDealId && limitToActiveDeal) limitToActiveDeal = false;
+  $: activeDealScopeKey = limitToActiveDeal && activeDealId ? activeDealId : '';
+  $: scheduleSearch(query, activeDealScopeKey);
 
   onMount(() => {
     const unsubscribeLocale = i18n.subscribe((nextLocale) => {
@@ -83,7 +88,18 @@
     return 0;
   }
 
-  function scheduleSearch(value) {
+  function currentDealSearchScope() {
+    const workspaceId = String(activeDealId || '').trim();
+    return limitToActiveDeal && workspaceId ? { kind: 'deal', workspaceId } : undefined;
+  }
+
+  function shellItemMatchesCurrentDeal(item) {
+    const scope = currentDealSearchScope();
+    if (!scope) return true;
+    return item?.action?.kind === 'workspace' && item.action.workspaceId === scope.workspaceId;
+  }
+
+  function scheduleSearch(value, _scopeKey) {
     clearTimeout(searchTimer);
     if (!normalize(value)) {
       searchSeq += 1;
@@ -232,6 +248,7 @@
             const response = await executePluginCommand(provider.pluginId, provider.handler, {
               query: variant,
               limit: RESULT_LIMIT,
+              scope: currentDealSearchScope(),
             });
             const value = commandResult(response);
             const list = Array.isArray(value) ? value : (Array.isArray(value?.results) ? value.results : []);
@@ -283,7 +300,7 @@
       return;
     }
 
-    const shellRows = shellIndex
+    const shellRows = shellIndex.filter(shellItemMatchesCurrentDeal)
       .map(item => ({ item, score: matchScore(item, variants) }))
       .filter(row => row.score > 0);
     const providerRows = [];
@@ -370,6 +387,12 @@
       data-global-search-input
     />
   </div>
+  {#if activeDealId}
+    <label class="global-search-deal-scope">
+      <input type="checkbox" bind:checked={limitToActiveDeal} data-global-search-deal-scope />
+      <span>{tr('search.activeDeal', undefined, 'Search in this Deal')}</span>
+    </label>
+  {/if}
   {#if focused && query}
     <div class="global-search-results" data-global-search-results>
       {#if results.length}
@@ -413,6 +436,21 @@
     border-radius: var(--vt-radius-md);
     background: #0f1424;
     color: var(--vt-color-text-muted);
+  }
+
+  .global-search-deal-scope {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    margin-top: 0.3rem;
+    color: var(--vt-color-text-muted);
+    font-size: 0.7rem;
+    cursor: pointer;
+    user-select: none;
+  }
+
+  .global-search-deal-scope input {
+    accent-color: var(--vt-color-accent);
   }
 
   :global(.global-search-icon) {

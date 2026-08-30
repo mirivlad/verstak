@@ -73,6 +73,24 @@ test.describe('Progressive global search index', () => {
     await expect(page.locator('[data-global-search-result-path="Project/Files/after-refresh.txt"]')).toBeVisible({ timeout: 5000 });
   });
 
+  test('limits provider results to the open Deal when requested', async ({ page }) => {
+    await page.evaluate(() => {
+      window.__wailsMock.putVaultFile('Project/Files/deal-scope-token.txt', 'Project deal scope token');
+      window.__wailsMock.putVaultFile('Test/deal-scope-token.txt', 'Test deal scope token');
+      window.dispatchEvent(new CustomEvent('verstak:files-changed'));
+    });
+
+    const input = page.locator('[data-global-search-input]');
+    await input.focus();
+    await input.fill('deal-scope-token');
+    await expect(page.locator('[data-global-search-result-path="Project/Files/deal-scope-token.txt"]')).toBeVisible({ timeout: 5000 });
+    await expect(page.locator('[data-global-search-result-path="Test/deal-scope-token.txt"]')).toBeVisible({ timeout: 5000 });
+
+    await page.locator('[data-global-search-deal-scope]').check();
+    await expect(page.locator('[data-global-search-result-path="Project/Files/deal-scope-token.txt"]')).toBeVisible({ timeout: 5000 });
+    await expect(page.locator('[data-global-search-result-path="Test/deal-scope-token.txt"]')).toHaveCount(0);
+  });
+
   test('indexes a real Wails file listing containing exactly two entries', async ({ page }) => {
     await page.evaluate(() => {
       window.__wailsMock.putVaultFile('TwoEntryFolder/first-exact-result.txt', 'first exact result');

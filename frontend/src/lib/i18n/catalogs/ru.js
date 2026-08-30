@@ -243,6 +243,7 @@ export default {
   'search.indexing': 'Индексирование...',
   'search.placeholder': 'Поиск',
   'search.global': 'Глобальный поиск',
+  'search.activeDeal': 'Искать в этом Деле',
   'search.noResults': 'Ничего не найдено',
   'search.partial': 'Индекс неполный — некоторые результаты могут отсутствовать',
   'search.type.workspace': 'Дело',
