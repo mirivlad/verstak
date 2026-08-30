@@ -334,10 +334,12 @@
              name for anyone who cannot see which nav item is selected. -->
         {#key activeSectionData.id}
           {#if pluginInfo[activeSectionData.panel.pluginId]?.entry}
-            <PluginBundleHost
-              pluginId={activeSectionData.panel.pluginId}
-              componentId={activeSectionData.panel.component || activeSectionData.panel.id}
-            />
+            <div class="settings-plugin-panel" data-settings-plugin-panel={activeSectionData.panel.id}>
+              <PluginBundleHost
+                pluginId={activeSectionData.panel.pluginId}
+                componentId={activeSectionData.panel.component || activeSectionData.panel.id}
+              />
+            </div>
           {:else}
             <p class="settings-hint" data-settings-panel-unavailable>
               {tr('pluginManager.settingsBundleUnavailable')}
@@ -472,6 +474,12 @@
     min-height: 0;
     overflow-y: auto;
     padding: 1rem 1.25rem;
+  }
+
+  .settings-plugin-panel {
+    display: flex;
+    flex: 1;
+    min-height: 0;
   }
 
   .settings-content h3 {

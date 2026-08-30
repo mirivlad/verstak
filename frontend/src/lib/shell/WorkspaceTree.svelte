@@ -7,6 +7,7 @@
   import Select from '../ui/Select.svelte';
   import TreeNode from './TreeNode.svelte';
   import { i18n } from '../i18n/index.js';
+  import { executePluginCommand } from '../plugin-host/VerstakPluginAPI.js';
 
   let tree = { roots: [], currentWorkspaceId: '', revision: 0 };
   let loading = true;
@@ -24,6 +25,8 @@
   let formError = ''; let formBusy = false;
   let editWorkspacePlugins = [];
   let selectedWorkspaceTools = [];
+  let dealTemplates = [];
+  let selectedTemplateId = '';
   let ctxMenu = null;
 
   // Drag state
@@ -196,14 +199,51 @@
 
   // ── Create/Rename/Move/Trash modals ────────────────────────────────────────
   function openCreateFolder(pid) { modal = { type: 'create-folder', parentId: pid }; formName = ''; formParentId = pid || ''; formError = ''; formBusy = false; folderIconId = ''; folderColor = ''; folderEditorView = 'form'; }
-  function handleCreateWorkspaceRequest() {
-    openTemplates();
+  function handleCreateWorkspaceRequest(event) {
+    openTemplates(event?.detail?.parentFolderId || '');
   }
 
-  function openTemplates() {
-    window.dispatchEvent(new CustomEvent('verstak:open-view', {
-      detail: { viewId: 'verstak.templates.view', pluginId: 'verstak.templates' }
-    }));
+  async function openTemplates(parentFolderId = '') {
+    const requestedParentId = typeof parentFolderId === 'string' ? parentFolderId : parentFolderId?.detail || '';
+    modal = { type: 'create-workspace' };
+    formName = '';
+    formParentId = requestedParentId;
+    formError = '';
+    formBusy = true;
+    dealTemplates = [];
+    selectedTemplateId = '';
+    try {
+      const response = await executePluginCommand('verstak.templates', 'verstak.templates.list');
+      dealTemplates = Array.isArray(response?.result) ? response.result : [];
+      selectedTemplateId = dealTemplates[0]?.id || '';
+      if (!selectedTemplateId) formError = tr('workspaceTree.templatesError');
+    } catch {
+      formError = tr('workspaceTree.templatesError');
+    } finally {
+      formBusy = false;
+    }
+  }
+
+  async function doCreateWorkspace() {
+    const name = formName.trim();
+    if (!name) { formError = tr('workspaceTree.nameRequired'); return; }
+    if (!selectedTemplateId) { formError = tr('workspaceTree.templatesError'); return; }
+    formBusy = true;
+    formError = '';
+    try {
+      await executePluginCommand('verstak.templates', 'verstak.templates.createDeal', {
+        templateId: selectedTemplateId,
+        parentFolderId: formParentId,
+        name,
+      });
+      if (formParentId) expandedIds['folder:' + formParentId] = true;
+      modal = null;
+      await loadTree();
+    } catch {
+      formError = tr('workspaceTree.createError');
+    } finally {
+      formBusy = false;
+    }
   }
 
   function openRename(kind, id, name) { modal = { type: 'rename', kind, id }; formName = name; formError = ''; formBusy = false; }
@@ -818,7 +858,7 @@
   <OverlayHost x={ctxMenu.x} y={ctxMenu.y}>
     <div class="vt-menu vt-ctx" on:click|stopPropagation on:mousedown|stopPropagation on:keydown={(event) => event.key === 'Escape' && closeCtx()} role="menu" tabindex="-1">
       {#if ctxMenu.kind === 'folder'}
-        <button class="vt-menu-item vt-ctx-i" on:click={() => { closeCtx(); openTemplates(); }}>{tr('workspaceTree.newDeal')}</button>
+        <button class="vt-menu-item vt-ctx-i" on:click={() => { const i = ctxMenu.id; closeCtx(); openTemplates(i); }}>{tr('workspaceTree.newDeal')}</button>
         <button class="vt-menu-item vt-ctx-i" on:click={() => { const i = ctxMenu.id; closeCtx(); openCreateFolder(i); }}>{tr('workspaceTree.newFolder')}</button>
         <div class="vt-menu-separator vt-ctx-s" />
         <button class="vt-menu-item vt-ctx-i" on:click={() => { const {id: i, name: n} = ctxMenu; closeCtx(); openEditFolder(i, n); }}>{tr('workspaceTree.editFolder')}</button>
@@ -908,6 +948,40 @@
   </svelte:fragment>
 </Modal>
 
+<Modal title={tr('workspaceTree.newDeal')} show={modal?.type === 'create-workspace'} on:close={closeModal} wide data-new-deal-dialog>
+  <label class="vt-field">
+    <span>{tr('workspaceTree.name')}</span>
+    <input class="vt-input" data-new-deal-name type="text" bind:value={formName} placeholder={tr('workspaceTree.namePlaceholder')} disabled={formBusy} on:keydown={(event) => event.key === 'Enter' && doCreateWorkspace()} />
+  </label>
+  <div class="wt-template-picker" aria-label={tr('workspaceTree.chooseTemplate')}>
+    <span class="wt-edit-tools-label">{tr('workspaceTree.template')}</span>
+    {#if formBusy}
+      <p class="wt-template-picker-status">{tr('common.loading')}</p>
+    {:else}
+      <div class="wt-template-grid">
+        {#each dealTemplates as template (template.id)}
+          <button
+            type="button"
+            class="wt-template"
+            class:selected={selectedTemplateId === template.id}
+            aria-pressed={selectedTemplateId === template.id}
+            data-new-deal-template={template.id}
+            on:click={() => { selectedTemplateId = template.id; }}
+          >
+            <span>{template.name}</span>
+            {#if template.description}<small>{template.description}</small>{/if}
+          </button>
+        {/each}
+      </div>
+    {/if}
+  </div>
+  {#if formError}<p class="vt-inline-alert error vt-ferr" data-new-deal-error>{formError}</p>{/if}
+  <svelte:fragment slot="actions">
+    <button type="button" class="vt-button secondary vt-btn" on:click={closeModal} disabled={formBusy}>{tr('common.cancel')}</button>
+    <button type="button" class="vt-button primary vt-btn-p" data-new-deal-create on:click={doCreateWorkspace} disabled={formBusy || !selectedTemplateId}>{tr('common.create')}</button>
+  </svelte:fragment>
+</Modal>
+
 <Modal title={tr('workspaceTree.editDeal')} show={modal?.type === 'edit-workspace'} on:close={closeModal} wide data-workspace-edit-modal>
   <label class="vt-field"><span>{tr('workspaceTree.name')}</span><input class="vt-input" data-workspace-edit-name type="text" bind:value={formName} disabled={formBusy} on:keydown={(e) => e.key === 'Enter' && doEditWorkspace()} /></label>
   <div class="wt-edit-tools" data-workspace-edit-tools>
@@ -967,6 +1041,13 @@
   .wt-edit-tool:hover { border-color: var(--vt-color-border-strong); }
   .wt-edit-tool.selected { border-color: var(--vt-color-accent); background: var(--vt-color-accent-soft); }
   .wt-edit-tool small { color: var(--vt-color-text-muted); font-size: 0.68rem; overflow-wrap: anywhere; }
+  .wt-template-picker { display: grid; gap: var(--vt-space-2); margin-top: var(--vt-space-3); }
+  .wt-template-picker-status { margin: 0; color: var(--vt-color-text-muted); font-size: 0.78rem; }
+  .wt-template-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: var(--vt-space-2); max-height: 42vh; overflow: auto; }
+  .wt-template { display: grid; gap: 0.2rem; padding: 0.65rem 0.75rem; border: 1px solid var(--vt-color-border); border-radius: var(--vt-radius-sm); background: var(--vt-color-surface); color: var(--vt-color-text); text-align: left; cursor: pointer; }
+  .wt-template:hover { border-color: var(--vt-color-border-strong); }
+  .wt-template.selected { border-color: var(--vt-color-accent); background: var(--vt-color-accent-soft); }
+  .wt-template small { color: var(--vt-color-text-muted); font-size: 0.72rem; line-height: 1.3; }
 
   .wt-notice {
     display: flex; align-items: flex-start; gap: var(--vt-space-2);
