@@ -39,8 +39,8 @@ test.describe('Todo plugin workflow', () => {
       const result = await window.go.api.App.ReadPluginSettings('verstak.todo');
       const settings = Array.isArray(result) ? result[0] : result;
       const todo = settings['todos:global'].find((item) => item.title === 'Prepare project review');
-      return todo && [todo.workspaceRootPath, todo.priority, todo.dueAt, todo.reminderDate, todo.reminderAt].join('|');
-    })).toBe('Project|high|2000-01-01|2000-01-01|2000-01-01T09:30');
+      return todo && [todo.workspaceId, todo.priority, todo.dueAt, todo.reminderDate, todo.reminderAt].join('|');
+    })).toBe('11111111-1111-4111-8111-111111111111|high|2000-01-01|2000-01-01|2000-01-01T09:30');
 
     await todos.locator('[data-todo-action="edit"]').click();
     await todos.locator('[data-todo-input="title"]').fill('Prepare project review updated');
@@ -101,7 +101,7 @@ test.describe('Todo plugin workflow', () => {
           {
             id: 'todo-project-open',
             title: 'Project deadline',
-            workspaceRootPath: 'Project',
+            workspaceId: '11111111-1111-4111-8111-111111111111',
             status: 'open',
             priority: 'high',
             dueAt: '2000-01-01',
@@ -112,7 +112,7 @@ test.describe('Todo plugin workflow', () => {
           {
             id: 'todo-project-done',
             title: 'Project completed item',
-            workspaceRootPath: 'Project',
+            workspaceId: '11111111-1111-4111-8111-111111111111',
             status: 'done',
             priority: 'normal',
             createdAt: '2026-06-30T08:01:00.000Z',
@@ -122,7 +122,7 @@ test.describe('Todo plugin workflow', () => {
           {
             id: 'todo-test-open',
             title: 'Test workspace item',
-            workspaceRootPath: 'Test',
+            workspaceId: '22222222-2222-4222-8222-222222222222',
             status: 'open',
             priority: 'normal',
             dueAt: '2000-01-01',
@@ -146,7 +146,7 @@ test.describe('Todo plugin workflow', () => {
     await expect(globalTodos).toContainText('Project deadline');
     await expect(globalTodos).toContainText('Test workspace item');
 
-    await globalTodos.locator('[data-todo-filter="workspace"]').selectOption('Project');
+    await globalTodos.locator('[data-todo-filter="workspace"]').selectOption('11111111-1111-4111-8111-111111111111');
     await expect(globalTodos).toContainText('Project deadline');
     await expect(globalTodos).toContainText('Project completed item');
     await expect(globalTodos).not.toContainText('Test workspace item');
