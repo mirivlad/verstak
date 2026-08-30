@@ -118,6 +118,28 @@ func TestRunnerVerifiedMigrationIsIdempotent(t *testing.T) {
 	}
 }
 
+func TestNeedsMigrationSkipsFreshAndVerifiedVaults(t *testing.T) {
+	fresh := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(fresh, ".verstak", "plugin-settings"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if needed, err := NewDealOnlyRunner(fresh).NeedsMigration(context.Background()); err != nil || needed {
+		t.Fatalf("fresh vault NeedsMigration = %v, %v", needed, err)
+	}
+
+	vault := copyMigrationFixture(t)
+	if needed, err := NewDealOnlyRunner(vault).NeedsMigration(context.Background()); err != nil || !needed {
+		t.Fatalf("legacy vault NeedsMigration = %v, %v", needed, err)
+	}
+	runner := NewDealOnlyRunner(vault)
+	if err := runner.Run(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if needed, err := runner.NeedsMigration(context.Background()); err != nil || needed {
+		t.Fatalf("verified vault NeedsMigration = %v, %v", needed, err)
+	}
+}
+
 func TestRunnerPreflightRejectsSymlinkedMigrationInput(t *testing.T) {
 	vault := copyMigrationFixture(t)
 	target := filepath.Join(vault, ".verstak", "plugin-data", "verstak.todo", "items.ndjson")

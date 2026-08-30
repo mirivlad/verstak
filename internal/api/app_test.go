@@ -3287,6 +3287,55 @@ func TestDealMigrationPreflightIsDiagnosticOnly(t *testing.T) {
 	}
 }
 
+func TestRunDealMigrationAppliesLegacyScopeExactlyOnce(t *testing.T) {
+	app, root := newFilesTestApp(t, []string{"files.read"})
+	tree := workspacetree.NewService(root, nil)
+	if err := tree.Initialize(); err != nil {
+		t.Fatal(err)
+	}
+	deals := tree.ListWorkspaces()
+	if len(deals) != 1 {
+		t.Fatalf("Deals = %#v", deals)
+	}
+	deal := deals[0]
+	settingsPath := filepath.Join(root, ".verstak", "plugin-settings", "verstak.projects", "settings.json")
+	if err := os.MkdirAll(filepath.Dir(settingsPath), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	legacy, err := json.Marshal(map[string]any{"projects:global": []any{map[string]any{
+		"id":          "legacy-project",
+		"workspaceId": deal.ID,
+		"name":        "Migrated Project",
+		"status":      "paused",
+	}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(settingsPath, legacy, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := app.runDealMigration(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	metadata, err := tree.ReadDealMetadata(deal.ID, deal.RootPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var projectMeta map[string]any
+	if err := json.Unmarshal(metadata.ToolConfig["verstak.projects"], &projectMeta); err != nil {
+		t.Fatal(err)
+	}
+	if projectMeta["name"] != "Migrated Project" || projectMeta["status"] != "paused" {
+		t.Fatalf("Project Meta = %#v", projectMeta)
+	}
+	if err := app.runDealMigration(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(root, ".verstak", "migrations", "deal-only-v1", "ledger.json")); err != nil {
+		t.Fatalf("migration ledger not written: %v", err)
+	}
+}
+
 func TestSyncNowAppliesEveryPullPageInOrder(t *testing.T) {
 	app, root := newSyncFilesTestApp(t, []string{"files.read", "files.write", "files.delete"}, "local-device")
 	server := newLocalHTTPTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

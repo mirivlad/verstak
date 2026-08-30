@@ -981,6 +981,11 @@ Vault plugin state хранится **внутри vault** в `.verstak/plugins.
 
 ## Дело: core capability
 
+> Historical implementation note. The canonical current contract is
+> [`DEAL_ONLY_SCOPE.md`](DEAL_ONLY_SCOPE.md): `workspacetree.Service` owns the
+> UUID-first Deal tree, templates are plugin-owned recipes, and `projectId` is
+> not a runtime scope.
+
 Дело — это физическая папка верхнего уровня внутри vault root. Filesystem
 является source of truth для списка Дел.
 
