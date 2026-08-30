@@ -24,7 +24,10 @@ test.describe('Desktop localization', () => {
     // The status bar names the vault rather than reporting that it is open.
     await expect(page.locator('.vault-status')).toContainText('vault');
     await expect(page.locator('.sidebar .plugin-item').filter({ hasText: 'Тест платформы' })).toBeVisible();
+    await expect(page.locator('.sidebar .plugin-item').filter({ hasText: 'Проекты' })).toBeVisible();
     await expect(page.locator('[data-status-item-id="verstak.platform-test.status"]')).toContainText('Все тесты пройдены');
+    await page.getByRole('button', { name: 'Закрыть' }).click();
+    await expect(page.getByRole('tab', { name: 'Проект', exact: true })).toBeVisible();
 
     const project = page.locator('.wt-node').filter({ hasText: 'Project' });
     await project.click({ button: 'right' });

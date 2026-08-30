@@ -20,7 +20,7 @@ test.describe('UX Overview workspace flow', () => {
 
     const tabs = page.getByRole('tab');
     await expect(tabs.nth(0)).toHaveText('Overview');
-    await expect(tabs.nth(1)).toHaveText('Project Meta');
+    await expect(tabs.nth(1)).toHaveText('Project');
     await expect(tabs.nth(2)).toHaveText('Notes');
     await expect(page.getByRole('tab', { name: 'Overview' })).toHaveAttribute('aria-selected', 'true');
     await expect(page.getByRole('tab', { name: 'Today' })).toHaveCount(0);

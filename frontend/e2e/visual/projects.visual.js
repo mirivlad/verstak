@@ -55,7 +55,7 @@ test.describe('Visual audit: Project Meta portfolio', () => {
     const ids = await seed(page);
 
     await expect(page.locator('.sidebar')).not.toContainText('Platform Test');
-    await page.locator('.sidebar .plugin-item').filter({ hasText: 'Project portfolio' }).click();
+    await page.locator('.sidebar .plugin-item').filter({ hasText: 'Projects' }).click();
     const portfolio = page.locator('[data-project-meta-portfolio]');
     await expect(portfolio).toBeVisible({ timeout: 10000 });
     await expect(portfolio.locator('[data-project-meta-deal]')).toHaveCount(4);
@@ -64,9 +64,9 @@ test.describe('Visual audit: Project Meta portfolio', () => {
     await shot(page, 'project-meta-portfolio.png');
 
     await portfolio.locator(`[data-project-meta-deal="${ids.creaturesId}"]`).click();
-    const meta = page.locator('[role="tabpanel"][aria-label="Project Meta"]');
+    const meta = page.locator('[role="tabpanel"][aria-label="Project"]');
     await expect(meta).toBeVisible({ timeout: 10000 });
-    await expect(meta.locator('.project-meta-title')).toHaveText('Project Meta');
+    await expect(meta.locator('.project-meta-title')).toHaveText('Project');
     await expect(meta.locator('[data-project-meta-field="name"]')).toHaveValue('Creatures UX');
     await expect(meta.locator('[data-project-meta-field="dueDate"]')).toHaveValue('2026-08-30');
     await shot(page, 'project-meta-deal.png');

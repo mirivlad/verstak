@@ -27,6 +27,7 @@ import importManifest from '../../../../../verstak-official-plugins/plugins/impo
 import searchManifest from '../../../../../verstak-official-plugins/plugins/search/plugin.json';
 import templatesManifest from '../../../../../verstak-official-plugins/plugins/templates/plugin.json';
 import milestonesManifest from '../../../../../verstak-official-plugins/plugins/milestones/plugin.json';
+import milestonesSource from '../../../../../verstak-official-plugins/plugins/milestones/frontend/src/index.js?raw';
 import gitManifest from '../../../../../verstak-official-plugins/plugins/git/plugin.json';
 import notesSource from '../../../../../verstak-official-plugins/plugins/notes/frontend/src/index.js?raw';
 import projectsSource from '../../../../../verstak-official-plugins/plugins/projects/frontend/src/index.js?raw';
@@ -1194,6 +1195,9 @@ function cloneJson(value) {
       }
       if (pluginId === templatesManifest.id && assetPath === templatesManifest.frontend.entry) {
         return Promise.resolve(templatesSource);
+      }
+      if (pluginId === milestonesManifest.id && assetPath === milestonesManifest.frontend.entry) {
+        return Promise.resolve(milestonesSource);
       }
       if (pluginId === gitManifest.id && assetPath === gitManifest.frontend.entry) {
         return Promise.resolve(gitSource);

@@ -22,7 +22,7 @@ test.describe('Project Meta', () => {
         name: 'Project Alpha', description: 'Portfolio card', status: 'active', priority: 'high', tags: ['release'], startDate: '2026-08-01', dueDate: '2026-08-31',
       });
     });
-    await page.locator('.sidebar .plugin-item').filter({ hasText: 'Project portfolio' }).click();
+    await page.locator('.sidebar .plugin-item').filter({ hasText: 'Projects' }).click();
     const portfolio = page.locator('[data-project-meta-portfolio]');
     await expect(portfolio).toBeVisible();
     await expect(portfolio.locator('[data-project-meta-deal="11111111-1111-4111-8111-111111111111"]')).toContainText('Project Alpha');
@@ -30,8 +30,8 @@ test.describe('Project Meta', () => {
   });
 
   test('selected Deal edits and persists its own Project Meta', async ({ page }) => {
-    await page.getByRole('tab', { name: 'Project Meta' }).click();
-    const panel = page.locator('[role="tabpanel"][aria-label="Project Meta"]');
+    await page.getByRole('tab', { name: 'Project' }).click();
+    const panel = page.locator('[role="tabpanel"][aria-label="Project"]');
     await panel.locator('[data-project-meta-field="name"]').fill('Project Deal');
     await panel.locator('[data-project-meta-field="description"]').fill('Metadata is Deal-owned.');
     await panel.locator('[data-project-meta-field="status"]').selectOption('paused');
