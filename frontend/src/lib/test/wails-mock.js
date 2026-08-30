@@ -36,6 +36,7 @@ import activitySource from '../../../../../verstak-official-plugins/plugins/acti
 import todoSource from '../../../../../verstak-official-plugins/plugins/todo/frontend/src/index.js?raw';
 import journalSource from '../../../../../verstak-official-plugins/plugins/journal/frontend/src/index.js?raw';
 import templatesSource from '../../../../../verstak-official-plugins/plugins/templates/frontend/src/index.js?raw';
+import gitSource from '../../../../../verstak-official-plugins/plugins/git/frontend/src/index.js?raw';
 import notesEnCatalog from '../../../../../verstak-official-plugins/plugins/notes/locales/en.json';
 import notesRuCatalog from '../../../../../verstak-official-plugins/plugins/notes/locales/ru.json';
 import projectsEnCatalog from '../../../../../verstak-official-plugins/plugins/projects/locales/en.json';
@@ -50,6 +51,8 @@ import journalEnCatalog from '../../../../../verstak-official-plugins/plugins/jo
 import journalRuCatalog from '../../../../../verstak-official-plugins/plugins/journal/locales/ru.json';
 import todoEnCatalog from '../../../../../verstak-official-plugins/plugins/todo/locales/en.json';
 import todoRuCatalog from '../../../../../verstak-official-plugins/plugins/todo/locales/ru.json';
+import gitEnCatalog from '../../../../../verstak-official-plugins/plugins/git/locales/en.json';
+import gitRuCatalog from '../../../../../verstak-official-plugins/plugins/git/locales/ru.json';
 import importSource from '../../../../../verstak-official-plugins/plugins/import/frontend/dist/index.js?raw';
 import importStyle from '../../../../../verstak-official-plugins/plugins/import/frontend/dist/style.css?raw';
 // Sync ships built output rather than raw source, so its manifest entry points
@@ -120,7 +123,8 @@ import syncStyle from '../../../../../verstak-official-plugins/plugins/sync/fron
     'verstak.browser-inbox': { en: browserEnCatalog, ru: browserRuCatalog },
     'verstak.file-preview': { en: filePreviewEnCatalog, ru: filePreviewRuCatalog },
     'verstak.journal': { en: journalEnCatalog, ru: journalRuCatalog },
-    'verstak.todo': { en: todoEnCatalog, ru: todoRuCatalog }
+    'verstak.todo': { en: todoEnCatalog, ru: todoRuCatalog },
+    'verstak.git': { en: gitEnCatalog, ru: gitRuCatalog }
   };
 
   var russianPluginNames = {
@@ -216,6 +220,7 @@ import syncStyle from '../../../../../verstak-official-plugins/plugins/sync/fron
   var importSequence = 0;
   var importRunCounts = { dokuwiki: 0, obsidian: 0 };
   var workspaceSequence = 3;
+  var gitCheckouts = {};
 
   // ── Helpers ────────────────────────────────────────────────────────
   function makeDefaultWorkspaceTree() {
@@ -641,6 +646,31 @@ function cloneJson(value) {
     ];
   }
 
+  function gitCheckoutKey(request) {
+    request = request || {};
+    return String(request.workspaceId || '') + ':' + String(request.repositoryId || '');
+  }
+
+  function gitNotClonedStatus() {
+    return { state: 'not-cloned', branch: '', clean: true, changedCount: 0, untrackedCount: 0, changedFiles: [], ahead: 0, behind: 0, recentCommits: [] };
+  }
+
+  function gitClonedStatus(request) {
+    return {
+      state: 'cloned', branch: String(request.branch || 'main'), clean: true, changedCount: 0, untrackedCount: 0,
+      changedFiles: [], ahead: 0, behind: 0,
+      recentCommits: [{ id: '0123456789012345678901234567890123456789', shortId: '0123456', subject: 'Initial mock commit', author: 'Verstak', committed: '2026-08-30T00:00:00Z' }]
+    };
+  }
+
+  function requireGitPermission(pluginId, remote, extra) {
+    var err = requirePluginPermission(pluginId, 'process.spawn');
+    if (err) return err;
+    if (remote) { err = requirePluginPermission(pluginId, 'network.remote'); if (err) return err; }
+    if (extra) { err = requirePluginPermission(pluginId, extra); if (err) return err; }
+    return '';
+  }
+
   function syncStatusDTO() {
     return {
       configured: syncState.configured,
@@ -996,6 +1026,48 @@ function cloneJson(value) {
       workbenchPreferences = Object.assign({}, workbenchPreferences, preferences || {});
       return Promise.resolve('');
     },
+    PluginGitClone: function (pluginId, request) {
+      var err = requireGitPermission(pluginId, true);
+      if (err) return Promise.resolve([{}, err]);
+      var key = gitCheckoutKey(request);
+      gitCheckouts[key] = gitClonedStatus(request);
+      return Promise.resolve([{ checkoutPath: 'Project/Repositories/' + String(request.checkoutName || 'repository') }, '']);
+    },
+    PluginGitRegisterExisting: function (pluginId, request) {
+      var err = requireGitPermission(pluginId, false, 'imports.readExternal');
+      if (err) return Promise.resolve([{}, err]);
+      var key = gitCheckoutKey(request);
+      gitCheckouts[key] = gitClonedStatus(request);
+      return Promise.resolve([{ checkoutPath: 'Project/Repositories/' + String(request.checkoutName || 'repository') }, '']);
+    },
+    PluginGitStatus: function (pluginId, request) {
+      var err = requireGitPermission(pluginId, false);
+      if (err) return Promise.resolve([{}, err]);
+      return Promise.resolve([cloneJson(gitCheckouts[gitCheckoutKey(request)] || gitNotClonedStatus()), '']);
+    },
+    PluginGitFetch: function (pluginId, request) {
+      var err = requireGitPermission(pluginId, true);
+      return Promise.resolve(err || '');
+    },
+    PluginGitPull: function (pluginId, request) {
+      var err = requireGitPermission(pluginId, true);
+      if (err) return Promise.resolve(err);
+      var status = gitCheckouts[gitCheckoutKey(request)]; if (status) status.behind = 0;
+      return Promise.resolve('');
+    },
+    PluginGitPush: function (pluginId, request) {
+      var err = requireGitPermission(pluginId, true);
+      if (err) return Promise.resolve(err);
+      var status = gitCheckouts[gitCheckoutKey(request)]; if (status) status.ahead = 0;
+      return Promise.resolve('');
+    },
+    PluginGitOpenDirectory: function (pluginId, request) {
+      var err = requireGitPermission(pluginId, false, 'files.openExternal');
+      if (err) return Promise.resolve(err);
+      externalOpens.push({ action: 'git-folder', path: String(request.checkoutName || '') });
+      window.__wailsMockExternalOpens = externalOpens.slice();
+      return Promise.resolve('');
+    },
     PluginSyncStatus: function (pluginId) {
       var err = requirePluginSyncPermission(pluginId, false);
       if (err) return Promise.resolve([{}, err]);
@@ -1122,6 +1194,9 @@ function cloneJson(value) {
       }
       if (pluginId === templatesManifest.id && assetPath === templatesManifest.frontend.entry) {
         return Promise.resolve(templatesSource);
+      }
+      if (pluginId === gitManifest.id && assetPath === gitManifest.frontend.entry) {
+        return Promise.resolve(gitSource);
       }
       return Promise.resolve('');
     },
@@ -1769,6 +1844,7 @@ function cloneJson(value) {
       importSequence = 0;
       importRunCounts = { dokuwiki: 0, obsidian: 0 };
       workspaceSequence = 3;
+      gitCheckouts = {};
     },
     setPluginStatus: function (pluginId, status, enabled) {
       if (pluginStates[pluginId]) {

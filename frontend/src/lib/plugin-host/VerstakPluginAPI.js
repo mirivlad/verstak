@@ -192,6 +192,34 @@ if (!window.__VERSTAK_TRANSFER_PROGRESS_BRIDGE__ && window.runtime && typeof win
   window.__VERSTAK_TRANSFER_PROGRESS_BRIDGE__ = window.runtime.EventsOnMultiple('verstak:files-transfer-progress', dispatchTransferProgress, -1);
 }
 
+function normalizeGitRequest(request, options) {
+  request = request || {};
+  options = options || {};
+  const scope = request.scope || {};
+  const workspaceId = String(scope.workspaceId || '').trim();
+  if (scope.kind !== 'deal' || !dealWorkspaceIdPattern.test(workspaceId)) {
+    throw new Error('git operation requires DealScope.workspaceId UUID');
+  }
+  const repositoryId = String(request.repositoryId || '').trim();
+  const checkoutName = String(request.checkoutName || '').trim();
+  if (!repositoryId || !checkoutName) {
+    throw new Error('git operation requires repositoryId and checkoutName');
+  }
+  const normalized = {
+    workspaceId: workspaceId,
+    repositoryId: repositoryId,
+    checkoutName: checkoutName,
+    remoteUrl: String(request.remoteUrl || '').trim(),
+    branch: String(request.branch || '').trim(),
+    credentialRef: String(request.credentialRef || '').trim(),
+    sourcePath: String(request.sourcePath || '').trim()
+  };
+  if (options.remote && !normalized.remoteUrl) {
+    throw new Error('git network operation requires remoteUrl');
+  }
+  return normalized;
+}
+
 function normalizeTransfers(transfers) {
   if (!Array.isArray(transfers)) {
     throw new Error('a bulk transfer requires an array of { from, to } pairs');
@@ -1041,6 +1069,51 @@ export function createPluginAPI(pluginId) {
         assertActive('sync.now');
         return callBackend(pluginId, 'sync.now', function() {
           return App.PluginSyncNow(pluginId);
+        });
+      }
+    },
+
+    git: {
+      clone: function(request) {
+        assertActive('git.clone');
+        return callBackend(pluginId, 'git.clone', function() {
+          return App.PluginGitClone(pluginId, normalizeGitRequest(request, { remote: true }));
+        });
+      },
+      registerExisting: function(request) {
+        assertActive('git.registerExisting');
+        return callBackend(pluginId, 'git.registerExisting', function() {
+          return App.PluginGitRegisterExisting(pluginId, normalizeGitRequest(request));
+        });
+      },
+      status: function(request) {
+        assertActive('git.status');
+        return callBackend(pluginId, 'git.status', function() {
+          return App.PluginGitStatus(pluginId, normalizeGitRequest(request));
+        });
+      },
+      fetch: function(request) {
+        assertActive('git.fetch');
+        return callBackendErrorString(pluginId, 'git.fetch', function() {
+          return App.PluginGitFetch(pluginId, normalizeGitRequest(request, { remote: true }));
+        });
+      },
+      pull: function(request) {
+        assertActive('git.pull');
+        return callBackendErrorString(pluginId, 'git.pull', function() {
+          return App.PluginGitPull(pluginId, normalizeGitRequest(request, { remote: true }));
+        });
+      },
+      push: function(request) {
+        assertActive('git.push');
+        return callBackendErrorString(pluginId, 'git.push', function() {
+          return App.PluginGitPush(pluginId, normalizeGitRequest(request, { remote: true }));
+        });
+      },
+      openDirectory: function(request) {
+        assertActive('git.openDirectory');
+        return callBackendErrorString(pluginId, 'git.openDirectory', function() {
+          return App.PluginGitOpenDirectory(pluginId, normalizeGitRequest(request));
         });
       }
     },

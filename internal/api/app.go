@@ -2410,6 +2410,21 @@ func (a *App) PluginGitRegisterExisting(pluginID string, rawRequest map[string]i
 	if err != nil {
 		return nil, err.Error()
 	}
+	if request.SourcePath == "" {
+		dialog := a.selectImportDirectory
+		if dialog == nil {
+			dialog = runtime.OpenDirectoryDialog
+		}
+		home, _ := os.UserHomeDir()
+		selected, dialogErr := dialog(a.ctx, runtime.OpenDialogOptions{Title: "Select existing Git repository", DefaultDirectory: home})
+		if dialogErr != nil {
+			return nil, dialogErr.Error()
+		}
+		if selected == "" {
+			return map[string]interface{}{"checkoutPath": ""}, ""
+		}
+		request.SourcePath = selected
+	}
 	checkout, err := gitservice.NewService(a.vaultPath()).RegisterExisting(gitservice.ExistingRepositoryRequest{
 		RepositoryRequest: gitservice.RepositoryRequest{WorkspaceID: request.WorkspaceID, WorkspaceRoot: request.WorkspaceRoot, RepositoryID: request.RepositoryID, CheckoutName: request.CheckoutName},
 		SourcePath:        request.SourcePath,
