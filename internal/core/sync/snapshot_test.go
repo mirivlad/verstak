@@ -51,6 +51,35 @@ func TestScanAndRecordCapturesOnlyExactTreeOrderMetadata(t *testing.T) {
 	assertUnpushedCount(t, service, 0)
 }
 
+func TestScanAndRecordExcludesGitCheckoutTrees(t *testing.T) {
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, "Deal", "checkout", ".git", "objects"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "Deal", "checkout", ".git", "objects", "pack"), []byte("local git state"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "Deal", "checkout", "README.md"), []byte("sync this"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	service := NewService(root, "device-a")
+	if _, err := service.ScanAndRecord(); err != nil {
+		t.Fatal(err)
+	}
+	snapshot, err := service.LoadSnapshot()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := snapshot.Entries["Deal/checkout/README.md"]; !ok {
+		t.Fatalf("ordinary checkout-adjacent file missing: %#v", snapshot.Entries)
+	}
+	for path := range snapshot.Entries {
+		if strings.Contains(path, "/.git/") || strings.HasPrefix(path, ".git/") {
+			t.Fatalf("Git checkout state leaked into snapshot: %s", path)
+		}
+	}
+}
+
 func TestTreeOrderBootstrapAndChangeEmitDedicatedUpdates(t *testing.T) {
 	root := t.TempDir()
 	initialOrder := workspacetree.OrderState{
