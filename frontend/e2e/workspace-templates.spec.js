@@ -67,6 +67,16 @@ test.describe('Deal templates plugin', () => {
     await expect(form.locator('.templates-message')).toContainText('Template saved.');
     await expect(page.getByRole('button', { name: 'Client recipe', exact: true })).toBeVisible();
 
+    await form.locator('[data-template-action="duplicate"]').click();
+    await expect(form.locator('.templates-message')).toContainText('Template duplicated.');
+    await expect(page.getByRole('button', { name: 'Client recipe (copy)', exact: true })).toBeVisible();
+    await form.locator('[data-template-field="name"]').fill('Independent client recipe');
+    await form.locator('[data-template-field="tools"]').fill('verstak.notes');
+    await form.locator('[data-template-action="save"]').click();
+    await expect(form.locator('.templates-message')).toContainText('Template saved.');
+    await page.getByRole('button', { name: 'Client recipe', exact: true }).click();
+    await expect(form.locator('[data-template-field="tools"]')).toHaveValue('verstak.notes\nverstak.files');
+
     await form.locator('[data-template-field="deal-name"]').fill('ClientDeal');
     await form.locator('[data-template-action="create-deal"]').click();
     await expect(form.locator('.templates-message')).toContainText('Deal created.');
