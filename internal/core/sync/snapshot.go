@@ -804,7 +804,7 @@ func readWorkspaceMetadataSnapshot(root, name string) (json.RawMessage, error) {
 func excludedFromSync(rel string) bool {
 	rel = filepath.ToSlash(rel)
 	for _, segment := range strings.Split(rel, "/") {
-		if strings.EqualFold(segment, ".verstak") {
+		if strings.EqualFold(segment, ".verstak") || strings.EqualFold(segment, ".git") {
 			return true
 		}
 	}
