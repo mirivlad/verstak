@@ -22,6 +22,8 @@
   // Modal state
   let modal = null; let formName = ''; let formParentId = ''; let folderIconId = ''; let folderColor = ''; let folderEditorView = 'form'; let iconSearch = ''; let appearanceCache = {}; $: filteredIcons = LUCIDE_ICONS.filter(i => !iconSearch || i.toLowerCase().includes(iconSearch.toLowerCase())).slice(0, 200);
   let formError = ''; let formBusy = false;
+  let editWorkspacePlugins = [];
+  let selectedWorkspaceTools = [];
   let ctxMenu = null;
 
   // Drag state
@@ -205,6 +207,47 @@
   }
 
   function openRename(kind, id, name) { modal = { type: 'rename', kind, id }; formName = name; formError = ''; formBusy = false; }
+  async function openEditWorkspace(id, name) {
+    modal = { type: 'edit-workspace', id, origName: name };
+    formName = name; formError = ''; formBusy = true;
+    selectedWorkspaceTools = [];
+    try {
+      const plugins = await App.GetPlugins().catch(() => []);
+      await Promise.all((plugins || []).map((plugin) => (
+        i18n.loadPlugin(plugin.manifest?.id, plugin.manifest?.localization).catch(() => {})
+      )));
+      editWorkspacePlugins = (plugins || [])
+        .map((plugin) => i18n.localizePlugin(plugin))
+        .filter((plugin) => (plugin.manifest?.contributes?.workspaceItems || []).length > 0)
+        .sort((a, b) => workspacePluginName(a).localeCompare(workspacePluginName(b), locale));
+      const response = await App.GetWorkspaceMetadataByUUID(id);
+      const [metadata, err] = resultOrError(response, null);
+      if (err || !metadata) { formError = tr('workspaceTree.editDealLoadError'); return; }
+      selectedWorkspaceTools = Array.isArray(metadata.workspaceTools) ? [...metadata.workspaceTools] : [];
+    } catch {
+      formError = tr('workspaceTree.editDealLoadError');
+    } finally {
+      formBusy = false;
+    }
+  }
+  function workspacePluginName(plugin) { return plugin?.manifest?.name || plugin?.manifest?.id || ''; }
+  function workspacePluginStatus(plugin) {
+    if (plugin?.enabled === false || plugin?.status === 'disabled') return tr('workspaceTree.templatePluginDisabled');
+    if (plugin?.status === 'incompatible') return tr('workspaceTree.templateIncompatible');
+    if (plugin?.status === 'missing-required-capability') return tr('workspaceTree.templateCapabilityUnavailable');
+    if (plugin?.status === 'failed') return tr('workspaceTree.templateLoadFailed');
+    if (plugin?.status && plugin.status !== 'loaded' && plugin.status !== 'degraded') return tr('workspaceTree.templateNotReady');
+    return '';
+  }
+  function toggleWorkspaceTool(pluginId) {
+    selectedWorkspaceTools = selectedWorkspaceTools.includes(pluginId)
+      ? selectedWorkspaceTools.filter((item) => item !== pluginId)
+      : [...selectedWorkspaceTools, pluginId];
+  }
+  function resultOrError(response, fallbackValue) {
+    if (Array.isArray(response) && typeof response[1] === 'string') return [response[0] || fallbackValue, response[1] || ''];
+    return typeof response === 'string' ? [fallbackValue, response] : [response || fallbackValue, ''];
+  }
   function openTrash(kind, id, name) { modal = { type: 'trash', kind, id, name }; formBusy = false; }
   function openEditFolder(id, name) {
     modal = { type: 'edit-folder', id, origName: name };
@@ -310,6 +353,30 @@
     };
     modal = null;
     await loadTree();
+  }
+  async function doEditWorkspace() {
+    const n = formName.trim();
+    if (!n) { formError = tr('workspaceTree.nameRequired'); return; }
+    const workspaceID = modal.id;
+    const originalName = modal.origName || '';
+    formBusy = true;
+    let renamed = false;
+    if (n !== originalName) {
+      const renameError = await App.RenameWorkspaceV2(workspaceID, n);
+      if (renameError) { formError = renameError; formBusy = false; return; }
+      renamed = true;
+    }
+    const toolsError = await App.UpdateWorkspaceV2Tools(workspaceID, selectedWorkspaceTools);
+    if (toolsError) {
+      if (renamed) await App.RenameWorkspaceV2(workspaceID, originalName).catch(() => {});
+      formError = tr('workspaceTree.editDealSaveError');
+      formBusy = false;
+      return;
+    }
+    modal = null;
+    await loadTree();
+    window.dispatchEvent(new CustomEvent('verstak:workspace-tools-changed', { detail: { workspaceId: workspaceID } }));
+    if (activeWid === workspaceID) await selectWorkspace(workspaceID);
   }
   async function doMove() { formBusy = true; let err = modal.kind === 'folder' ? await App.MoveFolderV2(modal.id, formParentId || '') : await App.MoveWorkspaceV2(modal.id, formParentId || ''); if (err) { formError = err; formBusy = false; return; } modal = null; await loadTree(); }
   async function doTrash() { formBusy = true; if (modal.kind === 'folder') await App.TrashFolderV2(modal.id); else { await App.TrashWorkspaceV2(modal.id); if (activeWid === modal.id) activeWid = ''; } modal = null; await loadTree(); }
@@ -758,6 +825,7 @@
         <button class="vt-menu-item danger vt-ctx-i vt-ctx-d" on:click={() => { const {id: i, name: n} = ctxMenu; closeCtx(); openTrash('folder', i, n); }}>{tr('workspaceTree.trashFolder')}</button>
       {:else}
         <button class="vt-menu-item vt-ctx-i" on:click={() => { const i = ctxMenu.id; closeCtx(); selectWorkspace(i); }}>{tr('workspaceTree.open')}</button>
+        <button class="vt-menu-item vt-ctx-i" on:click={() => { const {id: i, name: n} = ctxMenu; closeCtx(); openEditWorkspace(i, n); }}>{tr('workspaceTree.editDeal')}</button>
         <button class="vt-menu-item vt-ctx-i" on:click={() => { const {id: i, name: n} = ctxMenu; closeCtx(); openRename('workspace', i, n); }}>{tr('workspaceTree.renameDeal')}</button>
         <button class="vt-menu-item danger vt-ctx-i vt-ctx-d" on:click={() => { const {id: i, name: n} = ctxMenu; closeCtx(); openTrash('workspace', i, n); }}>{tr('workspaceTree.trashDeal')}</button>
       {/if}
@@ -840,6 +908,25 @@
   </svelte:fragment>
 </Modal>
 
+<Modal title={tr('workspaceTree.editDeal')} show={modal?.type === 'edit-workspace'} on:close={closeModal} wide data-workspace-edit-modal>
+  <label class="vt-field"><span>{tr('workspaceTree.name')}</span><input class="vt-input" data-workspace-edit-name type="text" bind:value={formName} disabled={formBusy} on:keydown={(e) => e.key === 'Enter' && doEditWorkspace()} /></label>
+  <div class="wt-edit-tools" data-workspace-edit-tools>
+    <span class="wt-edit-tools-label">{tr('workspaceTree.tools')}</span>
+    <div class="wt-edit-tool-grid">
+      {#each editWorkspacePlugins as plugin (plugin.manifest.id)}
+        {@const pluginId = plugin.manifest.id}
+        {@const status = workspacePluginStatus(plugin)}
+        <button type="button" class="wt-edit-tool" class:selected={selectedWorkspaceTools.includes(pluginId)} aria-pressed={selectedWorkspaceTools.includes(pluginId)} on:click={() => toggleWorkspaceTool(pluginId)} title={pluginId} data-workspace-edit-tool={pluginId}>
+          <span>{workspacePluginName(plugin)}</span>
+          <small>{status || pluginId}</small>
+        </button>
+      {/each}
+    </div>
+  </div>
+  {#if formError}<p class="vt-inline-alert error vt-ferr" data-workspace-edit-error>{formError}</p>{/if}
+  <svelte:fragment slot="actions"><button class="vt-button secondary vt-btn" on:click={closeModal} disabled={formBusy}>{tr('common.cancel')}</button><button class="vt-button primary vt-btn-p" on:click={doEditWorkspace} disabled={formBusy}>{tr('common.save')}</button></svelte:fragment>
+</Modal>
+
 <Modal title={tr('workspaceTree.rename')} show={modal?.type === 'rename'} on:close={closeModal}>
   <label class="vt-field"><span>{tr('workspaceTree.newName')}</span><input class="vt-input wt-rename" type="text" bind:value={formName} disabled={formBusy} on:keydown={(e) => e.key === 'Enter' && doRename()} /></label>
   {#if formError}<p class="vt-inline-alert error vt-ferr">{formError}</p>{/if}
@@ -873,6 +960,13 @@
   .wt-list { padding: 0.2rem 1.2rem 0.2rem 0.4rem; position: relative; }
   .wt-status { padding: 0.5rem; font-size: 0.78rem; color: var(--vt-color-text-muted); }
   .wt-error { display: grid; gap: var(--vt-space-2); justify-items: start; color: var(--vt-color-danger); }
+  .wt-edit-tools { display: grid; gap: var(--vt-space-2); }
+  .wt-edit-tools-label { color: var(--vt-color-text-muted); font-size: 0.75rem; font-weight: 600; }
+  .wt-edit-tool-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: var(--vt-space-2); max-height: 50vh; overflow: auto; }
+  .wt-edit-tool { display: grid; gap: 0.18rem; padding: 0.65rem 0.75rem; border: 1px solid var(--vt-color-border); border-radius: var(--vt-radius-sm); background: var(--vt-color-surface); color: var(--vt-color-text); text-align: left; cursor: pointer; }
+  .wt-edit-tool:hover { border-color: var(--vt-color-border-strong); }
+  .wt-edit-tool.selected { border-color: var(--vt-color-accent); background: var(--vt-color-accent-soft); }
+  .wt-edit-tool small { color: var(--vt-color-text-muted); font-size: 0.68rem; overflow-wrap: anywhere; }
 
   .wt-notice {
     display: flex; align-items: flex-start; gap: var(--vt-space-2);

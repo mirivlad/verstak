@@ -1559,7 +1559,7 @@ function cloneJson(value) {
       });
       workspaceTree.nodes = workspaceTree.nodes.map(function (n) {
         if (n.id !== oldNorm.path) return n;
-        return makeWorkspaceNode(newNorm.path, n.order);
+        return Object.assign({}, n, { id: newNorm.path, name: newNorm.path, rootPath: newNorm.path, title: newNorm.path });
       });
       if (workspaceMetadata[oldNorm.path]) {
         workspaceMetadata[newNorm.path] = Object.assign({}, workspaceMetadata[oldNorm.path], { workspaceName: newNorm.path });
@@ -1585,6 +1585,12 @@ function cloneJson(value) {
       if (norm.error) return Promise.resolve(norm.error);
       if (!vaultFiles[norm.path]) return Promise.resolve('not-found: ' + norm.path);
       return Promise.resolve(cloneJson(workspaceMetadata[norm.path] || genericWorkspaceMetadata(norm.path)));
+    },
+    GetWorkspaceMetadataByUUID: function (workspaceID) {
+      var node = findWorkspaceNodeV2(workspaceID);
+      if (!node) return Promise.resolve('workspace not found: ' + workspaceID);
+      var rootPath = node.path || node.rootPath || node.name || '';
+      return Promise.resolve(cloneJson(workspaceMetadata[rootPath] || genericWorkspaceMetadata(rootPath)));
     },
     UpdateWorkspaceMetadata: function (name, patch) {
       var norm = normalizeVaultPath(name, false);
