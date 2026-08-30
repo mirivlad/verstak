@@ -764,6 +764,20 @@ export function createPluginAPI(pluginId) {
           return App.PluginListWorkspaces(pluginId);
         });
       },
+      create: function(parentFolderId, name, recipe) {
+        assertActive('workspaces.create');
+        parentFolderId = String(parentFolderId || '').trim();
+        name = String(name || '').trim();
+        if (!name) {
+          return Promise.reject(new Error('workspaces.create requires a Deal name'));
+        }
+        if (!recipe || typeof recipe !== 'object' || Array.isArray(recipe)) {
+          return Promise.reject(new Error('workspaces.create requires a recipe snapshot'));
+        }
+        return callBackend(pluginId, 'workspaces.create', function() {
+          return App.PluginCreateWorkspace(pluginId, parentFolderId, name, recipe);
+        });
+      },
       readToolConfig: function(workspaceId) {
         assertActive('workspaces.readToolConfig');
         workspaceId = String(workspaceId || '').trim();

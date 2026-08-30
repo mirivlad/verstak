@@ -3550,6 +3550,48 @@ func (a *App) PluginListWorkspaces(pluginID string) ([]PluginWorkspaceDTO, strin
 	return rows, ""
 }
 
+// PluginCreateWorkspace creates a Deal from a complete plugin-owned recipe.
+// The recipe's template identity is retained only as provenance in canonical
+// Deal metadata; Core neither resolves nor interprets template definitions.
+func (a *App) PluginCreateWorkspace(pluginID, parentFolderID, name string, recipe workspacetree.DealRecipeSnapshot) (map[string]interface{}, string) {
+	if _, err := a.requirePluginAccess(pluginID, "workspaces.create"); err != nil {
+		return nil, err.Error()
+	}
+	if a.treeV2 == nil {
+		return nil, "workspace tree not initialized"
+	}
+	if err := a.validateWorkspaceTools(recipe.WorkspaceTools); err != nil {
+		return nil, err.Error()
+	}
+	ws, err := a.treeV2.CreateWorkspaceFromRecipe(parentFolderID, name, recipe, a.refreshWorkspaceBaseline)
+	if err != nil {
+		return nil, err.Error()
+	}
+	if err := a.recordWorkspaceSyncOp(syncsvc.OpCreate, ws.ID, ws.RootPath, "", ws.Name); err != nil {
+		return nil, err.Error()
+	}
+	a.publishWorkspaceLifecycleEvent(workspaceCreatedEventName, map[string]interface{}{
+		"operation": "create", "workspaceId": ws.ID, "workspaceRootPath": ws.RootPath, "workspaceName": ws.Name,
+		"templateId": recipe.Provenance.TemplateID,
+	})
+	return map[string]interface{}{"workspaceId": ws.ID, "name": ws.Name}, ""
+}
+
+func (a *App) validateWorkspaceTools(workspaceTools []string) error {
+	eligible := make(map[string]bool)
+	for _, installed := range a.plugins {
+		if installed.Manifest.Contributes != nil && len(installed.Manifest.Contributes.WorkspaceItems) > 0 {
+			eligible[installed.Manifest.ID] = true
+		}
+	}
+	for _, toolID := range workspaceTools {
+		if !eligible[toolID] {
+			return fmt.Errorf("workspace tool is not available: %s", toolID)
+		}
+	}
+	return nil
+}
+
 // workspaceHasTool answers the same question the workspace host answers when it
 // decides which tabs a Deal gets, and has to answer it the same way. A Deal
 // made by hand or carried in by an import has no tool list, and the host reads
@@ -3682,16 +3724,8 @@ func (a *App) CreateWorkspaceV2WithTools(parentFolderID, name, templateID string
 	if a.treeV2 == nil {
 		return map[string]interface{}{"error": "not initialized"}
 	}
-	eligible := make(map[string]bool)
-	for _, installed := range a.plugins {
-		if installed.Manifest.Contributes != nil && len(installed.Manifest.Contributes.WorkspaceItems) > 0 {
-			eligible[installed.Manifest.ID] = true
-		}
-	}
-	for _, toolID := range workspaceTools {
-		if !eligible[toolID] {
-			return map[string]interface{}{"error": fmt.Sprintf("workspace tool is not available: %s", toolID)}
-		}
+	if err := a.validateWorkspaceTools(workspaceTools); err != nil {
+		return map[string]interface{}{"error": err.Error()}
 	}
 	ws, err := a.treeV2.CreateWorkspaceWithTools(parentFolderID, name, templateID, workspaceTools, func() error {
 		if a.fileWatcher != nil {
@@ -3720,16 +3754,8 @@ func (a *App) UpdateWorkspaceV2Tools(workspaceID string, workspaceTools []string
 	if a.treeV2 == nil {
 		return "not initialized"
 	}
-	eligible := make(map[string]bool)
-	for _, installed := range a.plugins {
-		if installed.Manifest.Contributes != nil && len(installed.Manifest.Contributes.WorkspaceItems) > 0 {
-			eligible[installed.Manifest.ID] = true
-		}
-	}
-	for _, toolID := range workspaceTools {
-		if !eligible[toolID] {
-			return fmt.Sprintf("workspace tool is not available: %s", toolID)
-		}
+	if err := a.validateWorkspaceTools(workspaceTools); err != nil {
+		return err.Error()
 	}
 	if err := a.treeV2.UpdateWorkspaceTools(workspaceID, workspaceTools, func() error {
 		if a.fileWatcher != nil {

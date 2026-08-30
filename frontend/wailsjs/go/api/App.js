@@ -282,6 +282,10 @@ export function PluginListWorkspaces(arg1) {
   return window['go']['api']['App']['PluginListWorkspaces'](arg1);
 }
 
+export function PluginCreateWorkspace(arg1, arg2, arg3, arg4) {
+  return window['go']['api']['App']['PluginCreateWorkspace'](arg1, arg2, arg3, arg4);
+}
+
 export function PluginReadImportText(arg1, arg2, arg3) {
   return window['go']['api']['App']['PluginReadImportText'](arg1, arg2, arg3);
 }
