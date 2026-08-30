@@ -381,6 +381,26 @@ assertIncludes(
 );
 assertExcludes(overviewSurface, 'today-', 'Overview shell should not retain Today-era internal CSS names');
 assertExcludes(workspaceHost, 'TodaySurface', 'WorkspaceHost should use the final OverviewSurface component name');
+assertExcludes(
+  workspaceHost,
+  'overflow-x: auto',
+  'Deal tool tabs must not rely on a horizontal scrollbar',
+);
+assertIncludes(
+  workspaceHost,
+  'data-workspace-tab-page-next',
+  'Deal tool tabs must expose a right-arrow page control when tools do not fit',
+);
+assertIncludes(
+  workspaceHost,
+  'data-workspace-tab-page-previous',
+  'Deal tool tabs must expose a left-arrow page control after paging forward',
+);
+assertIncludes(
+  workspaceHost,
+  'ResizeObserver',
+  'Deal tool tab pages must be recalculated when the available width changes',
+);
 assertIncludes(
   workspaceHost,
   'findWorkspaceItem(workspaceItemId)',

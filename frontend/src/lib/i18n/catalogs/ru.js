@@ -37,6 +37,8 @@ export default {
   'workspace.overview': 'Обзор',
   'workspace.search': 'Поиск в Деле',
   'workspace.tools': 'Инструменты Дела',
+  'workspace.previousTools': 'Предыдущие инструменты',
+  'workspace.nextTools': 'Другие инструменты',
   'workspace.tool': 'Инструмент Дела',
   'workspace.emptyTools': 'Нет доступных инструментов',
   'workspace.emptyToolsHint': 'Включите плагины с инструментами Дела или откройте Менеджер плагинов в настройках.',

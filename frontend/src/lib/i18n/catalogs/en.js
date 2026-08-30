@@ -37,6 +37,8 @@ export default {
   'workspace.overview': 'Overview',
   'workspace.search': 'Search in this Deal',
   'workspace.tools': 'Deal tools',
+  'workspace.previousTools': 'Previous tools',
+  'workspace.nextTools': 'More tools',
   'workspace.tool': 'Deal tool',
   'workspace.emptyTools': 'No Deal tools available',
   'workspace.emptyToolsHint': 'Enable plugins with Deal tools or open Plugin Manager from settings.',
