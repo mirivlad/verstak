@@ -1,0 +1,88 @@
+package gitservice
+
+import (
+	"os"
+	"os/exec"
+	"path/filepath"
+	"testing"
+
+	"github.com/google/uuid"
+)
+
+func TestServiceClonesManagedCheckoutAndReportsWorkingTreeState(t *testing.T) {
+	vault := t.TempDir()
+	workspaceID := uuid.NewString()
+	writeWorkspaceMarker(t, vault, "Deal", workspaceID)
+	remote := createBareRemote(t)
+
+	service := NewService(vault)
+	checkout, err := service.Clone(CloneRequest{WorkspaceID: workspaceID, WorkspaceRoot: "Deal", RepositoryID: "origin", CheckoutName: "origin", RemoteURL: remote})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if checkout != "Deal/Repositories/origin" {
+		t.Fatalf("checkout = %q", checkout)
+	}
+	if _, err := os.Stat(filepath.Join(vault, "Deal", "Repositories", "origin", ".git")); err != nil {
+		t.Fatalf("clone did not create managed checkout: %v", err)
+	}
+	status, err := service.Status(RepositoryRequest{WorkspaceID: workspaceID, WorkspaceRoot: "Deal", RepositoryID: "origin", CheckoutName: "origin"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if status.State != CheckoutStateCloned || status.Branch != "main" || !status.Clean || len(status.RecentCommits) != 1 {
+		t.Fatalf("initial status = %+v", status)
+	}
+	if err := os.WriteFile(filepath.Join(vault, filepath.FromSlash(checkout), "README.md"), []byte("changed\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(vault, filepath.FromSlash(checkout), "new.txt"), []byte("new\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	status, err = service.Status(RepositoryRequest{WorkspaceID: workspaceID, WorkspaceRoot: "Deal", RepositoryID: "origin", CheckoutName: "origin"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if status.Clean || status.ChangedCount != 1 || status.UntrackedCount != 1 || len(status.ChangedFiles) != 2 {
+		t.Fatalf("dirty status = %+v", status)
+	}
+}
+
+func writeWorkspaceMarker(t *testing.T, vault, root, workspaceID string) {
+	t.Helper()
+	path := filepath.Join(vault, root, ".verstak", "workspace.json")
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	data := []byte(`{"schemaVersion":1,"workspaceId":"` + workspaceID + `"}`)
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func createBareRemote(t *testing.T) string {
+	t.Helper()
+	root := t.TempDir()
+	remote := filepath.Join(root, "remote.git")
+	runTestGit(t, root, "init", "--bare", remote)
+	seed := filepath.Join(root, "seed")
+	runTestGit(t, root, "init", "-b", "main", seed)
+	runTestGit(t, seed, "config", "user.name", "Test User")
+	runTestGit(t, seed, "config", "user.email", "test@example.invalid")
+	if err := os.WriteFile(filepath.Join(seed, "README.md"), []byte("initial\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	runTestGit(t, seed, "add", "README.md")
+	runTestGit(t, seed, "commit", "-m", "initial")
+	runTestGit(t, seed, "remote", "add", "origin", remote)
+	runTestGit(t, seed, "push", "-u", "origin", "main")
+	return remote
+}
+
+func runTestGit(t *testing.T, dir string, args ...string) {
+	t.Helper()
+	command := exec.Command("git", append([]string{"-C", dir}, args...)...)
+	if output, err := command.CombinedOutput(); err != nil {
+		t.Fatalf("git %v: %v\n%s", args, err, output)
+	}
+}
