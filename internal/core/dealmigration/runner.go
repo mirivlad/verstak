@@ -106,6 +106,7 @@ func NewRunner(vaultDir string, options ...Option) *Runner {
 func NewDealOnlyRunner(vaultDir string) *Runner {
 	return NewRunner(vaultDir,
 		WithTransform(NewDealMetadataTransform()),
+		WithTransform(NewJournalDataTransform()),
 		WithTransform(NewProviderDataTransform()),
 		WithTransform(NewProjectMetaTransform()),
 		WithTransform(NewMilestoneDataTransform()),
