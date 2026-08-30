@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -45,6 +46,16 @@ func TestServiceClonesManagedCheckoutAndReportsWorkingTreeState(t *testing.T) {
 	}
 	if status.Clean || status.ChangedCount != 1 || status.UntrackedCount != 1 || len(status.ChangedFiles) != 2 {
 		t.Fatalf("dirty status = %+v", status)
+	}
+}
+
+func TestGitFailureDoesNotExposeTransientCredential(t *testing.T) {
+	_, err := runGitOutput(t.TempDir(), Credential{Username: "git", Value: "token-must-not-leak"}, "status")
+	if err == nil {
+		t.Fatal("Git status outside a repository unexpectedly succeeded")
+	}
+	if strings.Contains(err.Error(), "token-must-not-leak") {
+		t.Fatalf("Git error leaked credential: %v", err)
 	}
 }
 

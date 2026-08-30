@@ -22,6 +22,7 @@ type CloneRequest struct {
 	CheckoutName  string
 	RemoteURL     string
 	Branch        string
+	Credential    Credential
 }
 
 type RepositoryRequest struct {
@@ -29,6 +30,14 @@ type RepositoryRequest struct {
 	WorkspaceRoot string
 	RepositoryID  string
 	CheckoutName  string
+	Credential    Credential
+}
+
+// Credential is transient process input resolved by Core. It is never stored
+// in checkout metadata or returned from this package.
+type Credential struct {
+	Username string
+	Value    string
 }
 
 type RecentCommit struct {
@@ -76,7 +85,7 @@ func (s *Service) Clone(request CloneRequest) (string, error) {
 	if branch == "" {
 		branch = "main"
 	}
-	if err := runGit(filepath.Dir(path), "clone", "--branch", branch, "--", request.RemoteURL, path); err != nil {
+	if err := runGitWithCredential(filepath.Dir(path), request.Credential, "clone", "--branch", branch, "--", request.RemoteURL, path); err != nil {
 		return "", err
 	}
 	return checkout, nil
@@ -92,7 +101,7 @@ func (s *Service) Status(request RepositoryRequest) (Status, error) {
 	} else if err != nil {
 		return Status{}, err
 	}
-	output, err := runGitOutput(path, "status", "--porcelain=v2", "--branch")
+	output, err := runGitOutput(path, request.Credential, "status", "--porcelain=v2", "--branch")
 	if err != nil {
 		return Status{}, err
 	}
@@ -120,7 +129,7 @@ func (s *Service) run(request RepositoryRequest, args ...string) error {
 	} else if err != nil {
 		return err
 	}
-	return runGit(path, args...)
+	return runGitWithCredential(path, request.Credential, args...)
 }
 
 func (s *Service) checkoutPath(request RepositoryRequest) (string, error) {
@@ -132,15 +141,26 @@ func (s *Service) checkoutPath(request RepositoryRequest) (string, error) {
 }
 
 func runGit(dir string, args ...string) error {
-	_, err := runGitOutput(dir, args...)
+	_, err := runGitOutput(dir, Credential{}, args...)
 	return err
 }
 
-func runGitOutput(dir string, args ...string) (string, error) {
+func runGitWithCredential(dir string, credential Credential, args ...string) error {
+	_, err := runGitOutput(dir, credential, args...)
+	return err
+}
+
+func runGitOutput(dir string, credential Credential, args ...string) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 	command := exec.CommandContext(ctx, "git", append([]string{"-C", dir}, args...)...)
 	command.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
+	cleanup, env, err := askPassEnvironment(credential)
+	if err != nil {
+		return "", err
+	}
+	defer cleanup()
+	command.Env = append(command.Env, env...)
 	output, err := command.CombinedOutput()
 	if ctx.Err() != nil {
 		return "", fmt.Errorf("Git operation timed out")
@@ -179,7 +199,7 @@ func parseStatus(output string) Status {
 }
 
 func recentCommits(path string) ([]RecentCommit, error) {
-	output, err := runGitOutput(path, "log", "-n", "10", "--format=%H%x1f%h%x1f%s%x1f%an%x1f%aI%x1e")
+	output, err := runGitOutput(path, Credential{}, "log", "-n", "10", "--format=%H%x1f%h%x1f%s%x1f%an%x1f%aI%x1e")
 	if err != nil {
 		return nil, err
 	}
@@ -192,4 +212,22 @@ func recentCommits(path string) ([]RecentCommit, error) {
 		commits = append(commits, RecentCommit{ID: fields[0], ShortID: fields[1], Subject: fields[2], Author: fields[3], Committed: fields[4]})
 	}
 	return commits, nil
+}
+
+func askPassEnvironment(credential Credential) (func(), []string, error) {
+	if credential.Value == "" {
+		return func() {}, nil, nil
+	}
+	dir, err := os.MkdirTemp("", "verstak-git-askpass-")
+	if err != nil {
+		return nil, nil, err
+	}
+	cleanup := func() { _ = os.RemoveAll(dir) }
+	script := filepath.Join(dir, "askpass")
+	contents := "#!/bin/sh\ncase \"$1\" in *Username*) printf '%s\\n' \"$VERSTAK_GIT_USERNAME\" ;; *) printf '%s\\n' \"$VERSTAK_GIT_PASSWORD\" ;; esac\n"
+	if err := os.WriteFile(script, []byte(contents), 0o700); err != nil {
+		cleanup()
+		return nil, nil, err
+	}
+	return cleanup, []string{"GIT_ASKPASS=" + script, "GIT_USERNAME=git", "VERSTAK_GIT_USERNAME=" + credential.Username, "VERSTAK_GIT_PASSWORD=" + credential.Value}, nil
 }
