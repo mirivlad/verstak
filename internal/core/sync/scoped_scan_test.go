@@ -347,7 +347,7 @@ func TestScanScopeRefusesPathsItCannotScopeBySafely(t *testing.T) {
 	}
 	for _, testCase := range cases {
 		t.Run(testCase.name, func(t *testing.T) {
-			if got := newScanScope(testCase.paths); !reflect.DeepEqual(got, testCase.want) {
+			if got := newScanScope(t.TempDir(), testCase.paths); !reflect.DeepEqual(got, testCase.want) {
 				t.Fatalf("newScanScope(%v) = %v, want %v", testCase.paths, got, testCase.want)
 			}
 		})

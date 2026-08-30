@@ -18,6 +18,7 @@ import (
 
 	"github.com/google/uuid"
 	corefiles "github.com/verstak/verstak-desktop/internal/core/files"
+	"github.com/verstak/verstak-desktop/internal/core/gitservice"
 	"github.com/verstak/verstak-desktop/internal/core/workspacetree"
 )
 
@@ -153,7 +154,7 @@ func (s *Service) ScanAndRecord() ([]string, error) {
 // no previous snapshot to carry forward, this falls back to a full scan rather
 // than guessing.
 func (s *Service) ScanPathsAndRecord(paths []string) ([]string, error) {
-	scope := newScanScope(paths)
+	scope := newScanScope(s.vaultRoot, paths)
 	if len(scope) == 0 {
 		return s.ScanAndRecord()
 	}
@@ -392,7 +393,7 @@ type scanScope []string
 // newScanScope normalises caller-supplied paths and returns an empty scope for
 // anything it cannot scope by safely, which the callers read as "scan
 // everything". Being conservative here is cheap; being wrong is not.
-func newScanScope(paths []string) scanScope {
+func newScanScope(vaultRoot string, paths []string) scanScope {
 	var scope scanScope
 	for _, raw := range paths {
 		// A leading slash means the vault root here, as it does everywhere else
@@ -405,7 +406,7 @@ func newScanScope(paths []string) scanScope {
 		if rel == "." || rel == ".." || strings.HasPrefix(rel, "../") || filepath.IsAbs(filepath.FromSlash(rel)) {
 			return nil
 		}
-		if excludedFromSync(rel) {
+		if excludedFromSync(vaultRoot, rel) {
 			// Never part of the snapshot, so it contributes no change. Drop it
 			// rather than widening the scan.
 			continue
@@ -524,7 +525,7 @@ func scanVault(root string, previous Snapshot, scope scanScope) (scannedVault, [
 		if rel == "." {
 			return nil
 		}
-		if excludedFromSync(rel) {
+		if excludedFromSync(root, rel) {
 			if entry.IsDir() {
 				return filepath.SkipDir
 			}
@@ -604,7 +605,7 @@ func scanVault(root string, previous Snapshot, scope scanScope) (scannedVault, [
 	for _, rel := range scope {
 		for parent := pathParent(rel); parent != ""; parent = pathParent(parent) {
 			info, err := os.Stat(filepath.Join(root, filepath.FromSlash(parent)))
-			if err != nil || !info.IsDir() || excludedFromSync(parent) {
+			if err != nil || !info.IsDir() || excludedFromSync(root, parent) {
 				break
 			}
 			result.Entries[parent] = SnapshotEntry{
@@ -693,7 +694,7 @@ func scanTreeSnapshots(root string, preferredWS map[string]WorkspaceSnapshot, pr
 		}
 		rel, _ := filepath.Rel(root, path)
 		rel = filepath.ToSlash(rel)
-		if excludedFromSync(rel) {
+		if excludedFromSync(root, rel) {
 			return filepath.SkipDir
 		}
 
@@ -801,7 +802,10 @@ func readWorkspaceMetadataSnapshot(root, name string) (json.RawMessage, error) {
 	return json.RawMessage(append([]byte(nil), data...)), nil
 }
 
-func excludedFromSync(rel string) bool {
+func excludedFromSync(vaultRoot, rel string) bool {
+	if gitservice.IsManagedCheckoutPath(vaultRoot, rel) {
+		return true
+	}
 	rel = filepath.ToSlash(rel)
 	for _, segment := range strings.Split(rel, "/") {
 		if strings.EqualFold(segment, ".verstak") || strings.EqualFold(segment, ".git") {

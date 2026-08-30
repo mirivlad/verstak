@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 	corefiles "github.com/verstak/verstak-desktop/internal/core/files"
+	"github.com/verstak/verstak-desktop/internal/core/gitservice"
 	"github.com/verstak/verstak-desktop/internal/core/workspacetree"
 )
 
@@ -53,13 +54,34 @@ func TestScanAndRecordCapturesOnlyExactTreeOrderMetadata(t *testing.T) {
 
 func TestScanAndRecordExcludesGitCheckoutTrees(t *testing.T) {
 	root := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(root, "Deal", "checkout", ".git", "objects"), 0o755); err != nil {
+	workspaceID := uuid.NewString()
+	workspaceRoot := filepath.Join(root, "Deal")
+	if err := os.MkdirAll(filepath.Join(workspaceRoot, ".verstak"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(root, "Deal", "checkout", ".git", "objects", "pack"), []byte("local git state"), 0o600); err != nil {
+	marker, err := json.Marshal(workspacetree.WorkspaceMarker{SchemaVersion: 1, WorkspaceID: workspaceID})
+	if err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(root, "Deal", "checkout", "README.md"), []byte("sync this"), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(workspaceRoot, ".verstak", "workspace.json"), marker, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := gitservice.RegisterCheckout(root, gitservice.CheckoutRegistration{WorkspaceID: workspaceID, WorkspaceRoot: "Deal", RepositoryID: "acme", CheckoutName: "acme"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(root, "Deal", "Repositories", "acme", ".git", "objects"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "Deal", "Repositories", "acme", ".git", "objects", "pack"), []byte("local git state"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "Deal", "Repositories", "acme", "README.md"), []byte("device local source"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(root, "Deal", "Notes", "Repositories"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "Deal", "Notes", "Repositories", "README.md"), []byte("ordinary user directory"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	service := NewService(root, "device-a")
@@ -70,12 +92,12 @@ func TestScanAndRecordExcludesGitCheckoutTrees(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, ok := snapshot.Entries["Deal/checkout/README.md"]; !ok {
-		t.Fatalf("ordinary checkout-adjacent file missing: %#v", snapshot.Entries)
+	if _, ok := snapshot.Entries["Deal/Notes/Repositories/README.md"]; !ok {
+		t.Fatalf("ordinary user Repositories directory was excluded: %#v", snapshot.Entries)
 	}
 	for path := range snapshot.Entries {
-		if strings.Contains(path, "/.git/") || strings.HasPrefix(path, ".git/") {
-			t.Fatalf("Git checkout state leaked into snapshot: %s", path)
+		if strings.HasPrefix(path, "Deal/Repositories/") {
+			t.Fatalf("managed Git checkout leaked into snapshot: %s", path)
 		}
 	}
 }
