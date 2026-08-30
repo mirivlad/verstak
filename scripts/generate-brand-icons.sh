@@ -53,9 +53,16 @@ render_ico() {
 render_png 256 "$ROOT/internal/shell/tray/verstak.png"
 render_ico "$ROOT/internal/shell/tray/verstak.ico" 16 20 24 32 48 256
 
+# XFCE and other freedesktop panels often resolve the window icon through the
+# raster hicolor hierarchy. Keep these generated from the same canonical SVG
+# as the tray and Windows resources.
+for size in 16 24 32 48 64 128 256; do
+  render_png "$size" "$ROOT/build/linux-icons/hicolor/${size}x${size}/apps/verstak.png"
+done
+
 # Wails consumes this PNG while it prepares the Windows executable resources.
 # Both files are generated build inputs and therefore deliberately ignored by Git.
 render_png 1024 "$ROOT/build/appicon.png"
 render_ico "$ROOT/build/windows/icon.ico" 16 32 48 64 128 256
 
-echo "generated Verstak tray and application icons from $SOURCE using $MAGICK"
+echo "generated Verstak tray, Linux and application icons from $SOURCE using $MAGICK"

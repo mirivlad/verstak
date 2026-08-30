@@ -11,6 +11,7 @@ import (
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"
 	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
+	"github.com/wailsapp/wails/v2/pkg/options/linux"
 
 	"github.com/verstak/verstak-desktop/internal/api"
 	"github.com/verstak/verstak-desktop/internal/core/appsettings"
@@ -264,7 +265,11 @@ func main() {
 		MinWidth:         800,
 		MinHeight:        600,
 		WindowStartState: options.Normal,
-		OnStartup:        app.Startup,
+		Linux: &linux.Options{
+			Icon:        tray.DefaultIcon(),
+			ProgramName: "verstak",
+		},
+		OnStartup: app.Startup,
 		OnDomReady: func(ctx context.Context) {
 			app.DomReady(ctx)
 			if err := trayController.Start(tray.Actions{Show: app.ShowWindow, Quit: app.Quit}); err != nil {

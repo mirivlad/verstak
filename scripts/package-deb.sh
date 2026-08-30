@@ -14,6 +14,8 @@ if ! command -v dpkg-deb >/dev/null; then
   exit 1
 fi
 
+"$ROOT/scripts/generate-brand-icons.sh"
+
 PACKAGE_VERSION="${VERSION#v}"
 if [[ ! "$PACKAGE_VERSION" =~ ^[0-9] ]]; then
   echo "Debian package version must start with a digit after an optional v prefix: $VERSION" >&2
@@ -39,6 +41,7 @@ install -m 755 "$BUNDLE/verstak-desktop" "$STAGING/opt/verstak/verstak-desktop"
 install -m 644 "$BUNDLE/README.md" "$BUNDLE/LICENSE" "$STAGING/usr/share/doc/verstak/"
 install -m 644 "$ROOT/packaging/linux/verstak.desktop" "$STAGING/usr/share/applications/verstak.desktop"
 install -m 644 "$ROOT/packaging/linux/verstak.svg" "$STAGING/usr/share/icons/hicolor/scalable/apps/verstak.svg"
+cp -R "$ROOT/build/linux-icons/hicolor/." "$STAGING/usr/share/icons/hicolor/"
 cp -R "$BUNDLE/plugins" "$STAGING/opt/verstak/plugins"
 
 mkdir -p "$RELEASE_ROOT"
