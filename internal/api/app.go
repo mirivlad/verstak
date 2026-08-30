@@ -2960,19 +2960,6 @@ func (a *App) ListWorkspaces() ([]workspace.Workspace, string) {
 	return workspaces, ""
 }
 
-// ListWorkspaceTemplates returns selectable built-in workspace templates.
-func (a *App) ListWorkspaceTemplates() ([]workspace.WorkspaceTemplate, string) {
-	definitions := workspacetree.ListDealTemplates()
-	result := make([]workspace.WorkspaceTemplate, 0, len(definitions))
-	for _, definition := range definitions {
-		result = append(result, workspace.WorkspaceTemplate{
-			ID: definition.ID, Name: definition.Name, Description: definition.Description,
-			Version: definition.Version, WorkspaceTools: definition.WorkspaceTools,
-		})
-	}
-	return result, ""
-}
-
 // ListWorkspaceIdentities returns durable workspace identities for relation-aware plugins.
 func (a *App) ListWorkspaceIdentities() ([]workspace.WorkspaceIdentity, string) {
 	if a.treeV2 == nil {

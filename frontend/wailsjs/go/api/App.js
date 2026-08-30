@@ -210,10 +210,6 @@ export function ListWorkspaceIdentities() {
   return window['go']['api']['App']['ListWorkspaceIdentities']();
 }
 
-export function ListWorkspaceTemplates() {
-  return window['go']['api']['App']['ListWorkspaceTemplates']();
-}
-
 export function ListWorkspaces() {
   return window['go']['api']['App']['ListWorkspaces']();
 }

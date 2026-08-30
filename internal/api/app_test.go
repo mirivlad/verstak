@@ -4059,11 +4059,8 @@ func TestWorkspaceAPIUsesTopLevelFoldersAndMetadataSnapshot(t *testing.T) {
 	if ws.RootPath != "Project" {
 		t.Fatalf("workspace = %+v, want rootPath Project", ws)
 	}
-	if _, err := os.Stat(filepath.Join(vaultDir, "Project", "Notes")); err != nil {
-		t.Fatalf("template notes folder missing: %v", err)
-	}
-	if _, err := os.Stat(filepath.Join(vaultDir, "Project", "Notes", "Overview.md")); !os.IsNotExist(err) {
-		t.Fatalf("template should not create overview file, stat err=%v", err)
+	if _, err := os.Stat(filepath.Join(vaultDir, "Project", "Notes")); !os.IsNotExist(err) {
+		t.Fatalf("legacy adapter created a template folder: %v", err)
 	}
 
 	meta, errStr := app.GetWorkspaceMetadata("Project")
@@ -4090,21 +4087,6 @@ func TestWorkspaceAPIUsesTopLevelFoldersAndMetadataSnapshot(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(vaultDir, "Renamed")); !os.IsNotExist(err) {
 		t.Fatalf("workspace should be moved out of top level, stat err=%v", err)
-	}
-}
-
-func TestWorkspaceAPIListsSelectableTemplates(t *testing.T) {
-	app, _ := newFilesTestApp(t, []string{"files.read"})
-
-	templates, errStr := app.ListWorkspaceTemplates()
-	if errStr != "" {
-		t.Fatalf("ListWorkspaceTemplates: %s", errStr)
-	}
-	if len(templates) != 5 {
-		t.Fatalf("templates = %+v, want 5 selectable templates", templates)
-	}
-	if templates[0].ID != "default" || templates[1].ID != "project" || templates[4].ID != "minimal" {
-		t.Fatalf("template order = %+v", templates)
 	}
 }
 

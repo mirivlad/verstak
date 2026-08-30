@@ -57,7 +57,7 @@
     // The empty Deal view offers a Create button; the dialog lives here.
     window.addEventListener('verstak:create-workspace-requested', handleCreateWorkspaceRequest);
     window.addEventListener('keydown', handleDragKeyDown);
-    await loadTree(); await loadTemplates();
+    await loadTree();
     if (typeof ResizeObserver !== 'undefined' && treeListElement) {
       scrollObserver = new ResizeObserver(measureThumb);
       scrollObserver.observe(treeListElement);
@@ -125,26 +125,6 @@
       .map(([key]) => key.slice(7));
     pendingExpandedWrite = App.UpdateAppSettings({ expandedFolderIds: ids }).catch(() => {});
     return pendingExpandedWrite;
-  }
-
-  async function loadTemplates() {
-    try {
-      const [tlist, plugins] = await Promise.all([
-        App.ListWorkspaceTemplates(),
-        App.GetPlugins().catch(() => []),
-      ]);
-      await Promise.all((plugins || []).map((plugin) => (
-        i18n.loadPlugin(plugin.manifest?.id, plugin.manifest?.localization).catch(() => {})
-      )));
-      templates = Array.isArray(tlist) ? tlist : [];
-      templates = [...templates, {
-        id: 'custom',
-        name: tr('workspaceTree.customTemplateName'),
-        description: tr('workspaceTree.customTemplateDescription'),
-        workspaceTools: [],
-      }];
-      templatePlugins = (plugins || []).map((plugin) => i18n.localizePlugin(plugin));
-    } catch { templates = []; templatePlugins = []; }
   }
 
   function ensureExpandedToWorkspace(wid) {
@@ -219,10 +199,16 @@
   // ── Create/Rename/Move/Trash modals ────────────────────────────────────────
   function openCreateFolder(pid) { modal = { type: 'create-folder', parentId: pid }; formName = ''; formParentId = pid || ''; formError = ''; formBusy = false; folderIconId = ''; folderColor = ''; folderEditorView = 'form'; }
   function handleCreateWorkspaceRequest() {
-    openCreateWorkspace('');
+    openTemplates();
   }
 
-  async function openCreateWorkspace(pid) { await loadTemplates(); modal = { type: 'create-workspace', parentId: pid }; formName = ''; formParentId = pid || ''; formTemplateId = templates[0]?.id || 'default'; resetTemplateTools(); formError = ''; formBusy = false; }
+  function openTemplates() {
+    window.dispatchEvent(new CustomEvent('verstak:open-view', {
+      detail: { viewId: 'verstak.templates.view', pluginId: 'verstak.templates' }
+    }));
+  }
+
+  async function openCreateWorkspace(pid) { openTemplates(); }
   function openRename(kind, id, name) { modal = { type: 'rename', kind, id }; formName = name; formError = ''; formBusy = false; }
   async function openEditWorkspace(id, name) {
     await loadTemplates();
@@ -789,7 +775,7 @@
   <div class="wt-header">
     <span class="wt-title">{tr('workspaceTree.title')}</span>
     <div class="wt-header-actions">
-      <button class="ti-btn" on:click={() => openCreateWorkspace('')} title={tr('workspaceTree.newDeal')} aria-label={tr('workspaceTree.newDeal')}><Icon name="space" size={14} /></button>
+      <button class="ti-btn" on:click={openTemplates} title={tr('workspaceTree.newDeal')} aria-label={tr('workspaceTree.newDeal')}><Icon name="space" size={14} /></button>
       <button class="ti-btn" on:click={() => openCreateFolder('')} title={tr('workspaceTree.newFolder')} aria-label={tr('workspaceTree.newFolder')}><Icon name="folder" size={14} /></button>
     </div>
   </div>
@@ -853,7 +839,7 @@
           on:dragend={resetDragState}
           on:dragcancel={resetDragState}
           on:createFolder={(e) => openCreateFolder(e.detail)}
-          on:createWorkspace={(e) => openCreateWorkspace(e.detail)}
+          on:createWorkspace={openTemplates}
         />
       {/each}
     {/if}
@@ -891,7 +877,7 @@
   <OverlayHost x={ctxMenu.x} y={ctxMenu.y}>
     <div class="vt-menu vt-ctx" on:click|stopPropagation on:mousedown|stopPropagation on:keydown={(event) => event.key === 'Escape' && closeCtx()} role="menu" tabindex="-1">
       {#if ctxMenu.kind === 'folder'}
-        <button class="vt-menu-item vt-ctx-i" on:click={() => { const i = ctxMenu.id; closeCtx(); openCreateWorkspace(i); }}>{tr('workspaceTree.newDeal')}</button>
+        <button class="vt-menu-item vt-ctx-i" on:click={() => { closeCtx(); openTemplates(); }}>{tr('workspaceTree.newDeal')}</button>
         <button class="vt-menu-item vt-ctx-i" on:click={() => { const i = ctxMenu.id; closeCtx(); openCreateFolder(i); }}>{tr('workspaceTree.newFolder')}</button>
         <div class="vt-menu-separator vt-ctx-s" />
         <button class="vt-menu-item vt-ctx-i" on:click={() => { const {id: i, name: n} = ctxMenu; closeCtx(); openEditFolder(i, n); }}>{tr('workspaceTree.editFolder')}</button>

@@ -117,8 +117,6 @@ export function ListVaultTrash(arg1:string):Promise<Array<files.TrashEntry>|stri
 
 export function ListWorkspaceIdentities():Promise<Array<workspace.WorkspaceIdentity>|string>;
 
-export function ListWorkspaceTemplates():Promise<Array<workspace.WorkspaceTemplate>|string>;
-
 export function ListWorkspaces():Promise<Array<workspace.Workspace>|string>;
 
 export function MoveFolderV2(arg1:string,arg2:string):Promise<string>;
