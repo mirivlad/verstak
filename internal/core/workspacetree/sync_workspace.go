@@ -55,9 +55,6 @@ func (s *Service) CreateWorkspaceFromSync(rootPath, workspaceID string, metadata
 	if err := WriteWorkspaceMarker(stagingAbs, workspaceID); err != nil {
 		return ScannedWorkspace{}, err
 	}
-	if err := applyWorkspaceToolFolders(stagingAbs, metadata.WorkspaceTools); err != nil {
-		return ScannedWorkspace{}, err
-	}
 	metadata.WorkspaceID = workspaceID
 	metadata.WorkspaceName = filepath.Base(filepath.FromSlash(cleaned))
 	metadata.UpdatedAt = ""

@@ -102,8 +102,8 @@ func TestCreateWorkspaceWithToolsPersistsExactSelection(t *testing.T) {
 	if _, ok := raw["folders"]; ok {
 		t.Fatalf("legacy folders persisted in v2 metadata: %s", data)
 	}
-	if _, err := os.Stat(filepath.Join(vault, "AdminFiles", "Secrets")); err != nil {
-		t.Fatal("selected Secrets tool folder missing:", err)
+	if _, err := os.Stat(filepath.Join(vault, "AdminFiles", "Secrets")); !os.IsNotExist(err) {
+		t.Fatalf("Core created a plugin-owned Secrets folder: %v", err)
 	}
 }
 
@@ -125,6 +125,9 @@ func TestUpdateWorkspaceToolsPersistsExactSelectionWithoutDeletingProviderData(t
 		t.Fatal(err)
 	}
 	secretFile := filepath.Join(vault, "Editable", "Secrets", "keep.txt")
+	if err := os.MkdirAll(filepath.Dir(secretFile), 0o755); err != nil {
+		t.Fatal(err)
+	}
 	if err := os.WriteFile(secretFile, []byte("keep"), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -150,8 +153,8 @@ func TestUpdateWorkspaceToolsPersistsExactSelectionWithoutDeletingProviderData(t
 	if metadata.CreatedFromTemplate == nil || metadata.CreatedFromTemplate.TemplateID != "admin" {
 		t.Fatalf("template snapshot was not preserved: %#v", metadata.CreatedFromTemplate)
 	}
-	if _, err := os.Stat(filepath.Join(vault, "Editable", "Notes")); err != nil {
-		t.Fatal("newly enabled Notes folder missing:", err)
+	if _, err := os.Stat(filepath.Join(vault, "Editable", "Notes")); !os.IsNotExist(err) {
+		t.Fatalf("Core created a plugin-owned Notes folder: %v", err)
 	}
 	if content, err := os.ReadFile(secretFile); err != nil || string(content) != "keep" {
 		t.Fatalf("disabled tool data was removed: content=%q err=%v", string(content), err)

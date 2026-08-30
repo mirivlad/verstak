@@ -23,11 +23,6 @@ func TestPrepareImportedWorkspace(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(dir, ".verstak", "workspace.json")); err != nil {
 		t.Fatalf("workspace marker: %v", err)
 	}
-	for _, name := range []string{"Notes", "Files"} {
-		if info, err := os.Stat(filepath.Join(dir, name)); err != nil || !info.IsDir() {
-			t.Fatalf("template directory %s: %v", name, err)
-		}
-	}
 
 	var metadata map[string]any
 	if err := json.Unmarshal(prepared.RegistryJSON, &metadata); err != nil {
@@ -38,12 +33,21 @@ func TestPrepareImportedWorkspace(t *testing.T) {
 	}
 }
 
-func TestPrepareImportedWorkspaceRejectsUnsupportedTemplate(t *testing.T) {
+func TestPrepareImportedWorkspaceTreatsTemplateAsProvenanceOnly(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "staged-workspace")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := PrepareImportedWorkspace(dir, "Сайт", "admin"); err == nil {
-		t.Fatal("expected unsupported template error")
+	prepared, err := PrepareImportedWorkspace(dir, "Сайт", "admin")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var metadata map[string]any
+	if err := json.Unmarshal(prepared.RegistryJSON, &metadata); err != nil {
+		t.Fatal(err)
+	}
+	provenance, _ := metadata["createdFromTemplate"].(map[string]any)
+	if provenance["templateId"] != "admin" {
+		t.Fatalf("provenance = %#v", provenance)
 	}
 }

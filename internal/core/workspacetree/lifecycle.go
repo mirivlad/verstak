@@ -1,12 +1,9 @@
 package workspacetree
 
 import (
-	"encoding/json"
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 
 	"github.com/google/uuid"
@@ -83,18 +80,27 @@ func (s *Service) CreateFolder(parentFolderID, name string, refreshBaseline func
 
 // ── Create Workspace ─────────────────────────────────────────────────────────
 
-// CreateWorkspace creates a new workspace under parentFolderID (empty = root).
+// CreateWorkspace is a legacy adapter. New callers must supply a complete
+// recipe snapshot through CreateWorkspaceFromRecipe; Core does not resolve
+// template IDs or infer plugin-owned folders.
 func (s *Service) CreateWorkspace(parentFolderID, name, templateID string, refreshBaseline func() error) (ScannedWorkspace, error) {
-	return s.createWorkspace(parentFolderID, name, templateID, resolveTemplateTools(templateID), refreshBaseline)
+	if strings.TrimSpace(templateID) == "" {
+		templateID = "legacy-direct"
+	}
+	return s.CreateWorkspaceFromRecipe(parentFolderID, name, DealRecipeSnapshot{Provenance: RecipeProvenance{TemplateID: templateID}}, refreshBaseline)
 }
 
-// CreateWorkspaceWithTools creates a workspace with an explicit definitive tool set.
+// CreateWorkspaceWithTools is a legacy adapter for callers that already own a
+// tool list. It deliberately has no template registry or tool-folder mapping.
 func (s *Service) CreateWorkspaceWithTools(parentFolderID, name, templateID string, workspaceTools []string, refreshBaseline func() error) (ScannedWorkspace, error) {
-	return s.createWorkspace(parentFolderID, name, templateID, normalizeWorkspaceTools(workspaceTools), refreshBaseline)
+	if strings.TrimSpace(templateID) == "" {
+		templateID = "legacy-direct"
+	}
+	return s.CreateWorkspaceFromRecipe(parentFolderID, name, DealRecipeSnapshot{WorkspaceTools: workspaceTools, Provenance: RecipeProvenance{TemplateID: templateID}}, refreshBaseline)
 }
 
-// UpdateWorkspaceTools replaces the definitive workspace tool set without deleting
-// provider data. Folders required by newly enabled tools are created if missing.
+// UpdateWorkspaceTools replaces the definitive workspace tool set without
+// deleting provider data. Providers own any folders they need.
 func (s *Service) UpdateWorkspaceTools(workspaceID string, workspaceTools []string, refreshBaseline func() error) error {
 	ws, ok := s.GetWorkspaceByID(workspaceID)
 	if !ok {
@@ -102,25 +108,9 @@ func (s *Service) UpdateWorkspaceTools(workspaceID string, workspaceTools []stri
 	}
 	tools := normalizeWorkspaceTools(workspaceTools)
 
-	s.mu.Lock()
-	vaultDir := s.vaultDir
-	s.mu.Unlock()
-	workspaceDir := filepath.Join(vaultDir, filepath.FromSlash(ws.RootPath))
-	if err := applyWorkspaceToolFolders(workspaceDir, tools); err != nil {
-		return err
-	}
-
 	metadata, err := s.ReadDealMetadata(workspaceID, ws.RootPath)
 	if err != nil {
-		if !errors.Is(err, os.ErrNotExist) {
-			return err
-		}
-		metadata = DealMetadata{
-			SchemaVersion: DealMetadataSchemaVersion,
-			WorkspaceID:   workspaceID,
-			WorkspaceName: ws.Name,
-			ToolConfig:    map[string]json.RawMessage{},
-		}
+		return err
 	}
 	metadata.WorkspaceName = ws.Name
 	metadata.WorkspaceTools = tools
@@ -146,94 +136,6 @@ func normalizeWorkspaceTools(workspaceTools []string) []string {
 		tools = append(tools, toolID)
 	}
 	return tools
-}
-
-func (s *Service) createWorkspace(parentFolderID, name, templateID string, workspaceTools []string, refreshBaseline func() error) (ScannedWorkspace, error) {
-	name = strings.TrimSpace(name)
-	if err := validateEntityName(name); err != nil {
-		return ScannedWorkspace{}, err
-	}
-
-	s.mu.Lock()
-	vaultDir := s.vaultDir
-	s.mu.Unlock()
-
-	parentPath := ""
-	if parentFolderID != "" {
-		f, ok := s.GetFolderByID(parentFolderID)
-		if !ok {
-			return ScannedWorkspace{}, fmt.Errorf("parent folder not found: %s", parentFolderID)
-		}
-		parentPath = f.Path
-	}
-
-	childRel := joinRelPath(parentPath, name)
-	childAbs := filepath.Join(vaultDir, filepath.FromSlash(childRel))
-
-	if _, err := os.Lstat(childAbs); err == nil {
-		return ScannedWorkspace{}, fmt.Errorf("conflict: %s already exists", childRel)
-	}
-
-	stagingName := "." + name + ".staging." + uuid.NewString()[:8]
-	stagingRel := joinRelPath(parentPath, stagingName)
-
-	stagingAbs := filepath.Join(vaultDir, filepath.FromSlash(stagingRel))
-
-	s.BeginInternalMutation()
-	defer func() {
-		_ = os.RemoveAll(stagingAbs)
-	}()
-
-	if err := os.MkdirAll(stagingAbs, 0o755); err != nil {
-		return ScannedWorkspace{}, err
-	}
-
-	wsID := uuid.NewString()
-	if err := WriteWorkspaceMarker(stagingAbs, wsID); err != nil {
-		return ScannedWorkspace{}, err
-	}
-
-	// Apply template.
-	if templateID != "" {
-		if err := applyWorkspaceTemplate(stagingAbs, templateID); err != nil {
-			return ScannedWorkspace{}, err
-		}
-	}
-	if err := applyWorkspaceToolFolders(stagingAbs, workspaceTools); err != nil {
-		return ScannedWorkspace{}, err
-	}
-
-	metadata := newDealMetadata(wsID, name, templateID, workspaceTools)
-	if err := s.WriteDealMetadata(metadata); err != nil {
-		return ScannedWorkspace{}, err
-	}
-	metadataPath := canonicalDealMetadataPath(vaultDir, wsID)
-	metadataPublished := false
-	defer func() {
-		if metadataPublished {
-			return
-		}
-		_ = os.Remove(metadataPath)
-	}()
-
-	// Atomic rename.
-	if err := os.Rename(stagingAbs, childAbs); err != nil {
-		return ScannedWorkspace{}, err
-	}
-	_ = os.RemoveAll(stagingAbs)
-	metadataPublished = true
-
-	if err := s.EndInternalMutationAndRefreshBaseline(refreshBaseline); err != nil {
-		return ScannedWorkspace{}, err
-	}
-
-	// Select the new workspace.
-	if err := s.SetCurrentWorkspaceID(wsID); err != nil {
-		return ScannedWorkspace{}, err
-	}
-
-	ws, _ := s.GetWorkspaceByID(wsID)
-	return ws, nil
 }
 
 // ── Rename ───────────────────────────────────────────────────────────────────
@@ -475,133 +377,6 @@ func validateEntityName(name string) error {
 		}
 	}
 	return nil
-}
-
-// applyWorkspaceTemplate creates default folders for a new workspace.
-func applyWorkspaceTemplate(workspaceDir, templateID string) error {
-	// Default template: Notes + Files.
-	folders := []string{"Notes", "Files"}
-	for _, folder := range folders {
-		if err := os.MkdirAll(filepath.Join(workspaceDir, folder), 0o755); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func applyWorkspaceToolFolders(workspaceDir string, workspaceTools []string) error {
-	folders := toolsToFolders(workspaceTools)
-	for _, folder := range folders {
-		if err := os.MkdirAll(filepath.Join(workspaceDir, folder), 0o755); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-var templateRegistry = map[string]templateDef{
-	"default":        {ID: "default", Name: "General", Description: "Everyday workspace with notes, files, journal, activity, and browser captures.", Version: 2, Selectable: true, Order: 10, WorkspaceTools: []string{"verstak.notes", "verstak.files", "verstak.journal", "verstak.activity", "verstak.browser-inbox"}},
-	"project":        {ID: "project", Name: "Project", Description: "Project planning with todos, journal, activity, and browser captures.", Version: 1, Selectable: true, Order: 20, WorkspaceTools: []string{"verstak.projects", "verstak.notes", "verstak.files", "verstak.todo", "verstak.journal", "verstak.activity", "verstak.browser-inbox"}},
-	"writing":        {ID: "writing", Name: "Writing", Description: "Focused notes, files, and journal workspace for documentation and writing.", Version: 1, Selectable: true, Order: 30, WorkspaceTools: []string{"verstak.notes", "verstak.files", "verstak.journal"}},
-	"admin":          {ID: "admin", Name: "Admin", Description: "Infrastructure workspace with secrets, todos, and journal.", Version: 1, Selectable: true, Order: 40, WorkspaceTools: []string{"verstak.notes", "verstak.files", "verstak.secrets", "verstak.todo", "verstak.journal"}},
-	"minimal":        {ID: "minimal", Name: "Minimal", Description: "Only notes and files for a lightweight workspace.", Version: 1, Selectable: true, Order: 50, WorkspaceTools: []string{"verstak.notes", "verstak.files"}},
-	"client-project": {ID: "client-project", Name: "Client Project", Description: "Legacy client project template retained for existing integrations.", Version: 1, Selectable: false, WorkspaceTools: []string{"verstak.notes", "verstak.files", "verstak.secrets"}},
-}
-
-// templateDefinition mirrors the built-in template structure from workspace package.
-type templateDef struct {
-	ID             string
-	Name           string
-	Description    string
-	Version        int
-	WorkspaceTools []string
-	Selectable     bool
-	Order          int
-}
-
-// DealTemplateSummary is the temporary read model for built-in recipes until
-// the Templates plugin owns CRUD persistence.
-type DealTemplateSummary struct {
-	ID             string
-	Name           string
-	Description    string
-	Version        int
-	WorkspaceTools []string
-}
-
-// ListDealTemplates returns selectable recipes in stable UI order.
-func ListDealTemplates() []DealTemplateSummary {
-	definitions := make([]templateDef, 0, len(templateRegistry))
-	for _, definition := range templateRegistry {
-		if definition.Selectable {
-			definitions = append(definitions, definition)
-		}
-	}
-	sort.Slice(definitions, func(i, j int) bool { return definitions[i].Order < definitions[j].Order })
-	result := make([]DealTemplateSummary, 0, len(definitions))
-	for _, definition := range definitions {
-		result = append(result, DealTemplateSummary{
-			ID:             definition.ID,
-			Name:           definition.Name,
-			Description:    definition.Description,
-			Version:        definition.Version,
-			WorkspaceTools: append([]string(nil), definition.WorkspaceTools...),
-		})
-	}
-	return result
-}
-
-// resolveTemplateTools returns the workspaceTools list for a template ID.
-func resolveTemplateTools(templateID string) []string {
-	if templateID == "" {
-		return []string{"verstak.notes", "verstak.files"}
-	}
-	tmpl, ok := templateRegistry[templateID]
-	if !ok || !tmpl.Selectable {
-		return []string{"verstak.notes", "verstak.files"}
-	}
-	return append([]string(nil), tmpl.WorkspaceTools...)
-}
-
-// toolsToFeatures derives a features map from a workspaceTools list.
-func toolsToFeatures(tools []string) map[string]bool {
-	f := make(map[string]bool)
-	for _, t := range tools {
-		switch t {
-		case "verstak.files":
-			f["files"] = true
-		case "verstak.projects":
-			f["projects"] = true
-		case "verstak.notes":
-			f["notes"] = true
-		case "verstak.journal":
-			f["journal"] = true
-		case "verstak.activity":
-			f["activity"] = true
-		case "verstak.browser-inbox":
-			f["browser-inbox"] = true
-		case "verstak.todo":
-			f["todo"] = true
-		case "verstak.secrets":
-			f["secrets"] = true
-		}
-	}
-	return f
-}
-
-func toolsToFolders(tools []string) map[string]string {
-	folders := make(map[string]string)
-	for _, toolID := range tools {
-		switch toolID {
-		case "verstak.notes":
-			folders["notes"] = "Notes"
-		case "verstak.files":
-			folders["files"] = "Files"
-		case "verstak.secrets":
-			folders["secrets"] = "Secrets"
-		}
-	}
-	return folders
 }
 
 // ── Set current workspace ────────────────────────────────────────────────────

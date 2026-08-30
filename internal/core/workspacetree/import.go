@@ -1,10 +1,6 @@
 package workspacetree
 
-import (
-	"fmt"
-
-	"github.com/google/uuid"
-)
+import "github.com/google/uuid"
 
 // PreparedImportedWorkspace contains the identity and registry record for a
 // workspace assembled outside the vault and not published yet.
@@ -19,22 +15,15 @@ func PrepareImportedWorkspace(workspaceDir, name, templateID string) (PreparedIm
 	if err := validateEntityName(name); err != nil {
 		return PreparedImportedWorkspace{}, err
 	}
-	if templateID != "default" {
-		return PreparedImportedWorkspace{}, fmt.Errorf("unsupported import template: %s", templateID)
-	}
-	definition, ok := templateRegistry[templateID]
-	if !ok || !definition.Selectable {
-		return PreparedImportedWorkspace{}, fmt.Errorf("unsupported import template: %s", templateID)
+	if templateID == "" {
+		templateID = "import"
 	}
 
 	workspaceID := uuid.NewString()
 	if err := WriteWorkspaceMarker(workspaceDir, workspaceID); err != nil {
 		return PreparedImportedWorkspace{}, err
 	}
-	if err := applyWorkspaceTemplate(workspaceDir, templateID); err != nil {
-		return PreparedImportedWorkspace{}, err
-	}
-	registryJSON, err := marshalWorkspaceMetadataV2(workspaceID, name, templateID, definition.WorkspaceTools)
+	registryJSON, err := marshalWorkspaceMetadataV2(workspaceID, name, templateID, nil)
 	if err != nil {
 		return PreparedImportedWorkspace{}, err
 	}
