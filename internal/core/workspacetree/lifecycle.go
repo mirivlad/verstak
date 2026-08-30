@@ -80,25 +80,6 @@ func (s *Service) CreateFolder(parentFolderID, name string, refreshBaseline func
 
 // ── Create Workspace ─────────────────────────────────────────────────────────
 
-// CreateWorkspace is a legacy adapter. New callers must supply a complete
-// recipe snapshot through CreateWorkspaceFromRecipe; Core does not resolve
-// template IDs or infer plugin-owned folders.
-func (s *Service) CreateWorkspace(parentFolderID, name, templateID string, refreshBaseline func() error) (ScannedWorkspace, error) {
-	if strings.TrimSpace(templateID) == "" {
-		templateID = "legacy-direct"
-	}
-	return s.CreateWorkspaceFromRecipe(parentFolderID, name, DealRecipeSnapshot{Provenance: RecipeProvenance{TemplateID: templateID}}, refreshBaseline)
-}
-
-// CreateWorkspaceWithTools is a legacy adapter for callers that already own a
-// tool list. It deliberately has no template registry or tool-folder mapping.
-func (s *Service) CreateWorkspaceWithTools(parentFolderID, name, templateID string, workspaceTools []string, refreshBaseline func() error) (ScannedWorkspace, error) {
-	if strings.TrimSpace(templateID) == "" {
-		templateID = "legacy-direct"
-	}
-	return s.CreateWorkspaceFromRecipe(parentFolderID, name, DealRecipeSnapshot{WorkspaceTools: workspaceTools, Provenance: RecipeProvenance{TemplateID: templateID}}, refreshBaseline)
-}
-
 // UpdateWorkspaceTools replaces the definitive workspace tool set without
 // deleting provider data. Providers own any folders they need.
 func (s *Service) UpdateWorkspaceTools(workspaceID string, workspaceTools []string, refreshBaseline func() error) error {

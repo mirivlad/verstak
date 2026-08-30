@@ -3004,29 +3004,6 @@ func (a *App) refreshWorkspaceBaseline() error {
 	return nil
 }
 
-// CreateWorkspace is a compatibility adapter for creating a root-level Deal.
-func (a *App) CreateWorkspace(name, templateID string) (workspace.Workspace, string) {
-	if a.treeV2 == nil {
-		return workspace.Workspace{}, "workspace not initialized"
-	}
-	ws, err := a.treeV2.CreateWorkspace("", name, templateID, a.refreshWorkspaceBaseline)
-	if err != nil {
-		return workspace.Workspace{}, err.Error()
-	}
-	result := workspace.Workspace{ID: ws.ID, Name: ws.Name, RootPath: ws.RootPath}
-	if err := a.recordWorkspaceSyncOp(syncsvc.OpCreate, ws.ID, ws.RootPath, "", ws.Name); err != nil {
-		return workspace.Workspace{}, err.Error()
-	}
-	a.publishWorkspaceLifecycleEvent(workspaceCreatedEventName, map[string]interface{}{
-		"operation":         "create",
-		"workspaceId":       ws.ID,
-		"workspaceRootPath": ws.RootPath,
-		"workspaceName":     ws.Name,
-		"templateId":        templateID,
-	})
-	return result, ""
-}
-
 // RenameWorkspace is a compatibility adapter accepting a Deal UUID or path.
 func (a *App) RenameWorkspace(oldName, newName string) string {
 	if a.treeV2 == nil {
@@ -3374,26 +3351,6 @@ func (a *App) GetWorkspaceTree() map[string]interface{} {
 }
 
 // Deprecated: compatibility wrapper over the flat top-level folder workspace
-// model. Prefer CreateWorkspace.
-func (a *App) CreateWorkspaceNode(parentID, nodeType, title string) map[string]interface{} {
-	if a.treeV2 == nil {
-		return map[string]interface{}{"error": "workspace not initialized"}
-	}
-	if workspace.NodeType(nodeType) == workspace.TypeFolder {
-		folder, err := a.treeV2.CreateFolder(parentID, title, a.refreshWorkspaceBaseline)
-		if err != nil {
-			return map[string]interface{}{"error": err.Error()}
-		}
-		return map[string]interface{}{"id": folder.ID, "parentId": folder.ParentID, "type": string(workspace.TypeFolder), "title": folder.Name, "name": folder.Name, "rootPath": folder.Path, "status": string(workspace.StatusActive)}
-	}
-	deal, err := a.treeV2.CreateWorkspace(parentID, title, "default", a.refreshWorkspaceBaseline)
-	if err != nil {
-		return map[string]interface{}{"error": err.Error()}
-	}
-	return map[string]interface{}{"id": deal.ID, "parentId": parentID, "type": string(workspace.TypeSpace), "title": deal.Name, "name": deal.Name, "rootPath": deal.RootPath, "status": string(workspace.StatusActive)}
-}
-
-// Deprecated: compatibility wrapper over the flat top-level folder workspace
 // model. Prefer RenameWorkspace.
 func (a *App) RenameWorkspaceNode(id, title string) string {
 	if a.treeV2 == nil {
@@ -3569,18 +3526,29 @@ func (a *App) PluginCreateWorkspace(pluginID, parentFolderID, name string, recip
 	if err := a.validateWorkspaceTools(recipe.WorkspaceTools); err != nil {
 		return nil, err.Error()
 	}
-	ws, err := a.treeV2.CreateWorkspaceFromRecipe(parentFolderID, name, recipe, a.refreshWorkspaceBaseline)
+	ws, err := a.createDealFromRecipe(parentFolderID, name, recipe)
 	if err != nil {
 		return nil, err.Error()
 	}
+	return map[string]interface{}{"workspaceId": ws.ID, "name": ws.Name}, ""
+}
+
+func (a *App) createDealFromRecipe(parentFolderID, name string, recipe workspacetree.DealRecipeSnapshot) (workspacetree.ScannedWorkspace, error) {
+	if a.treeV2 == nil {
+		return workspacetree.ScannedWorkspace{}, fmt.Errorf("workspace tree not initialized")
+	}
+	ws, err := a.treeV2.CreateWorkspaceFromRecipe(parentFolderID, name, recipe, a.refreshWorkspaceBaseline)
+	if err != nil {
+		return workspacetree.ScannedWorkspace{}, err
+	}
 	if err := a.recordWorkspaceSyncOp(syncsvc.OpCreate, ws.ID, ws.RootPath, "", ws.Name); err != nil {
-		return nil, err.Error()
+		return workspacetree.ScannedWorkspace{}, err
 	}
 	a.publishWorkspaceLifecycleEvent(workspaceCreatedEventName, map[string]interface{}{
 		"operation": "create", "workspaceId": ws.ID, "workspaceRootPath": ws.RootPath, "workspaceName": ws.Name,
 		"templateId": recipe.Provenance.TemplateID,
 	})
-	return map[string]interface{}{"workspaceId": ws.ID, "name": ws.Name}, ""
+	return ws, nil
 }
 
 func (a *App) validateWorkspaceTools(workspaceTools []string) error {
@@ -3696,62 +3664,6 @@ func (a *App) CreateFolderV2(parentFolderID, name string) map[string]interface{}
 		"name":     f.Name,
 		"path":     f.Path,
 		"parentId": f.ParentID,
-	}
-}
-
-func (a *App) CreateWorkspaceV2(parentFolderID, name, templateID string) map[string]interface{} {
-	if a.treeV2 == nil {
-		return map[string]interface{}{"error": "not initialized"}
-	}
-	ws, err := a.treeV2.CreateWorkspace(parentFolderID, name, templateID, func() error {
-		if a.fileWatcher != nil {
-			return a.fileWatcher.RefreshBaseline()
-		}
-		return nil
-	})
-	if err != nil {
-		return map[string]interface{}{"error": err.Error()}
-	}
-	if err := a.recordWorkspaceSyncOp(syncsvc.OpCreate, ws.ID, ws.RootPath, "", ws.Name); err != nil {
-		return map[string]interface{}{"error": err.Error()}
-	}
-	a.publishWorkspaceLifecycleEvent(workspaceCreatedEventName, map[string]interface{}{
-		"operation": "create", "workspaceId": ws.ID, "workspaceRootPath": ws.RootPath, "workspaceName": ws.Name, "templateId": templateID,
-	})
-	return map[string]interface{}{
-		"id":       ws.ID,
-		"name":     ws.Name,
-		"rootPath": ws.RootPath,
-	}
-}
-
-// CreateWorkspaceV2WithTools creates a Deal with the exact selected workspace tool set.
-func (a *App) CreateWorkspaceV2WithTools(parentFolderID, name, templateID string, workspaceTools []string) map[string]interface{} {
-	if a.treeV2 == nil {
-		return map[string]interface{}{"error": "not initialized"}
-	}
-	if err := a.validateWorkspaceTools(workspaceTools); err != nil {
-		return map[string]interface{}{"error": err.Error()}
-	}
-	ws, err := a.treeV2.CreateWorkspaceWithTools(parentFolderID, name, templateID, workspaceTools, func() error {
-		if a.fileWatcher != nil {
-			return a.fileWatcher.RefreshBaseline()
-		}
-		return nil
-	})
-	if err != nil {
-		return map[string]interface{}{"error": err.Error()}
-	}
-	if err := a.recordWorkspaceSyncOp(syncsvc.OpCreate, ws.ID, ws.RootPath, "", ws.Name); err != nil {
-		return map[string]interface{}{"error": err.Error()}
-	}
-	a.publishWorkspaceLifecycleEvent(workspaceCreatedEventName, map[string]interface{}{
-		"operation": "create", "workspaceId": ws.ID, "workspaceRootPath": ws.RootPath, "workspaceName": ws.Name, "templateId": templateID,
-	})
-	return map[string]interface{}{
-		"id":       ws.ID,
-		"name":     ws.Name,
-		"rootPath": ws.RootPath,
 	}
 }
 

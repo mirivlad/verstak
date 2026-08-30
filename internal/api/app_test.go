@@ -1406,7 +1406,7 @@ func TestBrowserInboxWorkspaceReferenceSurvivesRenameAndTrash(t *testing.T) {
 	if err := tree.Initialize(); err != nil {
 		t.Fatalf("Initialize: %v", err)
 	}
-	created, err := tree.CreateWorkspace("", "Project", "minimal", nil)
+	created, err := tree.CreateWorkspaceFromRecipe("", "Project", workspacetree.DealRecipeSnapshot{Provenance: workspacetree.RecipeProvenance{TemplateID: "test-direct"}}, nil)
 	if err != nil {
 		t.Fatalf("CreateWorkspace: %v", err)
 	}
@@ -2118,7 +2118,7 @@ func TestPlaceWorkspaceTreeNodeV2RecordsStructureBeforeOrder(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	deal, err := app.treeV2.CreateWorkspace("", "Deal", "", nil)
+	deal, err := app.treeV2.CreateWorkspaceFromRecipe("", "Deal", workspacetree.DealRecipeSnapshot{Provenance: workspacetree.RecipeProvenance{TemplateID: "test-direct"}}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2188,7 +2188,7 @@ func TestApplyRemoteSemanticTreeMovesBeforeOrder(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	deal, err := app.treeV2.CreateWorkspace("", "Deal", "", nil)
+	deal, err := app.treeV2.CreateWorkspaceFromRecipe("", "Deal", workspacetree.DealRecipeSnapshot{Provenance: workspacetree.RecipeProvenance{TemplateID: "test-direct"}}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2373,7 +2373,7 @@ func TestApplyRemoteWorkspaceTreeOrderAndRebase(t *testing.T) {
 		t.Fatal(err)
 	}
 	folder, _ := app.treeV2.CreateFolder("", "Folder", nil)
-	deal, _ := app.treeV2.CreateWorkspace("", "Deal", "", nil)
+	deal, _ := app.treeV2.CreateWorkspaceFromRecipe("", "Deal", workspacetree.DealRecipeSnapshot{Provenance: workspacetree.RecipeProvenance{TemplateID: "test-direct"}}, nil)
 	if _, err := app.syncSvc.RebaseSnapshot(); err != nil {
 		t.Fatal(err)
 	}
@@ -3110,73 +3110,6 @@ func TestPluginListWorkspacesReturnsNestedDealsOnly(t *testing.T) {
 	}
 }
 
-func TestCreateWorkspaceV2WithToolsValidatesAndPersistsExactSelection(t *testing.T) {
-	app, root := newFilesTestApp(t, []string{"files.read"})
-	app.plugins[0].Manifest.Contributes = &plugin.Contributions{WorkspaceItems: []plugin.ContributionWorkspaceItem{{
-		ID: "files", Title: "Files", Component: "FilesView",
-	}}}
-	app.plugins = append(app.plugins, plugin.Plugin{
-		Manifest: plugin.Manifest{
-			ID: "todo.plugin",
-			Contributes: &plugin.Contributions{
-				WorkspaceItems: []plugin.ContributionWorkspaceItem{{
-					ID: "todo", Title: "Todos", Component: "TodoView",
-				}},
-			},
-		},
-		Status:  plugin.StatusLoaded,
-		Enabled: true,
-	})
-	app.treeV2 = workspacetree.NewService(root, nil)
-	if err := app.treeV2.Initialize(); err != nil {
-		t.Fatal(err)
-	}
-
-	rejected := app.CreateWorkspaceV2WithTools("", "Rejected", "default", []string{"system.component"})
-	if !strings.Contains(fmt.Sprint(rejected["error"]), "workspace tool") {
-		t.Fatalf("unexpected validation response: %#v", rejected)
-	}
-	if _, err := os.Stat(filepath.Join(root, "Rejected")); !os.IsNotExist(err) {
-		t.Fatalf("invalid selection created a Deal: %v", err)
-	}
-
-	created := app.CreateWorkspaceV2WithTools("", "Selected", "default", []string{"todo.plugin", "files.plugin"})
-	if created["error"] != nil {
-		t.Fatalf("create response: %#v", created)
-	}
-	workspaceID := fmt.Sprint(created["id"])
-	data, err := os.ReadFile(filepath.Join(root, ".verstak", "workspaces", "uuid-"+workspaceID+".json"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	var metadata struct {
-		WorkspaceTools []string `json:"workspaceTools"`
-	}
-	if err := json.Unmarshal(data, &metadata); err != nil {
-		t.Fatal(err)
-	}
-	if len(metadata.WorkspaceTools) != 2 || metadata.WorkspaceTools[0] != "todo.plugin" || metadata.WorkspaceTools[1] != "files.plugin" {
-		t.Fatalf("workspaceTools = %#v", metadata.WorkspaceTools)
-	}
-
-	if errText := app.UpdateWorkspaceV2Tools(workspaceID, []string{"files.plugin"}); errText != "" {
-		t.Fatalf("update tools: %s", errText)
-	}
-	data, err = os.ReadFile(filepath.Join(root, ".verstak", "workspaces", "uuid-"+workspaceID+".json"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := json.Unmarshal(data, &metadata); err != nil {
-		t.Fatal(err)
-	}
-	if len(metadata.WorkspaceTools) != 1 || metadata.WorkspaceTools[0] != "files.plugin" {
-		t.Fatalf("updated workspaceTools = %#v", metadata.WorkspaceTools)
-	}
-	if errText := app.UpdateWorkspaceV2Tools(workspaceID, []string{"system.component"}); !strings.Contains(errText, "workspace tool") {
-		t.Fatalf("unexpected update validation response: %q", errText)
-	}
-}
-
 func TestPluginCreateWorkspaceUsesRecipeSnapshotAndRequiresPermission(t *testing.T) {
 	app, root := newFilesTestApp(t, []string{"workspaces.create"})
 	app.plugins[0].Manifest.Contributes = &plugin.Contributions{WorkspaceItems: []plugin.ContributionWorkspaceItem{{
@@ -3236,11 +3169,13 @@ func TestWorkspaceV2LifecyclePublishesEventsAndRecordsSync(t *testing.T) {
 		})
 	}
 
-	created := app.CreateWorkspaceV2("", "Project", "minimal")
-	workspaceID := fmt.Sprint(created["id"])
-	if workspaceID == "" || created["error"] != nil {
-		t.Fatalf("create response = %#v", created)
+	created, err := app.createDealFromRecipe("", "Project", workspacetree.DealRecipeSnapshot{
+		Provenance: workspacetree.RecipeProvenance{TemplateID: "test-recipe"},
+	})
+	if err != nil {
+		t.Fatalf("create Deal from recipe: %v", err)
 	}
+	workspaceID := created.ID
 	if errText := app.RenameWorkspaceV2(workspaceID, "Renamed"); errText != "" {
 		t.Fatal(errText)
 	}
@@ -4101,7 +4036,7 @@ func TestWorkspaceAPIUsesTopLevelFoldersAndMetadataSnapshot(t *testing.T) {
 		t.Fatalf("workspace tree Initialize: %v", err)
 	}
 
-	ws, errStr := app.CreateWorkspace("Project", "client-project")
+	ws, errStr := createTestDeal(app, "Project", "client-project")
 	if errStr != "" {
 		t.Fatalf("CreateWorkspace: %s", errStr)
 	}
@@ -4159,7 +4094,7 @@ func TestWorkspaceAPIPublishesLifecycleEvents(t *testing.T) {
 		})
 	}
 
-	if _, errStr := app.CreateWorkspace("Project", "client-project"); errStr != "" {
+	if _, errStr := createTestDeal(app, "Project", "client-project"); errStr != "" {
 		t.Fatalf("CreateWorkspace: %s", errStr)
 	}
 	if errStr := app.SetCurrentWorkspace("Project"); errStr != "" {
@@ -4324,7 +4259,7 @@ func TestWorkspaceIdentityAPIListsAndRepairsDuplicates(t *testing.T) {
 	if err := app.treeV2.Initialize(); err != nil {
 		t.Fatal(err)
 	}
-	if _, errStr := app.CreateWorkspace("Original", "default"); errStr != "" {
+	if _, errStr := createTestDeal(app, "Original", "default"); errStr != "" {
 		t.Fatalf("CreateWorkspace: %s", errStr)
 	}
 	identities, errStr := app.ListWorkspaceIdentities()
@@ -4357,7 +4292,7 @@ func TestWorkspaceTrashRestoreAndPurgePublishIdentityLifecycle(t *testing.T) {
 			received[name], _ = event.Payload.(map[string]interface{})
 		})
 	}
-	if _, errStr := app.CreateWorkspace("Client", "default"); errStr != "" {
+	if _, errStr := createTestDeal(app, "Client", "default"); errStr != "" {
 		t.Fatalf("CreateWorkspace: %s", errStr)
 	}
 	trashed, errStr := app.TrashWorkspace("Client")
@@ -4389,10 +4324,10 @@ func TestMoveWorkspaceNodeCompatibilityIsUnsupported(t *testing.T) {
 	if err := app.treeV2.Initialize(); err != nil {
 		t.Fatalf("workspace Load: %v", err)
 	}
-	if _, errStr := app.CreateWorkspace("Project", "default"); errStr != "" {
+	if _, errStr := createTestDeal(app, "Project", "default"); errStr != "" {
 		t.Fatalf("CreateWorkspace Project: %s", errStr)
 	}
-	if _, errStr := app.CreateWorkspace("Test", "default"); errStr != "" {
+	if _, errStr := createTestDeal(app, "Test", "default"); errStr != "" {
 		t.Fatalf("CreateWorkspace Test: %s", errStr)
 	}
 
@@ -4403,6 +4338,16 @@ func TestMoveWorkspaceNodeCompatibilityIsUnsupported(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(vaultDir, "Test", "Project")); !os.IsNotExist(err) {
 		t.Fatalf("MoveWorkspaceNode created nested mapped workspace, stat err=%v", err)
 	}
+}
+
+func createTestDeal(app *App, name, templateID string) (workspace.Workspace, string) {
+	ws, err := app.createDealFromRecipe("", name, workspacetree.DealRecipeSnapshot{
+		Provenance: workspacetree.RecipeProvenance{TemplateID: templateID},
+	})
+	if err != nil {
+		return workspace.Workspace{}, err.Error()
+	}
+	return workspace.Workspace{ID: ws.ID, Name: ws.Name, RootPath: ws.RootPath}, ""
 }
 
 func newBridgeTestApp(t *testing.T) *App {

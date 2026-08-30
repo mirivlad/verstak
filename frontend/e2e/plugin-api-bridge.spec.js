@@ -311,7 +311,7 @@ test.describe('D2: workspace tree plugin API', () => {
       await api.navigation.openWorkspace({
         workspaceId: '11111111-1111-4111-8111-111111111111',
         workspaceItemId: 'verstak.projects.workspace',
-        toolRequest: { projectId: 'project-7' },
+        toolRequest: { resourceId: 'resource-7' },
       });
       api.dispose();
       await new Promise((resolve) => setTimeout(resolve, 0));
@@ -328,15 +328,16 @@ test.describe('D2: workspace tree plugin API', () => {
         workspaceName: 'Projects/Workbench',
         workspaceRootPath: 'Projects/Workbench',
         workspaceItemId: 'verstak.projects.workspace',
-        toolRequest: { projectId: 'project-7' },
+        toolRequest: { resourceId: 'resource-7' },
       },
     });
     expect(result[1]).toEqual({
       name: 'verstak:workspace-open-tool',
       detail: {
+        workspaceId: '11111111-1111-4111-8111-111111111111',
         workspaceItemId: 'verstak.projects.workspace',
         workspaceRootPath: 'Projects/Workbench',
-        toolRequest: { projectId: 'project-7' },
+        toolRequest: { resourceId: 'resource-7' },
       },
     });
   });

@@ -1,6 +1,8 @@
 import { test, expect } from '@playwright/test';
 import { waitForAppReady, setupConsoleCollector, resetMockState, readJournalText } from './helpers.js';
 
+const PROJECT_ID = '11111111-1111-4111-8111-111111111111';
+
 test.describe('Activity workflow', () => {
   let consoleCollector;
 
@@ -29,15 +31,15 @@ test.describe('Activity workflow', () => {
 
   test('clearing activity requires destructive confirmation for the current case', async ({ page }) => {
     await page.evaluate(async () => {
-      await window.go.api.App.WritePluginSettings('verstak.activity', {
-        'events:workspace:Project': [{
+      const PROJECT_ID = '11111111-1111-4111-8111-111111111111';
+      await window.go.api.App.WritePluginDataNDJSON('verstak.activity', 'activity-events', [{
           activityId: 'activity-to-clear',
           occurredAt: '2026-06-30T08:00:00.000Z',
           type: 'note.saved',
           title: 'Keep until confirmed',
           workspaceRootPath: 'Project',
-        }],
-      });
+          workspaceId: PROJECT_ID,
+        }]);
     });
 
     await page.getByRole('tab', { name: 'Activity' }).click();
@@ -61,8 +63,8 @@ test.describe('Activity workflow', () => {
 
   test('workspace activity keeps raw events and renders factual work session candidates', async ({ page }) => {
     await page.evaluate(async () => {
-      await window.go.api.App.WritePluginSettings('verstak.activity', {
-        'events:workspace:Project': [
+      const PROJECT_ID = '11111111-1111-4111-8111-111111111111';
+      await window.go.api.App.WritePluginDataNDJSON('verstak.activity', 'activity-events', [
           {
             activityId: 'activity-e2e-capture',
             occurredAt: '2026-06-30T08:00:00.000Z',
@@ -71,6 +73,7 @@ test.describe('Activity workflow', () => {
             summary: 'Selected text from the article',
             sourcePluginId: 'verstak.browser-inbox',
             workspaceRootPath: 'Project',
+            workspaceId: PROJECT_ID,
           },
           {
             activityId: 'activity-e2e-note',
@@ -80,6 +83,7 @@ test.describe('Activity workflow', () => {
             summary: 'Project/Notes/Research Capture.md',
             sourcePluginId: 'verstak.files',
             workspaceRootPath: 'Project',
+            workspaceId: PROJECT_ID,
           },
           {
             activityId: 'activity-e2e-open',
@@ -89,9 +93,9 @@ test.describe('Activity workflow', () => {
             summary: 'Project/Notes/Research Capture.md',
             sourcePluginId: 'verstak.files',
             workspaceRootPath: 'Project',
+            workspaceId: PROJECT_ID,
           },
-        ],
-      });
+      ]);
     });
 
     await page.getByRole('tab', { name: 'Activity' }).click();
@@ -116,14 +120,15 @@ test.describe('Activity workflow', () => {
 
   test('Review opens a Journal form saying what the time went on, with selectable activities', async ({ page }) => {
     await page.evaluate(async () => {
-      await window.go.api.App.WritePluginSettings('verstak.activity', {
-        'events:workspace:Project': [
+      const PROJECT_ID = '11111111-1111-4111-8111-111111111111';
+      await window.go.api.App.WritePluginDataNDJSON('verstak.activity', 'activity-events', [
           {
             activityId: 'review-capture',
             occurredAt: '2026-06-30T08:00:00.000Z',
             type: 'browser.capture.selection',
             title: 'Research Capture',
             workspaceRootPath: 'Project',
+            workspaceId: PROJECT_ID,
           },
           {
             activityId: 'review-note',
@@ -131,9 +136,9 @@ test.describe('Activity workflow', () => {
             type: 'note.saved',
             title: 'Saved note',
             workspaceRootPath: 'Project',
+            workspaceId: PROJECT_ID,
           },
-        ],
-      });
+      ]);
     });
 
     await page.getByRole('tab', { name: 'Activity' }).click();

@@ -42,22 +42,6 @@ export function CreateVaultFolder(arg1, arg2) {
   return window['go']['api']['App']['CreateVaultFolder'](arg1, arg2);
 }
 
-export function CreateWorkspace(arg1, arg2) {
-  return window['go']['api']['App']['CreateWorkspace'](arg1, arg2);
-}
-
-export function CreateWorkspaceNode(arg1, arg2, arg3) {
-  return window['go']['api']['App']['CreateWorkspaceNode'](arg1, arg2, arg3);
-}
-
-export function CreateWorkspaceV2(arg1, arg2, arg3) {
-  return window['go']['api']['App']['CreateWorkspaceV2'](arg1, arg2, arg3);
-}
-
-export function CreateWorkspaceV2WithTools(arg1, arg2, arg3, arg4) {
-  return window['go']['api']['App']['CreateWorkspaceV2WithTools'](arg1, arg2, arg3, arg4);
-}
-
 export function DeleteVaultTrash(arg1, arg2) {
   return window['go']['api']['App']['DeleteVaultTrash'](arg1, arg2);
 }

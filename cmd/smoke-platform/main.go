@@ -873,7 +873,9 @@ func runWorkspaceTest(root string) {
 	refreshBaseline := func() error { return nil }
 
 	fmt.Printf("\n[create top-level Deal]\n")
-	topDeal, err := ws.CreateWorkspace("", "Test Deal", "minimal", refreshBaseline)
+	topDeal, err := ws.CreateWorkspaceFromRecipe("", "Test Deal", workspacetree.DealRecipeSnapshot{
+		Provenance: workspacetree.RecipeProvenance{TemplateID: "smoke-platform"},
+	}, refreshBaseline)
 	if err != nil {
 		fmt.Printf("  ❌ create top-level Deal: %v\n", err)
 		exitCode = 1
@@ -897,7 +899,9 @@ func runWorkspaceTest(root string) {
 	fmt.Printf("  ✅ folders created: %s / %s\n", folder1.Path, folder2.Path)
 
 	fmt.Printf("\n[create nested Deal]\n")
-	nestedDeal, err := ws.CreateWorkspace(folder2.ID, "Nested Deal", "minimal", refreshBaseline)
+	nestedDeal, err := ws.CreateWorkspaceFromRecipe(folder2.ID, "Nested Deal", workspacetree.DealRecipeSnapshot{
+		Provenance: workspacetree.RecipeProvenance{TemplateID: "smoke-platform"},
+	}, refreshBaseline)
 	if err != nil {
 		fmt.Printf("  ❌ create nested Deal: %v\n", err)
 		exitCode = 1
