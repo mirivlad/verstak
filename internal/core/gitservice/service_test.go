@@ -49,6 +49,42 @@ func TestServiceClonesManagedCheckoutAndReportsWorkingTreeState(t *testing.T) {
 	}
 }
 
+func TestManagedCheckoutCanMigrateFromGeneratedName(t *testing.T) {
+	vault := t.TempDir()
+	workspaceID := uuid.NewString()
+	writeWorkspaceMarker(t, vault, "Deal", workspaceID)
+	remote := createBareRemote(t)
+
+	service := NewService(vault)
+	legacyName := "repo-11111111-1111-4111-8111-111111111111"
+	checkout, err := service.Clone(CloneRequest{
+		WorkspaceID: workspaceID, WorkspaceRoot: "Deal", RepositoryID: legacyName, CheckoutName: legacyName, RemoteURL: remote,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	legacyPath := filepath.Join(vault, filepath.FromSlash(checkout))
+	if _, err := os.Stat(legacyPath); err != nil {
+		t.Fatalf("legacy checkout missing: %v", err)
+	}
+
+	status, err := service.Status(RepositoryRequest{
+		WorkspaceID: workspaceID, WorkspaceRoot: "Deal", RepositoryID: legacyName, CheckoutName: "sshkeeper",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if status.State != CheckoutStateCloned {
+		t.Fatalf("status after checkout rename = %+v", status)
+	}
+	if _, err := os.Stat(legacyPath); !os.IsNotExist(err) {
+		t.Fatalf("legacy generated checkout still exists: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(vault, "Deal", "Repositories", "sshkeeper", ".git")); err != nil {
+		t.Fatalf("human-readable checkout was not created: %v", err)
+	}
+}
+
 func TestGitFailureDoesNotExposeTransientCredential(t *testing.T) {
 	_, err := runGitOutput(t.TempDir(), Credential{Username: "git", Value: "token-must-not-leak"}, "status")
 	if err == nil {

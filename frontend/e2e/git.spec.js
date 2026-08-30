@@ -50,7 +50,7 @@ test.describe('Git Deal plugin', () => {
     await card.locator('[data-git-action="open-directory"]').click();
 
     await expect.poll(() => page.evaluate(() => window.__wailsMockExternalOpens)).toContainEqual({
-      action: 'git-folder', path: 'Primary-repository',
+      action: 'git-folder', path: 'repo',
     });
 
     const stored = await page.evaluate(async () => {
@@ -61,7 +61,7 @@ test.describe('Git Deal plugin', () => {
     expect(stored[0]).toMatchObject({
       workspaceId: '11111111-1111-4111-8111-111111111111',
       name: 'Primary repository',
-      checkoutName: 'Primary-repository',
+      checkoutName: 'repo',
       remoteUrl: 'https://example.com/owner/repo.git',
       defaultBranch: 'main',
     });

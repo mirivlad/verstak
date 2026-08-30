@@ -69,6 +69,30 @@ func RegisterCheckout(vaultRoot string, registration CheckoutRegistration) (stri
 	if registry.Repositories == nil {
 		registry.Repositories = make(map[string]string)
 	}
+
+	// CheckoutName is user-facing filesystem state while RepositoryID is the
+	// stable descriptor identity. Older Git plugin builds used repo-<uuid> as
+	// both, which leaked implementation detail into Files. If the descriptor
+	// starts asking for a better checkout name, move the existing managed tree
+	// before updating the local registry. No syncable descriptor identity changes.
+	if previous := strings.TrimSpace(registry.Repositories[registration.RepositoryID]); previous != "" && previous != registration.CheckoutName {
+		repositoriesRoot := filepath.Join(vaultRoot, filepath.FromSlash(workspaceRoot), "Repositories")
+		oldPath := filepath.Join(repositoriesRoot, previous)
+		newPath := filepath.Join(repositoriesRoot, registration.CheckoutName)
+		if _, err := os.Stat(oldPath); err == nil {
+			if _, targetErr := os.Stat(newPath); targetErr == nil {
+				return "", fmt.Errorf("cannot rename managed checkout: target already exists")
+			} else if !os.IsNotExist(targetErr) {
+				return "", targetErr
+			}
+			if err := os.Rename(oldPath, newPath); err != nil {
+				return "", fmt.Errorf("rename managed checkout: %w", err)
+			}
+		} else if !os.IsNotExist(err) {
+			return "", err
+		}
+	}
+
 	registry.Repositories[registration.RepositoryID] = registration.CheckoutName
 	if err := writeRegistry(registryPath, registry); err != nil {
 		return "", err
