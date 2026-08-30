@@ -3,6 +3,7 @@ package workspacetree
 import (
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -46,6 +47,19 @@ func TestReadDealMetadataPrefersCanonicalUUIDRecord(t *testing.T) {
 	}
 	if !reflect.DeepEqual(metadata.WorkspaceTools, []string{"canonical.tool"}) {
 		t.Fatalf("workspaceTools = %#v", metadata.WorkspaceTools)
+	}
+}
+
+func TestReadDealMetadataDoesNotConsultPathKeyedLegacyRecord(t *testing.T) {
+	svc, vault := newMetadataV2Service(t)
+	workspaceID := testUUID("metadata-runtime-canonical-only")
+	rootPath := "Clients/Acme"
+	legacyName := base64.RawURLEncoding.EncodeToString([]byte(rootPath)) + ".json"
+	writeMetadataV2Fixture(t, filepath.Join(vault, ".verstak", "workspaces", legacyName), `{"workspaceId":"`+workspaceID+`","workspaceName":"Acme","workspaceTools":["legacy.tool"]}`)
+
+	_, err := svc.ReadDealMetadata(workspaceID, rootPath)
+	if !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("ReadDealMetadata error = %v, want missing canonical metadata", err)
 	}
 }
 

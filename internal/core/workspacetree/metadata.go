@@ -60,9 +60,8 @@ func legacyDealMetadataPath(vaultDir, rootPath string) string {
 	return filepath.Join(vaultDir, ".verstak", "workspaces", encoded+".json")
 }
 
-// ReadDealMetadata reads canonical UUID metadata first. The path-keyed record
-// is migration input only and is consulted solely when canonical metadata is
-// absent.
+// ReadDealMetadata reads the canonical UUID-keyed metadata record. Path-keyed
+// files are one-shot migration input and are never part of the runtime path.
 func (s *Service) ReadDealMetadata(workspaceID, rootPath string) (DealMetadata, error) {
 	if _, err := uuid.Parse(workspaceID); err != nil {
 		return DealMetadata{}, fmt.Errorf("invalid workspace identity: %w", err)
@@ -76,14 +75,7 @@ func (s *Service) ReadDealMetadata(workspaceID, rootPath string) (DealMetadata, 
 	if !errors.Is(err, os.ErrNotExist) {
 		return DealMetadata{}, fmt.Errorf("read Deal metadata: %w", err)
 	}
-	if strings.TrimSpace(rootPath) == "" {
-		return DealMetadata{}, fmt.Errorf("Deal metadata not found for %s: %w", workspaceID, os.ErrNotExist)
-	}
-	data, err = os.ReadFile(legacyDealMetadataPath(vaultDir, rootPath))
-	if err != nil {
-		return DealMetadata{}, fmt.Errorf("read legacy Deal metadata: %w", err)
-	}
-	return decodeDealMetadata(data, workspaceID, filepath.Base(filepath.FromSlash(rootPath)))
+	return DealMetadata{}, fmt.Errorf("Deal metadata not found for %s: %w", workspaceID, os.ErrNotExist)
 }
 
 // WriteDealMetadata validates and atomically writes canonical UUID metadata.
