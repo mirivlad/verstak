@@ -139,6 +139,20 @@ export function PluginCancelImport(arg1:string,arg2:string):Promise<string>;
 
 export function PluginCloseImportSource(arg1:string,arg2:string):Promise<string>;
 
+export function PluginGitClone(arg1:string,arg2:Record<string, any>):Promise<Record<string, any>|string>;
+
+export function PluginGitFetch(arg1:string,arg2:Record<string, any>):Promise<string>;
+
+export function PluginGitOpenDirectory(arg1:string,arg2:Record<string, any>):Promise<string>;
+
+export function PluginGitPull(arg1:string,arg2:Record<string, any>):Promise<string>;
+
+export function PluginGitPush(arg1:string,arg2:Record<string, any>):Promise<string>;
+
+export function PluginGitRegisterExisting(arg1:string,arg2:Record<string, any>):Promise<Record<string, any>|string>;
+
+export function PluginGitStatus(arg1:string,arg2:Record<string, any>):Promise<Record<string, any>|string>;
+
 export function PluginListImportEntries(arg1:string,arg2:string,arg3:string):Promise<importservice.EntryPage|string>;
 
 export function PluginListWorkspaces(arg1:string):Promise<Array<api.PluginWorkspaceDTO>|string>;

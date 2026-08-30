@@ -254,6 +254,34 @@ export function PluginCloseImportSource(arg1, arg2) {
   return window['go']['api']['App']['PluginCloseImportSource'](arg1, arg2);
 }
 
+export function PluginGitClone(arg1, arg2) {
+  return window['go']['api']['App']['PluginGitClone'](arg1, arg2);
+}
+
+export function PluginGitFetch(arg1, arg2) {
+  return window['go']['api']['App']['PluginGitFetch'](arg1, arg2);
+}
+
+export function PluginGitOpenDirectory(arg1, arg2) {
+  return window['go']['api']['App']['PluginGitOpenDirectory'](arg1, arg2);
+}
+
+export function PluginGitPull(arg1, arg2) {
+  return window['go']['api']['App']['PluginGitPull'](arg1, arg2);
+}
+
+export function PluginGitPush(arg1, arg2) {
+  return window['go']['api']['App']['PluginGitPush'](arg1, arg2);
+}
+
+export function PluginGitRegisterExisting(arg1, arg2) {
+  return window['go']['api']['App']['PluginGitRegisterExisting'](arg1, arg2);
+}
+
+export function PluginGitStatus(arg1, arg2) {
+  return window['go']['api']['App']['PluginGitStatus'](arg1, arg2);
+}
+
 export function PluginListImportEntries(arg1, arg2, arg3) {
   return window['go']['api']['App']['PluginListImportEntries'](arg1, arg2, arg3);
 }

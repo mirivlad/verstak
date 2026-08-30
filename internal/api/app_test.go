@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -4299,6 +4300,96 @@ func TestPluginGitKeepsCredentialsBackendOnlyAndReportsNotCloned(t *testing.T) {
 	}); errText == "" || strings.Contains(errText, "token-must-not-leak") {
 		t.Fatalf("credential-bearing remote URL was accepted or echoed: %q", errText)
 	}
+}
+
+func TestPluginGitRegisterExistingUsesAuthorizedNativePicker(t *testing.T) {
+	prepare := func(t *testing.T, permissions []string) (*App, workspace.Workspace) {
+		t.Helper()
+		app, _ := newFilesTestApp(t, permissions)
+		app.ctx = context.Background()
+		app.plugins[0].Manifest.ID = "verstak.git"
+		app.treeV2 = workspacetree.NewService(app.vaultPath(), nil)
+		if err := app.treeV2.Initialize(); err != nil {
+			t.Fatal(err)
+		}
+		deal, errText := createTestDeal(app, "Deal", "git-picker-test")
+		if errText != "" {
+			t.Fatal(errText)
+		}
+		metadata, err := app.treeV2.ReadDealMetadata(deal.ID, deal.RootPath)
+		if err != nil {
+			t.Fatal(err)
+		}
+		metadata.WorkspaceTools = []string{"verstak.git"}
+		if err := app.treeV2.WriteDealMetadata(metadata); err != nil {
+			t.Fatal(err)
+		}
+		return app, deal
+	}
+
+	t.Run("permission is checked before opening the picker", func(t *testing.T) {
+		app, deal := prepare(t, []string{"process.spawn"})
+		pickerCalls := 0
+		app.selectImportDirectory = func(context.Context, runtime.OpenDialogOptions) (string, error) {
+			pickerCalls++
+			return t.TempDir(), nil
+		}
+		if _, errText := app.PluginGitRegisterExisting("verstak.git", map[string]interface{}{
+			"workspaceId": deal.ID, "repositoryId": "origin", "checkoutName": "origin",
+		}); !strings.Contains(errText, "imports.readExternal") {
+			t.Fatalf("permission error = %q", errText)
+		}
+		if pickerCalls != 0 {
+			t.Fatalf("picker opened before authorization: %d", pickerCalls)
+		}
+	})
+
+	t.Run("empty source path is selected and copied into managed checkout", func(t *testing.T) {
+		app, deal := prepare(t, []string{"process.spawn", "imports.readExternal"})
+		source := t.TempDir()
+		if output, err := exec.Command("git", "-C", source, "init", "-b", "main").CombinedOutput(); err != nil {
+			t.Fatalf("git init: %v: %s", err, output)
+		}
+		if err := os.WriteFile(filepath.Join(source, "README.md"), []byte("managed checkout\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		for _, args := range [][]string{
+			{"-C", source, "add", "README.md"},
+			{"-C", source, "-c", "user.name=Verstak Test", "-c", "user.email=test@example.invalid", "commit", "-m", "initial"},
+		} {
+			if output, err := exec.Command("git", args...).CombinedOutput(); err != nil {
+				t.Fatalf("git %v: %v: %s", args, err, output)
+			}
+		}
+		pickerCalls := 0
+		app.selectImportDirectory = func(_ context.Context, options runtime.OpenDialogOptions) (string, error) {
+			pickerCalls++
+			if options.Title == "" {
+				t.Fatal("Git picker title is empty")
+			}
+			return source, nil
+		}
+		result, errText := app.PluginGitRegisterExisting("verstak.git", map[string]interface{}{
+			"workspaceId": deal.ID, "repositoryId": "origin", "checkoutName": "origin",
+		})
+		if errText != "" {
+			t.Fatalf("register existing: %s", errText)
+		}
+		if pickerCalls != 1 {
+			t.Fatalf("picker calls = %d", pickerCalls)
+		}
+		checkout, _ := result["checkoutPath"].(string)
+		if checkout != deal.RootPath+"/Repositories/origin" {
+			t.Fatalf("checkout path = %q", checkout)
+		}
+		data, err := os.ReadFile(filepath.Join(app.vaultPath(), filepath.FromSlash(checkout), "README.md"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if string(data) != "managed checkout\n" {
+			t.Fatalf("copied README = %q", data)
+		}
+	})
 }
 
 func TestWorkspaceIdentityAPIListsAndRepairsDuplicates(t *testing.T) {
