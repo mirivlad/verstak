@@ -221,18 +221,14 @@ test.describe('UX Overview workspace flow', () => {
             workspaceId: PROJECT_ID,
           },
       ]);
-      await window.go.api.App.WritePluginSettings('verstak.journal', {
-        'worklog:workspace:Project': [
-          {
-            entryId: 'overview-journal-1',
-            date: '2026-06-30',
-            title: 'Write project summary',
-            summary: 'Turn recent captures into a worklog entry',
-            minutes: 35,
-            workspaceRootPath: 'Project',
-          },
-        ],
-      });
+      const journalFolderError = await window.go.api.App.CreateVaultFolder('verstak.journal', 'Project/Журнал');
+      if (journalFolderError) throw new Error(journalFolderError);
+      const journalWriteError = await window.go.api.App.WriteVaultTextFile('verstak.journal', 'Project/Журнал/2026-06.md', [
+        '## 2026-06-30', '', '### Write project summary', '', '35 min · non-billable', '',
+        'Turn recent captures into a worklog entry', '',
+        '<!-- verstak-entry {"entryId":"overview-journal-1","minutes":35,"billable":false} -->', '',
+      ].join('\n'), { createIfMissing: true, overwrite: true, service: true });
+      if (journalWriteError) throw new Error(journalWriteError);
     });
 
     await page.locator('[data-overview-action="refresh"]').click();
