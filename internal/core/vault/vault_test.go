@@ -262,11 +262,11 @@ func TestCreateVault_CreatesWorkspace(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(v.GetVaultPath(), "Workspace")); err != nil {
 		t.Fatalf("Workspace folder not found: %v", err)
 	}
-	if _, err := os.Stat(filepath.Join(v.GetVaultPath(), "Workspace", "Notes")); err != nil {
-		t.Fatalf("default workspace notes folder not found: %v", err)
+	if _, err := os.Stat(filepath.Join(v.GetVaultPath(), "Workspace", ".verstak", "workspace.json")); err != nil {
+		t.Fatalf("Deal UUID marker not found: %v", err)
 	}
-	if _, err := os.Stat(filepath.Join(v.GetVaultPath(), "Workspace", "Notes", "Overview.md")); !os.IsNotExist(err) {
-		t.Fatalf("default workspace should not create overview file, stat err=%v", err)
+	if _, err := os.Stat(filepath.Join(v.GetVaultPath(), "Workspace", "Notes")); !os.IsNotExist(err) {
+		t.Fatalf("Core must not create provider folders, stat err=%v", err)
 	}
 	if _, err := os.Stat(filepath.Join(v.GetVaultPath(), ".verstak", "workspace.json")); !os.IsNotExist(err) {
 		t.Fatalf("workspace.json should not be created as workspace source of truth, stat err=%v", err)

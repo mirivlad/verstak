@@ -15,7 +15,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/verstak/verstak-desktop/internal/core/events"
-	"github.com/verstak/verstak-desktop/internal/core/workspace"
+	"github.com/verstak/verstak-desktop/internal/core/workspacetree"
 )
 
 // VaultStatus represents the current state of a vault.
@@ -132,11 +132,16 @@ func (v *Vault) CreateVault(path string) error {
 		return fmt.Errorf("failed to write vault.json: %w", err)
 	}
 
-	// Create the initial physical workspace folder. Workspace listing is still
-	// sourced from top-level vault folders, not from .verstak metadata.
-	wsMgr := workspace.NewManager(vaultDir)
-	if _, err := wsMgr.CreateWorkspace("Workspace", "default"); err != nil {
-		return fmt.Errorf("failed to create workspace: %w", err)
+	// Bootstrap one empty Deal through the canonical UUID registry. Templates
+	// and provider-owned folders are created later by the Templates plugin.
+	tree := workspacetree.NewService(vaultDir, v.eventBus)
+	if err := tree.Initialize(); err != nil {
+		return fmt.Errorf("initialize Deal tree: %w", err)
+	}
+	if _, err := tree.CreateWorkspaceFromRecipe("", "Workspace", workspacetree.DealRecipeSnapshot{
+		Provenance: workspacetree.RecipeProvenance{TemplateID: "system-bootstrap", TemplateName: "Initial Deal"},
+	}, nil); err != nil {
+		return fmt.Errorf("create initial Deal: %w", err)
 	}
 
 	v.mu.Lock()
