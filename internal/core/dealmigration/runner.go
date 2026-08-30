@@ -104,8 +104,81 @@ func NewRunner(vaultDir string, options ...Option) *Runner {
 func NewDealOnlyRunner(vaultDir string) *Runner {
 	return NewRunner(vaultDir,
 		WithTransform(NewProviderDataTransform()),
+		WithTransform(NewProjectMetaTransform()),
 		WithTransform(NewMilestoneDataTransform()),
 	)
+}
+
+// NeedsMigration reports whether this vault still has the retired Project
+// scope or an interrupted one-shot migration. A verified ledger short-circuits
+// every legacy read, so normal runtime never consults legacy Projects again.
+func (r *Runner) NeedsMigration(ctx context.Context) (bool, error) {
+	if err := r.Preflight(ctx); err != nil {
+		return false, err
+	}
+	ledger, err := r.ReadLedger()
+	if err == nil {
+		return ledger.State != StateVerified, nil
+	}
+	if !errors.Is(err, os.ErrNotExist) {
+		return false, err
+	}
+	return hasLegacyDealScope(ctx, r.vaultDir)
+}
+
+func hasLegacyDealScope(ctx context.Context, vault string) (bool, error) {
+	projectsPath := filepath.Join(vault, ".verstak", "plugin-settings", legacyProjectsPluginID, "settings.json")
+	if data, err := os.ReadFile(projectsPath); err == nil {
+		var settings map[string]any
+		if err := json.Unmarshal(data, &settings); err != nil {
+			return false, fmt.Errorf("decode legacy Projects settings: %w", err)
+		}
+		if projects, _ := settings[projectsSettingsKey].([]any); len(projects) > 0 {
+			return true, nil
+		}
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return false, err
+	}
+	for _, root := range []string{
+		filepath.Join(vault, ".verstak", "plugin-settings"),
+		filepath.Join(vault, ".verstak", "plugin-data"),
+	} {
+		found := false
+		err := filepath.WalkDir(root, func(path string, entry os.DirEntry, walkErr error) error {
+			if walkErr != nil {
+				if errors.Is(walkErr, os.ErrNotExist) {
+					return nil
+				}
+				return walkErr
+			}
+			if err := ctx.Err(); err != nil {
+				return err
+			}
+			if entry.IsDir() || (filepath.Base(path) != "settings.json" && filepath.Ext(path) != ".ndjson") {
+				return nil
+			}
+			data, err := os.ReadFile(path)
+			if err != nil {
+				return err
+			}
+			value, err := decodeProviderValue(data, filepath.Ext(path) == ".ndjson")
+			if err != nil {
+				return fmt.Errorf("decode migration input %s: %w", filepath.ToSlash(path), err)
+			}
+			if containsProjectScope(value) {
+				found = true
+				return filepath.SkipAll
+			}
+			return nil
+		})
+		if err != nil {
+			return false, err
+		}
+		if found {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 func (r *Runner) Preflight(context.Context) error {

@@ -2715,6 +2715,11 @@ func (a *App) SetCurrentVault(path string) string {
 	if err := a.treeV2.Initialize(); err != nil {
 		log.Printf("[api] SetCurrentVault: warning initializing workspace tree v2: %v", err)
 	}
+	if err := a.runDealMigration(context.Background()); err != nil {
+		a.treeV2.Stop()
+		a.treeV2 = nil
+		return fmt.Sprintf("failed to migrate legacy Deal data: %v", err)
+	}
 	a.treeV2.StartRescanLoop()
 	// Register vault capability
 	if err := a.capRegistry.Register("verstak-desktop", []string{"verstak/core/vault/v1"}); err != nil {
@@ -2740,10 +2745,7 @@ func (a *App) rebindSyncService() {
 	a.syncSvc = syncsvc.NewService(a.vault.GetVaultPath(), "")
 }
 
-// preflightDealMigration is intentionally internal: foundation builds can
-// surface an actionable diagnostic without ever preparing or applying the
-// one-shot migration. Task 12 wires activation only after every target schema
-// has registered its transform bundle.
+// preflightDealMigration remains a read-only diagnostic for tests and support.
 func (a *App) preflightDealMigration(ctx context.Context) (dealmigration.Ledger, error) {
 	if a == nil || a.vault == nil || a.vault.GetVaultStatus() != vault.StatusOpen {
 		return dealmigration.Ledger{}, fmt.Errorf("vault is not open")
@@ -2757,6 +2759,18 @@ func (a *App) preflightDealMigration(ctx context.Context) (dealmigration.Ledger,
 		return dealmigration.Ledger{}, nil
 	}
 	return ledger, err
+}
+
+func (a *App) runDealMigration(ctx context.Context) error {
+	if a == nil || a.vault == nil || a.vault.GetVaultStatus() != vault.StatusOpen {
+		return fmt.Errorf("vault is not open")
+	}
+	runner := dealmigration.NewDealOnlyRunner(a.vault.GetVaultPath())
+	needed, err := runner.NeedsMigration(ctx)
+	if err != nil || !needed {
+		return err
+	}
+	return runner.Run(ctx)
 }
 
 func (a *App) rebindImportService() error {
@@ -2852,6 +2866,11 @@ func (a *App) startFileWatcherForOpenVault() {
 		a.treeV2 = workspacetree.NewService(vaultPath, a.eventBus)
 		if err := a.treeV2.Initialize(); err != nil {
 			log.Printf("[api] startFileWatcher: warning initializing tree v2: %v", err)
+		}
+		if err := a.runDealMigration(context.Background()); err != nil {
+			log.Printf("[api] startFileWatcher: legacy Deal migration failed: %v", err)
+			a.treeV2 = nil
+			return
 		}
 		a.treeV2.StartRescanLoop()
 	}

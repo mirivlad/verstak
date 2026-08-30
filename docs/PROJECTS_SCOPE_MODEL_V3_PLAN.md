@@ -1,5 +1,9 @@
 # Projects scope model v3 — implementation plan
 
+> Historical plan, superseded by the Deal-only architecture in
+> [`DEAL_ONLY_SCOPE.md`](DEAL_ONLY_SCOPE.md). Its `projectId` scope proposals
+> are not supported by the current runtime.
+
 Status: implementation plan for v0.1.5
 
 ## 1. Product model

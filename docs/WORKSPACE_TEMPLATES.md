@@ -1,40 +1,41 @@
-# Deal Templates
+# Deal templates
 
-Deal templates choose which dynamic plugin Deal tabs are visible when a new
-top-level Deal is created. They do not enable or disable plugins for the
-whole vault and do not affect global sidebar tools.
+Templates are persisted creation recipes owned by the `verstak.templates`
+plugin. They create a Deal; they do not define a second container type and
+never govern that Deal after creation.
 
-## Built-in templates
+## Scope and ownership
 
-| Template | Deal tabs |
-| --- | --- |
-| General | Notes, Files, Journal, Activity, Browser Inbox |
-| Project | Notes, Files, Todos, Journal, Activity, Browser Inbox |
-| Writing | Notes, Files, Journal |
-| Admin | Notes, Files, Secrets, Todos, Journal |
-| Minimal | Notes, Files |
+- A Deal UUID is the only runtime scope for all resources.
+- Core accepts a complete recipe snapshot: enabled tools, initial files and
+  folders, tool configuration, and historical provenance.
+- Core does not contain a template catalog or interpret plugin-specific recipe
+  fields. Provider plugins own their data and any folders they need.
+- `createdFromTemplate` is an immutable history snapshot. Editing or deleting
+  a template cannot mutate existing Deals.
 
-The create-Deal modal displays the selected template description and its
-included plugin tabs before the folder is created.
+The Templates plugin includes persisted seed recipes: General, Project,
+Writing, Admin, and Minimal. Users can create, edit, and delete their own
+recipes. A recipe that names a missing Deal plugin is rejected before creation;
+the host never silently substitutes another tool set.
 
-## Metadata and compatibility
+## Project recipe
 
-Creation stores a template snapshot in `.verstak/workspaces/` metadata. The
-snapshot contains the template id, name, version, applied time, and an ordered
-`workspaceTools` list of plugin IDs. Existing Deal metadata without
-`workspaceTools` remains compatible: its Deal continues to show all globally
-enabled Deal plugins rather than unexpectedly hiding tabs.
+The Project seed assembles independent Deal plugins: Project Meta, Git, Todo,
+Milestones, Notes, Files, Activity, Journal, and Secrets. Project Meta is
+metadata on that same Deal, not a nested Project scope. A Deal may have zero or
+more Git repository descriptors and milestones independently of Project Meta.
 
-Templates are applied once. Editing the built-in catalog or creating another
-Deal with a different template never changes an existing Deal snapshot.
-There is no template editor or post-creation template switcher yet.
+## Migration behavior
 
-## Global tools and unavailable plugins
+Opening a legacy vault triggers the one-shot `deal-only-v1` migration only
+when legacy Project-scoped data is found. It first writes an immutable backup
+and then flattens provider records to their Deal UUID, migrates one
+unambiguous Project record into Project Meta, and copies milestones to the
+Milestones provider. Multiple legacy Projects in one Deal are retained only in
+the backup; no extra Deals are created and no metadata winner is guessed.
 
-Template visibility applies only to `workspaceItems` in the selected Deal.
-Global views and sidebar items, such as global Todos, Browser Inbox, and Trash,
-remain available according to the normal plugin enablement state.
-
-The Deal host intersects the snapshot with dynamically discovered, globally
-enabled plugin contributions. If a template references a plugin that is missing or
-disabled, that tab is simply absent; the other template tabs remain usable.
+After the verified ledger is written, normal runtime does not read legacy
+Project records again. See
+[`DEAL_ONLY_SCOPE.md`](DEAL_ONLY_SCOPE.md) for the canonical architecture and
+migration invariants.
