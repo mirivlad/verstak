@@ -102,7 +102,10 @@ func NewRunner(vaultDir string, options ...Option) *Runner {
 // NewDealOnlyRunner assembles the complete one-shot migration. Calling it is
 // harmless; migration still requires an explicit Run invocation.
 func NewDealOnlyRunner(vaultDir string) *Runner {
-	return NewRunner(vaultDir, WithTransform(NewProviderDataTransform()))
+	return NewRunner(vaultDir,
+		WithTransform(NewProviderDataTransform()),
+		WithTransform(NewMilestoneDataTransform()),
+	)
 }
 
 func (r *Runner) Preflight(context.Context) error {
