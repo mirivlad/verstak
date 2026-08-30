@@ -1603,6 +1603,38 @@ function cloneJson(value) {
       collect(workspaceTreeV2Snapshot().roots);
       return Promise.resolve([out, '']);
     },
+    PluginCreateWorkspace: function (pluginId, parentFolderID, name, recipe) {
+      var err = requirePluginPermission(pluginId, 'workspaces.create');
+      if (err) return Promise.resolve([null, err]);
+      if (!recipe || typeof recipe !== 'object' || Array.isArray(recipe) || !recipe.provenance || !recipe.provenance.templateId) {
+        return Promise.resolve([null, 'recipe provenance template ID is required']);
+      }
+      var tools = Array.isArray(recipe.workspaceTools) ? recipe.workspaceTools.slice() : [];
+      var eligible = allPlugins().filter(function (plugin) {
+        return (plugin.manifest && plugin.manifest.contributes && plugin.manifest.contributes.workspaceItems || []).length > 0;
+      }).map(function (plugin) { return plugin.manifest.id; });
+      var unavailable = tools.find(function (toolID) { return eligible.indexOf(toolID) === -1; });
+      if (unavailable) return Promise.resolve([null, 'workspace tool is not available: ' + unavailable]);
+      return this.CreateWorkspaceV2WithTools(parentFolderID, name, 'custom', tools).then(function (created) {
+        if (created.error) return [null, created.error];
+        var rootPath = created.rootPath;
+        (recipe.initialFolders || []).forEach(function (folder) {
+          vaultFiles[rootPath + '/' + folder] = { type: 'folder', modifiedAt: new Date().toISOString() };
+        });
+        (recipe.initialFiles || []).forEach(function (file) {
+          if (file && file.path) vaultFiles[rootPath + '/' + file.path] = { type: 'file', content: String(file.content || ''), modifiedAt: new Date().toISOString() };
+        });
+        var metadata = workspaceMetadata[rootPath] || {};
+        metadata.workspaceTools = tools;
+        metadata.createdFromTemplate = {
+          templateId: recipe.provenance.templateId,
+          templateName: recipe.provenance.templateName || '',
+          templateVersion: recipe.provenance.templateVersion || 0
+        };
+        workspaceMetadata[rootPath] = metadata;
+        return [{ workspaceId: created.id, name: created.name }, ''];
+      });
+    },
     GetWorkspaceByID: function (id) {
       var v2 = findWorkspaceNodeV2(id);
       if (v2) {

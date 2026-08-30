@@ -45,6 +45,7 @@ func (r *Registry) registerDefaults() {
 		{Name: "ui.register", Description: "Register UI components and contributions", Dangerous: false},
 		{Name: "commands.register", Description: "Register command palette commands", Dangerous: false},
 		{Name: "workbench.open", Description: "Request Workbench open/edit routing for vault resources", Dangerous: false},
+		{Name: "workspaces.create", Description: "Create a Deal from a complete recipe snapshot", Dangerous: true},
 		{Name: "network.local", Description: "Connect to localhost network services", Dangerous: false},
 		{Name: "network.remote", Description: "Connect to remote network services", Dangerous: true},
 		{Name: "process.spawn", Description: "Spawn external processes", Dangerous: true},

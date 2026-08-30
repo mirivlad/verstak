@@ -153,6 +153,8 @@ export function PluginListImportEntries(arg1:string,arg2:string,arg3:string):Pro
 
 export function PluginListWorkspaces(arg1:string):Promise<Array<api.PluginWorkspaceDTO>|string>;
 
+export function PluginCreateWorkspace(arg1:string,arg2:string,arg3:string,arg4:Record<string, any>):Promise<Record<string, any>|string>;
+
 export function PluginReadImportText(arg1:string,arg2:string,arg3:string):Promise<string|string>;
 
 export function PluginResolveWorkspacePath(arg1:string,arg2:string):Promise<Record<string, any>|string>;

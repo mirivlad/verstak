@@ -3177,6 +3177,50 @@ func TestCreateWorkspaceV2WithToolsValidatesAndPersistsExactSelection(t *testing
 	}
 }
 
+func TestPluginCreateWorkspaceUsesRecipeSnapshotAndRequiresPermission(t *testing.T) {
+	app, root := newFilesTestApp(t, []string{"workspaces.create"})
+	app.plugins[0].Manifest.Contributes = &plugin.Contributions{WorkspaceItems: []plugin.ContributionWorkspaceItem{{
+		ID: "files", Title: "Files", Component: "FilesView",
+	}}}
+	app.treeV2 = workspacetree.NewService(root, nil)
+	if err := app.treeV2.Initialize(); err != nil {
+		t.Fatal(err)
+	}
+
+	recipe := workspacetree.DealRecipeSnapshot{
+		WorkspaceTools: []string{"files.plugin"},
+		InitialFolders: []string{"Notes"},
+		InitialFiles:   []workspacetree.DealRecipeFile{{Path: "Notes/brief.md", Content: "# Brief\n"}},
+		Provenance:     workspacetree.RecipeProvenance{TemplateID: "user-template", TemplateName: "Research", TemplateVersion: 3},
+	}
+	created, errText := app.PluginCreateWorkspace("files.plugin", "", "Research Deal", recipe)
+	if errText != "" {
+		t.Fatalf("PluginCreateWorkspace: %s", errText)
+	}
+	if created["workspaceId"] == "" || created["name"] != "Research Deal" {
+		t.Fatalf("created = %#v", created)
+	}
+	if _, err := os.Stat(filepath.Join(root, "Research Deal", "Notes", "brief.md")); err != nil {
+		t.Fatalf("recipe file missing: %v", err)
+	}
+
+	_, errText = app.PluginCreateWorkspace("files.plugin", "", "Rejected", workspacetree.DealRecipeSnapshot{
+		WorkspaceTools: []string{"missing.plugin"},
+		Provenance:     workspacetree.RecipeProvenance{TemplateID: "user-template"},
+	})
+	if !strings.Contains(errText, "workspace tool is not available") {
+		t.Fatalf("invalid tool error = %q", errText)
+	}
+	if _, err := os.Stat(filepath.Join(root, "Rejected")); !os.IsNotExist(err) {
+		t.Fatalf("invalid recipe created a Deal: %v", err)
+	}
+
+	app.plugins[0].Manifest.Permissions = nil
+	if _, errText = app.PluginCreateWorkspace("files.plugin", "", "Denied", recipe); !strings.Contains(errText, "workspaces.create") {
+		t.Fatalf("permission error = %q", errText)
+	}
+}
+
 func TestWorkspaceV2LifecyclePublishesEventsAndRecordsSync(t *testing.T) {
 	app, root := newSyncFilesTestApp(t, []string{"files.read"}, "local-device")
 	app.eventBus = events.NewBus()
