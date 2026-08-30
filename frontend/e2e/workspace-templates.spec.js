@@ -15,24 +15,62 @@ test.describe('Deal templates plugin', () => {
     consoleCollector.assertNoErrors();
   });
 
-  async function openTemplates(page) {
+  async function openNewDeal(page) {
     await page.locator('button[title="New Deal"]').click();
-    const form = page.locator('[data-templates-form]');
-    await expect(form).toBeVisible();
-    return form;
+    const dialog = page.locator('[data-new-deal-dialog]');
+    await expect(dialog).toBeVisible();
+    return dialog;
   }
 
+  async function openTemplateSettings(page) {
+    await page.locator('[data-settings-menu-button]').click();
+    await page.locator('[data-settings-section="plugin:verstak.templates:verstak.templates.settings"]').click();
+    const editor = page.locator('[data-templates-form]');
+    await expect(editor).toBeVisible();
+    return editor;
+  }
+
+  test('Settings owns template CRUD while New Deal applies a selected persisted template', async ({ page }) => {
+    const editor = await openTemplateSettings(page);
+    await expect(editor.locator('[data-template-tool="verstak.notes"]')).toContainText('Notes');
+    await expect(editor.locator('[data-template-tool="verstak.notes"]')).not.toContainText('verstak.notes');
+
+    await page.locator('[data-settings-window-close]').click();
+    await page.locator('button[title="New Deal"]').click();
+
+    const dialog = await openNewDeal(page);
+    await dialog.locator('[data-new-deal-template="seed-minimal"]').click();
+    await dialog.locator('[data-new-deal-name]').fill('Minimal picker Deal');
+    await dialog.locator('[data-new-deal-create]').click();
+
+    await expect.poll(async () => page.evaluate(async () => {
+      const tree = await window.go.api.App.GetWorkspaceTreeV2();
+      return tree.roots.some((node) => node.name === 'Minimal picker Deal');
+    })).toBe(true);
+  });
+
+  test('Settings keeps a removed template tool visible but disabled', async ({ page }) => {
+    await page.evaluate(() => window.__wailsMock.setPluginStatus('verstak.todo', 'disabled', false));
+    const editor = await openTemplateSettings(page);
+    await page.locator('button.templates-template', { hasText: 'Project' }).click();
+
+    const projectTools = await page.evaluate(async () => {
+      const result = await window.go.api.App.ReadPluginDataNDJSON('verstak.templates', 'templates');
+      const templates = Array.isArray(result) ? result[0] : result;
+      return templates.find((template) => template.id === 'seed-project')?.workspaceTools || [];
+    });
+    expect(projectTools).toContain('verstak.todo');
+
+    const missingTool = editor.locator('[data-template-tool="verstak.todo"]');
+    await expect(missingTool).toBeDisabled();
+    await expect(missingTool).toContainText('Unavailable workspace tool');
+  });
+
   test('Project seed passes its complete recipe snapshot through the public creation bridge', async ({ page }) => {
-    const form = await openTemplates(page);
-    await page.getByRole('button', { name: 'Project', exact: true }).click();
-
-    await expect(form.locator('[data-template-field="tools"]')).toHaveValue(/verstak\.git/);
-    await expect(form.locator('[data-template-field="tools"]')).toHaveValue(/verstak\.milestones/);
-    await expect(form.locator('[data-template-field="tools"]')).toHaveValue(/verstak\.secrets/);
-    await form.locator('[data-template-field="deal-name"]').fill('ProjectPlan');
-    await form.locator('[data-template-action="create-deal"]').click();
-
-    await expect(form.locator('.templates-message')).toContainText('Deal created.');
+    const dialog = await openNewDeal(page);
+    await dialog.locator('[data-new-deal-template="seed-project"]').click();
+    await dialog.locator('[data-new-deal-name]').fill('ProjectPlan');
+    await dialog.locator('[data-new-deal-create]').click();
     await expect.poll(async () => page.evaluate(async () => {
       const tree = await window.go.api.App.GetWorkspaceTreeV2();
       return tree.roots.some((node) => node.name === 'ProjectPlan');
@@ -56,11 +94,11 @@ test.describe('Deal templates plugin', () => {
   });
 
   test('Edit Deal changes tools without deleting disabled plugin data', async ({ page }) => {
-    const form = await openTemplates(page);
-    await page.getByRole('button', { name: 'Project', exact: true }).click();
-    await form.locator('[data-template-field="deal-name"]').fill('EditableDeal');
-    await form.locator('[data-template-action="create-deal"]').click();
-    await expect(form.locator('.templates-message')).toContainText('Deal created.');
+    const dialog = await openNewDeal(page);
+    await dialog.locator('[data-new-deal-template="seed-project"]').click();
+    await dialog.locator('[data-new-deal-name]').fill('EditableDeal');
+    await dialog.locator('[data-new-deal-create]').click();
+    await expect(dialog).toBeHidden();
 
     const workspaceId = await page.evaluate(async () => {
       const tree = await window.go.api.App.GetWorkspaceTreeV2();
@@ -112,12 +150,13 @@ test.describe('Deal templates plugin', () => {
   });
 
   test('templates are persisted plugin-owned recipes with CRUD and creation', async ({ page }) => {
-    const form = await openTemplates(page);
-    await page.getByRole('button', { name: 'New template', exact: true }).click();
+    const form = await openTemplateSettings(page);
+    await page.locator('.templates-list').getByRole('button', { name: 'New template', exact: true }).click();
 
     await form.locator('[data-template-field="name"]').fill('Client recipe');
     await form.locator('[data-template-field="description"]').fill('A focused client Deal.');
-    await form.locator('[data-template-field="tools"]').fill('verstak.notes\nverstak.files');
+    await form.locator('[data-template-tool="verstak.notes"]').click();
+    await form.locator('[data-template-tool="verstak.files"]').click();
     await form.locator('[data-template-field="folders"]').fill('Notes\nFiles\nBrief');
     await form.locator('[data-template-action="save"]').click();
     await expect(form.locator('.templates-message')).toContainText('Template saved.');
@@ -127,15 +166,18 @@ test.describe('Deal templates plugin', () => {
     await expect(form.locator('.templates-message')).toContainText('Template duplicated.');
     await expect(page.getByRole('button', { name: 'Client recipe (copy)', exact: true })).toBeVisible();
     await form.locator('[data-template-field="name"]').fill('Independent client recipe');
-    await form.locator('[data-template-field="tools"]').fill('verstak.notes');
+    await form.locator('[data-template-tool="verstak.files"]').click();
     await form.locator('[data-template-action="save"]').click();
     await expect(form.locator('.templates-message')).toContainText('Template saved.');
     await page.getByRole('button', { name: 'Client recipe', exact: true }).click();
-    await expect(form.locator('[data-template-field="tools"]')).toHaveValue('verstak.notes\nverstak.files');
+    await expect(form.locator('[data-template-tool="verstak.notes"]')).toHaveAttribute('aria-pressed', 'true');
+    await expect(form.locator('[data-template-tool="verstak.files"]')).toHaveAttribute('aria-pressed', 'true');
 
-    await form.locator('[data-template-field="deal-name"]').fill('ClientDeal');
-    await form.locator('[data-template-action="create-deal"]').click();
-    await expect(form.locator('.templates-message')).toContainText('Deal created.');
+    await page.locator('[data-settings-window-close]').click();
+    const dialog = await openNewDeal(page);
+    await dialog.getByRole('button', { name: 'Client recipe', exact: true }).click();
+    await dialog.locator('[data-new-deal-name]').fill('ClientDeal');
+    await dialog.locator('[data-new-deal-create]').click();
     await expect.poll(async () => page.evaluate(async () => {
       const metadata = await window.go.api.App.GetWorkspaceMetadata('ClientDeal');
       return {
@@ -160,12 +202,12 @@ test.describe('Deal templates plugin', () => {
 
   test('creation rejects a recipe whose workspace plugin is unavailable', async ({ page }) => {
     await page.evaluate(() => window.__wailsMock.setPluginStatus('verstak.todo', 'disabled', false));
-    const form = await openTemplates(page);
-    await page.getByRole('button', { name: 'Project', exact: true }).click();
-    await form.locator('[data-template-field="deal-name"]').fill('UnavailableProject');
-    await form.locator('[data-template-action="create-deal"]').click();
+    const dialog = await openNewDeal(page);
+    await dialog.locator('[data-new-deal-template="seed-project"]').click();
+    await dialog.locator('[data-new-deal-name]').fill('UnavailableProject');
+    await dialog.locator('[data-new-deal-create]').click();
 
-    await expect(form.locator('.templates-missing')).toContainText('verstak.todo');
+    await expect(dialog.locator('[data-new-deal-error]')).toBeVisible();
     await expect.poll(async () => page.evaluate(async () => {
       const tree = await window.go.api.App.GetWorkspaceTreeV2();
       return tree.roots.some((node) => node.name === 'UnavailableProject');
