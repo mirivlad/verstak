@@ -59,4 +59,34 @@ test.describe('Workspace tool order', () => {
     expect(labels.indexOf('Notes')).toBeLessThan(labels.indexOf('Files'));
     expect(labels.indexOf('Todos')).toBeLessThan(labels.indexOf('Files'));
   });
+
+  test('tool tabs page with directional arrows instead of scrolling', async ({ page }) => {
+    await page.setViewportSize({ width: 980, height: 760 });
+    await page.goto('/');
+    await waitForAppReady(page);
+    await page.evaluate(async () => {
+      const workspaceId = '11111111-1111-4111-8111-111111111111';
+      await window.go.api.App.UpdateWorkspaceV2Tools(workspaceId, [
+        'verstak.projects', 'verstak.notes', 'verstak.files', 'verstak.todo',
+        'verstak.milestones', 'verstak.git', 'verstak.activity',
+        'verstak.browser-inbox', 'verstak.journal', 'verstak.secrets', 'verstak.search',
+      ]);
+      window.dispatchEvent(new CustomEvent('verstak:workspace-tools-changed', { detail: { workspaceId } }));
+    });
+
+    const next = page.locator('[data-workspace-tab-page-next]');
+    const previous = page.locator('[data-workspace-tab-page-previous]');
+    await expect(next).toBeVisible({ timeout: 10000 });
+    await expect(page.getByRole('tab', { name: 'Overview', exact: true })).toBeVisible();
+    const tabListMetrics = await page.locator('.workspace-tab-list').evaluate((node) => ({
+      clientWidth: node.clientWidth,
+      scrollWidth: node.scrollWidth,
+      pageWidth: node.firstElementChild?.getBoundingClientRect().width,
+    }));
+    expect(tabListMetrics.scrollWidth).toBeLessThanOrEqual(tabListMetrics.clientWidth);
+
+    await next.click();
+    await expect(previous).toBeVisible();
+    await expect(page.getByRole('tab', { name: 'Overview', exact: true })).toHaveCount(0);
+  });
 });
