@@ -4253,6 +4253,54 @@ func TestPluginDealToolConfigIsNamespacedByPluginAndDealUUID(t *testing.T) {
 	}
 }
 
+func TestPluginGitKeepsCredentialsBackendOnlyAndReportsNotCloned(t *testing.T) {
+	app, _ := newFilesTestApp(t, []string{"process.spawn", "network.remote", "files.openExternal", "secrets.read", "secrets.write"})
+	app.plugins[0].Manifest.ID = "verstak.git"
+	app.treeV2 = workspacetree.NewService(app.vaultPath(), nil)
+	if err := app.treeV2.Initialize(); err != nil {
+		t.Fatal(err)
+	}
+	deal, errText := createTestDeal(app, "Deal", "git-test")
+	if errText != "" {
+		t.Fatal(errText)
+	}
+	metadata, err := app.treeV2.ReadDealMetadata(deal.ID, deal.RootPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	metadata.WorkspaceTools = []string{"verstak.git"}
+	if err := app.treeV2.WriteDealMetadata(metadata); err != nil {
+		t.Fatal(err)
+	}
+
+	status, errText := app.PluginGitStatus("verstak.git", map[string]interface{}{
+		"workspaceId": deal.ID, "repositoryId": "origin", "checkoutName": "origin",
+	})
+	if errText != "" || status["state"] != "not-cloned" {
+		t.Fatalf("status=%+v error=%q", status, errText)
+	}
+
+	if errText := app.PluginSecretsUnlock("verstak.git", "master password"); errText != "" {
+		t.Fatalf("unlock secrets: %s", errText)
+	}
+	if _, errText := app.PluginSecretsWrite("verstak.git", map[string]interface{}{
+		"id": "git-token", "title": "Git token", "value": "token-must-not-leak", "username": "git", "scope": map[string]interface{}{"kind": "global"},
+	}); errText != "" {
+		t.Fatalf("write secret: %s", errText)
+	}
+	_, errText = app.PluginGitClone("verstak.git", map[string]interface{}{
+		"workspaceId": deal.ID, "repositoryId": "origin", "checkoutName": "origin", "remoteUrl": "https://127.0.0.1:1/repo.git", "credentialRef": "verstak-secret://git-token",
+	})
+	if errText == "" || strings.Contains(errText, "token-must-not-leak") {
+		t.Fatalf("clone error leaked backend-only credential: %q", errText)
+	}
+	if _, errText := app.PluginGitClone("verstak.git", map[string]interface{}{
+		"workspaceId": deal.ID, "repositoryId": "unsafe", "checkoutName": "unsafe", "remoteUrl": "https://token-must-not-leak@example.invalid/repo.git",
+	}); errText == "" || strings.Contains(errText, "token-must-not-leak") {
+		t.Fatalf("credential-bearing remote URL was accepted or echoed: %q", errText)
+	}
+}
+
 func TestWorkspaceIdentityAPIListsAndRepairsDuplicates(t *testing.T) {
 	app, vaultDir := newFilesTestApp(t, []string{"files.read"})
 	app.treeV2 = workspacetree.NewService(vaultDir, nil)

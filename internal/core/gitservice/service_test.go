@@ -59,6 +59,89 @@ func TestGitFailureDoesNotExposeTransientCredential(t *testing.T) {
 	}
 }
 
+func TestServiceRegistersExistingRepositoryIntoManagedCheckout(t *testing.T) {
+	vault := t.TempDir()
+	workspaceID := uuid.NewString()
+	writeWorkspaceMarker(t, vault, "Deal", workspaceID)
+
+	source := filepath.Join(t.TempDir(), "source")
+	runTestGit(t, filepath.Dir(source), "init", "-b", "main", source)
+	runTestGit(t, source, "config", "user.name", "Test User")
+	runTestGit(t, source, "config", "user.email", "test@example.invalid")
+	if err := os.WriteFile(filepath.Join(source, "README.md"), []byte("existing\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	runTestGit(t, source, "add", "README.md")
+	runTestGit(t, source, "commit", "-m", "existing")
+
+	service := NewService(vault)
+	checkout, err := service.RegisterExisting(ExistingRepositoryRequest{
+		RepositoryRequest: RepositoryRequest{WorkspaceID: workspaceID, WorkspaceRoot: "Deal", RepositoryID: "existing", CheckoutName: "existing"},
+		SourcePath:        source,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if checkout != "Deal/Repositories/existing" {
+		t.Fatalf("checkout = %q", checkout)
+	}
+	if got := string(mustReadFile(t, filepath.Join(vault, filepath.FromSlash(checkout), "README.md"))); got != "existing\n" {
+		t.Fatalf("registered checkout README = %q", got)
+	}
+}
+
+func TestStatusReportsSyncedDescriptorAsNotClonedOnThisDevice(t *testing.T) {
+	vault := t.TempDir()
+	workspaceID := uuid.NewString()
+	writeWorkspaceMarker(t, vault, "Deal", workspaceID)
+
+	status, err := NewService(vault).Status(RepositoryRequest{WorkspaceID: workspaceID, WorkspaceRoot: "Deal", RepositoryID: "synced", CheckoutName: "synced"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if status.State != CheckoutStateNotCloned || !status.Clean || len(status.ChangedFiles) != 0 || len(status.RecentCommits) != 0 {
+		t.Fatalf("status = %+v", status)
+	}
+}
+
+func TestPrivateKeyEnvironmentIsTransient(t *testing.T) {
+	cleanup, env, err := credentialEnvironment(Credential{Username: "git", Value: "private-key-must-not-persist", PrivateKey: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	keyPath := ""
+	for _, entry := range env {
+		if strings.HasPrefix(entry, "GIT_SSH_COMMAND=") {
+			parts := strings.Split(entry, "'")
+			if len(parts) >= 2 {
+				keyPath = parts[1]
+			}
+		}
+		if strings.Contains(entry, "private-key-must-not-persist") {
+			t.Fatalf("credential value leaked through environment: %q", entry)
+		}
+	}
+	if keyPath == "" {
+		t.Fatalf("GIT_SSH_COMMAND missing from %v", env)
+	}
+	if got := string(mustReadFile(t, keyPath)); got != "private-key-must-not-persist" {
+		t.Fatalf("temporary key = %q", got)
+	}
+	cleanup()
+	if _, err := os.Stat(keyPath); !os.IsNotExist(err) {
+		t.Fatalf("temporary key remains after cleanup: %v", err)
+	}
+}
+
+func mustReadFile(t *testing.T, path string) []byte {
+	t.Helper()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return data
+}
+
 func writeWorkspaceMarker(t *testing.T, vault, root, workspaceID string) {
 	t.Helper()
 	path := filepath.Join(vault, root, ".verstak", "workspace.json")

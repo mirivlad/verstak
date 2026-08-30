@@ -33,11 +33,19 @@ type RepositoryRequest struct {
 	Credential    Credential
 }
 
+// ExistingRepositoryRequest copies an existing local checkout into the
+// managed Deal checkout root. The source is intentionally not retained.
+type ExistingRepositoryRequest struct {
+	RepositoryRequest
+	SourcePath string
+}
+
 // Credential is transient process input resolved by Core. It is never stored
 // in checkout metadata or returned from this package.
 type Credential struct {
-	Username string
-	Value    string
+	Username   string
+	Value      string
+	PrivateKey bool
 }
 
 type RecentCommit struct {
@@ -91,6 +99,39 @@ func (s *Service) Clone(request CloneRequest) (string, error) {
 	return checkout, nil
 }
 
+func (s *Service) RegisterExisting(request ExistingRepositoryRequest) (string, error) {
+	source := filepath.Clean(strings.TrimSpace(request.SourcePath))
+	if !filepath.IsAbs(source) {
+		return "", fmt.Errorf("existing repository path must be absolute")
+	}
+	if info, err := os.Stat(source); err != nil || !info.IsDir() {
+		return "", fmt.Errorf("existing repository path is not a directory")
+	}
+	if err := runGit(source, "rev-parse", "--is-inside-work-tree"); err != nil {
+		return "", fmt.Errorf("existing repository path is not a Git worktree")
+	}
+	checkout, err := RegisterCheckout(s.vaultRoot, CheckoutRegistration{
+		WorkspaceID: request.WorkspaceID, WorkspaceRoot: request.WorkspaceRoot,
+		RepositoryID: request.RepositoryID, CheckoutName: request.CheckoutName,
+	})
+	if err != nil {
+		return "", err
+	}
+	path := filepath.Join(s.vaultRoot, filepath.FromSlash(checkout))
+	if _, err := os.Stat(path); err == nil {
+		return "", fmt.Errorf("managed checkout already exists")
+	} else if !os.IsNotExist(err) {
+		return "", err
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return "", err
+	}
+	if err := runGit(filepath.Dir(path), "clone", "--local", "--", source, path); err != nil {
+		return "", err
+	}
+	return checkout, nil
+}
+
 func (s *Service) Status(request RepositoryRequest) (Status, error) {
 	path, err := s.checkoutPath(request)
 	if err != nil {
@@ -113,6 +154,21 @@ func (s *Service) Status(request RepositoryRequest) (Status, error) {
 	}
 	status.RecentCommits = commits
 	return status, nil
+}
+
+// CheckoutPath returns an existing managed local checkout. It intentionally
+// does not create a checkout for a synced descriptor on a new device.
+func (s *Service) CheckoutPath(request RepositoryRequest) (string, error) {
+	path, err := s.checkoutPath(request)
+	if err != nil {
+		return "", err
+	}
+	if _, err := os.Stat(path); os.IsNotExist(err) {
+		return "", fmt.Errorf("repository is not cloned on this device")
+	} else if err != nil {
+		return "", err
+	}
+	return path, nil
 }
 
 func (s *Service) Fetch(request RepositoryRequest) error { return s.run(request, "fetch", "--prune") }
@@ -155,7 +211,7 @@ func runGitOutput(dir string, credential Credential, args ...string) (string, er
 	defer cancel()
 	command := exec.CommandContext(ctx, "git", append([]string{"-C", dir}, args...)...)
 	command.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
-	cleanup, env, err := askPassEnvironment(credential)
+	cleanup, env, err := credentialEnvironment(credential)
 	if err != nil {
 		return "", err
 	}
@@ -214,10 +270,17 @@ func recentCommits(path string) ([]RecentCommit, error) {
 	return commits, nil
 }
 
-func askPassEnvironment(credential Credential) (func(), []string, error) {
+func credentialEnvironment(credential Credential) (func(), []string, error) {
 	if credential.Value == "" {
 		return func() {}, nil, nil
 	}
+	if credential.PrivateKey {
+		return privateKeyEnvironment(credential.Value)
+	}
+	return askPassEnvironment(credential)
+}
+
+func askPassEnvironment(credential Credential) (func(), []string, error) {
 	dir, err := os.MkdirTemp("", "verstak-git-askpass-")
 	if err != nil {
 		return nil, nil, err
@@ -229,5 +292,23 @@ func askPassEnvironment(credential Credential) (func(), []string, error) {
 		cleanup()
 		return nil, nil, err
 	}
-	return cleanup, []string{"GIT_ASKPASS=" + script, "GIT_USERNAME=git", "VERSTAK_GIT_USERNAME=" + credential.Username, "VERSTAK_GIT_PASSWORD=" + credential.Value}, nil
+	return cleanup, []string{"GIT_ASKPASS=" + script, "VERSTAK_GIT_USERNAME=" + credential.Username, "VERSTAK_GIT_PASSWORD=" + credential.Value}, nil
+}
+
+func privateKeyEnvironment(privateKey string) (func(), []string, error) {
+	dir, err := os.MkdirTemp("", "verstak-git-key-")
+	if err != nil {
+		return nil, nil, err
+	}
+	cleanup := func() { _ = os.RemoveAll(dir) }
+	path := filepath.Join(dir, "identity")
+	if err := os.WriteFile(path, []byte(privateKey), 0o600); err != nil {
+		cleanup()
+		return nil, nil, err
+	}
+	return cleanup, []string{"GIT_SSH_COMMAND=ssh -i " + shellSingleQuote(path) + " -o IdentitiesOnly=yes -o BatchMode=yes"}, nil
+}
+
+func shellSingleQuote(value string) string {
+	return "'" + strings.ReplaceAll(value, "'", "'\\\"'\\\"'") + "'"
 }
