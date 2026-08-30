@@ -15,6 +15,8 @@ if ! command -v ldd >/dev/null || ! command -v file >/dev/null; then
   exit 1
 fi
 
+"$ROOT/scripts/generate-brand-icons.sh"
+
 VERSTAK_VERSION="$VERSION" "$ROOT/scripts/build-linux-bundle.sh"
 
 APPIMAGETOOL="${APPIMAGETOOL_BIN:-$ROOT/build/tools/appimagetool-x86_64.AppImage}"
@@ -50,6 +52,7 @@ install -m 644 "$ROOT/packaging/linux/verstak.desktop" "$APPDIR/verstak.desktop"
 install -m 644 "$ROOT/packaging/linux/verstak.desktop" "$APPDIR/usr/share/applications/verstak.desktop"
 install -m 644 "$ROOT/packaging/linux/verstak.svg" "$APPDIR/verstak.svg"
 install -m 644 "$ROOT/packaging/linux/verstak.svg" "$APPDIR/usr/share/icons/hicolor/scalable/apps/verstak.svg"
+cp -R "$ROOT/build/linux-icons/hicolor/." "$APPDIR/usr/share/icons/hicolor/"
 cp -R "$BUNDLE/plugins" "$APPDIR/usr/bin/plugins"
 cp -a "$WEBKIT_RUNTIME_DIR" "$APPDIR/usr/lib/webkit2gtk-4.1"
 

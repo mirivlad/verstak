@@ -7,5 +7,6 @@ Icon=verstak
 Terminal=false
 Categories=Office;
 StartupNotify=true
+StartupWMClass=verstak
 X-Verstak-Desktop-Entry=true
 X-AppImage-Name=Verstak
