@@ -25,6 +25,9 @@ import todoManifest from '../../../../../verstak-official-plugins/plugins/todo/p
 import secretsManifest from '../../../../../verstak-official-plugins/plugins/secrets/plugin.json';
 import importManifest from '../../../../../verstak-official-plugins/plugins/import/plugin.json';
 import searchManifest from '../../../../../verstak-official-plugins/plugins/search/plugin.json';
+import templatesManifest from '../../../../../verstak-official-plugins/plugins/templates/plugin.json';
+import milestonesManifest from '../../../../../verstak-official-plugins/plugins/milestones/plugin.json';
+import gitManifest from '../../../../../verstak-official-plugins/plugins/git/plugin.json';
 import notesSource from '../../../../../verstak-official-plugins/plugins/notes/frontend/src/index.js?raw';
 import projectsSource from '../../../../../verstak-official-plugins/plugins/projects/frontend/src/index.js?raw';
 import browserInboxSource from '../../../../../verstak-official-plugins/plugins/browser-inbox/frontend/src/index.js?raw';
@@ -32,6 +35,7 @@ import secretsSource from '../../../../../verstak-official-plugins/plugins/secre
 import activitySource from '../../../../../verstak-official-plugins/plugins/activity/frontend/src/index.js?raw';
 import todoSource from '../../../../../verstak-official-plugins/plugins/todo/frontend/src/index.js?raw';
 import journalSource from '../../../../../verstak-official-plugins/plugins/journal/frontend/src/index.js?raw';
+import templatesSource from '../../../../../verstak-official-plugins/plugins/templates/frontend/src/index.js?raw';
 import notesEnCatalog from '../../../../../verstak-official-plugins/plugins/notes/locales/en.json';
 import notesRuCatalog from '../../../../../verstak-official-plugins/plugins/notes/locales/ru.json';
 import projectsEnCatalog from '../../../../../verstak-official-plugins/plugins/projects/locales/en.json';
@@ -83,7 +87,10 @@ import syncStyle from '../../../../../verstak-official-plugins/plugins/sync/fron
     [todoManifest, 'todo'],
     [secretsManifest, 'secrets'],
     [importManifest, 'import'],
-    [searchManifest, 'search']
+    [searchManifest, 'search'],
+    [templatesManifest, 'templates'],
+    [milestonesManifest, 'milestones'],
+    [gitManifest, 'git']
   ];
 
   function makeDefaultPluginStates() {
@@ -188,6 +195,7 @@ import syncStyle from '../../../../../verstak-official-plugins/plugins/sync/fron
   };
   var pluginNotifications = {};
   var pluginData = {};
+  var pluginDealConfig = {};
   var folderAppearances = {};
   var secretRecords = makeDefaultSecretRecords();
   var vaultFiles = makeDefaultVaultFiles();
@@ -207,6 +215,7 @@ import syncStyle from '../../../../../verstak-official-plugins/plugins/sync/fron
   var importSessions = {};
   var importSequence = 0;
   var importRunCounts = { dokuwiki: 0, obsidian: 0 };
+  var workspaceSequence = 3;
 
   // ── Helpers ────────────────────────────────────────────────────────
   function makeDefaultWorkspaceTree() {
@@ -214,8 +223,8 @@ import syncStyle from '../../../../../verstak-official-plugins/plugins/sync/fron
       status: 'initialized',
       currentNodeId: 'Project',
       nodes: [
-        { id: 'Project', parentId: '', type: 'space', title: 'Project', name: 'Project', rootPath: 'Project', status: 'active', order: 1 },
-        { id: 'Test', parentId: '', type: 'space', title: 'Test', name: 'Test', rootPath: 'Test', status: 'active', order: 2 }
+        { id: 'Project', workspaceId: '11111111-1111-4111-8111-111111111111', parentId: '', type: 'space', title: 'Project', name: 'Project', rootPath: 'Project', status: 'active', order: 1 },
+        { id: 'Test', workspaceId: '22222222-2222-4222-8222-222222222222', parentId: '', type: 'space', title: 'Test', name: 'Test', rootPath: 'Test', status: 'active', order: 2 }
       ]
     };
   }
@@ -231,15 +240,16 @@ import syncStyle from '../../../../../verstak-official-plugins/plugins/sync/fron
   function listWorkspacesFromTree() {
     return workspaceTree.nodes
       .filter(function (n) { return !n.parentId; })
-      .map(function (n) { return { name: n.name || n.id, rootPath: n.rootPath || n.name || n.id }; });
+      .map(function (n) { return { id: n.workspaceId || n.id, name: n.name || n.id, rootPath: n.rootPath || n.name || n.id }; });
   }
 
   function makeWorkspaceNode(name, order) {
-    return { id: name, parentId: '', type: 'space', title: name, name: name, rootPath: name, status: 'active', order: order };
+    var node = makeWorkspaceNodeV2(name, order);
+    return Object.assign(node, { parentId: '', type: 'space', title: name, status: 'active' });
   }
 
   function makeWorkspaceNodeV2(name, order) {
-    var wsid = 'ws-' + Math.random().toString(36).slice(2, 10);
+    var wsid = '00000000-0000-4000-8000-' + String(workspaceSequence++).padStart(12, '0');
     return { id: name, workspaceId: wsid, name: name, rootPath: name, order: order };
   }
 
@@ -307,86 +317,65 @@ function cloneJson(value) {
     ];
   }
 
-  function builtInWorkspaceTemplates() {
-    return [
-      {
-        id: 'default',
-        name: 'General',
-        description: 'Everyday Deal with notes, files, journal, activity, and browser captures.',
-        version: 2,
-        workspaceTools: ['verstak.notes', 'verstak.files', 'verstak.journal', 'verstak.activity', 'verstak.browser-inbox'],
-        folders: ['Notes', 'Files'],
-        features: { files: true, notes: true, activity: true, journal: true, 'browser-inbox': true },
-      },
-      {
-        id: 'project',
-        name: 'Project',
-        description: 'Project planning with todos, journal, activity, and browser captures.',
-        version: 1,
-        workspaceTools: ['verstak.projects', 'verstak.notes', 'verstak.files', 'verstak.todo', 'verstak.journal', 'verstak.activity', 'verstak.browser-inbox'],
-        folders: ['Notes', 'Files'],
-        features: { projects: true, files: true, notes: true, todo: true, journal: true, activity: true, 'browser-inbox': true },
-      },
-      {
-        id: 'writing',
-        name: 'Writing',
-        description: 'Focused notes, files, and journal Deal for documentation and writing.',
-        version: 1,
-        workspaceTools: ['verstak.notes', 'verstak.files', 'verstak.journal'],
-        folders: ['Notes', 'Files'],
-        features: { files: true, notes: true, journal: true },
-      },
-      {
-        id: 'admin',
-        name: 'Admin',
-        description: 'Infrastructure Deal with secrets, todos, and journal.',
-        version: 1,
-        workspaceTools: ['verstak.notes', 'verstak.files', 'verstak.secrets', 'verstak.todo', 'verstak.journal'],
-        folders: ['Notes', 'Files', 'Secrets'],
-        features: { files: true, notes: true, secrets: true, todo: true, journal: true },
-      },
-      {
-        id: 'minimal',
-        name: 'Minimal',
-        description: 'Only notes and files for a lightweight Deal.',
-        version: 1,
-        workspaceTools: ['verstak.notes', 'verstak.files'],
-        folders: ['Notes', 'Files'],
-        features: { files: true, notes: true },
-      },
-    ];
-  }
-
-  function workspaceTemplateByID(templateID) {
-    var id = String(templateID || 'default');
-    return builtInWorkspaceTemplates().find(function (template) { return template.id === id; }) || null;
-  }
-
-  function metadataForTemplate(name, template) {
+  function metadataForRecipe(name, recipe) {
     var now = new Date().toISOString();
-    var folders = { notes: 'Notes', files: 'Files' };
-    if (template.features.secrets) folders.secrets = 'Secrets';
-    return {
+    var tools = Array.isArray(recipe && recipe.workspaceTools) ? recipe.workspaceTools.slice() : [];
+    var metadata = {
       workspaceName: name,
-      createdFromTemplate: {
-        templateId: template.id,
-        templateName: template.name,
-        templateVersion: template.version,
-        appliedAt: now,
-        workspaceTools: template.workspaceTools.slice(),
-      },
-      features: Object.assign({}, template.features),
-      folders: folders,
-      workspaceTools: template.workspaceTools.slice(),
+      features: {},
+      folders: {},
+      workspaceTools: tools,
       updatedAt: now,
     };
+    tools.forEach(function (toolID) {
+      var key = toolID.replace('verstak.', '');
+      metadata.features[key] = true;
+      if (key === 'notes') metadata.folders.notes = 'Notes';
+      if (key === 'files') metadata.folders.files = 'Files';
+      if (key === 'secrets') metadata.folders.secrets = 'Secrets';
+    });
+    if (recipe && recipe.provenance) {
+      metadata.createdFromTemplate = {
+        templateId: recipe.provenance.templateId,
+        templateName: recipe.provenance.templateName || '',
+        templateVersion: recipe.provenance.templateVersion || 0,
+        appliedAt: now,
+        workspaceTools: tools.slice(),
+      };
+    }
+    return metadata;
+  }
+
+  function createWorkspaceFromRecipe(name, recipe) {
+    var norm = normalizeVaultPath(name, false);
+    if (norm.error || norm.path !== String(name || '').trim() || norm.path.indexOf('/') !== -1) {
+      return { error: norm.error || 'invalid-workspace-name' };
+    }
+    if (vaultFiles[norm.path]) return { error: 'conflict: ' + norm.path };
+    var tools = Array.isArray(recipe && recipe.workspaceTools) ? recipe.workspaceTools.slice() : [];
+    var eligible = allPlugins().filter(function (plugin) {
+      return (plugin.manifest && plugin.manifest.contributes && plugin.manifest.contributes.workspaceItems || []).length > 0;
+    }).map(function (plugin) { return plugin.manifest.id; });
+    var unavailable = tools.find(function (toolID) { return eligible.indexOf(toolID) === -1; });
+    if (unavailable) return { error: 'workspace tool is not available: ' + unavailable };
+    vaultFiles[norm.path] = { type: 'folder', modifiedAt: new Date().toISOString() };
+    (recipe.initialFolders || []).forEach(function (folder) {
+      vaultFiles[norm.path + '/' + folder] = { type: 'folder', modifiedAt: new Date().toISOString() };
+    });
+    (recipe.initialFiles || []).forEach(function (file) {
+      if (file && file.path) vaultFiles[norm.path + '/' + file.path] = { type: 'file', content: String(file.content || ''), modifiedAt: new Date().toISOString() };
+    });
+    var node = makeWorkspaceNode(norm.path, workspaceTree.nodes.length + 1);
+    workspaceMetadata[norm.path] = metadataForRecipe(norm.path, recipe || {});
+    workspaceTree.nodes.push(node);
+    return { id: node.workspaceId, name: node.name, rootPath: node.rootPath };
   }
 
   function makeDefaultWorkspaceMetadata() {
-    var projectTemplate = workspaceTemplateByID('project');
+    var fixtureRecipe = { workspaceTools: ['verstak.projects', 'verstak.notes', 'verstak.files', 'verstak.todo', 'verstak.journal', 'verstak.activity', 'verstak.browser-inbox'] };
     return {
-      Project: metadataForTemplate('Project', projectTemplate),
-      Test: metadataForTemplate('Test', projectTemplate),
+      Project: metadataForRecipe('Project', fixtureRecipe),
+      Test: metadataForRecipe('Test', fixtureRecipe),
     };
   }
 
@@ -685,6 +674,7 @@ function cloneJson(value) {
     var views = [], commands = [], searchProviders = [], worklogProviders = [], overviewProviders = [], sidebarItems = [], statusBarItems = [], settingsPanels = [], openProviders = [], workspaceItems = [];
     for (var id in pluginStates) {
       var s = pluginStates[id];
+      if (!s || s.status !== 'loaded' || !s.enabled) continue;
       var c = (s.manifest && s.manifest.contributes) || {};
       if (c.views) c.views.forEach(function (v) { views.push(Object.assign({}, v, { pluginId: id })); });
       if (c.commands) c.commands.forEach(function (cmd) { commands.push(Object.assign({}, cmd, { pluginId: id })); });
@@ -965,6 +955,19 @@ function cloneJson(value) {
       }
       return Promise.resolve([Array.isArray(data) ? data.slice() : [], '']);
     },
+    ReadPluginDealConfig: function (pluginId, workspaceId) {
+      var err = requirePluginPermission(pluginId, 'storage.namespace');
+      if (err) return Promise.resolve([{}, err]);
+      return Promise.resolve([cloneJson((pluginDealConfig[pluginId] || {})[workspaceId] || {}), '']);
+    },
+    WritePluginDealConfig: function (pluginId, workspaceId, config) {
+      var err = requirePluginPermission(pluginId, 'storage.namespace');
+      if (err) return Promise.resolve(err);
+      if (!findWorkspaceNodeV2(workspaceId)) return Promise.resolve('workspace not found: ' + workspaceId);
+      pluginDealConfig[pluginId] = pluginDealConfig[pluginId] || {};
+      pluginDealConfig[pluginId][workspaceId] = cloneJson(config || {});
+      return Promise.resolve('');
+    },
     WritePluginDataJSON: function (pluginId, name, data) {
       pluginData[pluginId] = pluginData[pluginId] || {};
       pluginData[pluginId][name] = Object.assign({}, data || {});
@@ -1116,6 +1119,9 @@ function cloneJson(value) {
       }
       if (pluginId === importManifest.id && assetPath === importManifest.frontend.style) {
         return Promise.resolve(importStyle);
+      }
+      if (pluginId === templatesManifest.id && assetPath === templatesManifest.frontend.entry) {
+        return Promise.resolve(templatesSource);
       }
       return Promise.resolve('');
     },
@@ -1462,33 +1468,6 @@ function cloneJson(value) {
     ListWorkspaces: function () {
       return Promise.resolve(listWorkspacesFromTree());
     },
-    ListWorkspaceTemplates: function () {
-      return Promise.resolve(builtInWorkspaceTemplates().map(function (template) {
-        return {
-          id: template.id,
-          name: template.name,
-          description: template.description,
-          version: template.version,
-          workspaceTools: template.workspaceTools.slice()
-        };
-      }));
-    },
-    CreateWorkspace: function (name, templateID) {
-      var norm = normalizeVaultPath(name, false);
-      if (norm.error || norm.path !== String(name || '').trim() || norm.path.indexOf('/') !== -1) {
-        return Promise.resolve(norm.error || 'invalid-workspace-name');
-      }
-      if (vaultFiles[norm.path]) return Promise.resolve('conflict: ' + norm.path);
-      var template = workspaceTemplateByID(templateID);
-      if (!template) return Promise.resolve('template-not-found: ' + String(templateID || ''));
-      vaultFiles[norm.path] = { type: 'folder', modifiedAt: new Date().toISOString() };
-      template.folders.forEach(function (folder) {
-        vaultFiles[norm.path + '/' + folder] = { type: 'folder', modifiedAt: new Date().toISOString() };
-      });
-      workspaceMetadata[norm.path] = metadataForTemplate(norm.path, template);
-      workspaceTree.nodes.push(makeWorkspaceNode(norm.path, workspaceTree.nodes.length + 1));
-      return Promise.resolve({ name: norm.path, rootPath: norm.path });
-    },
     RenameWorkspace: function (oldName, newName) {
       var oldNorm = normalizeVaultPath(oldName, false);
       var newNorm = normalizeVaultPath(newName, false);
@@ -1542,7 +1521,7 @@ function cloneJson(value) {
     },
     GetCurrentWorkspace: function () {
       var found = workspaceTree.nodes.find(function (n) { return n.id === workspaceTree.currentNodeId; });
-      return Promise.resolve(found ? { name: found.name || found.id, rootPath: found.rootPath || found.name || found.id } : null);
+      return Promise.resolve(found ? { workspaceId: found.workspaceId || found.id, name: found.name || found.id, rootPath: found.rootPath || found.name || found.id } : null);
     },
     GetCurrentWorkspaceNode: function () {
       var found = workspaceTree.nodes.find(function (n) { return n.id === workspaceTree.currentNodeId; });
@@ -1550,13 +1529,6 @@ function cloneJson(value) {
     },
     GetWorkspaceTree: function () { return Promise.resolve(cloneWorkspaceTree()); },
     ArchiveWorkspaceNode: function (id) { return this.TrashWorkspace(id).then(function (response) { return typeof response === 'string' ? response : ''; }); },
-    CreateWorkspaceNode: function (parentId, nodeType, title) {
-      return this.CreateWorkspace(title, 'default').then(function (response) {
-        if (typeof response === 'string') return { error: response };
-        var ws = response;
-        return makeWorkspaceNode(ws.name, workspaceTree.nodes.length);
-      });
-    },
     MoveWorkspaceNode: function () { return Promise.resolve(''); },
     RenameWorkspaceNode: function (id, title) { return this.RenameWorkspace(id, title); },
     SetCurrentWorkspace: function (id) {
@@ -1609,31 +1581,10 @@ function cloneJson(value) {
       if (!recipe || typeof recipe !== 'object' || Array.isArray(recipe) || !recipe.provenance || !recipe.provenance.templateId) {
         return Promise.resolve([null, 'recipe provenance template ID is required']);
       }
-      var tools = Array.isArray(recipe.workspaceTools) ? recipe.workspaceTools.slice() : [];
-      var eligible = allPlugins().filter(function (plugin) {
-        return (plugin.manifest && plugin.manifest.contributes && plugin.manifest.contributes.workspaceItems || []).length > 0;
-      }).map(function (plugin) { return plugin.manifest.id; });
-      var unavailable = tools.find(function (toolID) { return eligible.indexOf(toolID) === -1; });
-      if (unavailable) return Promise.resolve([null, 'workspace tool is not available: ' + unavailable]);
-      return this.CreateWorkspaceV2WithTools(parentFolderID, name, 'custom', tools).then(function (created) {
-        if (created.error) return [null, created.error];
-        var rootPath = created.rootPath;
-        (recipe.initialFolders || []).forEach(function (folder) {
-          vaultFiles[rootPath + '/' + folder] = { type: 'folder', modifiedAt: new Date().toISOString() };
-        });
-        (recipe.initialFiles || []).forEach(function (file) {
-          if (file && file.path) vaultFiles[rootPath + '/' + file.path] = { type: 'file', content: String(file.content || ''), modifiedAt: new Date().toISOString() };
-        });
-        var metadata = workspaceMetadata[rootPath] || {};
-        metadata.workspaceTools = tools;
-        metadata.createdFromTemplate = {
-          templateId: recipe.provenance.templateId,
-          templateName: recipe.provenance.templateName || '',
-          templateVersion: recipe.provenance.templateVersion || 0
-        };
-        workspaceMetadata[rootPath] = metadata;
-        return [{ workspaceId: created.id, name: created.name }, ''];
-      });
+      var created = createWorkspaceFromRecipe(name, recipe);
+      if (created.error) return Promise.resolve([null, created.error]);
+      window.dispatchEvent(new CustomEvent('verstak:workspace-tree-changed'));
+      return Promise.resolve([{ workspaceId: created.id, name: created.name }, '']);
     },
     GetWorkspaceByID: function (id) {
       var v2 = findWorkspaceNodeV2(id);
@@ -1662,61 +1613,6 @@ function cloneJson(value) {
       if (!found) return Promise.resolve('workspace not found: ' + id);
       workspaceTree.currentNodeId = found.id;
       return Promise.resolve('');
-    },
-    CreateWorkspaceV2: function (parentFolderID, name, templateID) {
-      var norm = normalizeVaultPath(name, false);
-      if (norm.error || norm.path !== String(name || '').trim() || norm.path.indexOf('/') !== -1) {
-        return Promise.resolve({ error: norm.error || 'invalid-workspace-name' });
-      }
-      if (vaultFiles[norm.path]) return Promise.resolve({ error: 'conflict: ' + norm.path });
-      var template = workspaceTemplateByID(templateID || 'default');
-      if (!template) return Promise.resolve({ error: 'template-not-found: ' + String(templateID || '') });
-      vaultFiles[norm.path] = { type: 'folder', modifiedAt: new Date().toISOString() };
-      template.folders.forEach(function (folder) {
-        vaultFiles[norm.path + '/' + folder] = { type: 'folder', modifiedAt: new Date().toISOString() };
-      });
-      workspaceMetadata[norm.path] = metadataForTemplate(norm.path, template);
-      var node = makeWorkspaceNodeV2(norm.path, workspaceTree.nodes.length + 1);
-      workspaceTree.nodes.push(node);
-      return Promise.resolve({ id: node.workspaceId || node.id, name: norm.path, rootPath: norm.path });
-    },
-    CreateWorkspaceV2WithTools: function (parentFolderID, name, templateID, workspaceTools) {
-      var norm = normalizeVaultPath(name, false);
-      if (norm.error || norm.path !== String(name || '').trim() || norm.path.indexOf('/') !== -1) {
-        return Promise.resolve({ error: norm.error || 'invalid-workspace-name' });
-      }
-      if (vaultFiles[norm.path]) return Promise.resolve({ error: 'conflict: ' + norm.path });
-      var eligible = allPlugins().filter(function (plugin) {
-        return (plugin.manifest && plugin.manifest.contributes && plugin.manifest.contributes.workspaceItems || []).length > 0;
-      }).map(function (plugin) { return plugin.manifest.id; });
-      var tools = Array.isArray(workspaceTools) ? workspaceTools.slice() : [];
-      var invalid = tools.find(function (toolID) { return eligible.indexOf(toolID) === -1; });
-      if (invalid) return Promise.resolve({ error: 'workspace tool is not available: ' + invalid });
-      var template = workspaceTemplateByID(templateID || 'default');
-      if (!template && templateID !== 'custom') return Promise.resolve({ error: 'template-not-found: ' + String(templateID || '') });
-      template = template || { id: 'custom', name: 'Custom', version: 1, folders: ['Notes', 'Files'], features: {}, workspaceTools: [] };
-      vaultFiles[norm.path] = { type: 'folder', modifiedAt: new Date().toISOString() };
-      template.folders.forEach(function (folder) {
-        vaultFiles[norm.path + '/' + folder] = { type: 'folder', modifiedAt: new Date().toISOString() };
-      });
-      if (tools.indexOf('verstak.secrets') !== -1) {
-        vaultFiles[norm.path + '/Secrets'] = { type: 'folder', modifiedAt: new Date().toISOString() };
-      }
-      var metadata = metadataForTemplate(norm.path, template);
-      metadata.workspaceTools = tools.slice();
-      metadata.features = {};
-      metadata.folders = {};
-      tools.forEach(function (toolID) {
-        var key = toolID.replace('verstak.', '');
-        metadata.features[key] = true;
-        if (key === 'notes') metadata.folders.notes = 'Notes';
-        if (key === 'files') metadata.folders.files = 'Files';
-        if (key === 'secrets') metadata.folders.secrets = 'Secrets';
-      });
-      workspaceMetadata[norm.path] = metadata;
-      var node = makeWorkspaceNodeV2(norm.path, workspaceTree.nodes.length + 1);
-      workspaceTree.nodes.push(node);
-      return Promise.resolve({ id: node.workspaceId || node.id, name: norm.path, rootPath: norm.path });
     },
     UpdateWorkspaceV2Tools: function (workspaceID, workspaceTools) {
       var found = workspaceTree.nodes.find(function (node) { return (node.workspaceId || node.id) === workspaceID; });
@@ -1852,6 +1748,7 @@ function cloneJson(value) {
       pluginSettings = { 'verstak.platform-test': { savedText: 'initial value' } };
       pluginNotifications = {};
       pluginData = {};
+      pluginDealConfig = {};
       folderAppearances = {};
       secretRecords = makeDefaultSecretRecords();
       vaultFiles = makeDefaultVaultFiles();
@@ -1871,6 +1768,7 @@ function cloneJson(value) {
       importSessions = {};
       importSequence = 0;
       importRunCounts = { dokuwiki: 0, obsidian: 0 };
+      workspaceSequence = 3;
     },
     setPluginStatus: function (pluginId, status, enabled) {
       if (pluginStates[pluginId]) {

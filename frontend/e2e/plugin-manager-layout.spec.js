@@ -119,7 +119,7 @@ test.describe('E: Plugin Manager layout', () => {
     await expect(page.locator('.plugin-card')).toHaveCount(1);
     await expect(page.locator('.plugin-card')).toContainText('Todos');
     await page.locator('[data-plugin-filter-permission="secrets.read"]').check();
-    await expect(page.locator('.plugin-card')).toHaveCount(2);
+    await expect(page.locator('.plugin-card')).toHaveCount(3);
     await page.locator('[data-plugin-filter-permission="secrets.read"]').uncheck();
 
     await page.locator('[data-plugin-filter-reset]').click();
@@ -174,9 +174,11 @@ test.describe('E: Plugin Manager layout', () => {
 
   test('workspace sidebar creates renames and trashes top-level workspaces', async ({ page }) => {
     await page.locator('button[title="New Deal"]').click();
-    const modal = page.locator('[data-workspace-create-modal]');
-    await modal.locator('[data-workspace-name]').fill('ClientA');
-    await modal.getByRole('button', { name: 'Create Deal' }).click();
+    const form = page.locator('[data-templates-form]');
+    await expect(form).toBeVisible();
+    await form.locator('[data-template-field="deal-name"]').fill('ClientA');
+    await form.locator('[data-template-action="create-deal"]').click();
+    await expect(form.locator('.templates-message')).toContainText('Deal created.');
 
     await expect(page.locator('.wt-label').filter({ hasText: 'ClientA' })).toBeVisible();
 

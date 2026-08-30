@@ -25,8 +25,9 @@ test.describe('Progressive global search index', () => {
             path: 'Clients/Active',
             children: [{
               kind: 'workspace',
-              id: 'nested-deal',
-              key: 'workspace:nested-deal',
+              id: '44444444-4444-4444-8444-444444444444',
+              workspaceId: '44444444-4444-4444-8444-444444444444',
+              key: 'workspace:44444444-4444-4444-8444-444444444444',
               name: 'Acme Nested Deal',
               path: 'Clients/Active/Acme',
               children: [],
@@ -38,6 +39,7 @@ test.describe('Progressive global search index', () => {
         warnings: [],
       });
     });
+    await page.evaluate(() => window.dispatchEvent(new CustomEvent('verstak:workspace-tree-changed')));
 
     const input = page.locator('[data-global-search-input]');
     await input.focus();

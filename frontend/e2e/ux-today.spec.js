@@ -20,7 +20,7 @@ test.describe('UX Overview workspace flow', () => {
 
     const tabs = page.getByRole('tab');
     await expect(tabs.nth(0)).toHaveText('Overview');
-    await expect(tabs.nth(1)).toHaveText('Project');
+    await expect(tabs.nth(1)).toHaveText('Project Meta');
     await expect(tabs.nth(2)).toHaveText('Notes');
     await expect(page.getByRole('tab', { name: 'Overview' })).toHaveAttribute('aria-selected', 'true');
     await expect(page.getByRole('tab', { name: 'Today' })).toHaveCount(0);
@@ -85,10 +85,13 @@ test.describe('UX Overview workspace flow', () => {
 
   test('Overview hides Browser cards and actions when the current Deal does not include it', async ({ page }) => {
     await page.locator('button[title="New Deal"]').click();
-    const modal = page.locator('[data-workspace-create-modal]');
-    await modal.locator('[data-workspace-name]').fill('MinimalOverview');
-    await modal.locator('[data-workspace-template]').selectOption('minimal');
-    await modal.getByRole('button', { name: 'Create Deal' }).click();
+    const form = page.locator('[data-templates-form]');
+    await expect(form).toBeVisible();
+    await page.getByRole('button', { name: 'Minimal', exact: true }).click();
+    await form.locator('[data-template-field="deal-name"]').fill('MinimalOverview');
+    await form.locator('[data-template-action="create-deal"]').click();
+    await expect(form.locator('.templates-message')).toContainText('Deal created.');
+    await page.locator('.wt-label').filter({ hasText: 'MinimalOverview' }).click();
     await expect(page.getByRole('tab', { name: 'Browser' })).toHaveCount(0);
 
     await page.evaluate(async () => {
@@ -171,8 +174,8 @@ test.describe('UX Overview workspace flow', () => {
           },
         ],
       });
-      await window.go.api.App.WritePluginSettings('verstak.activity', {
-        'events:workspace:Project': [
+      const PROJECT_ID = '11111111-1111-4111-8111-111111111111';
+      await window.go.api.App.WritePluginDataNDJSON('verstak.activity', 'activity-events', [
           {
             activityId: 'overview-selected-file',
             occurredAt: '2026-06-30T08:50:00.000Z',
@@ -180,6 +183,7 @@ test.describe('UX Overview workspace flow', () => {
             title: 'Selected file',
             summary: 'Project/draft.md',
             workspaceRootPath: 'Project',
+            workspaceId: PROJECT_ID,
           },
           {
             activityId: 'overview-opened-file',
@@ -188,6 +192,7 @@ test.describe('UX Overview workspace flow', () => {
             title: 'draft.md',
             summary: 'Project/draft.md',
             workspaceRootPath: 'Project',
+            workspaceId: PROJECT_ID,
           },
           {
             activityId: 'overview-note',
@@ -196,6 +201,7 @@ test.describe('UX Overview workspace flow', () => {
             title: 'Overview',
             summary: 'Project/Notes/Overview.md',
             workspaceRootPath: 'Project',
+            workspaceId: PROJECT_ID,
           },
           {
             activityId: 'overview-file',
@@ -204,6 +210,7 @@ test.describe('UX Overview workspace flow', () => {
             title: 'draft.md',
             summary: 'Project/draft.md',
             workspaceRootPath: 'Project',
+            workspaceId: PROJECT_ID,
           },
           {
             activityId: 'overview-workspace-selected',
@@ -211,24 +218,9 @@ test.describe('UX Overview workspace flow', () => {
             type: 'case.selected',
             title: 'Workspace selected',
             workspaceRootPath: 'Project',
+            workspaceId: PROJECT_ID,
           },
-        ],
-        'work-session-candidates:workspace:Project': [
-          {
-            candidateId: 'work-session:Project:overview-note:overview-file',
-            workspaceRootPath: 'Project',
-            startedAt: '2026-06-30T08:15:00.000Z',
-            endedAt: '2026-06-30T08:25:00.000Z',
-            estimatedMinutes: 10,
-            activityCount: 2,
-            activityIds: ['overview-file', 'overview-note'],
-            activities: [
-              { activityId: 'overview-file', type: 'file.changed', occurredAt: '2026-06-30T08:20:00.000Z' },
-              { activityId: 'overview-note', type: 'note.saved', occurredAt: '2026-06-30T08:25:00.000Z' },
-            ],
-          },
-        ],
-      });
+      ]);
       await window.go.api.App.WritePluginSettings('verstak.journal', {
         'worklog:workspace:Project': [
           {
@@ -310,14 +302,16 @@ test.describe('UX Overview workspace flow', () => {
   // list.
   test('the Activity card counts this Deal, not global browser activity', async ({ page }) => {
     await page.evaluate(async () => {
-      await window.go.api.App.WritePluginSettings('verstak.activity', {
-        'events:workspace:Project': [
+      const PROJECT_ID = '11111111-1111-4111-8111-111111111111';
+      const OTHER_DEAL_ID = '33333333-3333-4333-8333-333333333333';
+      await window.go.api.App.WritePluginDataNDJSON('verstak.activity', 'activity-events', [
           {
             activityId: 'in-this-deal-1',
             occurredAt: '2026-06-30T08:10:00.000Z',
             type: 'note.saved',
             title: 'One',
             workspaceRootPath: 'Project',
+            workspaceId: PROJECT_ID,
           },
           {
             activityId: 'in-this-deal-2',
@@ -325,6 +319,7 @@ test.describe('UX Overview workspace flow', () => {
             type: 'note.saved',
             title: 'Two',
             workspaceRootPath: 'Project',
+            workspaceId: PROJECT_ID,
           },
           // Same event twice: the Activity tool keys its list on the id.
           {
@@ -333,6 +328,7 @@ test.describe('UX Overview workspace flow', () => {
             type: 'note.saved',
             title: 'Two',
             workspaceRootPath: 'Project',
+            workspaceId: PROJECT_ID,
           },
           // Belongs to another Deal.
           {
@@ -341,6 +337,7 @@ test.describe('UX Overview workspace flow', () => {
             type: 'note.saved',
             title: 'Elsewhere',
             workspaceRootPath: 'SomewhereElse',
+            workspaceId: OTHER_DEAL_ID,
           },
           // Global: a visited domain belongs to no Deal.
           {
@@ -355,8 +352,7 @@ test.describe('UX Overview workspace flow', () => {
             type: 'browser.activity.domain',
             title: 'example.com',
           },
-        ],
-      });
+      ]);
     });
 
     const overview = page.locator('[data-overview-root]');
@@ -371,16 +367,16 @@ test.describe('UX Overview workspace flow', () => {
 
   test('Overview localizes activity labels without exposing internal event names', async ({ page }) => {
     await page.evaluate(async () => {
-      await window.go.api.App.WritePluginSettings('verstak.activity', {
-        'events:workspace:Project': [{
+      const PROJECT_ID = '11111111-1111-4111-8111-111111111111';
+      await window.go.api.App.WritePluginDataNDJSON('verstak.activity', 'activity-events', [{
           activityId: 'overview-russian-note',
           occurredAt: '2026-06-30T08:25:00.000Z',
           type: 'note.saved',
           title: 'Локализация',
           summary: 'Project/Notes/Localization.md',
           workspaceRootPath: 'Project',
-        }],
-      });
+          workspaceId: PROJECT_ID,
+        }]);
     });
     await page.locator('[data-settings-menu-button]').click();
     await page.locator('[data-settings-language="ru"]').click();

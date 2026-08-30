@@ -145,7 +145,7 @@ func TestSyncNowAgainstRealServerTwoVaults(t *testing.T) {
 	expectText(t, appA, "Shared/offline-created.txt", "created while closed")
 	assertNoUnpushedOps(t, appA)
 
-	deal, errStr := appA.CreateWorkspace("Synced Deal", "minimal")
+	deal, errStr := createTestDeal(appA, "Synced Deal", "minimal")
 	if errStr != "" {
 		t.Fatalf("appA CreateWorkspace: %s", errStr)
 	}

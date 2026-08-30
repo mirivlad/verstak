@@ -6,6 +6,7 @@ import { waitForAppReady, setupConsoleCollector, resetMockState, readJournalText
 // whatever happens to be mounted.
 async function seedActivity(page) {
   await page.evaluate(async () => {
+    const PROJECT_ID = '11111111-1111-4111-8111-111111111111';
     await window.go.api.App.WritePluginDataNDJSON('verstak.activity', 'activity-events', [
       {
         activityId: 'proposal-note',
@@ -14,7 +15,8 @@ async function seedActivity(page) {
         occurredAt: '2026-07-20T09:00:00.000Z',
         sourcePluginId: 'verstak.notes',
         workspaceRootPath: 'Project',
-        payload: { workspaceRootPath: 'Project' },
+        workspaceId: PROJECT_ID,
+        payload: { workspaceRootPath: 'Project', workspaceId: PROJECT_ID },
       },
       {
         activityId: 'proposal-file',
@@ -23,7 +25,8 @@ async function seedActivity(page) {
         occurredAt: '2026-07-20T09:15:00.000Z',
         sourcePluginId: 'verstak.files',
         workspaceRootPath: 'Project',
-        payload: { workspaceRootPath: 'Project' },
+        workspaceId: PROJECT_ID,
+        payload: { workspaceRootPath: 'Project', workspaceId: PROJECT_ID },
       },
     ]);
   });

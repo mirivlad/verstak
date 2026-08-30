@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { waitForAppReady, setupConsoleCollector, resetMockState } from './helpers.js';
 
-test.describe('Workspace templates', () => {
+test.describe('Deal templates plugin', () => {
   let consoleCollector;
 
   test.beforeEach(async ({ page }) => {
@@ -15,182 +15,94 @@ test.describe('Workspace templates', () => {
     consoleCollector.assertNoErrors();
   });
 
-  async function openCreateModal(page) {
+  async function openTemplates(page) {
     await page.locator('button[title="New Deal"]').click();
-    const modal = page.locator('[data-workspace-create-modal]');
-    await expect(modal).toBeVisible();
-    return modal;
+    const form = page.locator('[data-templates-form]');
+    await expect(form).toBeVisible();
+    return form;
   }
 
-  test('creation modal validates names, shows template tools, and persists the selected snapshot', async ({ page }) => {
-    const modal = await openCreateModal(page);
-    const templateSelect = modal.locator('[data-workspace-template]');
-    await expect(templateSelect).toHaveValue('default');
-    await expect(templateSelect).toHaveCSS('appearance', 'none');
-    await expect(modal.locator('[data-workspace-template-tools]')).toContainText('Notes');
-    await expect(modal.locator('[data-workspace-template-tools]')).toContainText('Browser');
+  test('Project seed passes its complete recipe snapshot through the public creation bridge', async ({ page }) => {
+    const form = await openTemplates(page);
+    await page.getByRole('button', { name: 'Project', exact: true }).click();
 
-    await modal.getByRole('button', { name: 'Create Deal' }).click();
-    await expect(modal.locator('[data-workspace-create-error]')).toContainText('Name is required');
+    await expect(form.locator('[data-template-field="tools"]')).toHaveValue(/verstak\.git/);
+    await expect(form.locator('[data-template-field="tools"]')).toHaveValue(/verstak\.milestones/);
+    await expect(form.locator('[data-template-field="tools"]')).toHaveValue(/verstak\.secrets/);
+    await form.locator('[data-template-field="deal-name"]').fill('ProjectPlan');
+    await form.locator('[data-template-action="create-deal"]').click();
 
-    await modal.locator('[data-workspace-name]').fill('bad/name');
-    await modal.getByRole('button', { name: 'Create Deal' }).click();
-    await expect(modal.locator('[data-workspace-create-error]')).toContainText('Could not create the Deal. Please try again.');
-
-    await modal.locator('[data-workspace-name]').fill('ProjectPlan');
-    await modal.locator('[data-workspace-template]').selectOption('project');
-    await expect(modal.locator('[data-workspace-template-description]')).toContainText('Project planning');
-    await expect(modal.locator('[data-workspace-template-tools]')).toContainText('Todos');
-    await modal.getByRole('button', { name: 'Create Deal' }).click();
-
-    await expect(page.locator('.wt-label').filter({ hasText: 'ProjectPlan' })).toBeVisible();
+    await expect(form.locator('.templates-message')).toContainText('Deal created.');
     await expect.poll(async () => page.evaluate(async () => {
-      const result = await window.go.api.App.GetWorkspaceMetadata('ProjectPlan');
-      const metadata = Array.isArray(result) ? result[0] : result;
+      const tree = await window.go.api.App.GetWorkspaceTreeV2();
+      return tree.roots.some((node) => node.name === 'ProjectPlan');
+    })).toBe(true);
+    await expect.poll(async () => page.evaluate(async () => {
+      const metadata = await window.go.api.App.GetWorkspaceMetadata('ProjectPlan');
       return {
-        templateId: metadata.createdFromTemplate?.templateId,
         tools: metadata.workspaceTools,
+        provenance: metadata.createdFromTemplate,
       };
     })).toEqual({
-      templateId: 'project',
-      tools: ['verstak.projects', 'verstak.notes', 'verstak.files', 'verstak.todo', 'verstak.journal', 'verstak.activity', 'verstak.browser-inbox'],
+      tools: ['verstak.projects', 'verstak.git', 'verstak.todo', 'verstak.milestones', 'verstak.notes', 'verstak.files', 'verstak.activity', 'verstak.journal', 'verstak.secrets'],
+      provenance: {
+        templateId: 'seed-project',
+        templateName: 'Project',
+        templateVersion: 1,
+        appliedAt: expect.any(String),
+        workspaceTools: ['verstak.projects', 'verstak.git', 'verstak.todo', 'verstak.milestones', 'verstak.notes', 'verstak.files', 'verstak.activity', 'verstak.journal', 'verstak.secrets'],
+      },
+    });
+  });
+
+  test('templates are persisted plugin-owned recipes with CRUD and creation', async ({ page }) => {
+    const form = await openTemplates(page);
+    await page.getByRole('button', { name: 'New template', exact: true }).click();
+
+    await form.locator('[data-template-field="name"]').fill('Client recipe');
+    await form.locator('[data-template-field="description"]').fill('A focused client Deal.');
+    await form.locator('[data-template-field="tools"]').fill('verstak.notes\nverstak.files');
+    await form.locator('[data-template-field="folders"]').fill('Notes\nFiles\nBrief');
+    await form.locator('[data-template-action="save"]').click();
+    await expect(form.locator('.templates-message')).toContainText('Template saved.');
+    await expect(page.getByRole('button', { name: 'Client recipe', exact: true })).toBeVisible();
+
+    await form.locator('[data-template-field="deal-name"]').fill('ClientDeal');
+    await form.locator('[data-template-action="create-deal"]').click();
+    await expect(form.locator('.templates-message')).toContainText('Deal created.');
+    await expect.poll(async () => page.evaluate(async () => {
+      const metadata = await window.go.api.App.GetWorkspaceMetadata('ClientDeal');
+      return {
+        tools: metadata.workspaceTools,
+        templateName: metadata.createdFromTemplate?.templateName,
+        briefExists: Boolean((await window.go.api.App.ListVaultFiles('verstak.files', 'ClientDeal'))[0].find((entry) => entry.relativePath === 'ClientDeal/Brief')),
+      };
+    })).toEqual({
+      tools: ['verstak.notes', 'verstak.files'],
+      templateName: 'Client recipe',
+      briefExists: true,
     });
 
-    await expect(page.getByRole('tab', { name: 'Project' })).toBeVisible();
-    await expect(page.getByRole('tab', { name: 'Todos' })).toBeVisible();
-    await expect(page.getByRole('tab', { name: 'Journal' })).toBeVisible();
-    await expect(page.getByRole('tab', { name: 'Secrets' })).toHaveCount(0);
-  });
-
-  test('template tools are an editable initial selection and creation persists the exact set', async ({ page }) => {
-    const modal = await openCreateModal(page);
-    await modal.locator('[data-workspace-template]').selectOption('project');
-
-    const todo = modal.locator('[data-workspace-tool="verstak.todo"]');
-    const files = modal.locator('[data-workspace-tool="verstak.files"]');
-    const secrets = modal.locator('[data-workspace-tool="verstak.secrets"]');
-    await expect(todo).toHaveAttribute('aria-pressed', 'true');
-    await expect(files).toHaveAttribute('aria-pressed', 'true');
-    await expect(secrets).toHaveAttribute('aria-pressed', 'false');
-
-    await files.click();
-    await secrets.click();
-    await expect(files).toHaveAttribute('aria-pressed', 'false');
-    await expect(secrets).toHaveAttribute('aria-pressed', 'true');
-
-    await modal.locator('[data-workspace-name]').fill('ExactTools');
-    await modal.getByRole('button', { name: 'Create Deal' }).click();
+    await form.locator('[data-template-action="delete"]').click();
+    await expect(page.getByRole('button', { name: 'Client recipe', exact: true })).toHaveCount(0);
     await expect.poll(async () => page.evaluate(async () => {
-      const result = await window.go.api.App.GetWorkspaceMetadata('ExactTools');
-      const metadata = Array.isArray(result) ? result[0] : result;
-      return metadata.workspaceTools;
-    })).toEqual([
-      'verstak.projects',
-      'verstak.notes',
-      'verstak.todo',
-      'verstak.journal',
-      'verstak.activity',
-      'verstak.browser-inbox',
-      'verstak.secrets',
-    ]);
+      const result = await window.go.api.App.ReadPluginDataNDJSON('verstak.templates', 'templates');
+      const templates = Array.isArray(result) ? result[0] : result;
+      return templates.some((template) => template.name === 'Client recipe');
+    })).toBe(false);
   });
 
-  test('existing Deal can add Projects through Edit Deal and updates its tabs immediately', async ({ page }) => {
-    const create = await openCreateModal(page);
-    await create.locator('[data-workspace-name]').fill('AddProjectsLater');
-    await create.getByRole('button', { name: 'Create Deal' }).click();
+  test('creation rejects a recipe whose workspace plugin is unavailable', async ({ page }) => {
+    await page.evaluate(() => window.__wailsMock.setPluginStatus('verstak.todo', 'disabled', false));
+    const form = await openTemplates(page);
+    await page.getByRole('button', { name: 'Project', exact: true }).click();
+    await form.locator('[data-template-field="deal-name"]').fill('UnavailableProject');
+    await form.locator('[data-template-action="create-deal"]').click();
 
-    await expect(page.getByRole('tab', { name: 'Project' })).toHaveCount(0);
-    const deal = page.locator('.wt-node').filter({ hasText: 'AddProjectsLater' });
-    await deal.click({ button: 'right' });
-    await page.getByRole('button', { name: 'Edit Deal' }).click();
-
-    const edit = page.locator('[data-workspace-edit-modal]');
-    await expect(edit).toBeVisible();
-    await expect(edit.locator('[data-workspace-edit-name]')).toHaveValue('AddProjectsLater');
-    const projects = edit.locator('[data-workspace-edit-tool="verstak.projects"]');
-    await expect(projects).toHaveAttribute('aria-pressed', 'false');
-    await projects.click();
-    await expect(projects).toHaveAttribute('aria-pressed', 'true');
-    await edit.getByRole('button', { name: 'Save' }).click();
-
-    await expect(edit).toBeHidden();
-    await expect(page.getByRole('tab', { name: 'Project' })).toBeVisible();
+    await expect(form.locator('.templates-missing')).toContainText('verstak.todo');
     await expect.poll(async () => page.evaluate(async () => {
-      const result = await window.go.api.App.GetWorkspaceMetadata('AddProjectsLater');
-      const metadata = Array.isArray(result) ? result[0] : result;
-      return metadata.workspaceTools.includes('verstak.projects');
-    })).toBe(true);
-  });
-
-  test('Custom shows every eligible workspace plugin and cancel does not mutate the tree', async ({ page }) => {
-    const before = await page.evaluate(async () => (await window.go.api.App.GetWorkspaceTreeV2()).roots.length);
-    const modal = await openCreateModal(page);
-    await modal.locator('[data-workspace-template]').selectOption('custom');
-    await expect(modal.locator('[data-workspace-tool]')).toHaveCount(9);
-    await expect(modal.locator('[data-workspace-tool][aria-pressed="true"]')).toHaveCount(0);
-    await expect(modal.locator('[data-workspace-tool="verstak.default-editor"]')).toHaveCount(0);
-    await modal.locator('[data-workspace-name]').fill('CancelledDeal');
-    await modal.getByRole('button', { name: 'Cancel' }).click();
-    await expect(modal).toBeHidden();
-    const after = await page.evaluate(async () => (await window.go.api.App.GetWorkspaceTreeV2()).roots.length);
-    expect(after).toBe(before);
-    await expect(page.locator('.wt-label').filter({ hasText: 'CancelledDeal' })).toHaveCount(0);
-  });
-
-  test('Minimal keeps global tools available while limiting workspace tabs', async ({ page }) => {
-    const modal = await openCreateModal(page);
-    await modal.locator('[data-workspace-name]').fill('MinimalSpace');
-    await modal.locator('[data-workspace-template]').selectOption('minimal');
-    await modal.getByRole('button', { name: 'Create Deal' }).click();
-
-    await expect(page.getByRole('tab', { name: 'Overview' })).toBeVisible();
-    await expect(page.getByRole('tab', { name: 'Notes' })).toBeVisible();
-    await expect(page.getByRole('tab', { name: 'Files' })).toBeVisible();
-    await expect(page.getByRole('tab', { name: 'Todos' })).toHaveCount(0);
-    await expect(page.getByRole('tab', { name: 'Journal' })).toHaveCount(0);
-    await expect(page.getByRole('tab', { name: 'Secrets' })).toHaveCount(0);
-    await expect(page.locator('.sidebar .plugin-item').filter({ hasText: 'Todos' })).toBeVisible();
-    await expect(page.locator('.sidebar .plugin-item').filter({ hasText: 'Browser' })).toBeVisible();
-  });
-
-  test('template explains an unavailable plugin and warns after incomplete creation', async ({ page }) => {
-    await page.evaluate(() => window.__wailsMock.setPluginStatus('verstak.todo', 'disabled', false));
-    const modal = await openCreateModal(page);
-    await modal.locator('[data-workspace-template]').selectOption('project');
-
-    const todo = modal.locator('[data-workspace-template-tool="verstak.todo"]');
-    await expect(todo).toContainText('Todos');
-    await expect(todo).toContainText('Plugin is disabled');
-    await expect(todo).toHaveAttribute('data-template-tool-status', 'unavailable');
-
-    await modal.locator('[data-workspace-name]').fill('ProjectWithWarning');
-    await modal.getByRole('button', { name: 'Create Deal' }).click();
-
-    const warning = page.locator('[data-workspace-template-warning]');
-    await expect(warning).toContainText('ProjectWithWarning');
-    await expect(warning).toContainText('Todos');
-    await expect(warning).toContainText('Plugin is disabled');
-  });
-
-  test('Admin shows Secrets when available and missing workspace plugins degrade without breaking tabs', async ({ page }) => {
-    let modal = await openCreateModal(page);
-    await modal.locator('[data-workspace-name]').fill('AdminSpace');
-    await modal.locator('[data-workspace-template]').selectOption('admin');
-    await modal.getByRole('button', { name: 'Create Deal' }).click();
-    await expect(page.getByRole('tab', { name: 'Secrets' })).toBeVisible();
-
-    await page.evaluate(() => window.__wailsMock.setPluginStatus('verstak.todo', 'disabled', false));
-    modal = await openCreateModal(page);
-    await modal.locator('[data-workspace-name]').fill('ProjectWithoutTodo');
-    await modal.locator('[data-workspace-template]').selectOption('project');
-    await modal.getByRole('button', { name: 'Create Deal' }).click();
-
-    await expect(page.getByRole('tab', { name: 'Notes' })).toBeVisible();
-    await expect(page.getByRole('tab', { name: 'Files' })).toBeVisible();
-    await expect(page.getByRole('tab', { name: 'Todos' })).toHaveCount(0);
-
-    await page.locator('.wt-label').filter({ hasText: 'AdminSpace' }).click();
-    await expect(page.getByRole('tab', { name: 'Secrets' })).toBeVisible();
+      const tree = await window.go.api.App.GetWorkspaceTreeV2();
+      return tree.roots.some((node) => node.name === 'UnavailableProject');
+    })).toBe(false);
   });
 });
