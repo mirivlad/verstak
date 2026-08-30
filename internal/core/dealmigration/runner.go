@@ -13,6 +13,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/verstak/verstak-desktop/internal/core/workspacetree"
 )
 
 type State string
@@ -103,6 +105,7 @@ func NewRunner(vaultDir string, options ...Option) *Runner {
 // harmless; migration still requires an explicit Run invocation.
 func NewDealOnlyRunner(vaultDir string) *Runner {
 	return NewRunner(vaultDir,
+		WithTransform(NewDealMetadataTransform()),
 		WithTransform(NewProviderDataTransform()),
 		WithTransform(NewProjectMetaTransform()),
 		WithTransform(NewMilestoneDataTransform()),
@@ -123,7 +126,28 @@ func (r *Runner) NeedsMigration(ctx context.Context) (bool, error) {
 	if !errors.Is(err, os.ErrNotExist) {
 		return false, err
 	}
-	return hasLegacyDealScope(ctx, r.vaultDir)
+	legacy, err := hasLegacyDealScope(ctx, r.vaultDir)
+	if err != nil || legacy {
+		return legacy, err
+	}
+	return hasMissingCanonicalDealMetadata(r.vaultDir)
+}
+
+func hasMissingCanonicalDealMetadata(vault string) (bool, error) {
+	rootToWorkspace, err := currentWorkspaceRootIDs(vault)
+	if err != nil {
+		return false, err
+	}
+	service := workspacetree.NewService(vault, nil)
+	for rootPath, workspaceID := range rootToWorkspace {
+		if _, err := service.ReadDealMetadata(workspaceID, rootPath); err != nil {
+			if errors.Is(err, os.ErrNotExist) {
+				return true, nil
+			}
+			return false, err
+		}
+	}
+	return false, nil
 }
 
 func hasLegacyDealScope(ctx context.Context, vault string) (bool, error) {
