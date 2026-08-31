@@ -24,7 +24,6 @@
   $: shellCommands = [
     { id: 'verstak.shell.open-overview', title: tr('command.openOverview'), pluginId: 'verstak.shell', pluginName: 'Verstak', priority: 10, shellAction: 'overview' },
     { id: 'verstak.shell.open-files', title: tr('command.openFiles'), pluginId: 'verstak.shell', pluginName: 'Verstak', priority: 20, shellAction: 'files' },
-    { id: 'verstak.shell.open-activity', title: tr('command.openActivity'), pluginId: 'verstak.shell', pluginName: 'Verstak', priority: 30, shellAction: 'activity' },
     { id: 'verstak.shell.open-browser-inbox', title: tr('command.openBrowserInbox'), pluginId: 'verstak.shell', pluginName: 'Verstak', priority: 40, shellAction: 'browser-inbox' },
     { id: 'verstak.shell.create-markdown', title: tr('command.createMarkdown'), pluginId: 'verstak.shell', pluginName: 'Verstak', priority: 50, shellAction: 'create-markdown' },
     { id: 'verstak.shell.create-text', title: tr('command.createText'), pluginId: 'verstak.shell', pluginName: 'Verstak', priority: 60, shellAction: 'create-text' },

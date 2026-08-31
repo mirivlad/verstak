@@ -15,10 +15,13 @@ test.describe('Activity visibility', () => {
     consoleCollector.assertNoErrors();
   });
 
-  test('Activity is a background provider without sidebar, Deal tab, or Overview surface', async ({ page }) => {
+  test('Activity is a background provider without a user-facing entry point', async ({ page }) => {
     await expect(page.getByRole('tab', { name: 'Activity', exact: true })).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Activity', exact: true })).toHaveCount(0);
     await expect(page.locator('[data-overview-provider="verstak.activity"]')).toHaveCount(0);
+
+    await page.keyboard.press(process.platform === 'darwin' ? 'Meta+K' : 'Control+K');
+    await expect(page.locator('[data-command-id="verstak.shell.open-activity"]')).toHaveCount(0);
 
     await openPluginManager(page);
     await expect(page.locator('.plugin-manager').getByText('Activity', { exact: true })).toBeVisible();

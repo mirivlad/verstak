@@ -54,18 +54,18 @@ test.describe('Command Palette', () => {
     const items = palette.locator('.command-palette-item');
     await expect(items.nth(0)).toHaveAttribute('data-command-id', 'verstak.shell.open-overview');
     await expect(items.nth(1)).toHaveAttribute('data-command-id', 'verstak.shell.open-files');
-    await expect(items.nth(2)).toHaveAttribute('data-command-id', 'verstak.shell.open-activity');
-    await expect(items.nth(3)).toHaveAttribute('data-command-id', 'verstak.shell.open-browser-inbox');
+    await expect(items.nth(2)).toHaveAttribute('data-command-id', 'verstak.shell.open-browser-inbox');
+    await expect(palette.loc('[data-command-id="verstak.shell.open-activity"]')).toHaveCount(0);
 
-    await palette.locator('[data-command-palette-input]').fill('activity');
-    await expect(palette.locator('[data-command-id="verstak.shell.open-activity"]')).toBeVisible();
+    await palette.locator('[data-command-palette-input]').fill('browser');
+    await expect(palette.locator('[data-command-id="verstak.shell.open-browser-inbox"]')).toBeVisible();
     await expect(palette.locator('[data-command-id="verstak.platform-test.run-tests"]')).not.toBeVisible();
 
     await page.keyboard.press('Enter');
 
     await expect(palette).not.toBeVisible();
-    await expect(page.getByRole('tab', { name: 'Activity' })).toHaveAttribute('aria-selected', 'true');
-    await expect(page.locator('.activity-root')).toBeVisible({ timeout: 10000 });
+    await expect(page.getByRole('tab', { name: 'Browser' })).toHaveAttribute('aria-selected', 'true');
+    await expect(page.locator('.browser-inbox-root')).toBeVisible({ timeout: 10000 });
   });
 
   test('starts file creation workflows from user commands', async ({ page }) => {
