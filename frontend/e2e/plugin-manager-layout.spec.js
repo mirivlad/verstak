@@ -174,11 +174,11 @@ test.describe('E: Plugin Manager layout', () => {
 
   test('workspace sidebar creates renames and trashes top-level workspaces', async ({ page }) => {
     await page.locator('button[title="New Deal"]').click();
-    const form = page.locator('[data-templates-form]');
-    await expect(form).toBeVisible();
-    await form.locator('[data-template-field="deal-name"]').fill('ClientA');
-    await form.locator('[data-template-action="create-deal"]').click();
-    await expect(form.locator('.templates-message')).toContainText('Deal created.');
+    const dialog = page.locator('[data-new-deal-dialog]');
+    await expect(dialog).toBeVisible();
+    await dialog.locator('[data-new-deal-name]').fill('ClientA');
+    await dialog.locator('[data-new-deal-create]').click();
+    await expect(dialog).toBeHidden();
 
     await expect(page.locator('.wt-label').filter({ hasText: 'ClientA' })).toBeVisible();
 

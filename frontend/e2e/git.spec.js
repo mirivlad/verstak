@@ -11,10 +11,11 @@ test.describe('Git Deal plugin', () => {
     await waitForAppReady(page);
     await page.evaluate(async () => {
       const workspaceId = '11111111-1111-4111-8111-111111111111';
-      await window.go.api.App.UpdateWorkspaceV2Tools(workspaceId, [
+      const error = await window.go.api.App.UpdateWorkspaceV2Tools(workspaceId, [
         'verstak.projects', 'verstak.notes', 'verstak.files', 'verstak.todo', 'verstak.journal',
-        'verstak.activity', 'verstak.browser-inbox', 'verstak.git',
+        'verstak.browser-inbox', 'verstak.git',
       ]);
+      if (error) throw new Error(error);
       window.dispatchEvent(new CustomEvent('verstak:workspace-tools-changed', { detail: { workspaceId } }));
     });
     await page.getByRole('tab', { name: 'Git', exact: true }).click();

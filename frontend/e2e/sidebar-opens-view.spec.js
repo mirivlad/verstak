@@ -27,35 +27,31 @@ test.describe('B: Sidebar opens plugin view by item.view', () => {
     consoleCollector.assertNoErrors();
   });
 
-  test('Sidebar item exists with correct label', async ({ page }) => {
+  test('Sidebar hides Activity while retaining user-facing tools', async ({ page }) => {
     await expect(page.locator('.sidebar .nav-item').filter({ hasText: 'Plugin Manager' })).not.toBeVisible();
-    await expect(page.locator('.sidebar .plugin-item').filter({ hasText: 'Activity' })).toBeVisible();
+    await expect(page.locator('.sidebar .plugin-item').filter({ hasText: 'Activity' })).toHaveCount(0);
     await expect(page.locator('.sidebar .plugin-item').filter({ hasText: 'Browser' })).toBeVisible();
 
     const sidebarItem = page.locator('.sidebar .plugin-item').filter({ hasText: 'Platform Test' });
     await expect(sidebarItem).toBeVisible();
   });
 
-  test('Global Activity and Browser sidebar items open plugin views', async ({ page }) => {
-    await page.locator('.sidebar .plugin-item').filter({ hasText: 'Activity' }).click();
-    await expect(page.locator('[data-main-content-header] .main-content-title-text')).toHaveText('Activity', { timeout: 10000 });
-
+  test('Global Browser sidebar item opens its plugin view', async ({ page }) => {
     await page.locator('.sidebar .plugin-item').filter({ hasText: 'Browser' }).click();
     await expect(page.locator('[data-main-content-header] .main-content-title-text')).toHaveText('Browser', { timeout: 10000 });
   });
 
   test('selected global tool remains visibly active through navigation and sidebar reloads', async ({ page }) => {
-    const activity = page.locator('.sidebar .plugin-item').filter({ hasText: 'Activity' });
     const browserInbox = page.locator('.sidebar .plugin-item').filter({ hasText: 'Browser' });
 
-    await activity.click();
-    await expect(activity).toHaveAttribute('aria-current', 'page');
-    await expect(activity).toHaveClass(/is-active/);
+    await browserInbox.click();
+    await expect(browserInbox).toHaveAttribute('aria-current', 'page');
+    await expect(browserInbox).toHaveClass(/is-active/);
 
     await page.evaluate(() => {
       window.dispatchEvent(new CustomEvent('verstak:plugins-changed'));
     });
-    await expect(activity).toHaveAttribute('aria-current', 'page');
+    await expect(browserInbox).toHaveAttribute('aria-current', 'page');
 
     await page.evaluate(() => {
       window.dispatchEvent(new CustomEvent('verstak:open-view', {
@@ -65,7 +61,6 @@ test.describe('B: Sidebar opens plugin view by item.view', () => {
     await expect(page.locator('[data-main-content-header] .main-content-title-text')).toHaveText('Browser', { timeout: 10000 });
     await expect(browserInbox).toHaveAttribute('aria-current', 'page');
     await expect(browserInbox).toHaveClass(/is-active/);
-    await expect(activity).not.toHaveAttribute('aria-current', 'page');
 
     await page.locator('.wt-label').filter({ hasText: 'Project' }).click();
     await expect(browserInbox).not.toHaveAttribute('aria-current', 'page');

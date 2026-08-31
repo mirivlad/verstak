@@ -5104,6 +5104,14 @@ func TestPluginBridgeCapabilitiesCommandsAndEventsAreChecked(t *testing.T) {
 		t.Fatalf("command status = %v, want declared", commandResult["status"])
 	}
 
+	providerResult, errStr := app.ExecutePluginCommand("bridge.plugin", "searchVault", nil)
+	if errStr != "" {
+		t.Fatalf("ExecutePluginCommand provider handler: %s", errStr)
+	}
+	if providerResult["handler"] != "searchVault" {
+		t.Fatalf("provider handler = %v, want searchVault", providerResult["handler"])
+	}
+
 	if errStr := app.PublishPluginEvent("bridge.plugin", "bridge.event", map[string]interface{}{"ok": true}); errStr != "" {
 		t.Fatalf("PublishPluginEvent: %s", errStr)
 	}
