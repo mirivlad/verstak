@@ -1,9 +1,7 @@
 import { test, expect } from '@playwright/test';
-import { waitForAppReady, setupConsoleCollector, resetMockState, readJournalText } from './helpers.js';
+import { waitForAppReady, setupConsoleCollector, resetMockState, openPluginManager } from './helpers.js';
 
-const PROJECT_ID = '11111111-1111-4111-8111-111111111111';
-
-test.describe('Activity workflow', () => {
+test.describe('Activity visibility', () => {
   let consoleCollector;
 
   test.beforeEach(async ({ page }) => {
@@ -17,163 +15,12 @@ test.describe('Activity workflow', () => {
     consoleCollector.assertNoErrors();
   });
 
-  test('workspace activity explains empty event flow', async ({ page }) => {
-    await page.getByRole('tab', { name: 'Activity' }).click();
+  test('Activity is a background provider without sidebar, Deal tab, or Overview surface', async ({ page }) => {
+    await expect(page.getByRole('tab', { name: 'Activity', exact: true })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Activity', exact: true })).toHaveCount(0);
+    await expect(page.locator('[data-overview-provider="verstak.activity"]')).toHaveCount(0);
 
-    const activity = page.locator('.activity-root');
-    await expect(activity).toBeVisible({ timeout: 10000 });
-    await expect(activity.locator('.activity-title')).toContainText('Activity');
-    await expect(activity.locator('.activity-count')).toHaveText('0 events');
-    await expect(activity.locator('.activity-empty')).toContainText('No activity events yet');
-    await expect(activity.locator('.activity-empty')).toContainText('File changes, browser captures, and conversions will appear here');
-    await expect(activity.locator('[data-activity-action="clear"]')).toBeDisabled();
-  });
-
-  test('clearing activity requires destructive confirmation for the current case', async ({ page }) => {
-    await page.evaluate(async () => {
-      const PROJECT_ID = '11111111-1111-4111-8111-111111111111';
-      await window.go.api.App.WritePluginDataNDJSON('verstak.activity', 'activity-events', [{
-          activityId: 'activity-to-clear',
-          occurredAt: '2026-06-30T08:00:00.000Z',
-          type: 'note.saved',
-          title: 'Keep until confirmed',
-          workspaceRootPath: 'Project',
-          workspaceId: PROJECT_ID,
-        }]);
-    });
-
-    await page.getByRole('tab', { name: 'Activity' }).click();
-    const activity = page.locator('.activity-root');
-    await expect(activity.locator('.activity-count')).toHaveText('1 event');
-
-    await activity.locator('[data-activity-action="clear"]').click();
-    const confirmation = activity.locator('[data-activity-clear-confirmation]');
-    await expect(confirmation).toBeVisible();
-    await expect(confirmation).toContainText(/Project|Дело/);
-    await expect(activity.locator('.activity-count')).toHaveText('1 event');
-
-    await confirmation.locator('[data-activity-clear-cancel]').click();
-    await expect(confirmation).toHaveCount(0);
-    await expect(activity.locator('.activity-count')).toHaveText('1 event');
-
-    await activity.locator('[data-activity-action="clear"]').click();
-    await activity.locator('[data-activity-clear-confirm]').click();
-    await expect(activity.locator('.activity-count')).toHaveText('0 events');
-  });
-
-  test('workspace activity keeps raw events and renders factual work session candidates', async ({ page }) => {
-    await page.evaluate(async () => {
-      const PROJECT_ID = '11111111-1111-4111-8111-111111111111';
-      await window.go.api.App.WritePluginDataNDJSON('verstak.activity', 'activity-events', [
-          {
-            activityId: 'activity-e2e-capture',
-            occurredAt: '2026-06-30T08:00:00.000Z',
-            type: 'browser.capture.selection',
-            title: 'Research Capture',
-            summary: 'Selected text from the article',
-            sourcePluginId: 'verstak.browser-inbox',
-            workspaceRootPath: 'Project',
-            workspaceId: PROJECT_ID,
-          },
-          {
-            activityId: 'activity-e2e-note',
-            occurredAt: '2026-06-30T08:20:00.000Z',
-            type: 'note.saved',
-            title: 'Saved note',
-            summary: 'Project/Notes/Research Capture.md',
-            sourcePluginId: 'verstak.files',
-            workspaceRootPath: 'Project',
-            workspaceId: PROJECT_ID,
-          },
-          {
-            activityId: 'activity-e2e-open',
-            occurredAt: '2026-06-30T08:30:00.000Z',
-            type: 'file.opened',
-            title: 'Selected file',
-            summary: 'Project/Notes/Research Capture.md',
-            sourcePluginId: 'verstak.files',
-            workspaceRootPath: 'Project',
-            workspaceId: PROJECT_ID,
-          },
-      ]);
-    });
-
-    await page.getByRole('tab', { name: 'Activity' }).click();
-
-    const activity = page.locator('.activity-root');
-    await expect(activity.locator('.activity-count')).toHaveText('3 events');
-    await expect(activity.locator('[data-activity-id="activity-e2e-capture"]')).toContainText('Research Capture');
-    await expect(activity.locator('[data-activity-id="activity-e2e-note"]')).toContainText('Saved note');
-    await expect(activity.locator('[data-activity-id="activity-e2e-open"]')).toContainText('Selected file');
-
-    const candidateSection = activity.locator('[data-activity-section="work-session-candidates"]');
-    await expect(candidateSection).toContainText('Possible journal entries');
-    const candidate = candidateSection.locator('[data-work-session-candidate]');
-    await expect(candidate).toHaveCount(1);
-    await expect(candidate).toContainText('Deal: Project');
-    await expect(candidate).toContainText('Estimated duration: 15 min');
-    await expect(candidate).toContainText('Activities: 2');
-    await expect(candidate).not.toContainText('Project work on');
-    await expect(candidate.locator('[data-work-session-action="review"]')).toBeVisible();
-    await expect(candidate.locator('[data-work-session-action="dismiss"]')).toBeVisible();
-  });
-
-  test('Review opens a Journal form saying what the time went on, with selectable activities', async ({ page }) => {
-    await page.evaluate(async () => {
-      const PROJECT_ID = '11111111-1111-4111-8111-111111111111';
-      await window.go.api.App.WritePluginDataNDJSON('verstak.activity', 'activity-events', [
-          {
-            activityId: 'review-capture',
-            occurredAt: '2026-06-30T08:00:00.000Z',
-            type: 'browser.capture.selection',
-            title: 'Research Capture',
-            workspaceRootPath: 'Project',
-            workspaceId: PROJECT_ID,
-          },
-          {
-            activityId: 'review-note',
-            occurredAt: '2026-06-30T08:20:00.000Z',
-            type: 'note.saved',
-            title: 'Saved note',
-            workspaceRootPath: 'Project',
-            workspaceId: PROJECT_ID,
-          },
-      ]);
-    });
-
-    await page.getByRole('tab', { name: 'Activity' }).click();
-    await page.locator('[data-work-session-candidate] [data-work-session-action="review"]').click();
-
-    await expect(page.getByRole('tab', { name: 'Journal' })).toHaveAttribute('aria-selected', 'true');
-    const journal = page.locator('.journal-root');
-    await expect(journal).toBeVisible({ timeout: 10000 });
-    await expect(journal.locator('[data-journal-candidate]')).toContainText('Deal: Project');
-    await expect(journal.locator('[data-journal-candidate]')).toContainText('Estimated duration: 15 min');
-    // Only the user knows what the work was for, so the title stays theirs to
-    // write. The body arrives with what the time actually went on.
-    await expect(journal.locator('[data-journal-input="title"]')).toHaveValue('');
-    await expect(journal.locator('[data-journal-input="summary"]')).toHaveValue(/notes \(1\)/);
-    await expect(journal.locator('[data-journal-input="summary"]')).toHaveValue(/15 min in total/);
-    await expect(journal.locator('[data-journal-input="minutes"]')).toHaveValue('15');
-
-    const activityInputs = journal.locator('[data-journal-candidate-activity]');
-    await expect(activityInputs).toHaveCount(2);
-    await expect(activityInputs.nth(0)).toBeChecked();
-    await expect(activityInputs.nth(1)).toBeChecked();
-    await journal.locator('[data-journal-input="title"]').fill('Review research capture');
-    await journal.locator('[data-journal-input="summary"]').fill('Read the capture and updated the project note.');
-    await activityInputs.nth(1).uncheck();
-    await journal.locator('[data-journal-action="save-entry"]').click();
-
-    await expect(journal).toContainText('Review research capture');
-    await expect(journal).toContainText('15 min');
-    // The entry is in the Deal's own journal, and it carries only the activity
-    // the user left ticked.
-    const stored = await readJournalText(page, 'Project');
-    expect(stored).toContain('### Review research capture');
-    expect(stored).toContain('Read the capture and updated the project note.');
-    // Only the activity the user left ticked. The candidate's own id names both,
-    // which is why the link list is what this asserts.
-    expect(stored).toContain('"activityIds":["review-capture"]');
+    await openPluginManager(page);
+    await expect(page.locator('.plugin-manager').getByText('Activity', { exact: true })).toBeVisible();
   });
 });
