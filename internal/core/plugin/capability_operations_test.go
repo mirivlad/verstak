@@ -31,9 +31,10 @@ func TestValidateManifestCapabilityOperations(t *testing.T) {
 		t.Fatalf("missing provided-capability error: %q", got)
 	}
 
-	invalidCommand := *valid
-	invalidCommand.CapabilityOperations = map[string]map[string]string{"example/cap/v1": {"list": "provider.missing"}}
-	if got := strings.Join(ValidateManifest(&invalidCommand), "\n"); !strings.Contains(got, "undeclared command") {
-		t.Fatalf("missing command error: %q", got)
+	backgroundOperation := *valid
+	backgroundOperation.Contributes = nil
+	backgroundOperation.CapabilityOperations = map[string]map[string]string{"example/cap/v1": {"list": "provider.list"}}
+	if errs := ValidateManifest(&backgroundOperation); len(errs) != 0 {
+		t.Fatalf("background capability operation errors = %v", errs)
 	}
 }

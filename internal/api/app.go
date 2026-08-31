@@ -2753,6 +2753,18 @@ func (a *App) pluginHandler(pluginID, handlerID string) (string, bool) {
 			return provider.Item.Handler, true
 		}
 	}
+	// Capability operations may be intentionally headless. Their handler is
+	// still registered through commands.register, but they must not acquire a
+	// command-palette contribution merely to be callable by another plugin.
+	if loaded, err := a.findPlugin(pluginID); err == nil {
+		for _, operations := range loaded.Manifest.CapabilityOperations {
+			for _, operationHandler := range operations {
+				if operationHandler == handlerID {
+					return operationHandler, true
+				}
+			}
+		}
+	}
 	return "", false
 }
 

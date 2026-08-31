@@ -296,12 +296,6 @@ func ValidateManifest(m *Manifest) []string {
 	for _, name := range m.Provides {
 		provided[name] = struct{}{}
 	}
-	declaredCommands := make(map[string]struct{})
-	if m.Contributes != nil {
-		for _, command := range m.Contributes.Commands {
-			declaredCommands[command.ID] = struct{}{}
-		}
-	}
 	for capabilityName, operations := range m.CapabilityOperations {
 		if _, ok := provided[capabilityName]; !ok {
 			errs.add("capabilityOperations[%q] must reference a capability declared in provides", capabilityName)
@@ -316,9 +310,6 @@ func ValidateManifest(m *Manifest) []string {
 			if strings.TrimSpace(commandID) == "" {
 				errs.add("capabilityOperations[%q][%q] must reference a command", capabilityName, operation)
 				continue
-			}
-			if _, ok := declaredCommands[commandID]; !ok {
-				errs.add("capabilityOperations[%q][%q] references undeclared command %q", capabilityName, operation, commandID)
 			}
 		}
 	}
