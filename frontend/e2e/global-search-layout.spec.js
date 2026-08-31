@@ -35,6 +35,22 @@ test.describe('Global search layout', () => {
     await expect(actions.locator('[data-global-search-input]')).toBeVisible();
   });
 
+  test('GlobalSearchDealScopeSharesTheInputRow', async ({ page }) => {
+    await page.locator('.wt-label').filter({ hasText: 'Project' }).click();
+    await expect(page.locator('[data-main-content-header] .main-content-title-text')).toHaveText('Project', { timeout: 10000 });
+
+    const searchInput = page.locator('[data-global-search-input]');
+    const scopeToggle = page.locator('[data-global-search-deal-scope]');
+    await expect(scopeToggle).toBeVisible();
+
+    const [inputBox, toggleBox] = await Promise.all([
+      searchInput.boundingBox(),
+      scopeToggle.boundingBox(),
+    ]);
+    expect(toggleBox.x).toBeGreaterThan(inputBox.x + inputBox.width - 1);
+    expect(Math.abs((toggleBox.y + toggleBox.height / 2) - (inputBox.y + inputBox.height / 2))).toBeLessThan(3);
+  });
+
   test('GlobalSearchSharesRowWithToolTitle', async ({ page }) => {
     // Navigate to a sidebar view (e.g., Platform Test)
     await page.locator('.sidebar .plugin-item').filter({ hasText: 'Platform Test' }).click();
