@@ -5084,6 +5084,13 @@ func TestPluginSyncStatusReportsPersistedError(t *testing.T) {
 
 func TestPluginBridgeCapabilitiesCommandsAndEventsAreChecked(t *testing.T) {
 	app := newBridgeTestApp(t)
+	bridge, err := app.findPlugin("bridge.plugin")
+	if err != nil {
+		t.Fatal(err)
+	}
+	bridge.Manifest.CapabilityOperations = map[string]map[string]string{
+		"bridge/cap/v1": {"headless": "bridge.headless"},
+	}
 
 	capInfo, errStr := app.GetPluginCapability("bridge.plugin", "bridge/cap/v1")
 	if errStr != "" {
@@ -5110,6 +5117,14 @@ func TestPluginBridgeCapabilitiesCommandsAndEventsAreChecked(t *testing.T) {
 	}
 	if providerResult["handler"] != "searchVault" {
 		t.Fatalf("provider handler = %v, want searchVault", providerResult["handler"])
+	}
+
+	headlessResult, errStr := app.ExecutePluginCommand("bridge.plugin", "bridge.headless", nil)
+	if errStr != "" {
+		t.Fatalf("ExecutePluginCommand headless capability handler: %s", errStr)
+	}
+	if headlessResult["handler"] != "bridge.headless" {
+		t.Fatalf("headless handler = %v, want bridge.headless", headlessResult["handler"])
 	}
 
 	if errStr := app.PublishPluginEvent("bridge.plugin", "bridge.event", map[string]interface{}{"ok": true}); errStr != "" {
