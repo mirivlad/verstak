@@ -22,6 +22,7 @@ test.describe('Activity visibility', () => {
 
     await page.keyboard.press(process.platform === 'darwin' ? 'Meta+K' : 'Control+K');
     await expect(page.locator('[data-command-id="verstak.shell.open-activity"]')).toHaveCount(0);
+    await page.keyboard.press('Escape');
 
     await openPluginManager(page);
     await expect(page.locator('.plugin-manager').getByText('Activity', { exact: true })).toBeVisible();
