@@ -876,7 +876,7 @@
 <!-- Modals -->
 <Modal title={folderEditorView === 'icon-picker' ? tr('workspaceTree.iconPicker') : tr('workspaceTree.newFolder')} show={modal?.type === 'create-folder'} on:close={folderEditorView === 'icon-picker' ? () => { folderEditorView = 'form'; } : closeModal}>
   {#if folderEditorView === 'icon-picker'}
-    <label class="vt-field"><span>{tr('workspaceTree.iconSearch')} ({filteredIcons.length} / {LUCIDE_ICONS.length})</span><input class="vt-input" type="text" bind:value={iconSearch} placeholder={tr('workspaceTree.iconSearch') + '...'} autofocus /></label>
+    <label class="vt-field"><span>{tr('workspaceTree.iconSearch')} ({filteredIcons.length} / {LUCIDE_ICONS.length})</span><input class="vt-input" type="text" bind:value={iconSearch} placeholder={tr('workspaceTree.iconSearch') + '...'} /></label>
     <div class="vt-icon-grid">
       <button type="button" class="vt-icon-item" class:vt-icon-selected={!folderIconId} on:click={() => selectFolderIcon('')}><Icon name="folder" size={20} /><span>{tr('workspaceTree.defaultIcon')}</span></button>
       {#each filteredIcons as icon}
@@ -884,7 +884,7 @@
       {/each}
     </div>
   {:else}
-    <label class="vt-field"><span>{tr('workspaceTree.location')}</span><Select options={flatFolders(tree.roots).map(f => ({ value: f.id, label: f.path }))} placeholder={tr('workspaceTree.root')} bind:value={formParentId} labelKey="label" valueKey="value" /></label>
+    <div class="vt-field"><span>{tr('workspaceTree.location')}</span><Select options={flatFolders(tree.roots).map(f => ({ value: f.id, label: f.path }))} placeholder={tr('workspaceTree.root')} bind:value={formParentId} labelKey="label" valueKey="value" /></div>
     <label class="vt-field"><span>{tr('workspaceTree.folderName')}</span><input class="vt-input" type="text" bind:value={formName} placeholder={tr('workspaceTree.folderNamePlaceholder')} disabled={formBusy} on:keydown={(e) => e.key === 'Enter' && doCreateFolder()} /></label>
     <label class="vt-field"><span>{tr('workspaceTree.appearance')}</span>
       <div class="vt-appearance-row">
@@ -914,7 +914,7 @@
 
 <Modal title={folderEditorView === 'icon-picker' ? tr('workspaceTree.iconPicker') : tr('workspaceTree.editFolder')} show={modal?.type === 'edit-folder'} on:close={folderEditorView === 'icon-picker' ? () => { folderEditorView = 'form'; } : closeModal}>
   {#if folderEditorView === 'icon-picker'}
-    <label class="vt-field"><span>{tr('workspaceTree.iconSearch')} ({filteredIcons.length} / {LUCIDE_ICONS.length})</span><input class="vt-input" type="text" bind:value={iconSearch} placeholder={tr('workspaceTree.iconSearch') + '...'} autofocus /></label>
+    <label class="vt-field"><span>{tr('workspaceTree.iconSearch')} ({filteredIcons.length} / {LUCIDE_ICONS.length})</span><input class="vt-input" type="text" bind:value={iconSearch} placeholder={tr('workspaceTree.iconSearch') + '...'} /></label>
     <div class="vt-icon-grid">
       <button type="button" class="vt-icon-item" class:vt-icon-selected={!folderIconId} on:click={() => selectFolderIcon('')}><Icon name="folder" size={20} /><span>{tr('workspaceTree.defaultIcon')}</span></button>
       {#each filteredIcons as icon}
@@ -1090,7 +1090,6 @@
   .vt-appearance-row { display: flex; gap: 8px; }
   .vt-appearance-btn { display: inline-flex; align-items: center; gap: 6px; min-height: 2rem; padding: 4px 10px; border: 1px solid var(--vt-color-border); border-radius: var(--vt-radius-sm); background: var(--vt-color-surface); color: var(--vt-color-text-secondary); cursor: pointer; font-size: .78rem; }
   .vt-appearance-btn:hover { border-color: var(--vt-color-accent); }
-  .vt-color-swatch { width: 16px; height: 16px; border-radius: 50%; border: 1px solid var(--vt-color-border); }
 
 
   .vt-appearance-row { display: flex; flex-direction: column; gap: 8px; }
@@ -1101,7 +1100,6 @@
   .vt-color-hex { width: 7rem; }
   .vt-icon-grid { display: grid; grid-template-columns: repeat(auto-fill, 64px); grid-auto-rows: 72px; gap: 6px; margin-top: 8px; max-height: 55vh; overflow-y: auto; justify-content: center; }
   .vt-icon-item { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; width: 64px; height: 72px; min-width: 64px; min-height: 72px; padding: 4px 2px; border: 1px solid transparent; border-radius: var(--vt-radius-sm); background: transparent; color: var(--vt-color-text-secondary); cursor: pointer; font-size: .6rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .vt-icon-item svg { width: 28px; height: 28px; min-width: 28px; min-height: 28px; flex-shrink: 0; }
   .vt-icon-item:hover { border-color: var(--vt-color-accent); background: var(--vt-color-accent-muted); }
   .vt-icon-selected { border-color: var(--vt-color-accent); background: var(--vt-color-accent-muted); color: var(--vt-color-accent); }
 </style>

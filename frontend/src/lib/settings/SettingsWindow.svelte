@@ -249,6 +249,7 @@
         class="settings-section-list"
         role="tablist"
         aria-orientation="vertical"
+        tabindex="-1"
         bind:this={listEl}
         on:keydown={onListKeydown}
       >
@@ -275,7 +276,7 @@
       </div>
     </nav>
 
-    <section class="settings-content" role="tabpanel" aria-label={activeSectionData?.title || ''} data-settings-content>
+    <div class="settings-content" role="tabpanel" aria-label={activeSectionData?.title || ''} data-settings-content>
       {#if activeSection === GENERAL}
         <h3>{tr('settings.section.general', undefined, 'General')}</h3>
         <div class="settings-group">
@@ -347,7 +348,7 @@
           {/if}
         {/key}
       {/if}
-    </section>
+    </div>
   </div>
 </div>
 

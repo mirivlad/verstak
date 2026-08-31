@@ -15,16 +15,22 @@ never govern that Deal after creation.
   a template cannot mutate existing Deals.
 
 The Templates plugin includes persisted seed recipes: General, Project,
-Writing, Admin, and Minimal. Users can create, edit, and delete their own
-recipes. A recipe that names a missing Deal plugin is rejected before creation;
-the host never silently substitutes another tool set.
+Writing, Admin, and Minimal. Template CRUD lives in **Settings → Templates**;
+the New Deal dialog only picks one saved recipe. The editor presents installed
+Deal tools as named selectable cards, so users never have to enter plugin IDs.
+A recipe that names a missing Deal plugin is rejected before creation; the host
+never silently substitutes another tool set.
 
 ## Project recipe
 
 The Project seed assembles independent Deal plugins: Project Meta, Git, Todo,
-Milestones, Notes, Files, Activity, Journal, and Secrets. Project Meta is
-metadata on that same Deal, not a nested Project scope. A Deal may have zero or
-more Git repository descriptors and milestones independently of Project Meta.
+Milestones, Notes, Files, Journal, and Secrets. Project Meta is metadata on
+that same Deal, not a nested Project scope. A Deal may have zero or more Git
+repository descriptors and milestones independently of Project Meta.
+
+Activity is a background provider for Journal and other integrations, not a
+Deal workspace tool. It is therefore not recorded in template `workspaceTools`
+and has no visible sidebar or Deal tab.
 
 ## Migration behavior
 

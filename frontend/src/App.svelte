@@ -569,7 +569,6 @@
     gap: 0.75rem;
   }
 
-  .main-content-title-icon { width: 1rem; height: 1rem; flex-shrink: 0; color: var(--vt-color-text-muted); }
   .main-content-title-text {
     min-width: 0;
     overflow: hidden;
