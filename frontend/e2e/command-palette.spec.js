@@ -55,7 +55,7 @@ test.describe('Command Palette', () => {
     await expect(items.nth(0)).toHaveAttribute('data-command-id', 'verstak.shell.open-overview');
     await expect(items.nth(1)).toHaveAttribute('data-command-id', 'verstak.shell.open-files');
     await expect(items.nth(2)).toHaveAttribute('data-command-id', 'verstak.shell.open-browser-inbox');
-    await expect(palette.loc('[data-command-id="verstak.shell.open-activity"]')).toHaveCount(0);
+    await expect(palette.locator('[data-command-id="verstak.shell.open-activity"]')).toHaveCount(0);
 
     await palette.locator('[data-command-palette-input]').fill('browser');
     await expect(palette.locator('[data-command-id="verstak.shell.open-browser-inbox"]')).toBeVisible();
