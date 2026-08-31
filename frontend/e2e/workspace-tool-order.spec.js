@@ -61,7 +61,7 @@ test.describe('Workspace tool order', () => {
   });
 
   test('tool tabs page with directional arrows instead of scrolling', async ({ page }) => {
-    await page.setViewportSize({ width: 980, height: 760 });
+    await page.setViewportSize({ width: 390, height: 760 });
     await page.goto('/');
     await waitForAppReady(page);
     await page.evaluate(async () => {

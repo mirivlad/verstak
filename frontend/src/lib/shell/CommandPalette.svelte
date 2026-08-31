@@ -173,7 +173,6 @@
     const actionToTab = {
       overview: 'overview',
       files: 'files',
-      activity: 'activity',
       'browser-inbox': 'browser inbox',
     };
     await openWorkspaceTool(actionToTab[command.shellAction] || command.shellAction);
