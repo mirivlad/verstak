@@ -16,7 +16,7 @@ test.describe('Project Meta', () => {
   test('global portfolio includes only Deals with the Project Meta capability', async ({ page }) => {
     await page.evaluate(async () => {
       await window.go.api.App.UpdateWorkspaceV2Tools('22222222-2222-4222-8222-222222222222', [
-        'verstak.notes', 'verstak.files', 'verstak.todo', 'verstak.journal', 'verstak.activity', 'verstak.browser-inbox',
+        'verstak.notes', 'verstak.files', 'verstak.todo', 'verstak.journal', 'verstak.browser-inbox',
       ]);
       await window.go.api.App.WritePluginDealConfig('verstak.projects', '11111111-1111-4111-8111-111111111111', {
         name: 'Project Alpha', description: 'Portfolio card', status: 'active', priority: 'high', tags: ['release'], startDate: '2026-08-01', dueDate: '2026-08-31',

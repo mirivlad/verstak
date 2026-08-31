@@ -13,11 +13,6 @@ test.describe('UX follow-up fixes', () => {
     await expect(search).toBeVisible();
     await expect(page.locator('.main-content-header [data-global-search-input]')).toBeVisible();
 
-    await page.locator('.sidebar .nav-item').filter({ hasText: 'Activity' }).click();
-    await expect(page.locator('.activity-root')).toBeVisible({ timeout: 10000 });
-    await expect(search).toBeVisible();
-    await expect(page.locator('.main-content-header [data-global-search-input]')).toBeVisible();
-
     await page.locator('.sidebar .nav-item').filter({ hasText: 'Browser' }).click();
     await expect(page.locator('.browser-inbox-root')).toBeVisible({ timeout: 10000 });
     await expect(search).toBeVisible();
@@ -73,27 +68,6 @@ test.describe('UX follow-up fixes', () => {
 
     await expect(page.locator('.browser-inbox-root')).toBeVisible({ timeout: 10000 });
     await expect(page.locator('.browser-inbox-detail-title')).toHaveText('Research Search Result');
-  });
-
-  test('workspace Search input keeps focus while typing', async ({ page }) => {
-    await page.evaluate(async () => {
-      const metadata = await window.go.api.App.GetWorkspaceMetadata('Project');
-      await window.go.api.App.UpdateWorkspaceMetadata('Project', {
-        workspaceTools: [...metadata.workspaceTools, 'verstak.search'],
-      });
-    });
-    await page.locator('.wt-label').filter({ hasText: 'Test' }).click();
-    await page.locator('.wt-label').filter({ hasText: 'Project' }).click();
-    await page.getByRole('tab', { name: 'Search' }).click();
-    const searchInput = page.locator('[data-search-input="query"]');
-    await expect(searchInput).toBeVisible({ timeout: 10000 });
-
-    await searchInput.click();
-    await page.keyboard.press('p');
-    await expect(searchInput).toBeFocused();
-    await page.keyboard.press('r');
-    await expect(searchInput).toBeFocused();
-    await expect(searchInput).toHaveValue('pr');
   });
 
   test('mobile workspace layout gives content full width below the sidebar', async ({ page }) => {

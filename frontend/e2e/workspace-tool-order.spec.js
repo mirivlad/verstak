@@ -68,8 +68,8 @@ test.describe('Workspace tool order', () => {
       const workspaceId = '11111111-1111-4111-8111-111111111111';
       await window.go.api.App.UpdateWorkspaceV2Tools(workspaceId, [
         'verstak.projects', 'verstak.notes', 'verstak.files', 'verstak.todo',
-        'verstak.milestones', 'verstak.git', 'verstak.activity',
-        'verstak.browser-inbox', 'verstak.journal', 'verstak.secrets', 'verstak.search',
+        'verstak.milestones', 'verstak.git', 'verstak.browser-inbox',
+        'verstak.journal', 'verstak.secrets',
       ]);
       window.dispatchEvent(new CustomEvent('verstak:workspace-tools-changed', { detail: { workspaceId } }));
     });
