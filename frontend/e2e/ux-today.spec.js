@@ -36,7 +36,7 @@ test.describe('UX Overview workspace flow', () => {
     await expect(overview.locator('[data-overview-section="quick-actions"]')).toHaveCount(0);
 
     const summaryCards = overview.locator('button[data-overview-summary]');
-    await expect(summaryCards).toHaveCount(4);
+    await expect(summaryCards).toHaveCount(3);
     await expect(overview.locator('[data-overview-summary="attention"]')).toHaveCount(0);
     await expect(overview.locator('[data-overview-summary="notes"]')).toContainText('1 note');
     await expect(overview.locator('[data-overview-summary="captures"]')).toContainText('0 captures to review');
@@ -51,11 +51,6 @@ test.describe('UX Overview workspace flow', () => {
     await overview.locator('[data-overview-summary="notes"]').click();
     await expect(page.getByRole('tab', { name: 'Notes' })).toHaveAttribute('aria-selected', 'true');
     await expect(page.locator('.notes-root')).toBeVisible({ timeout: 10000 });
-
-    await page.getByRole('tab', { name: 'Overview' }).click();
-    await overview.locator('[data-overview-summary="files"]').click();
-    await expect(page.getByRole('tab', { name: 'Files' })).toHaveAttribute('aria-selected', 'true');
-    await expect(page.locator('.files-root')).toBeVisible({ timeout: 10000 });
 
     await page.getByRole('tab', { name: 'Overview' }).click();
     await overview.locator('[data-overview-summary="captures"]').click();
@@ -81,12 +76,12 @@ test.describe('UX Overview workspace flow', () => {
 
   test('Overview hides Browser cards and actions when the current Deal does not include it', async ({ page }) => {
     await page.locator('button[title="New Deal"]').click();
-    const form = page.locator('[data-templates-form]');
-    await expect(form).toBeVisible();
-    await page.getByRole('button', { name: 'Minimal', exact: true }).click();
-    await form.locator('[data-template-field="deal-name"]').fill('MinimalOverview');
-    await form.locator('[data-template-action="create-deal"]').click();
-    await expect(form.locator('.templates-message')).toContainText('Deal created.');
+    const dialog = page.locator('[data-new-deal-dialog]');
+    await expect(dialog).toBeVisible();
+    await dialog.locator('[data-new-deal-template="seed-minimal"]').click();
+    await dialog.locator('[data-new-deal-name]').fill('MinimalOverview');
+    await dialog.locator('[data-new-deal-create]').click();
+    await expect(dialog).toBeHidden();
     await page.locator('.wt-label').filter({ hasText: 'MinimalOverview' }).click();
     await expect(page.getByRole('tab', { name: 'Browser' })).toHaveCount(0);
 
@@ -231,57 +226,42 @@ test.describe('UX Overview workspace flow', () => {
 
     const overview = page.locator('[data-overview-root]');
     await expect(overview.locator('[data-overview-summary="notes"]')).toContainText('1 note');
-    await expect(overview.locator('[data-overview-summary="files"]')).toContainText('1 recent change');
+    await expect(overview.locator('[data-overview-summary="files"]')).toHaveCount(0);
     await expect(overview.locator('[data-overview-summary="captures"]')).toContainText('2');
-    await expect(overview.locator('[data-overview-summary="activity"]')).toContainText('5 recorded events');
+    await expect(overview.locator('[data-overview-summary="activity"]')).toHaveCount(0);
     await expect(overview.locator('[data-overview-summary="journal"]')).toContainText('1');
     await expect(overview.locator('[data-overview-summary="attention"]')).toHaveCount(0);
     const attention = overview.locator('[data-overview-section="attention"]');
-    await expect(attention).toContainText('Possible journal entry');
-    await expect(attention).toContainText('10 min');
-    await expect(attention).toContainText('2 activities');
-    await attention.locator('.overview-attention-row', { hasText: 'Possible journal entry' }).getByRole('button').click();
-    await expect(page.getByRole('tab', { name: 'Journal' })).toHaveAttribute('aria-selected', 'true');
-    await expect(page.locator('.journal-root [data-journal-candidate]')).toContainText('Deal: Project');
-    await page.locator('.journal-modal-actions').getByRole('button', { name: 'Cancel' }).click();
-    await page.getByRole('tab', { name: 'Overview' }).click();
+    await expect(attention).toContainText('Quote to process');
+    await expect(attention).toContainText('Research Report');
 
     const resume = overview.locator('[data-overview-section="continue"]');
     const candidates = resume.locator('[data-overview-continue-item]');
-    await expect(candidates).toHaveCount(3);
-    await expect(candidates.nth(0)).toContainText('Overview');
-    await expect(candidates.nth(1)).toContainText('draft.md');
-    await expect(candidates.nth(2)).toContainText('Write project summary');
+    await expect(candidates).toHaveCount(1);
+    await expect(candidates.nth(0)).toContainText('Write project summary');
     await expect(resume).not.toContainText('Quote to process');
     await expect(resume).not.toContainText('Research Report');
     await candidates.nth(0).click();
 
-    await expect(page.getByRole('tab', { name: 'Notes' })).toHaveAttribute('aria-selected', 'true');
-    await expect(page.locator('.notes-root')).toBeVisible({ timeout: 10000 });
+    await expect(page.getByRole('tab', { name: 'Journal' })).toHaveAttribute('aria-selected', 'true');
+    await expect(page.locator('.journal-root')).toBeVisible({ timeout: 10000 });
 
     await page.getByRole('tab', { name: 'Overview' }).click();
     const recent = overview.locator('[data-overview-section="recent"]');
-    await expect(recent).toContainText('Overview');
-    await expect(recent).toContainText('draft.md');
     await expect(recent).toContainText('Research Report');
+    await expect(recent).toContainText('Quote to process');
     await expect(recent).toContainText('Write project summary');
-    await expect(recent).not.toContainText('Selected file');
-    await expect(recent).not.toContainText('Workspace selected');
-    await expect(recent).not.toContainText('file.opened');
+    await expect(recent).not.toContainText('Overview');
+    await expect(recent).not.toContainText('draft.md');
     await expect(recent).not.toContainText('Client capture must stay global');
     await expect(recent).not.toContainText('Unassigned capture must stay global');
-    await expect(recent.locator('[data-overview-recent-item]')).toHaveCount(5);
+    await expect(recent.locator('[data-overview-recent-item]')).toHaveCount(3);
     await expect(recent.locator('[data-overview-recent-item] button')).toHaveCount(0);
-
-    await overview.locator('[data-overview-filter="notes"]').click();
-    await expect(recent).toContainText('Overview');
-    await expect(recent).not.toContainText('draft.md');
-    await expect(recent).not.toContainText('Research Report');
 
     await overview.locator('[data-overview-filter="captures"]').click();
     await expect(recent).toContainText('Research Report');
     await expect(recent).toContainText('Quote to process');
-    await expect(recent).not.toContainText('Overview');
+    await expect(recent).not.toContainText('Write project summary');
 
     await overview.locator('[data-overview-filter="journal"]').click();
     await expect(recent).toContainText('Write project summary');
