@@ -3821,9 +3821,9 @@ func (a *App) createDealFromRecipe(parentFolderID, name string, recipe workspace
 
 func (a *App) validateWorkspaceTools(workspaceTools []string) error {
 	eligible := make(map[string]bool)
-	for _, installed := range a.plugins {
-		if installed.Manifest.Contributes != nil && len(installed.Manifest.Contributes.WorkspaceItems) > 0 {
-			eligible[installed.Manifest.ID] = true
+	for _, loaded := range a.plugins {
+		if loaded.Manifest.Contributes != nil && len(loaded.Manifest.Contributes.WorkspaceItems) > 0 {
+			eligible[loaded.Manifest.ID] = true
 		}
 	}
 	for _, toolID := range workspaceTools {
@@ -3832,6 +3832,33 @@ func (a *App) validateWorkspaceTools(workspaceTools []string) error {
 		}
 	}
 	return nil
+}
+
+// currentWorkspaceTools drops a retired service plugin from a Deal's persisted
+// tool list. Existing Deals can carry those IDs from an older release, but a
+// service plugin without a workspaceItems contribution is no longer a Deal
+// tool. Unknown IDs remain errors so corrupt or mistyped tool selections are
+// never silently discarded.
+func (a *App) currentWorkspaceTools(workspaceTools []string) ([]string, error) {
+	eligible := make(map[string]bool)
+	installed := make(map[string]bool)
+	for _, loaded := range a.plugins {
+		installed[loaded.Manifest.ID] = true
+		if loaded.Manifest.Contributes != nil && len(loaded.Manifest.Contributes.WorkspaceItems) > 0 {
+			eligible[loaded.Manifest.ID] = true
+		}
+	}
+	current := make([]string, 0, len(workspaceTools))
+	for _, toolID := range workspaceTools {
+		if eligible[toolID] {
+			current = append(current, toolID)
+			continue
+		}
+		if !installed[toolID] {
+			return nil, fmt.Errorf("workspace tool is not available: %s", toolID)
+		}
+	}
+	return current, nil
 }
 
 // workspaceHasTool answers the same question the workspace host answers when it
@@ -3940,10 +3967,11 @@ func (a *App) UpdateWorkspaceV2Tools(workspaceID string, workspaceTools []string
 	if a.treeV2 == nil {
 		return "not initialized"
 	}
-	if err := a.validateWorkspaceTools(workspaceTools); err != nil {
+	currentTools, err := a.currentWorkspaceTools(workspaceTools)
+	if err != nil {
 		return err.Error()
 	}
-	if err := a.treeV2.UpdateWorkspaceTools(workspaceID, workspaceTools, func() error {
+	if err := a.treeV2.UpdateWorkspaceTools(workspaceID, currentTools, func() error {
 		if a.fileWatcher != nil {
 			return a.fileWatcher.RefreshBaseline()
 		}

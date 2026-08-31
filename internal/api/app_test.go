@@ -3138,6 +3138,19 @@ func TestPluginCreateWorkspaceUsesRecipeSnapshotAndRequiresPermission(t *testing
 		t.Fatalf("recipe file missing: %v", err)
 	}
 
+	app.plugins = append(app.plugins, plugin.Plugin{
+		Manifest: plugin.Manifest{ID: "verstak.activity", Name: "Activity"},
+		Status:   plugin.StatusLoaded,
+		Enabled:  true,
+	})
+	_, errText = app.PluginCreateWorkspace("files.plugin", "", "Retired", workspacetree.DealRecipeSnapshot{
+		WorkspaceTools: []string{"verstak.activity"},
+		Provenance:     workspacetree.RecipeProvenance{TemplateID: "user-template"},
+	})
+	if !strings.Contains(errText, "workspace tool is not available: verstak.activity") {
+		t.Fatalf("retired service tool error = %q", errText)
+	}
+
 	_, errText = app.PluginCreateWorkspace("files.plugin", "", "Rejected", workspacetree.DealRecipeSnapshot{
 		WorkspaceTools: []string{"missing.plugin"},
 		Provenance:     workspacetree.RecipeProvenance{TemplateID: "user-template"},
@@ -3152,6 +3165,52 @@ func TestPluginCreateWorkspaceUsesRecipeSnapshotAndRequiresPermission(t *testing
 	app.plugins[0].Manifest.Permissions = nil
 	if _, errText = app.PluginCreateWorkspace("files.plugin", "", "Denied", recipe); !strings.Contains(errText, "workspaces.create") {
 		t.Fatalf("permission error = %q", errText)
+	}
+}
+
+func TestUpdateWorkspaceV2ToolsDropsRetiredServicePlugins(t *testing.T) {
+	app, root := newFilesTestApp(t, nil)
+	app.plugins = []plugin.Plugin{
+		{
+			Manifest: plugin.Manifest{ID: "verstak.activity", Name: "Activity"},
+			Status:   plugin.StatusLoaded,
+			Enabled:  true,
+		},
+		{
+			Manifest: plugin.Manifest{
+				ID:   "verstak.todo",
+				Name: "Todos",
+				Contributes: &plugin.Contributions{WorkspaceItems: []plugin.ContributionWorkspaceItem{{
+					ID: "verstak.todo.workspace", Title: "Todos", Component: "TodoView",
+				}}},
+			},
+			Status:  plugin.StatusLoaded,
+			Enabled: true,
+		},
+	}
+	app.treeV2 = workspacetree.NewService(root, nil)
+	if err := app.treeV2.Initialize(); err != nil {
+		t.Fatal(err)
+	}
+	deal, err := app.treeV2.CreateWorkspaceFromRecipe("", "Migrated", workspacetree.DealRecipeSnapshot{
+		Provenance: workspacetree.RecipeProvenance{TemplateID: "test"},
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := app.treeV2.UpdateWorkspaceTools(deal.ID, []string{"verstak.activity"}, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	if errText := app.UpdateWorkspaceV2Tools(deal.ID, []string{"verstak.activity", "verstak.todo"}); errText != "" {
+		t.Fatalf("UpdateWorkspaceV2Tools = %q, want retired service plugin removed", errText)
+	}
+	metadata, err := app.treeV2.ReadDealMetadata(deal.ID, deal.RootPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(metadata.WorkspaceTools, []string{"verstak.todo"}) {
+		t.Fatalf("workspaceTools = %#v, want only current Deal tool", metadata.WorkspaceTools)
 	}
 }
 
