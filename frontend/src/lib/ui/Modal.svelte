@@ -1,10 +1,11 @@
 <script>
-  import { createEventDispatcher } from 'svelte';
+  import { createEventDispatcher, onMount } from 'svelte';
   import { fade } from 'svelte/transition';
 
   export let title = '';
   export let show = false;
   export let wide = false;
+  let overlayElement;
 
   const dispatch = createEventDispatcher();
 
@@ -12,19 +13,26 @@
     dispatch('close');
   }
 
-  function closeFromOverlay(event) {
-    if (event.target === event.currentTarget) close();
+  function onKeydown(e) {
+    if (show && e.key === 'Escape') close();
   }
 
-  function onKeydown(e) {
-    if (e.key === 'Escape') close();
-  }
+  onMount(() => {
+    function closeFromDocumentClick(event) {
+      if (show && event.target === overlayElement) close();
+    }
+    document.addEventListener('click', closeFromDocumentClick);
+    return () => document.removeEventListener('click', closeFromDocumentClick);
+  });
 </script>
 
+<svelte:window on:keydown={onKeydown} />
+
 {#if show}
-  <div {...$$restProps} class="vt-modal-overlay" on:click={closeFromOverlay} on:keydown={onKeydown} role="dialog" aria-modal="true" aria-label={title} tabindex="-1">
+  <div {...$$restProps} class="vt-modal-overlay" bind:this={overlayElement}>
     <div
       class="vt-modal" class:vt-modal-wide={wide}
+      role="dialog" aria-modal="true" aria-label={title} tabindex="-1"
       transition:fade={{ duration: 120 }}
     >
       {#if title}

@@ -64,12 +64,12 @@ No account, cloud service or sync server is required for local use.
 | **Notes**                | Create Markdown notes, overview pages and links between related information.                 |
 | **Overview**             | Quickly return to recent work and see what may need attention.                               |
 | **Browser Inbox**        | Send pages, links, selections and files from a browser into Verstak.                         |
-| **Activity and Journal** | Reconstruct work sessions and turn selected activity into journal entries.                   |
+| **Activity and Journal** | Journal turns background activity into reviewable work sessions without exposing a separate Activity screen. |
 | **Todo**                 | Keep optional task lists inside individual Deals and across the whole vault.                 |
-| **Search**               | Search across notes, files and supported plugin data.                                        |
+| **Search**               | Search across notes, files and supported plugin data; optionally limit it to the open Deal.  |
 | **Trash**                | Restore deleted items or remove them permanently from one central location.                  |
 | **Secrets**              | Keep credentials and access information connected to the relevant Deal.                      |
-| **Templates**            | Create repeatable Deal structures for common types of work.                                  |
+| **Templates**            | Manage repeatable Deal structures in Settings and choose one when creating a Deal.           |
 | **Plugins**              | Add, replace or disable tools without turning Verstak into one rigid monolithic application. |
 | **Optional sync**        | Synchronize vaults between devices using a self-hosted Verstak Sync Server.                  |
 
