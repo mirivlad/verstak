@@ -19,7 +19,7 @@ grep -Fq 'packaging/deb/postinst' "$ROOT/scripts/package-deb.sh"
 test -x "$ROOT/packaging/deb/postinst"
 sh -n "$ROOT/packaging/deb/postinst"
 grep -Fxq 'Exec=verstak %U' "$ROOT/packaging/linux/verstak.desktop"
-grep -Fxq 'StartupWMClass=verstak' "$ROOT/packaging/linux/verstak.desktop"
+grep -Fxq 'StartupWMClass=verstak-desktop' "$ROOT/packaging/linux/verstak.desktop"
 grep -Fxq 'X-Verstak-Desktop-Entry=true' "$ROOT/packaging/linux/verstak.desktop"
 grep -Fxq 'Categories=Office;' "$ROOT/packaging/linux/verstak.desktop"
 grep -Fq 'update-desktop-database' "$ROOT/packaging/deb/postinst"
@@ -60,7 +60,10 @@ grep -Fq 'generate-brand-icons.sh' "$ROOT/scripts/package-deb.sh"
 grep -Fq 'generate-brand-icons.sh' "$ROOT/scripts/package-appimage.sh"
 grep -Fq 'build/linux-icons/hicolor' "$ROOT/scripts/package-deb.sh"
 grep -Fq 'build/linux-icons/hicolor' "$ROOT/scripts/package-appimage.sh"
-grep -Fq 'ProgramName: "verstak"' "$ROOT/main.go"
+if grep -Fq 'ProgramName:' "$ROOT/main.go"; then
+  echo "Linux ProgramName is set after Wails creates the GTK window and must not declare a different WM class" >&2
+  exit 1
+fi
 test -x "$ROOT/scripts/test-brand-icons.sh"
 grep -Fq 'package-windows-portable.sh' "$ROOT/scripts/release.sh"
 git -C "$ROOT" check-ignore -q verstak-desktop-res.syso

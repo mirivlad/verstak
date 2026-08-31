@@ -266,8 +266,7 @@ func main() {
 		MinHeight:        600,
 		WindowStartState: options.Normal,
 		Linux: &linux.Options{
-			Icon:        tray.DefaultIcon(),
-			ProgramName: "verstak",
+			Icon: tray.DefaultIcon(),
 		},
 		OnStartup: app.Startup,
 		OnDomReady: func(ctx context.Context) {

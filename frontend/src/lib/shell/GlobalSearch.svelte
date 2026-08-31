@@ -375,24 +375,26 @@
 </script>
 
 <div class="global-search" class:open={focused && (query || results.length)} data-index-revision={revision} data-index-building={loading || searching} data-index-partial={partial}>
-  <div class="global-search-box">
-    <Icon name="search" size={14} class="global-search-icon" />
-    <input
-      bind:value={query}
-      on:focus={handleFocus}
-      on:blur={() => setTimeout(() => focused = false, 120)}
-      type="search"
-      placeholder={loading ? tr('search.indexing') : tr('search.placeholder')}
-      aria-label={tr('search.global')}
-      data-global-search-input
-    />
+  <div class="global-search-controls">
+    <div class="global-search-box">
+      <Icon name="search" size={14} class="global-search-icon" />
+      <input
+        bind:value={query}
+        on:focus={handleFocus}
+        on:blur={() => setTimeout(() => focused = false, 120)}
+        type="search"
+        placeholder={loading ? tr('search.indexing') : tr('search.placeholder')}
+        aria-label={tr('search.global')}
+        data-global-search-input
+      />
+    </div>
+    {#if activeDealId}
+      <label class="global-search-deal-scope">
+        <input type="checkbox" bind:checked={limitToActiveDeal} data-global-search-deal-scope />
+        <span>{tr('search.activeDeal', undefined, 'Search in this Deal')}</span>
+      </label>
+    {/if}
   </div>
-  {#if activeDealId}
-    <label class="global-search-deal-scope">
-      <input type="checkbox" bind:checked={limitToActiveDeal} data-global-search-deal-scope />
-      <span>{tr('search.activeDeal', undefined, 'Search in this Deal')}</span>
-    </label>
-  {/if}
   {#if focused && query}
     <div class="global-search-results" data-global-search-results>
       {#if results.length}
@@ -426,6 +428,12 @@
     flex-shrink: 0;
   }
 
+  .global-search-controls {
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+  }
+
   .global-search-box {
     display: flex;
     align-items: center;
@@ -442,11 +450,11 @@
     display: flex;
     align-items: center;
     gap: 0.35rem;
-    margin-top: 0.3rem;
     color: var(--vt-color-text-muted);
     font-size: 0.7rem;
     cursor: pointer;
     user-select: none;
+    white-space: nowrap;
   }
 
   .global-search-deal-scope input {
