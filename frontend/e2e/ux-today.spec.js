@@ -36,11 +36,11 @@ test.describe('UX Overview workspace flow', () => {
     await expect(overview.locator('[data-overview-section="quick-actions"]')).toHaveCount(0);
 
     const summaryCards = overview.locator('button[data-overview-summary]');
-    await expect(summaryCards).toHaveCount(5);
+    await expect(summaryCards).toHaveCount(4);
     await expect(overview.locator('[data-overview-summary="attention"]')).toHaveCount(0);
     await expect(overview.locator('[data-overview-summary="notes"]')).toContainText('1 note');
     await expect(overview.locator('[data-overview-summary="captures"]')).toContainText('0 captures to review');
-    await expect(overview.locator('[data-overview-summary="activity"]')).toContainText('0 recorded events');
+    await expect(overview.locator('[data-overview-summary="activity"]')).toHaveCount(0);
     await expect(overview.locator('[data-overview-summary="journal"]')).toContainText('0 journal entries');
     await expect(overview).toContainText('No clear resume point yet');
     await expect(overview).toContainText('No meaningful changes for this filter yet');
@@ -62,10 +62,6 @@ test.describe('UX Overview workspace flow', () => {
 
     await expect(page.getByRole('tab', { name: 'Browser' })).toHaveAttribute('aria-selected', 'true');
     await expect(page.locator('.browser-inbox-root')).toBeVisible({ timeout: 10000 });
-
-    await page.getByRole('tab', { name: 'Overview' }).click();
-    await overview.locator('[data-overview-summary="activity"]').click();
-    await expect(page.getByRole('tab', { name: 'Activity' })).toHaveAttribute('aria-selected', 'true');
 
     await page.getByRole('tab', { name: 'Overview' }).click();
     await overview.locator('[data-overview-summary="journal"]').click();
@@ -292,11 +288,7 @@ test.describe('UX Overview workspace flow', () => {
     await expect(recent).not.toContainText('draft.md');
   });
 
-  // The Activity card claimed a number the Activity tool would never show,
-  // because it counted globally scoped events -- browser domain activity, of
-  // which a real vault had 180 -- into every Deal. 184 on the card, 4 in the
-  // list.
-  test('the Activity card counts this Deal, not global browser activity', async ({ page }) => {
+  test('Activity data remains unavailable from the Deal Overview', async ({ page }) => {
     await page.evaluate(async () => {
       const PROJECT_ID = '11111111-1111-4111-8111-111111111111';
       const OTHER_DEAL_ID = '33333333-3333-4333-8333-333333333333';
@@ -353,38 +345,8 @@ test.describe('UX Overview workspace flow', () => {
 
     const overview = page.locator('[data-overview-root]');
     await overview.locator('[data-overview-action="refresh"]').click();
-    await expect(overview.locator('[data-overview-summary="activity"]')).toContainText('2 recorded events');
-
-    // And the card agrees with what clicking it shows.
-    await overview.locator('[data-overview-summary="activity"]').click();
-    await expect(page.getByRole('tab', { name: 'Activity' })).toHaveAttribute('aria-selected', 'true');
-    await expect(page.locator('.activity-root .activity-row')).toHaveCount(2);
-  });
-
-  test('Overview localizes activity labels without exposing internal event names', async ({ page }) => {
-    await page.evaluate(async () => {
-      const PROJECT_ID = '11111111-1111-4111-8111-111111111111';
-      await window.go.api.App.WritePluginDataNDJSON('verstak.activity', 'activity-events', [{
-          activityId: 'overview-russian-note',
-          occurredAt: '2026-06-30T08:25:00.000Z',
-          type: 'note.saved',
-          title: 'Локализация',
-          summary: 'Project/Notes/Localization.md',
-          workspaceRootPath: 'Project',
-          workspaceId: PROJECT_ID,
-        }]);
-    });
-    await page.locator('[data-settings-menu-button]').click();
-    await page.locator('[data-settings-language="ru"]').click();
-    // Settings are a window now, not a dropdown over the current view, so
-    // getting back to the Overview is a step.
-    await page.keyboard.press('Escape');
-
-    const overview = page.locator('[data-overview-root]');
-    await overview.locator('[data-overview-action="refresh"]').click();
-    const recent = overview.locator('[data-overview-section="recent"]');
-    await expect(recent).toContainText('Изменена заметка — Локализация');
-    await expect(recent).not.toContainText('note.saved');
-    await expect(recent).not.toContainText('Edited note');
+    await expect(overview.locator('[data-overview-summary="activity"]')).toHaveCount(0);
+    await expect(overview).not.toContainText('One');
+    await expect(overview).not.toContainText('Elsewhere');
   });
 });
