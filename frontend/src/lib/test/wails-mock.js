@@ -1212,8 +1212,17 @@ function cloneJson(value) {
     ListPluginCapabilities: function () { return Promise.resolve([allCapabilities(), '']); },
     ExecutePluginCommand: function (pluginId, commandId, args) {
       var s = pluginStates[pluginId];
-      var commands = ((s && s.manifest && s.manifest.contributes && s.manifest.contributes.commands) || []);
+      var contributions = (s && s.manifest && s.manifest.contributes) || {};
+      var commands = contributions.commands || [];
       var found = commands.find(function (cmd) { return cmd.id === commandId; });
+      if (!found) {
+        ['searchProviders', 'worklogProviders', 'overviewProviders'].some(function (point) {
+          var provider = (contributions[point] || []).find(function (item) { return item.handler === commandId; });
+          if (!provider) return false;
+          found = { id: commandId, handler: provider.handler };
+          return true;
+        });
+      }
       if (!found) return Promise.resolve([{}, 'command not declared']);
       return Promise.resolve([{ status: 'declared', pluginId: pluginId, commandId: commandId, handler: found.handler, args: args || {} }, '']);
     },

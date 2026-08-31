@@ -2709,7 +2709,9 @@ func (a *App) GetPluginCapability(pluginID, capabilityName string) (map[string]i
 	}, ""
 }
 
-// ExecutePluginCommand validates that a command is declared by the plugin.
+// ExecutePluginCommand validates that a callable handler is declared by the
+// plugin. Provider handlers are deliberately not command-palette entries: the
+// shell invokes them for integrations such as search, Overview, and Journal.
 // Actual handler execution is intentionally deferred until sidecar/RPC exists.
 func (a *App) ExecutePluginCommand(pluginID, commandID string, args map[string]interface{}) (map[string]interface{}, string) {
 	if _, err := a.requirePluginAccess(pluginID, "commands.register"); err != nil {
@@ -2718,18 +2720,40 @@ func (a *App) ExecutePluginCommand(pluginID, commandID string, args map[string]i
 	if a.contribRegistry == nil {
 		return nil, "contribution registry not initialized"
 	}
-	for _, command := range a.contribRegistry.Commands() {
-		if command.PluginID == pluginID && command.Item.ID == commandID {
-			return map[string]interface{}{
-				"status":    "declared",
-				"pluginId":  pluginID,
-				"commandId": commandID,
-				"handler":   command.Item.Handler,
-				"args":      args,
-			}, ""
-		}
+	if handler, ok := a.pluginHandler(pluginID, commandID); ok {
+		return map[string]interface{}{
+			"status":    "declared",
+			"pluginId":  pluginID,
+			"commandId": commandID,
+			"handler":   handler,
+			"args":      args,
+		}, ""
 	}
 	return nil, fmt.Sprintf("command %q is not declared by plugin %q", commandID, pluginID)
+}
+
+func (a *App) pluginHandler(pluginID, handlerID string) (string, bool) {
+	for _, command := range a.contribRegistry.Commands() {
+		if command.PluginID == pluginID && command.Item.ID == handlerID {
+			return command.Item.Handler, true
+		}
+	}
+	for _, provider := range a.contribRegistry.SearchProviders() {
+		if provider.PluginID == pluginID && provider.Item.Handler == handlerID {
+			return provider.Item.Handler, true
+		}
+	}
+	for _, provider := range a.contribRegistry.WorklogProviders() {
+		if provider.PluginID == pluginID && provider.Item.Handler == handlerID {
+			return provider.Item.Handler, true
+		}
+	}
+	for _, provider := range a.contribRegistry.OverviewProviders() {
+		if provider.PluginID == pluginID && provider.Item.Handler == handlerID {
+			return provider.Item.Handler, true
+		}
+	}
+	return "", false
 }
 
 // PublishPluginEvent validates publish permission and emits to the in-process bus.
