@@ -52,6 +52,14 @@ test.describe('Project, Milestones and Git workspace UX', () => {
     expect(milestoneSelectStyle.appearance).toBe('none');
     expect(milestoneSelectStyle.backgroundImage).not.toBe('none');
 
+    const milestoneRow = milestones.locator('.milestones-row').filter({ hasText: 'Release 1.0' });
+    page.once('dialog', (dialog) => dialog.dismiss());
+    await milestoneRow.locator('[data-milestone-action="delete"]').click();
+    await expect(milestoneRow).toBeVisible();
+    page.once('dialog', (dialog) => dialog.accept());
+    await milestoneRow.locator('[data-milestone-action="delete"]').click();
+    await expect(milestoneRow).toHaveCount(0);
+
     await page.getByRole('tab', { name: 'Git', exact: true }).click();
     const gitRoot = page.locator('[data-git-root]');
     await gitRoot.locator('[data-git-action="add"]').click();
