@@ -64,6 +64,20 @@ test.describe('Deal templates plugin', () => {
     await expect(missingTool).toContainText('Unavailable workspace tool');
   });
 
+  test('switching templates asks before discarding an unsaved draft', async ({ page }) => {
+    const form = await openTemplateSettings(page);
+    const list = page.locator('.templates-list');
+    await form.locator('[data-template-field="name"]').fill('Unsaved draft');
+    page.once('dialog', (dialog) => dialog.dismiss());
+    await list.getByRole('button', { name: 'Project', exact: true }).click();
+    await expect(form.locator('[data-template-field="name"]')).toHaveValue('Unsaved draft');
+    await expect(list.getByRole('button', { name: 'General', exact: true })).toHaveClass(/selected/);
+
+    page.once('dialog', (dialog) => dialog.accept());
+    await list.getByRole('button', { name: 'Project', exact: true }).click();
+    await expect(form.locator('[data-template-field="name"]')).toHaveValue('Project');
+  });
+
   test('Project seed passes its complete recipe snapshot through the public creation bridge', async ({ page }) => {
     const dialog = await openNewDeal(page);
     await dialog.locator('[data-new-deal-template="seed-project"]').click();
@@ -196,6 +210,10 @@ test.describe('Deal templates plugin', () => {
 
     const reopenedForm = await openTemplateSettings(page);
     await page.locator('.templates-list').getByRole('button', { name: 'Client recipe', exact: true }).click();
+    page.once('dialog', (dialog) => dialog.dismiss());
+    await reopenedForm.locator('[data-template-action="delete"]').click();
+    await expect(page.getByRole('button', { name: 'Client recipe', exact: true })).toBeVisible();
+    page.once('dialog', (dialog) => dialog.accept());
     await reopenedForm.locator('[data-template-action="delete"]').click();
     await expect(page.getByRole('button', { name: 'Client recipe', exact: true })).toHaveCount(0);
     await expect.poll(async () => page.evaluate(async () => {
