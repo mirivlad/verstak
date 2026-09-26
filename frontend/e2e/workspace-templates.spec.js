@@ -64,6 +64,27 @@ test.describe('Deal templates plugin', () => {
     await expect(missingTool).toContainText('Unavailable workspace tool');
   });
 
+  test('template settings keep the list compact and adapt to narrow panels', async ({ page }) => {
+    await page.setViewportSize({ width: 1200, height: 820 });
+    await openTemplateSettings(page);
+    const list = page.locator('.templates-list');
+    const form = page.locator('.templates-form');
+    const newButton = list.getByRole('button', { name: 'New template' });
+    expect((await newButton.boundingBox()).height).toBeLessThan(52);
+    expect((await list.boundingBox()).height).toBeLessThan(380);
+    expect((await form.boundingBox()).x).toBeGreaterThan((await list.boundingBox()).x + (await list.boundingBox()).width);
+
+    await page.setViewportSize({ width: 1000, height: 820 });
+    await expect.poll(async () => {
+      const listBox = await list.boundingBox();
+      const formBox = await form.boundingBox();
+      return formBox.y >= listBox.y + listBox.height;
+    }).toBe(true);
+
+    await page.setViewportSize({ width: 600, height: 820 });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
+  });
+
   test('switching templates asks before discarding an unsaved draft', async ({ page }) => {
     const form = await openTemplateSettings(page);
     const list = page.locator('.templates-list');
