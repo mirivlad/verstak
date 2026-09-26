@@ -1171,6 +1171,8 @@ func TestActivityProviderRecordsFileChangedWithoutMountedView(t *testing.T) {
 }
 
 func TestBrowserActivityBatchPersistsWithoutMountedViewAndDeduplicates(t *testing.T) {
+	endedAt := time.Now().UTC()
+	startedAt := endedAt.Add(-5 * time.Minute)
 	v := vault.NewVault(nil)
 	if err := v.CreateVault(t.TempDir()); err != nil {
 		t.Fatalf("CreateVault: %v", err)
@@ -1186,11 +1188,11 @@ func TestBrowserActivityBatchPersistsWithoutMountedViewAndDeduplicates(t *testin
 	}
 	event := events.Event{
 		Name:      "browser.activity.batch",
-		Timestamp: "2026-07-12T10:05:01Z",
+		Timestamp: endedAt.Format(time.RFC3339),
 		Payload: map[string]interface{}{
 			"batchId": "batch-activity-1",
 			"entries": []map[string]interface{}{{
-				"hostname": "example.com", "startedAt": "2026-07-12T10:00:00Z", "endedAt": "2026-07-12T10:05:00Z", "durationSeconds": int64(300),
+				"hostname": "example.com", "startedAt": startedAt.Format(time.RFC3339), "endedAt": endedAt.Format(time.RFC3339), "durationSeconds": int64(300),
 			}},
 		},
 	}
@@ -1223,6 +1225,8 @@ func TestBrowserActivityBatchPersistsWithoutMountedViewAndDeduplicates(t *testin
 // The address is what the user recognises afterwards: a domain alone cannot
 // tell configuring a site in its dashboard from reading its public pages.
 func TestBrowserActivityBatchKeepsThePageAddress(t *testing.T) {
+	endedAt := time.Now().UTC()
+	startedAt := endedAt.Add(-5 * time.Minute)
 	v := vault.NewVault(nil)
 	if err := v.CreateVault(t.TempDir()); err != nil {
 		t.Fatalf("CreateVault: %v", err)
@@ -1239,14 +1243,14 @@ func TestBrowserActivityBatchKeepsThePageAddress(t *testing.T) {
 	}
 	if err := app.recordBrowserActivityBatch(events.Event{
 		Name:      "browser.activity.batch",
-		Timestamp: "2026-07-12T10:05:01Z",
+		Timestamp: endedAt.Format(time.RFC3339),
 		Payload: map[string]interface{}{
 			"batchId": "batch-activity-page",
 			"entries": []map[string]interface{}{{
 				"hostname":        "example.com",
 				"url":             "https://example.com/admin/settings?tab=billing",
-				"startedAt":       "2026-07-12T10:00:00Z",
-				"endedAt":         "2026-07-12T10:05:00Z",
+				"startedAt":       startedAt.Format(time.RFC3339),
+				"endedAt":         endedAt.Format(time.RFC3339),
 				"durationSeconds": int64(300),
 			}},
 		},
