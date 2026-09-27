@@ -35,6 +35,19 @@ test.describe('Settings window', () => {
     await expect(page.locator('[data-settings-language="system"]')).toBeVisible();
   });
 
+  test('settings fill the available workspace width on wide and narrow windows', async ({ page }) => {
+    for (const width of [1920, 800]) {
+      await page.setViewportSize({ width, height: 900 });
+      if (width === 1920) await openSettings(page);
+      const contentBox = await page.locator('.content.scroll-surface').boundingBox();
+      const settingsBox = await page.locator('[data-settings-window]').boundingBox();
+      expect(Math.abs(settingsBox.x - contentBox.x)).toBeLessThanOrEqual(1);
+      // The content scroller keeps its own scrollbar gutter.
+      expect(Math.abs(settingsBox.width - contentBox.width)).toBeLessThanOrEqual(16);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
+    }
+  });
+
   test('search narrows the section list by what a setting is called', async ({ page }) => {
     await openSettings(page);
     const sections = page.locator('[data-settings-section]');
