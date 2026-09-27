@@ -358,8 +358,7 @@
     flex-direction: column;
     flex: 1;
     min-height: 0;
-    width: min(100%, 1100px);
-    margin: 0 auto;
+    width: 100%;
   }
 
   .settings-window-header {
