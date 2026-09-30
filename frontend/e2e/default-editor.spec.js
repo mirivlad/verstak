@@ -1,6 +1,9 @@
 import { test, expect } from '@playwright/test';
 import { waitForAppReady, setupConsoleCollector, resetMockState, openPluginManager } from './helpers.js';
 
+const expectDocument = async (editor, text) => expect.poll(async () =>
+  editor.locator('.cm-line').allTextContents().then(lines => lines.join('\n'))).toBe(text);
+
 test.describe('F: Default Editor Plugin', () => {
   let consoleCollector;
 
@@ -31,9 +34,9 @@ test.describe('F: Default Editor Plugin', () => {
     await expect(editor).toBeVisible({ timeout: 10000 });
     await expect(editor).toHaveAttribute('data-resource-path', 'Docs/todo.txt');
     await expect(editor).toHaveAttribute('data-request-mode', 'view');
-    const textarea = editor.locator('[data-editor-textarea]');
+    const textarea = editor.locator('.cm-content');
     await expect(textarea).toBeVisible();
-    await expect(textarea).toHaveValue('Buy groceries\nWrite tests');
+    await expectDocument(editor, 'Buy groceries\nWrite tests');
   });
 
   test('soft wrap defaults on, persists, and never changes saved newlines', async ({ page }) => {
@@ -50,10 +53,10 @@ test.describe('F: Default Editor Plugin', () => {
 
     const editor = page.locator('[data-editor-mode="text"]');
     const wrap = editor.locator('[data-editor-action="toggle-wrap"]');
-    const textarea = editor.locator('[data-editor-textarea]');
+    const textarea = editor.locator('.cm-content');
     await expect(wrap).toHaveText('Wrap long lines');
     await expect(wrap).toHaveAttribute('aria-pressed', 'true');
-    await expect(textarea).toHaveAttribute('wrap', 'soft');
+    await expect(textarea).toHaveClass(/cm-lineWrapping/);
 
     const exactText = 'one long logical line that only wraps visually and must not gain a newline\nsecond logical line';
     await textarea.fill(exactText);
@@ -66,7 +69,7 @@ test.describe('F: Default Editor Plugin', () => {
 
     await wrap.click();
     await expect(wrap).toHaveAttribute('aria-pressed', 'false');
-    await expect(textarea).toHaveAttribute('wrap', 'off');
+    await expect(textarea).not.toHaveClass(/cm-lineWrapping/);
     await expect.poll(async () => page.evaluate(async () => {
       const [settings, err] = await window.go.api.App.ReadPluginSettings('verstak.default-editor');
       if (err) throw new Error(err);
@@ -86,7 +89,7 @@ test.describe('F: Default Editor Plugin', () => {
     });
     const reopened = page.locator('[data-editor-mode="text"]');
     await expect(reopened.locator('[data-editor-action="toggle-wrap"]')).toHaveAttribute('aria-pressed', 'false');
-    await expect(reopened.locator('[data-editor-textarea]')).toHaveAttribute('wrap', 'off');
+    await expect(reopened.locator('.cm-content')).not.toHaveClass(/cm-lineWrapping/);
   });
 
   test('secret link opens its exact secret and closing it restores the note preview', async ({ page }) => {
@@ -124,7 +127,7 @@ test.describe('F: Default Editor Plugin', () => {
     await page.locator('.main-content-header .close-btn').click();
     await expect(note).toBeVisible({ timeout: 10000 });
     await expect(note.locator('[data-preview]')).toContainText('Target secret');
-    await expect(note.locator('[data-editor-textarea]')).toHaveCount(0);
+    await expect(note.locator('.cm-content')).toHaveCount(0);
     await expect(note.locator('[data-save-state]')).toHaveText('');
 
     const storedContent = await page.evaluate(async ({ notePath }) => {
@@ -173,22 +176,23 @@ test.describe('F: Default Editor Plugin', () => {
 
     const editor = page.locator('[data-editor-mode="notes-markdown"]');
     await expect(editor).toBeVisible({ timeout: 10000 });
-    await expect(editor.locator('[data-notes-badge]')).toBeVisible();
+    await expect(editor.locator('[data-editor-mode-button="preview"]')).toHaveAttribute('aria-pressed', 'true');
+    await expect(editor.locator('.de-md-toolbar')).toBeHidden();
 
     await editor.locator('[data-editor-mode-button="edit"]').click();
-    const textarea = editor.locator('[data-editor-textarea]');
+    const textarea = editor.locator('.cm-content');
     await expect(textarea).toBeVisible();
     await textarea.fill('plain text');
-    await textarea.selectText();
+    await textarea.press('ControlOrMeta+a');
     await editor.locator('[data-md-action="bold"]').click();
-    await expect(textarea).toHaveValue('**plain text**');
+    await expectDocument(editor, '**plain text**');
 
     await editor.locator('[data-md-action="heading"]').click();
-    await expect(textarea).toHaveValue('# **plain text**');
+    await expectDocument(editor, '# **plain text**');
     await expect(editor.locator('[data-save-state]')).toContainText('Modified');
 
     await editor.locator('[data-editor-mode-button="split"]').click();
-    await expect(editor.locator('[data-editor-textarea]')).toBeVisible();
+    await expect(editor.locator('.cm-content')).toBeVisible();
     await expect(editor.locator('[data-preview]')).toBeVisible();
     await expect(editor.locator('[data-preview]')).toContainText('plain text');
 
@@ -198,7 +202,7 @@ test.describe('F: Default Editor Plugin', () => {
     await textarea.fill('discard me');
     page.once('dialog', (dialog) => dialog.accept());
     await editor.locator('[data-editor-action="reload"]').click();
-    await expect(textarea).toHaveValue('# **plain text**');
+    await expectDocument(editor, '# **plain text**');
 
     await page.evaluate(async () => {
       const [result, openErr] = await window.go.api.App.OpenWorkbenchResource('verstak.platform-test', {

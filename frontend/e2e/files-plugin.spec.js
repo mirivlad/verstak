@@ -639,7 +639,7 @@ test.describe('G: Files Plugin', () => {
     await expect(editor).toBeVisible({ timeout: 10000 });
     await expect(editor).toHaveAttribute('data-resource-path', 'Docs/todo.txt');
 
-    const textarea = page.locator('.de-textarea');
+    const textarea = page.locator('.cm-editor');
     await expect(textarea).toBeVisible({ timeout: 10000 });
     const textareaBox = await textarea.boundingBox();
     expect(textareaBox.height).toBeGreaterThan(300);

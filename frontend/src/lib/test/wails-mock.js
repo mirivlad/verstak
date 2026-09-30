@@ -4,7 +4,7 @@
  * Каждый метод возвращает Promise с данными, совместимыми с Wails-контрактом.
  * Состояние мутабельно — тесты могут менять его между сценариями.
  */
-import defaultEditorSource from '../../../../../verstak-official-plugins/plugins/default-editor/frontend/src/index.js?raw';
+import defaultEditorSource from '../../../../../verstak-official-plugins/plugins/default-editor/frontend/dist/index.js?raw';
 import filesSource from '../../../../../verstak-official-plugins/plugins/files/frontend/src/index.js?raw';
 import filePreviewSource from '../../../../../verstak-official-plugins/plugins/file-preview/frontend/src/index.js?raw';
 import trashSource from '../../../../../verstak-official-plugins/plugins/trash/frontend/src/index.js?raw';
