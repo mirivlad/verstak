@@ -145,7 +145,7 @@ func (s *Service) RenameFolder(folderID, newName string, refreshBaseline func() 
 	if newRel == f.Path {
 		return f, nil // no-op
 	}
-	if _, err := os.Lstat(newAbs); err == nil {
+	if occupiedByAnother(oldAbs, newAbs) {
 		return ScannedFolder{}, fmt.Errorf("conflict: %s already exists", newRel)
 	}
 
@@ -199,7 +199,7 @@ func (s *Service) RenameWorkspace(workspaceID, newName string, refreshBaseline f
 	if newRel == ws.RootPath {
 		return ws, nil
 	}
-	if _, err := os.Lstat(newAbs); err == nil {
+	if occupiedByAnother(oldAbs, newAbs) {
 		return ScannedWorkspace{}, fmt.Errorf("conflict: %s already exists", newRel)
 	}
 
@@ -389,4 +389,20 @@ func (s *Service) GetCurrentWorkspaceID() string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.currentWS
+}
+
+// occupiedByAnother reports whether newAbs names an entry other than oldAbs.
+// On a case-insensitive file system (Windows, macOS) "Client" already exists
+// when renaming "client" -- it is the same folder -- and treating that as a
+// conflict made case-only renames impossible there.
+func occupiedByAnother(oldAbs, newAbs string) bool {
+	newInfo, err := os.Lstat(newAbs)
+	if err != nil {
+		return false
+	}
+	oldInfo, err := os.Lstat(oldAbs)
+	if err != nil {
+		return true
+	}
+	return !os.SameFile(oldInfo, newInfo)
 }

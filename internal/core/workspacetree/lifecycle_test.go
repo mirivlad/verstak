@@ -614,3 +614,33 @@ func TestMoveWorkspaceIntoFolderAndBackToRoot(t *testing.T) {
 		}
 	}
 }
+
+// On a case-insensitive file system the new spelling of a case-only rename
+// resolves to the entry being renamed. That must not count as a conflict,
+// while a genuinely different entry must.
+func TestOccupiedByAnotherDistinguishesTheSameEntry(t *testing.T) {
+	dir := t.TempDir()
+	original := filepath.Join(dir, "client.md")
+	if err := os.WriteFile(original, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// A hard link is the same entry under a second name -- what "Client.md"
+	// is to "client.md" on NTFS or APFS.
+	sameEntry := filepath.Join(dir, "Client.md")
+	if err := os.Link(original, sameEntry); err != nil {
+		t.Skipf("hard links unavailable: %v", err)
+	}
+	if occupiedByAnother(original, sameEntry) {
+		t.Error("the entry being renamed must not conflict with itself")
+	}
+	other := filepath.Join(dir, "other.md")
+	if err := os.WriteFile(other, []byte("y"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if !occupiedByAnother(original, other) {
+		t.Error("a different entry at the destination is a conflict")
+	}
+	if occupiedByAnother(original, filepath.Join(dir, "missing.md")) {
+		t.Error("a free destination is not a conflict")
+	}
+}
