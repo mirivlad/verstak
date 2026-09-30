@@ -144,3 +144,35 @@ jobs:
           name: e2e-results
           path: frontend/e2e-results/
           retention-days: 7
+
+  # The Windows ZIP is cross-compiled on Linux and was never run on Windows by
+  # CI. Path handling (the Files API safe-path policy, trash, sync paths) is
+  # where the platforms differ, and it is covered by Go tests, so run them on a
+  # real Windows runner. The root package embeds the built frontend and is left
+  # out; everything under internal/ is plain Go.
+  go-test-windows:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check out the official plugins
+        uses: actions/checkout@v4
+        with:
+          repository: mirivlad/verstak-official-plugins
+          ref: main
+          path: verstak-official-plugins
+
+      - name: Put official plugins beside desktop
+        run: mv verstak-official-plugins ../verstak-official-plugins
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Go tests on Windows
+        run: go test -count=1 ./internal/...
