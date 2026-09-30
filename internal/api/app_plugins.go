@@ -809,7 +809,13 @@ func (a *App) GetPluginLocalization(pluginID, locale string) (map[string]string,
 	if err != nil {
 		return nil, fmt.Sprintf("failed to resolve catalog: %v", err)
 	}
-	if !pathInsideRoot(absRoot, resolvedPath) {
+	// Resolve the root the same way before comparing: a root reached through a
+	// symlink or a Windows 8.3 short name otherwise never contains anything.
+	resolvedRoot, err := filepath.EvalSymlinks(absRoot)
+	if err != nil {
+		return nil, fmt.Sprintf("resolve plugin root: %v", err)
+	}
+	if !pathInsideRoot(resolvedRoot, resolvedPath) {
 		return nil, "catalog path escapes plugin root"
 	}
 

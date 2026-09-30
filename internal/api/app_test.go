@@ -881,6 +881,38 @@ func TestGetPluginLocalizationReadsDeclaredCatalog(t *testing.T) {
 	}
 }
 
+// A plugin directory reached through a link -- a symlinked install dir on
+// Linux, an 8.3 short name such as RUNNER~1 on Windows -- is still the plugin's
+// own directory. Comparing the resolved catalog path with an unresolved root
+// made every catalog look like it escaped, and the Windows build showed plugin
+// keys instead of text.
+func TestGetPluginLocalizationFollowsALinkedPluginRoot(t *testing.T) {
+	realRoot := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(realRoot, "locales"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(realRoot, "locales", "ru.json"), []byte(`{"greeting":"Привет"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	linkedRoot := filepath.Join(t.TempDir(), "linked-plugin")
+	if err := os.Symlink(realRoot, linkedRoot); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+	app := newTestApp(linkedRoot)
+	app.plugins[0].Manifest.Localization = &plugin.LocalizationConfig{
+		DefaultLocale: "ru",
+		Locales:       map[string]string{"ru": "locales/ru.json"},
+	}
+
+	catalog, errStr := app.GetPluginLocalization("test.plugin", "ru")
+	if errStr != "" {
+		t.Fatalf("GetPluginLocalization: %s", errStr)
+	}
+	if catalog["greeting"] != "Привет" {
+		t.Fatalf("catalog = %#v", catalog)
+	}
+}
+
 func TestGetPluginLocalizationRejectsInvalidCatalogs(t *testing.T) {
 	root := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(root, "locales"), 0o755); err != nil {
