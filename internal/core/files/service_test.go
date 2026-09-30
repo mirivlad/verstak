@@ -749,3 +749,27 @@ func TestCreateVaultFolderRejectsSymlinkParentEscape(t *testing.T) {
 		t.Fatalf("folder should not be created outside vault, stat err=%v", err)
 	}
 }
+
+// Renaming "note.md" to "Note.md" on NTFS or APFS finds "Note.md" already
+// there -- it is the same file. Only a different entry may block the move.
+func TestMoveVaultPathAllowsTheSameEntryUnderAnotherSpelling(t *testing.T) {
+	s, root := newTestService(t)
+	original := filepath.Join(root, "note.md")
+	if err := os.WriteFile(original, []byte("text"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// A hard link stands in for the case-insensitive alias.
+	if err := os.Link(original, filepath.Join(root, "Note.md")); err != nil {
+		t.Skipf("hard links unavailable: %v", err)
+	}
+	if err := s.MoveVaultPath("note.md", "Note.md", MoveOptions{}); err != nil {
+		t.Fatalf("renaming a file onto itself under another spelling: %v", err)
+	}
+
+	if err := os.WriteFile(filepath.Join(root, "other.md"), []byte("other"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.MoveVaultPath("Note.md", "other.md", MoveOptions{}); err == nil || !strings.Contains(err.Error(), "conflict") {
+		t.Fatalf("moving onto a different file must conflict, got %v", err)
+	}
+}

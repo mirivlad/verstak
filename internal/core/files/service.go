@@ -412,7 +412,9 @@ func (s *Service) MoveVaultPath(fromRelativePath string, toRelativePath string, 
 	} else if !info.IsDir() {
 		return fmt.Errorf("parent-not-directory: %s", pathDir(toRel))
 	}
-	if _, err := os.Lstat(toFull); err == nil && !options.Overwrite {
+	// On a case-insensitive file system "Note.md" already exists when renaming
+	// "note.md": it is the same file. Only a different entry is a conflict.
+	if toInfo, err := os.Lstat(toFull); err == nil && !options.Overwrite && !os.SameFile(fromInfo, toInfo) {
 		return fmt.Errorf("conflict: %s", toRel)
 	} else if err != nil && !os.IsNotExist(err) {
 		return err
