@@ -68,6 +68,8 @@ export default {
   'status.failed': 'ошибка',
   'status.disabled': 'выключено',
   'status.missing': 'отсутствует',
+  'status.incompatible': 'несовместим',
+  'status.missing-required-capability': 'нет зависимости',
   'pluginManager.reloading': '⟳ Обновление...',
   'pluginManager.reload': '⟳ Обновить',
   'pluginManager.scanning': 'Сканирование каталогов плагинов...',

@@ -80,6 +80,12 @@ discovered
 | `failed` | Ошибка регистрации capabilities | Не загружается |
 | `incompatible` | Неподдерживаемая schemaVersion/apiVersion | Не загружается |
 
+`apiVersion` сверяется с `plugin.HostAPIVersion` (сейчас `0.1.0`) до
+регистрации capabilities. Совпадать должен major, а пока API 0.x — и minor;
+внутри совместимой линии плагин может целиться в более старую версию API, но не в
+более новую. Несовместимый плагин не регистрирует capabilities, поэтому
+зависящие от него плагины получают `missing-required-capability`.
+
 ## Required / Optional Capabilities
 
 ### Правило

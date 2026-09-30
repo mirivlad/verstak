@@ -67,6 +67,8 @@ export default {
   'status.failed': 'failed',
   'status.disabled': 'disabled',
   'status.missing': 'missing',
+  'status.incompatible': 'incompatible',
+  'status.missing-required-capability': 'missing dependency',
   'pluginManager.reloading': '⟳ Reloading...',
   'pluginManager.reload': '⟳ Reload',
   'pluginManager.scanning': 'Scanning plugin directories...',
