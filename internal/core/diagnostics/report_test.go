@@ -3,6 +3,7 @@ package diagnostics
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -113,7 +114,8 @@ func TestWritePutsTheReportWhereItCanBeFound(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Somebody else's account on the same machine has no business reading it.
-	if info.Mode().Perm() != 0o600 {
+	// Windows has no Unix permission bits; its ACLs are not modelled here.
+	if runtime.GOOS != "windows" && info.Mode().Perm() != 0o600 {
 		t.Fatalf("report mode = %v, want 0600", info.Mode().Perm())
 	}
 }
