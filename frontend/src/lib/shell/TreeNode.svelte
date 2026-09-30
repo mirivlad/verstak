@@ -189,7 +189,7 @@
     {#if isFolder}
       <span class="tchev" class:open={isExpanded}><Icon name="chevron-right" size={12} /></span>
     {:else}
-      <span class="tchev tempty" />
+      <span class="tchev tempty"></span>
     {/if}
     <span class="tico"><Icon class="wt-node-icon" name={isFolder ? folderIconName : 'layout-grid'} size={14} style={isFolder && folderIconColor ? 'color:' + folderIconColor : ''} /></span>
     <span class="tname wt-label" title={node.name}>{node.name}</span>
@@ -220,8 +220,7 @@
       style="margin-left:{(depth + 1) * INDENT}rem"
       role="none"
       on:dragover={onChildListDragOver}
-      on:drop={onChildListDrop}
-    />
+      on:drop={onChildListDrop}></div>
   {/if}
 </div>
 
