@@ -19,7 +19,7 @@ func createTempPlugin(t *testing.T, dir, id, name string) string {
 		"id": "` + id + `",
 		"name": "` + name + `",
 		"version": "1.0.0",
-		"apiVersion": "1.0",
+		"apiVersion": "0.1.0",
 		"provides": ["` + id + `.cap1"],
 		"permissions": ["vault.read"]
 	}`
@@ -126,7 +126,7 @@ func TestDiscoverPlugins_DuplicateID(t *testing.T) {
 		"id": "dup-one",
 		"name": "Second",
 		"version": "1.0.0",
-		"apiVersion": "1.0",
+		"apiVersion": "0.1.0",
 		"provides": ["dup-one.cap1"],
 		"permissions": ["vault.read"]
 	}`
@@ -163,7 +163,7 @@ func TestDiscoverPlugins_DuplicateIDAcrossDirs_FirstWinsAndReportsBothPaths(t *t
 		"id": "shared.plugin",
 		"name": "Second",
 		"version": "2.0.0",
-		"apiVersion": "1.0",
+		"apiVersion": "0.1.0",
 		"provides": ["shared.plugin.second.cap"],
 		"permissions": ["vault.read"]
 	}`
@@ -197,7 +197,7 @@ func TestValidateManifest_OpenProviders(t *testing.T) {
 		ID:            "editor.plugin",
 		Name:          "Editor",
 		Version:       "1.0.0",
-		APIVersion:    "1.0",
+		APIVersion:    "0.1.0",
 		Provides:      []string{"editor.text"},
 		Permissions:   []string{"workbench.open"},
 		Contributes: &Contributions{
@@ -239,7 +239,7 @@ func TestValidateManifest_Localization(t *testing.T) {
 		ID:            "localized.plugin",
 		Name:          "Localized",
 		Version:       "1.0.0",
-		APIVersion:    "1.0",
+		APIVersion:    "0.1.0",
 		Provides:      []string{"localized.capability"},
 		Permissions:   []string{"ui.register"},
 		Localization: &LocalizationConfig{

@@ -42,7 +42,7 @@ func TestLifecycle_CoreCapabilitiesRegisteredBeforePlugins(t *testing.T) {
 		"id": "test.lifecycle.core",
 		"name": "Core Cap Test",
 		"version": "1.0.0",
-		"apiVersion": "1.0",
+		"apiVersion": "0.1.0",
 		"provides": ["test.lifecycle.core.cap1"],
 		"requires": ["verstak/core/plugin-manager/v1"],
 		"permissions": ["vault.read"]
@@ -115,7 +115,7 @@ func TestLifecycle_MissingRequiredCapability(t *testing.T) {
 		"id": "test.lifecycle.missing",
 		"name": "Missing Cap Test",
 		"version": "1.0.0",
-		"apiVersion": "1.0",
+		"apiVersion": "0.1.0",
 		"provides": ["test.lifecycle.missing.cap1"],
 		"requires": ["verstak/core/plugin-manager/v1"],
 		"permissions": ["vault.read"]
@@ -159,7 +159,7 @@ func TestLifecycle_MissingOptionalCapability_DEGRADED(t *testing.T) {
 		"id": "test.lifecycle.degraded",
 		"name": "Degraded Test",
 		"version": "1.0.0",
-		"apiVersion": "1.0",
+		"apiVersion": "0.1.0",
 		"provides": ["test.lifecycle.degraded.cap1"],
 		"requires": ["verstak/core/plugin-manager/v1"],
 		"optionalRequires": ["verstak/core/vault/v1"],
@@ -210,7 +210,7 @@ func TestLifecycle_AllCapabilitiesResolved_LOADED(t *testing.T) {
 		"id": "test.lifecycle.loaded",
 		"name": "Loaded Test",
 		"version": "1.0.0",
-		"apiVersion": "1.0",
+		"apiVersion": "0.1.0",
 		"provides": ["test.lifecycle.loaded.cap1"],
 		"requires": ["verstak/core/plugin-manager/v1"],
 		"optionalRequires": ["verstak/core/vault/v1"],
@@ -264,7 +264,7 @@ func TestLifecycle_ReloadPlugins_DoesNotDuplicateCapabilities(t *testing.T) {
 		"id": "test.lifecycle.reload",
 		"name": "Reload Test",
 		"version": "1.0.0",
-		"apiVersion": "1.0",
+		"apiVersion": "0.1.0",
 		"provides": ["test.lifecycle.reload.cap1"],
 		"requires": ["verstak/core/plugin-manager/v1"],
 		"permissions": ["vault.read"]
@@ -318,7 +318,7 @@ func TestLifecycle_DisabledPlugin(t *testing.T) {
 		"id": "test.lifecycle.disabled",
 		"name": "Disabled Test",
 		"version": "1.0.0",
-		"apiVersion": "1.0",
+		"apiVersion": "0.1.0",
 		"provides": ["test.lifecycle.disabled.cap1"],
 		"requires": ["verstak/core/plugin-manager/v1"],
 		"permissions": ["vault.read"]
@@ -371,6 +371,7 @@ func TestResolveLifecycleResolvesRequiredCapabilitiesRegardlessOfDiscoveryOrder(
 		{
 			Manifest: Manifest{
 				ID:          "consumer.plugin",
+				APIVersion:  HostAPIVersion,
 				Provides:    []string{"consumer.capability"},
 				Requires:    []string{"provider.capability"},
 				Permissions: []string{"vault.read"},
@@ -380,6 +381,7 @@ func TestResolveLifecycleResolvesRequiredCapabilitiesRegardlessOfDiscoveryOrder(
 		{
 			Manifest: Manifest{
 				ID:          "provider.plugin",
+				APIVersion:  HostAPIVersion,
 				Provides:    []string{"provider.capability"},
 				Permissions: []string{"vault.read"},
 			},
@@ -406,6 +408,7 @@ func TestResolveLifecycleDoesNotExposeCapabilitiesFromUnresolvedPlugin(t *testin
 		{
 			Manifest: Manifest{
 				ID:          "dependent.plugin",
+				APIVersion:  HostAPIVersion,
 				Provides:    []string{"dependent.capability"},
 				Requires:    []string{"unresolved.capability"},
 				Permissions: []string{"vault.read"},
@@ -415,6 +418,7 @@ func TestResolveLifecycleDoesNotExposeCapabilitiesFromUnresolvedPlugin(t *testin
 		{
 			Manifest: Manifest{
 				ID:          "unresolved.plugin",
+				APIVersion:  HostAPIVersion,
 				Provides:    []string{"unresolved.capability"},
 				Requires:    []string{"missing.capability"},
 				Permissions: []string{"vault.read"},
@@ -441,6 +445,7 @@ func TestResolveLifecycleEvaluatesOptionalCapabilitiesAfterProvidersLoad(t *test
 		{
 			Manifest: Manifest{
 				ID:               "optional.consumer",
+				APIVersion:       HostAPIVersion,
 				Provides:         []string{"consumer.capability"},
 				OptionalRequires: []string{"optional.capability"},
 				Permissions:      []string{"vault.read"},
@@ -450,6 +455,7 @@ func TestResolveLifecycleEvaluatesOptionalCapabilitiesAfterProvidersLoad(t *test
 		{
 			Manifest: Manifest{
 				ID:          "optional.provider",
+				APIVersion:  HostAPIVersion,
 				Provides:    []string{"optional.capability"},
 				Permissions: []string{"vault.read"},
 			},

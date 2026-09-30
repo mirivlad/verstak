@@ -11,7 +11,7 @@ func TestValidateManifestCapabilityOperations(t *testing.T) {
 		ID:            "provider.plugin",
 		Name:          "Provider",
 		Version:       "1.0.0",
-		APIVersion:    "1.0",
+		APIVersion:    "0.1.0",
 		Provides:      []string{"example/cap/v1"},
 		Permissions:   []string{"commands.register"},
 		CapabilityOperations: map[string]map[string]string{

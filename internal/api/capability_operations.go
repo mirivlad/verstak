@@ -5,9 +5,11 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
+
+	"github.com/verstak/verstak-desktop/internal/core/plugin"
 )
 
-const dealCapabilityHostAPIVersion = "0.1.0"
+const dealCapabilityHostAPIVersion = plugin.HostAPIVersion
 
 var dealCapabilityOperations = map[string]map[string]struct{}{
 	"verstak/notes/v2":    {"list": {}, "create": {}, "open": {}},

@@ -27,6 +27,15 @@ func ResolveLifecycle(plugins []Plugin, registry *capability.Registry, isDisable
 			p.Status = StatusDisabled
 			continue
 		}
+		// A plugin written for another plugin API is not started at all: its
+		// capabilities are not registered, so dependants report the missing
+		// capability instead of failing later inside a call that no longer
+		// exists.
+		if reason := CheckAPICompatibility(p.Manifest.APIVersion, HostAPIVersion); reason != "" {
+			p.Status = StatusIncompatible
+			p.Error = reason
+			continue
+		}
 		pending[i] = struct{}{}
 	}
 
