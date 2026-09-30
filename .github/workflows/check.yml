@@ -174,5 +174,14 @@ jobs:
           go-version-file: go.mod
           cache: true
 
+      # Git tests compare checked-out bytes; the runner's global autocrlf
+      # would turn LF into CRLF underneath them.
+      - name: Keep line endings as committed
+        run: git config --global core.autocrlf false
+
       - name: Go tests on Windows
+        # The bundled-plugin test reads the official plugin sources directly;
+        # no install step runs on this job.
+        env:
+          VERSTAK_RELEASE_PLUGIN_DIR: ${{ github.workspace }}/../verstak-official-plugins/plugins
         run: go test -count=1 ./internal/...

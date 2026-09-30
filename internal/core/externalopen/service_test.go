@@ -2,6 +2,7 @@ package externalopen
 
 import (
 	"reflect"
+	"runtime"
 	"testing"
 )
 
@@ -50,6 +51,12 @@ func TestShowInFolderCommands(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
+			// The Unix cases build parent paths with the host's filepath; on a
+			// Windows host they would be modelling a platform the code never
+			// runs that way on.
+			if runtime.GOOS == "windows" && tc.goos != "windows" {
+				t.Skip("Unix path handling is exercised on Unix hosts")
+			}
 			var got commandCall
 			svc := NewServiceFor(tc.goos, func(name string, args ...string) error {
 				got = commandCall{name: name, args: args}
