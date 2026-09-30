@@ -860,7 +860,7 @@
       {#if ctxMenu.kind === 'folder'}
         <button class="vt-menu-item vt-ctx-i" on:click={() => { const i = ctxMenu.id; closeCtx(); openTemplates(i); }}>{tr('workspaceTree.newDeal')}</button>
         <button class="vt-menu-item vt-ctx-i" on:click={() => { const i = ctxMenu.id; closeCtx(); openCreateFolder(i); }}>{tr('workspaceTree.newFolder')}</button>
-        <div class="vt-menu-separator vt-ctx-s" />
+        <div class="vt-menu-separator vt-ctx-s"></div>
         <button class="vt-menu-item vt-ctx-i" on:click={() => { const {id: i, name: n} = ctxMenu; closeCtx(); openEditFolder(i, n); }}>{tr('workspaceTree.editFolder')}</button>
         <button class="vt-menu-item danger vt-ctx-i vt-ctx-d" on:click={() => { const {id: i, name: n} = ctxMenu; closeCtx(); openTrash('folder', i, n); }}>{tr('workspaceTree.trashFolder')}</button>
       {:else}

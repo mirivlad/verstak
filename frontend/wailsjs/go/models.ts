@@ -1438,6 +1438,7 @@ export namespace plugin {
 	    provides: string[];
 	    requires?: string[];
 	    optionalRequires?: string[];
+	    capabilityOperations?: Record<string, any>;
 	    permissions: string[];
 	    frontend?: FrontendConfig;
 	    backend?: BackendConfig;
@@ -1463,6 +1464,7 @@ export namespace plugin {
 	        this.provides = source["provides"];
 	        this.requires = source["requires"];
 	        this.optionalRequires = source["optionalRequires"];
+	        this.capabilityOperations = source["capabilityOperations"];
 	        this.permissions = source["permissions"];
 	        this.frontend = this.convertValues(source["frontend"], FrontendConfig);
 	        this.backend = this.convertValues(source["backend"], BackendConfig);
@@ -1829,31 +1831,79 @@ export namespace workspace {
 	        this.state = source["state"];
 	    }
 	}
-	export class WorkspaceTemplate {
-	    id: string;
-	    name: string;
-	    description: string;
-	    version: number;
-	    workspaceTools: string[];
-	
-	    static createFrom(source: any = {}) {
-	        return new WorkspaceTemplate(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.id = source["id"];
-	        this.name = source["name"];
-	        this.description = source["description"];
-	        this.version = source["version"];
-	        this.workspaceTools = source["workspaceTools"];
-	    }
-	}
 
 }
 
 export namespace workspacetree {
 	
+	export class DealRecipeFile {
+	    path: string;
+	    content: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new DealRecipeFile(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.path = source["path"];
+	        this.content = source["content"];
+	    }
+	}
+	export class RecipeProvenance {
+	    templateId: string;
+	    templateName?: string;
+	    templateVersion?: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new RecipeProvenance(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.templateId = source["templateId"];
+	        this.templateName = source["templateName"];
+	        this.templateVersion = source["templateVersion"];
+	    }
+	}
+	export class DealRecipeSnapshot {
+	    workspaceTools: string[];
+	    initialFolders?: string[];
+	    initialFiles?: DealRecipeFile[];
+	    toolConfig?: Record<string, Array<number>>;
+	    provenance: RecipeProvenance;
+	
+	    static createFrom(source: any = {}) {
+	        return new DealRecipeSnapshot(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.workspaceTools = source["workspaceTools"];
+	        this.initialFolders = source["initialFolders"];
+	        this.initialFiles = this.convertValues(source["initialFiles"], DealRecipeFile);
+	        this.toolConfig = source["toolConfig"];
+	        this.provenance = this.convertValues(source["provenance"], RecipeProvenance);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
 	export class PlacementRequest {
 	    sourceKey: string;
 	    targetKey: string;
@@ -1870,6 +1920,7 @@ export namespace workspacetree {
 	        this.position = source["position"];
 	    }
 	}
+	
 	export class TreeDiagnostic {
 	    level: string;
 	    code: string;
@@ -1892,3 +1943,4 @@ export namespace workspacetree {
 	}
 
 }
+

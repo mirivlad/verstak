@@ -114,14 +114,6 @@ export function GetPluginCapability(arg1, arg2) {
   return window['go']['api']['App']['GetPluginCapability'](arg1, arg2);
 }
 
-export function ResolvePluginCapabilityOperation(arg1, arg2, arg3) {
-  return window['go']['api']['App']['ResolvePluginCapabilityOperation'](arg1, arg2, arg3);
-}
-
-export function ResolveDealCapabilityOperation(arg1, arg2, arg3, arg4) {
-  return window['go']['api']['App']['ResolveDealCapabilityOperation'](arg1, arg2, arg3, arg4);
-}
-
 export function GetPluginFrontendInfo(arg1) {
   return window['go']['api']['App']['GetPluginFrontendInfo'](arg1);
 }
@@ -254,6 +246,10 @@ export function PluginCloseImportSource(arg1, arg2) {
   return window['go']['api']['App']['PluginCloseImportSource'](arg1, arg2);
 }
 
+export function PluginCreateWorkspace(arg1, arg2, arg3, arg4) {
+  return window['go']['api']['App']['PluginCreateWorkspace'](arg1, arg2, arg3, arg4);
+}
+
 export function PluginGitClone(arg1, arg2) {
   return window['go']['api']['App']['PluginGitClone'](arg1, arg2);
 }
@@ -288,10 +284,6 @@ export function PluginListImportEntries(arg1, arg2, arg3) {
 
 export function PluginListWorkspaces(arg1) {
   return window['go']['api']['App']['PluginListWorkspaces'](arg1);
-}
-
-export function PluginCreateWorkspace(arg1, arg2, arg3, arg4) {
-  return window['go']['api']['App']['PluginCreateWorkspace'](arg1, arg2, arg3, arg4);
 }
 
 export function PluginReadImportText(arg1, arg2, arg3) {
@@ -448,6 +440,14 @@ export function RescanWorkspaceTree() {
 
 export function ResetFolderAppearance(arg1) {
   return window['go']['api']['App']['ResetFolderAppearance'](arg1);
+}
+
+export function ResolveDealCapabilityOperation(arg1, arg2, arg3, arg4) {
+  return window['go']['api']['App']['ResolveDealCapabilityOperation'](arg1, arg2, arg3, arg4);
+}
+
+export function ResolvePluginCapabilityOperation(arg1, arg2, arg3) {
+  return window['go']['api']['App']['ResolvePluginCapabilityOperation'](arg1, arg2, arg3);
 }
 
 export function RestoreVaultTrash(arg1, arg2, arg3) {

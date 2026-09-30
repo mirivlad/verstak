@@ -227,8 +227,7 @@
     on:pointerup={() => stopResize(true)}
     on:pointercancel={() => stopResize(true)}
     on:dblclick={resetSidebarWidth}
-    on:keydown={resizeWithKeyboard}
-  />
+    on:keydown={resizeWithKeyboard}></button>
 </aside>
 
 <style>

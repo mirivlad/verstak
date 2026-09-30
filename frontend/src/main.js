@@ -1,3 +1,4 @@
+import { mount } from 'svelte';
 import App from './App.svelte';
 import * as Backend from '../wailsjs/go/api/App';
 import { i18n } from './lib/i18n/index.js';
@@ -80,7 +81,7 @@ async function start() {
   syncDocumentLanguage();
   i18n.subscribe(syncDocumentLanguage);
 
-  return new App({
+  return mount(App, {
     target: document.getElementById('app'),
   });
 }

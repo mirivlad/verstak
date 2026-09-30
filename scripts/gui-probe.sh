@@ -134,13 +134,21 @@ fi
 # into a screenshot. The probe should model an installed application.
 (
   cd "$BINARY_DIR" || exit 1
+  # Wails enforces a single instance through a D-Bus session name. Without a
+  # bus of its own the probe could meet a running Verstak (the installed one,
+  # or a previous probe's autolaunched bus), hand its arguments over and exit
+  # before a window exists. A private session bus keeps every run isolated.
+  DBUS_WRAPPER=()
+  if command -v dbus-run-session >/dev/null; then
+    DBUS_WRAPPER=(dbus-run-session --)
+  fi
   exec env -i \
     HOME="$PROBE_HOME" \
     DISPLAY="$DISPLAY_NUM" \
     PATH="/usr/bin:/bin" \
     XDG_RUNTIME_DIR="$PROBE_HOME/run" \
     WEBKIT_DISABLE_COMPOSITING_MODE="${WEBKIT_DISABLE_COMPOSITING_MODE:-0}" \
-    "$BINARY" --debug
+    "${DBUS_WRAPPER[@]}" "$BINARY" --debug
 ) >"$OUT/app.log" 2>&1 &
 APP_PID=$!
 
