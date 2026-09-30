@@ -24,6 +24,8 @@ func TestIsNewer(t *testing.T) {
 		{"v0.2.9", "v0.2.8-dirty", true},
 		{"v0.2.8", "dev", true}, // a build without a release is always behind
 		{"v0.2.8", "", true},
+		{"v0.2.8", "v0.2.8-5-g1ff1c5a", false}, // git describe: after v0.2.8
+		{"v0.2.9", "v0.2.8-5-g1ff1c5a", true},
 	}
 	for _, c := range cases {
 		got, err := IsNewer(c.latest, c.current)

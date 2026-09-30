@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -129,6 +130,8 @@ func IsNewer(latest, current string) (bool, error) {
 	}
 }
 
+var gitDescribeSuffix = regexp.MustCompile(`^[0-9]+-g[0-9a-f]+$`)
+
 type version struct {
 	core [3]int
 	pre  string
@@ -146,6 +149,11 @@ func parse(value string) (version, error) {
 	if i := strings.IndexByte(value, '-'); i >= 0 {
 		out.pre = value[i+1:]
 		value = value[:i]
+		// "v0.2.8-5-g1ff1c5a" is git describe for five commits after v0.2.8:
+		// later than that release, not a pre-release before it.
+		if gitDescribeSuffix.MatchString(out.pre) {
+			out.pre = ""
+		}
 	}
 	parts := strings.Split(value, ".")
 	if len(parts) != 3 {
