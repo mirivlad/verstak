@@ -25,6 +25,12 @@ watching for.
 
 ## 2. The packages
 
+- [ ] `OFFICIAL_PLUGINS_VERSION` names the plugins release that goes into the
+      installers, and the release notes' `**Official plugins ...**` line agrees
+      with it — `scripts/resolve-official-plugins-ref.sh <version>` checks both.
+      A pushed `v*` tag builds and publishes with that pin; nothing is derived
+      from the desktop version number any more
+
 - [ ] `verstak-official-plugins/scripts/build.sh` — every plugin packaged, each
       with its `checksums.txt`
 - [ ] `verstak-desktop/scripts/install-dev-plugins.sh` — the installed copy is

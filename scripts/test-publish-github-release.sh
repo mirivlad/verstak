@@ -53,6 +53,10 @@ case "${1:-}" in
     echo test-commit
     ;;
   describe) echo v0.0.0-previous ;;
+  config)
+    if [[ "${2:-}" == "--get" ]]; then exit 1; fi
+    printf 'config:%s:%s\n' "${2:-}" "${3:-}" >> "$LOG"
+    ;;
   tag) touch "$TEST_STATE/tag"; printf 'tag:%s\n' "${3:-}" >> "$LOG" ;;
   push) printf 'push:%s:%s\n' "${2:-}" "${3:-}" >> "$LOG" ;;
   *) echo "unexpected git invocation: $*" >&2; exit 1 ;;
@@ -99,6 +103,7 @@ grep -F -- "--notes-file $WORK/release-notes/$VERSION.md" "$LOG" >/dev/null
 grep -F -- "--generate-notes" "$LOG" >/dev/null
 grep -F -- "--notes-start-tag v0.0.0-previous" "$LOG" >/dev/null
 grep -F -- "--prerelease" "$LOG" >/dev/null
+grep -Fqx "config:user.name:github-actions[bot]" "$LOG"
 
 run_publisher
 grep -F "release upload $VERSION" "$LOG" >/dev/null
