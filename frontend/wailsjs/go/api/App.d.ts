@@ -17,6 +17,8 @@ export function ArchiveWorkspaceNode(arg1:string):Promise<string>;
 
 export function CancelVaultTransfer(arg1:string,arg2:string):Promise<string>;
 
+export function CheckForUpdates():Promise<Record<string, any>|string>;
+
 export function ClearPluginNotifications(arg1:string):Promise<string>;
 
 export function CloseVault():Promise<void>;
@@ -118,6 +120,8 @@ export function MoveWorkspaceNode(arg1:string,arg2:string):Promise<string>;
 export function MoveWorkspaceV2(arg1:string,arg2:string):Promise<string>;
 
 export function OpenExternalURL(arg1:string,arg2:string):Promise<string>;
+
+export function OpenUpdatePage():Promise<string>;
 
 export function OpenVault(arg1:string):Promise<void>;
 

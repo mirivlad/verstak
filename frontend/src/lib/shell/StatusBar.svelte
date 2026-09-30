@@ -87,7 +87,25 @@
     window.dispatchEvent(new CustomEvent('verstak:open-settings', { detail: {} }));
   }
 
+  // Set when the opt-in startup check found a newer release; clicking opens
+  // that release's page. Nothing is downloaded.
+  let availableUpdate = null;
+  let stopUpdateEvents = null;
+  function onUpdateAvailable(event) {
+    const release = event?.detail || null;
+    if (release && release.newer) availableUpdate = release;
+  }
+  function openUpdatePage() {
+    App.OpenUpdatePage().catch(() => {});
+  }
+
   onMount(() => {
+    window.addEventListener('verstak:update-available', onUpdateAvailable);
+    if (window.runtime && typeof window.runtime.EventsOnMultiple === 'function') {
+      stopUpdateEvents = window.runtime.EventsOnMultiple('verstak:update-available', (release) => {
+        window.dispatchEvent(new CustomEvent('verstak:update-available', { detail: release }));
+      }, -1);
+    }
     unsubscribeLocale = i18n.subscribe((nextLocale) => {
       const changed = locale !== nextLocale;
       locale = nextLocale;
@@ -100,6 +118,8 @@
   });
 
   onDestroy(() => {
+    window.removeEventListener('verstak:update-available', onUpdateAvailable);
+    if (typeof stopUpdateEvents === 'function') stopUpdateEvents();
     if (unsubscribeLocale) unsubscribeLocale();
     window.removeEventListener('verstak:plugins-changed', loadStatusBar);
     window.removeEventListener('verstak:vault-opened', loadStatusBar);
@@ -160,6 +180,15 @@
         data-build-version={build.version}
         title={buildTooltip}
       >{build.display}</span>
+    {/if}
+    {#if availableUpdate}
+      <button
+        class="status-bar-item update-available"
+        type="button"
+        title={tr('settings.updates.openPage')}
+        data-status-update-available={availableUpdate.latest}
+        on:click={openUpdatePage}
+      >{tr('statusBar.updateAvailable', { version: availableUpdate.latest })}</button>
     {/if}
 
     <button
@@ -253,6 +282,22 @@
   :global(.status-icon) {
     flex-shrink: 0;
     color: currentColor;
+  }
+
+  .update-available {
+    border: 1px solid var(--vt-color-accent);
+    border-radius: var(--vt-radius-sm, 4px);
+    background: transparent;
+    color: var(--vt-color-accent);
+    font: inherit;
+    padding: 0 0.4rem;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+
+  .update-available:focus-visible {
+    outline: 0;
+    box-shadow: var(--vt-focus-ring);
   }
 
   .build-version {

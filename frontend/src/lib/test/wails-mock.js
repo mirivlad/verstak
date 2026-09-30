@@ -184,6 +184,7 @@ import syncStyle from '../../../../../verstak-official-plugins/plugins/sync/fron
 
   var vaultStatus = { status: 'open', path: '/tmp/verstak-test/vault', vaultId: 'test-vault-001' };
   var diagnosticsReports = [];
+  var lastUpdateResult = null;
   var vaultPluginState = makeDefaultVaultPluginState();
   var appSettings = {
     currentVaultPath: '/tmp/verstak-test/vault',
@@ -836,6 +837,20 @@ function cloneJson(value) {
       });
     },
     GetAppSettings: function () { return Promise.resolve(appSettings); },
+    // Tests set window.__VERSTAK_MOCK_UPDATE__ to the release the check should
+    // find; without it the check fails the way an offline machine would.
+    CheckForUpdates: function () {
+      var release = window.__VERSTAK_MOCK_UPDATE__;
+      window.__wailsMockUpdateChecks = (window.__wailsMockUpdateChecks || 0) + 1;
+      if (!release) return Promise.resolve([null, 'release server unreachable']);
+      lastUpdateResult = Object.assign({ current: 'test', checkedAt: '2026-01-01T00:00:00Z' }, release);
+      return Promise.resolve([lastUpdateResult, '']);
+    },
+    OpenUpdatePage: function () {
+      if (!lastUpdateResult || !lastUpdateResult.newer) return Promise.resolve('no newer release has been found');
+      window.__wailsMockOpenedUpdatePages = (window.__wailsMockOpenedUpdatePages || []).concat([lastUpdateResult.url]);
+      return Promise.resolve('');
+    },
     GetPluginFrontendInfo: function (pluginId) {
       var s = pluginStates[pluginId];
       if (s && s.manifest && s.manifest.frontend) {
@@ -1837,6 +1852,10 @@ function cloneJson(value) {
       vaultStatus = { status: 'open', path: '/tmp/verstak-test/vault', vaultId: 'test-vault-001' };
       vaultPluginState = makeDefaultVaultPluginState();
       appSettings = { currentVaultPath: '/tmp/verstak-test/vault', recentVaults: [], language: 'system', sidebarWidth: 220, expandedFolderIds: [], settingsSection: '' };
+      lastUpdateResult = null;
+      window.__VERSTAK_MOCK_UPDATE__ = undefined;
+      window.__wailsMockUpdateChecks = 0;
+      window.__wailsMockOpenedUpdatePages = [];
       workbenchPreferences = {};
       openedResources = [];
       pluginSettings = { 'verstak.platform-test': { savedText: 'initial value' } };
