@@ -39,6 +39,18 @@ jobs:
       - name: Put official plugins beside desktop
         run: mv verstak-official-plugins ../verstak-official-plugins
 
+      # sdk-surface-test compares the plugin API the host provides with the
+      # one the SDK declares, so the SDK sources must sit beside desktop too.
+      - name: Check out the plugin SDK
+        uses: actions/checkout@v4
+        with:
+          repository: mirivlad/verstak-sdk
+          ref: main
+          path: verstak-sdk
+
+      - name: Put the SDK beside desktop
+        run: mv verstak-sdk ../verstak-sdk
+
       # Ubuntu 24.04 no longer ships webkit2gtk-4.0. scripts/build.sh already
       # picks the right Wails build tag from pkg-config, so installing 4.1 is
       # enough and no build tag has to be pinned here.
