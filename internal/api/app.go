@@ -27,6 +27,7 @@ import (
 	coresecrets "github.com/verstak/verstak-desktop/internal/core/secrets"
 	"github.com/verstak/verstak-desktop/internal/core/storage"
 	syncsvc "github.com/verstak/verstak-desktop/internal/core/sync"
+	"github.com/verstak/verstak-desktop/internal/core/updates"
 	"github.com/verstak/verstak-desktop/internal/core/vault"
 	coreworkbench "github.com/verstak/verstak-desktop/internal/core/workbench"
 	"github.com/verstak/verstak-desktop/internal/core/workspacetree"
@@ -85,6 +86,9 @@ type App struct {
 	allowQuit             atomic.Bool
 	trayReady             atomic.Bool
 	quitOnce              sync.Once
+	updateChecker         updates.Checker
+	updateMu              sync.Mutex
+	lastUpdate            *updates.Result
 }
 
 // SetNotificationService attaches the core-owned plugin notification scheduler.
@@ -156,6 +160,7 @@ func (a *App) Startup(ctx context.Context) {
 
 // DomReady initializes the native notification runtime before starting schedules.
 func (a *App) DomReady(ctx context.Context) {
+	a.checkForUpdatesAtStartup(ctx)
 	if a.notifications == nil {
 		return
 	}

@@ -10,6 +10,10 @@ export function CancelVaultTransfer(arg1, arg2) {
   return window['go']['api']['App']['CancelVaultTransfer'](arg1, arg2);
 }
 
+export function CheckForUpdates() {
+  return window['go']['api']['App']['CheckForUpdates']();
+}
+
 export function ClearPluginNotifications(arg1) {
   return window['go']['api']['App']['ClearPluginNotifications'](arg1);
 }
@@ -212,6 +216,10 @@ export function MoveWorkspaceV2(arg1, arg2) {
 
 export function OpenExternalURL(arg1, arg2) {
   return window['go']['api']['App']['OpenExternalURL'](arg1, arg2);
+}
+
+export function OpenUpdatePage() {
+  return window['go']['api']['App']['OpenUpdatePage']();
 }
 
 export function OpenVault(arg1) {

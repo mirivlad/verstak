@@ -33,7 +33,10 @@ type Config struct {
 	Sync            SyncSettings            `json:"sync,omitempty"`
 	BrowserReceiver BrowserReceiverSettings `json:"browserReceiver,omitempty"`
 	WindowState     *WindowState            `json:"windowState,omitempty"`
-	LastOpenedAt    string                  `json:"lastOpenedAt"`
+	// CheckForUpdates asks GitHub for a newer release at startup. Off unless
+	// the user turns it on: a local-first application does not phone out.
+	CheckForUpdates bool   `json:"checkForUpdates,omitempty"`
+	LastOpenedAt    string `json:"lastOpenedAt"`
 }
 
 const (
@@ -236,6 +239,17 @@ func (m *Manager) Update(patch *Config) error {
 	return m.saveLocked()
 }
 
+// UpdateCheckForUpdates persists whether startup may check for a newer release.
+func (m *Manager) UpdateCheckForUpdates(enabled bool) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.config == nil {
+		m.config = defaultConfig()
+	}
+	m.config.CheckForUpdates = enabled
+	return m.saveLocked()
+}
+
 // UpdateLanguage validates and persists the installation-local UI language.
 func (m *Manager) UpdateLanguage(language string) error {
 	language = strings.TrimSpace(language)
@@ -405,6 +419,7 @@ func copyConfig(c *Config) *Config {
 		Theme:             c.Theme,
 		Language:          c.Language,
 		DevMode:           c.DevMode,
+		CheckForUpdates:   c.CheckForUpdates,
 		UserPluginsDir:    c.UserPluginsDir,
 		SidebarWidth:      c.SidebarWidth,
 		ExpandedFolderIDs: expandedFolderIDs,

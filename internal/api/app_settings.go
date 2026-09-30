@@ -28,6 +28,7 @@ func (a *App) GetAppSettings() map[string]interface{} {
 		"theme":             cfg.Theme,
 		"language":          cfg.Language,
 		"devMode":           cfg.DevMode,
+		"checkForUpdates":   cfg.CheckForUpdates,
 		"debug":             a.debug,
 		"userPluginsDir":    cfg.UserPluginsDir,
 		"sidebarWidth":      cfg.SidebarWidth,
@@ -87,6 +88,15 @@ func (a *App) UpdateAppSettings(patch map[string]interface{}) string {
 
 	if hasConfigPatch {
 		if err := a.appSettings.Update(cfg); err != nil {
+			return err.Error()
+		}
+	}
+	if value, exists := patch["checkForUpdates"]; exists {
+		enabled, ok := value.(bool)
+		if !ok {
+			return "checkForUpdates must be a boolean"
+		}
+		if err := a.appSettings.UpdateCheckForUpdates(enabled); err != nil {
 			return err.Error()
 		}
 	}

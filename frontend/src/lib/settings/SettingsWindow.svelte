@@ -32,6 +32,40 @@
   let diagnosticsReportPath = '';
   let diagnosticsError = '';
   let collectingDiagnostics = false;
+  let checkForUpdates = false;
+  let checkingUpdates = false;
+  let updateResult = null;
+  let updateError = '';
+
+  async function toggleUpdateCheck(event) {
+    const enabled = event.currentTarget.checked;
+    const err = await App.UpdateAppSettings({ checkForUpdates: enabled });
+    if (err) {
+      event.currentTarget.checked = checkForUpdates;
+      return;
+    }
+    checkForUpdates = enabled;
+  }
+
+  async function checkUpdatesNow() {
+    checkingUpdates = true;
+    updateError = '';
+    updateResult = null;
+    try {
+      const response = await App.CheckForUpdates();
+      const [result, err] = Array.isArray(response) ? response : [response, ''];
+      if (err) updateError = err;
+      else updateResult = result;
+    } catch (error) {
+      updateError = error?.message || String(error);
+    } finally {
+      checkingUpdates = false;
+    }
+  }
+
+  function openUpdatePage() {
+    App.OpenUpdatePage().catch(() => {});
+  }
 
   // Somebody reporting a problem should not have to be told to find a terminal
   // and pass a flag. The report is written where they can read it first.
@@ -77,7 +111,7 @@
   // names of the settings inside it -- somebody looking for "language" should
   // not have to know it lives under General.
   const searchTerms = {
-    [GENERAL]: () => [tr('settings.language'), tr('settings.section.appearance', undefined, 'Appearance')],
+    [GENERAL]: () => [tr('settings.language'), tr('settings.section.appearance', undefined, 'Appearance'), tr('settings.updates')],
     [PLUGINS]: () => [tr('settings.section.pluginsHint', undefined, 'install, enable, disable, permissions')],
     [DIAGNOSTICS]: () => [tr('settings.section.diagnosticsHint', undefined, 'log, crash, report, bug, support')],
   };
@@ -101,6 +135,7 @@
       applyRequestedSection();
     } else {
       const stored = await App.GetAppSettings().catch(() => ({}));
+      checkForUpdates = Boolean(stored && stored.checkForUpdates);
       const remembered = stored && stored.settingsSection;
       if (remembered && sections.some((section) => section.id === remembered)) {
         activeSection = remembered;
@@ -293,6 +328,27 @@
                 on:click={() => selectLanguage(language)}
               >{tr(`settings.language.${language}`)}</button>
             {/each}
+          </div>
+        </div>
+        <div class="settings-group" data-settings-updates>
+          <div class="settings-group-title">{tr('settings.updates')}</div>
+          <label class="settings-toggle">
+            <input type="checkbox" checked={checkForUpdates} on:change={toggleUpdateCheck} data-settings-update-check-toggle />
+            {tr('settings.updates.checkOnStartup')}
+          </label>
+          <p class="settings-hint">{tr('settings.updates.privacy')}</p>
+          <div class="settings-update-row">
+            <button class="vt-button" type="button" disabled={checkingUpdates} on:click={checkUpdatesNow} data-settings-update-check-now>
+              {checkingUpdates ? tr('settings.updates.checking') : tr('settings.updates.checkNow')}
+            </button>
+            {#if updateError}
+              <span class="settings-update-status is-error" data-settings-update-status>{tr('settings.updates.failed', { error: updateError })}</span>
+            {:else if updateResult && updateResult.newer}
+              <span class="settings-update-status is-new" data-settings-update-status>{tr('settings.updates.available', { version: updateResult.latest })}</span>
+              <button class="vt-button" type="button" on:click={openUpdatePage} data-settings-update-open>{tr('settings.updates.openPage')}</button>
+            {:else if updateResult}
+              <span class="settings-update-status" data-settings-update-status>{tr('settings.updates.current', { version: updateResult.latest })}</span>
+            {/if}
           </div>
         </div>
       {:else if activeSection === PLUGINS}
@@ -531,6 +587,40 @@
   }
 
   .settings-error {
+    color: var(--vt-color-danger, #e94560);
+  }
+
+  .settings-toggle {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.35rem;
+    font-size: 0.85rem;
+    color: var(--vt-color-text-primary);
+    cursor: pointer;
+  }
+
+  .settings-toggle input {
+    accent-color: var(--vt-color-accent);
+  }
+
+  .settings-update-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.6rem;
+  }
+
+  .settings-update-status {
+    font-size: 0.83rem;
+    color: var(--vt-color-text-secondary);
+  }
+
+  .settings-update-status.is-new {
+    color: var(--vt-color-accent);
+  }
+
+  .settings-update-status.is-error {
     color: var(--vt-color-danger, #e94560);
   }
 
