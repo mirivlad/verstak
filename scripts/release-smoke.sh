@@ -135,6 +135,8 @@ fi
 if [ -z "$version" ]; then
   report "a release version to describe" 1
   note "pass a version to release-smoke.sh or create a tag"
+elif [[ "$version" == v0.0.0-pr* ]]; then
+  note "pull request build $version is not a release; notes are not required"
 elif [ -f "$ROOT/release-notes/$version.md" ]; then
   report "release-notes/$version.md exists" 0
 else

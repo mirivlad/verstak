@@ -47,6 +47,19 @@ BRAND_ICONS_STATUS=0
 (cd "$ROOT" && ./scripts/test-brand-icons.sh) || BRAND_ICONS_STATUS=$?
 report "desktop brand icon generation" "$BRAND_ICONS_STATUS"
 
+# ── Release script contracts ──
+# Each of these went red unnoticed for weeks while nothing ran them.
+echo "[release scripts]"
+for release_test in \
+  test-package-formats.sh \
+  test-build-windows.sh \
+  test-publish-github-release.sh \
+  test-resolve-official-plugins-ref.sh; do
+  RELEASE_TEST_STATUS=0
+  (cd "$ROOT" && bash "./scripts/$release_test") || RELEASE_TEST_STATUS=$?
+  report "$release_test" "$RELEASE_TEST_STATUS"
+done
+
 # ── Frontend contract tests ──
 # Every file in frontend/tests/ runs. Adding a test file is enough to enrol it;
 # nothing here may be skipped selectively.

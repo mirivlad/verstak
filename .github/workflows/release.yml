@@ -11,9 +11,9 @@ on:
         required: true
         type: string
       official_plugins_ref:
-        description: Official plugins git ref to package
+        description: Official plugins git ref to package (empty = the tag pinned in OFFICIAL_PLUGINS_VERSION)
         required: false
-        default: main
+        default: ''
         type: string
       publish:
         description: Create/update the GitHub Release after all checks pass
@@ -28,6 +28,8 @@ on:
       - 'scripts/release*.sh'
       - 'scripts/publish-github-release.sh'
       - 'scripts/stage-shipping-plugins.sh'
+      - 'scripts/resolve-official-plugins-ref.sh'
+      - 'OFFICIAL_PLUGINS_VERSION'
       - 'packaging/**'
 
 permissions:
@@ -42,8 +44,9 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     env:
-      VERSION: ${{ github.event_name == 'workflow_dispatch' && inputs.version || github.ref_name }}
-      OFFICIAL_PLUGINS_REF: ${{ github.event_name == 'workflow_dispatch' && inputs.official_plugins_ref || github.ref_name }}
+      # A pull request has no release version of its own; it builds a throwaway
+      # one so the packaging path is exercised without release notes.
+      VERSION: ${{ github.event_name == 'workflow_dispatch' && inputs.version || github.event_name == 'pull_request' && format('v0.0.0-pr{0}', github.event.pull_request.number) || github.ref_name }}
 
     steps:
       - name: Require main for a real release
@@ -65,6 +68,14 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
+      - name: Resolve official plugins ref
+        env:
+          OVERRIDE_REF: ${{ github.event_name == 'workflow_dispatch' && inputs.official_plugins_ref || '' }}
+        run: |
+          ref="$(bash scripts/resolve-official-plugins-ref.sh "$VERSION" "$OVERRIDE_REF")"
+          echo "Packaging official plugins at $ref"
+          echo "OFFICIAL_PLUGINS_REF=$ref" >> "$GITHUB_ENV"
 
       - name: Check out official plugins
         uses: actions/checkout@v4
@@ -98,6 +109,7 @@ jobs:
         run: go install github.com/wailsapp/wails/v2/cmd/wails@v2.12.0
 
       - name: Require release notes before spending build time
+        if: ${{ github.event_name != 'pull_request' }}
         run: test -s "release-notes/$VERSION.md"
 
       - name: Build Linux and Windows release assets
