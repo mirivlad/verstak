@@ -252,6 +252,7 @@ func (a *App) syncConfigure(serverURL, username, password, remoteVaultID string)
 	if err := a.requireVault(); err != nil {
 		return err
 	}
+	serverURL = strings.TrimRight(strings.TrimSpace(serverURL), "/")
 	meta := a.vault.GetVaultMeta()
 	if meta == nil || strings.TrimSpace(meta.VaultID) == "" {
 		return fmt.Errorf("vault ID is unavailable")
@@ -265,11 +266,17 @@ func (a *App) syncConfigure(serverURL, username, password, remoteVaultID string)
 	if targetVaultID == "" {
 		targetVaultID = meta.VaultID
 	}
+	preserveSyncCursor := false
 	if a.syncSvc != nil {
 		previousServerURL, _, _, _, stateErr := a.syncSvc.GetState()
 		previousVaultID, _ := a.syncSvc.RemoteVaultID()
 		if previousVaultID == "" {
 			previousVaultID = meta.VaultID
+		}
+		if stateErr == nil && previousServerURL != "" && previousVaultID == targetVaultID &&
+			strings.TrimRight(previousServerURL, "/") == strings.TrimRight(serverURL, "/") {
+			completed, bootstrapErr := a.syncSvc.BootstrapComplete()
+			preserveSyncCursor = bootstrapErr == nil && completed
 		}
 		if stateErr == nil && previousServerURL != "" && previousVaultID != targetVaultID {
 			pending, err := a.syncSvc.GetUnpushedOps()
@@ -296,11 +303,16 @@ func (a *App) syncConfigure(serverURL, username, password, remoteVaultID string)
 	if err := a.syncSvc.SetRemoteVaultID(targetVaultID); err != nil {
 		return err
 	}
-	if err := a.syncSvc.SetLastPullSeq(0); err != nil {
-		return err
-	}
-	if err := a.syncSvc.SetBootstrapComplete(false); err != nil {
-		return err
+	// Re-pairing the same already-synchronized remote scope must not replay
+	// its entire history against a populated vault or reset the bootstrap
+	// state. A new/different scope still starts at sequence zero.
+	if !preserveSyncCursor {
+		if err := a.syncSvc.SetLastPullSeq(0); err != nil {
+			return err
+		}
+		if err := a.syncSvc.SetBootstrapComplete(false); err != nil {
+			return err
+		}
 	}
 	if err := a.syncSvc.SetLastWarning(""); err != nil {
 		return err
@@ -524,10 +536,22 @@ func (a *App) syncNow() (map[string]interface{}, error) {
 		return nil, fmt.Errorf("load initial snapshot: %w", err)
 	}
 
+	var obsoleteHistory map[string]bool
+	if !bootstrapComplete {
+		// Inspect the server's complete file history before changing the local
+		// vault. A file created, moved, and later deleted remotely must not
+		// move a distinct pre-existing local file during the initial pull.
+		obsoleteHistory, err = fetchInitialFileHistory(client)
+		if err != nil {
+			_ = a.updateSyncError(err.Error())
+			return nil, err
+		}
+	}
+
 	// Pull before publishing. This makes the first reconciliation safe: remote
 	// state is applied or reported as a conflict before a pre-existing local
 	// vault can enqueue its bootstrap creates.
-	pulled, cursor, serverSequence, err := a.pullRemoteOps(client, lastPullSeq, !bootstrapComplete)
+	pulled, cursor, serverSequence, err := a.pullRemoteOpsWithSkips(client, lastPullSeq, !bootstrapComplete, obsoleteHistory)
 	if err != nil {
 		return nil, err
 	}
@@ -674,6 +698,10 @@ func (a *App) uploadPendingBlobs(client *syncsvc.Client, ops []syncsvc.Op) error
 }
 
 func (a *App) pullRemoteOps(client *syncsvc.Client, cursor int, initialReconciliation bool) (pulled, nextCursor, serverSequence int, err error) {
+	return a.pullRemoteOpsWithSkips(client, cursor, initialReconciliation, nil)
+}
+
+func (a *App) pullRemoteOpsWithSkips(client *syncsvc.Client, cursor int, initialReconciliation bool, obsoleteHistory map[string]bool) (pulled, nextCursor, serverSequence int, err error) {
 	nextCursor = cursor
 	for {
 		pageStartCursor := nextCursor
@@ -694,11 +722,13 @@ func (a *App) pullRemoteOps(client *syncsvc.Client, cursor int, initialReconcili
 				return pulled, nextCursor, serverSequence, fmt.Errorf("%s", errMsg)
 			}
 			lastSequenceInPage = op.ServerSequence
-			if err := a.applyRemoteOpWithClient(client, op, initialReconciliation); err != nil {
-				path := syncOperationPath(op)
-				errMsg := fmt.Sprintf("pull apply failed at sequence %d for %s %s (%s): %v", op.ServerSequence, op.EntityType, path, op.OpID, err)
-				_ = a.updateSyncError(errMsg)
-				return pulled, nextCursor, serverSequence, fmt.Errorf("%s", errMsg)
+			if !obsoleteHistory[op.OpID] {
+				if err := a.applyRemoteOpWithClient(client, op, initialReconciliation); err != nil {
+					path := syncOperationPath(op)
+					errMsg := fmt.Sprintf("pull apply failed at sequence %d for %s %s (%s): %v", op.ServerSequence, op.EntityType, path, op.OpID, err)
+					_ = a.updateSyncError(errMsg)
+					return pulled, nextCursor, serverSequence, fmt.Errorf("%s", errMsg)
+				}
 			}
 			if err := a.syncSvc.RecordRemoteOp(op); err != nil {
 				errMsg := fmt.Sprintf("record applied remote operation at sequence %d (%s): %v", op.ServerSequence, op.OpID, err)
@@ -814,6 +844,9 @@ func (a *App) applyRemoteOpWithClient(client *syncsvc.Client, op syncsvc.Op, ini
 			return fmt.Errorf("workspace tree service not initialized")
 		}
 		switch op.OpType {
+		case syncsvc.OpCreate:
+			_, err := a.treeV2.CreateFolderFromSync(payload.Path, payload.FolderID, a.refreshWorkspaceBaseline)
+			return err
 		case syncsvc.OpMove, syncsvc.OpRename:
 			return a.treeV2.ApplyPathFromSync(
 				"folder:"+payload.FolderID,
