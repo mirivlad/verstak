@@ -54,7 +54,7 @@ test.describe('F: Default Editor Plugin', () => {
     const editor = page.locator('[data-editor-mode="text"]');
     const wrap = editor.locator('[data-editor-action="toggle-wrap"]');
     const textarea = editor.locator('.cm-content');
-    await expect(wrap).toHaveText('Wrap long lines');
+    await expect(wrap).toHaveAccessibleName('Wrap long lines');
     await expect(wrap).toHaveAttribute('aria-pressed', 'true');
     await expect(textarea).toHaveClass(/cm-lineWrapping/);
 
