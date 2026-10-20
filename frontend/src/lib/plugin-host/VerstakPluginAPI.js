@@ -804,6 +804,11 @@ export function createPluginAPI(pluginId) {
         }
         return callBackend(pluginId, 'workspaces.create', function() {
           return App.PluginCreateWorkspace(pluginId, parentFolderId, name, recipe);
+        }).then(function(created) {
+          if (!created || !dealWorkspaceIdPattern.test(created.workspaceId)) {
+            throw new Error('workspaces.create returned no Deal UUID');
+          }
+          return created;
         });
       },
       readToolConfig: function(workspaceId) {

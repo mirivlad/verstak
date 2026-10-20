@@ -110,21 +110,21 @@ func (a *App) PluginListWorkspaces(pluginID string) ([]PluginWorkspaceDTO, strin
 // PluginCreateWorkspace creates a Deal from a complete plugin-owned recipe.
 // The recipe's template identity is retained only as provenance in canonical
 // Deal metadata; Core neither resolves nor interprets template definitions.
-func (a *App) PluginCreateWorkspace(pluginID, parentFolderID, name string, recipe workspacetree.DealRecipeSnapshot) (map[string]interface{}, string) {
+func (a *App) PluginCreateWorkspace(pluginID, parentFolderID, name string, recipe workspacetree.DealRecipeSnapshot) (map[string]interface{}, error) {
 	if _, err := a.requirePluginAccess(pluginID, "workspaces.create"); err != nil {
-		return nil, err.Error()
+		return nil, err
 	}
 	if a.treeV2 == nil {
-		return nil, "workspace tree not initialized"
+		return nil, fmt.Errorf("workspace tree not initialized")
 	}
 	if err := a.validateWorkspaceTools(recipe.WorkspaceTools); err != nil {
-		return nil, err.Error()
+		return nil, err
 	}
 	ws, err := a.createDealFromRecipe(parentFolderID, name, recipe)
 	if err != nil {
-		return nil, err.Error()
+		return nil, err
 	}
-	return map[string]interface{}{"workspaceId": ws.ID, "name": ws.Name}, ""
+	return map[string]interface{}{"workspaceId": ws.ID, "name": ws.Name}, nil
 }
 
 func (a *App) createDealFromRecipe(parentFolderID, name string, recipe workspacetree.DealRecipeSnapshot) (workspacetree.ScannedWorkspace, error) {

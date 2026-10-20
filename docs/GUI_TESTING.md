@@ -6,8 +6,8 @@ Verstak has two complementary GUI test layers:
 
 1. **Playwright + Chromium** for deterministic frontend behavior with mocked
    Wails bindings and real official plugin bundles.
-2. **Real Wails + WebKitGTK under Xvfb** for native desktop rendering and
-   startup smoke evidence.
+2. **Real Wails + WebKitGTK under Xvfb** for native desktop rendering,
+   startup evidence and the Deal creation regression gate.
 
 Neither layer replaces the other. Playwright is the fast, controllable product
 flow test. The Wails probe verifies that the application we actually ship can be
@@ -44,6 +44,32 @@ traces, video-on-retry and JSON results are kept under `frontend/e2e-results/`
 and uploaded as the `e2e-results` Actions artifact.
 
 ## Real desktop GUI (Wails + WebKitGTK)
+
+### Deal creation regression gate
+
+After building the desktop and official plugins, stage the shipping plugins and
+run the native creation smoke:
+
+```bash
+bash scripts/stage-shipping-plugins.sh ../verstak-official-plugins/dist build/bin/plugins
+bash scripts/smoke-native-create-deal.sh
+```
+
+This Linux-only gate needs Xvfb, xdotool, ImageMagick, Node.js 20+, Python 3 and
+dbus-run-session. It uses a temporary HOME/vault and a private D-Bus session.
+The WebKit inspector listens only on loopback for the duration of the test;
+mouse clicks and typing use xdotool. The inspector reads DOM state and tests
+one rejected native binding call. It does not replace the backend with mocks.
+
+It checks the top New Deal button, the folder menu, old recipes containing the
+retired Activity tool, fresh seeds, focus containment, duplicate-name recovery,
+unavailable tools and Wails rejection for an invalid parent. Success requires
+real workspace markers and canonical UUID metadata on disk, plus navigation to
+the created Deal. Logs, screenshots and results go to `build/native-create-deal`.
+`VERSTAK_PROBE_OUT`, `VERSTAK_PROBE_DISPLAY` and
+`VERSTAK_PROBE_INSPECTOR_PORT` can separate concurrent local runs.
+
+### Rendering probe
 
 `scripts/gui-probe.sh` starts the built `build/bin/verstak-desktop` on an Xvfb
 virtual display with an isolated temporary `HOME` and a synthetic vault. It

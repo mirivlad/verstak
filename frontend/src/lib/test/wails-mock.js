@@ -353,10 +353,23 @@ function cloneJson(value) {
     return metadata;
   }
 
-  function createWorkspaceFromRecipe(name, recipe) {
+  function createWorkspaceFromRecipe(name, recipe, parentFolderID) {
     var norm = normalizeVaultPath(name, false);
     if (norm.error || norm.path !== String(name || '').trim() || norm.path.indexOf('/') !== -1) {
       return { error: norm.error || 'invalid-workspace-name' };
+    }
+    var parent = null;
+    if (parentFolderID) {
+      function findFolder(nodes) {
+        (nodes || []).some(function (node) {
+          if (node.kind === 'folder' && node.id === parentFolderID) { parent = node; return true; }
+          findFolder(node.children);
+          return !!parent;
+        });
+      }
+      findFolder(workspaceTreeV2Snapshot().roots);
+      if (!parent) return { error: 'parent folder not found: ' + parentFolderID };
+      norm.path = parent.path + '/' + norm.path;
     }
     if (vaultFiles[norm.path]) return { error: 'conflict: ' + norm.path };
     var tools = Array.isArray(recipe && recipe.workspaceTools) ? recipe.workspaceTools.slice() : [];
@@ -373,8 +386,22 @@ function cloneJson(value) {
       if (file && file.path) vaultFiles[norm.path + '/' + file.path] = { type: 'file', content: String(file.content || ''), modifiedAt: new Date().toISOString() };
     });
     var node = makeWorkspaceNode(norm.path, workspaceTree.nodes.length + 1);
-    workspaceMetadata[norm.path] = metadataForRecipe(norm.path, recipe || {});
+    node.name = name;
+    node.title = name;
+    workspaceMetadata[norm.path] = metadataForRecipe(name, recipe || {});
     workspaceTree.nodes.push(node);
+    if (workspaceTreeV2Override) {
+      var treeNode = { key: 'workspace:' + node.workspaceId, id: node.workspaceId, kind: 'workspace', name: name, path: norm.path, children: [] };
+      function insert(nodes) {
+        if (!parentFolderID) { nodes.push(treeNode); return true; }
+        return nodes.some(function (item) {
+          if (item.id === parentFolderID) { (item.children ||= []).push(treeNode); return true; }
+          return insert(item.children || []);
+        });
+      }
+      insert(workspaceTreeV2Override.roots);
+      workspaceTreeV2Override.revision += 1;
+    }
     return { id: node.workspaceId, name: node.name, rootPath: node.rootPath };
   }
 
@@ -1686,14 +1713,14 @@ function cloneJson(value) {
     },
     PluginCreateWorkspace: function (pluginId, parentFolderID, name, recipe) {
       var err = requirePluginPermission(pluginId, 'workspaces.create');
-      if (err) return Promise.resolve([null, err]);
+      if (err) return Promise.reject(new Error(err));
       if (!recipe || typeof recipe !== 'object' || Array.isArray(recipe) || !recipe.provenance || !recipe.provenance.templateId) {
-        return Promise.resolve([null, 'recipe provenance template ID is required']);
+        return Promise.reject(new Error('recipe provenance template ID is required'));
       }
-      var created = createWorkspaceFromRecipe(name, recipe);
-      if (created.error) return Promise.resolve([null, created.error]);
+      var created = createWorkspaceFromRecipe(name, recipe, parentFolderID);
+      if (created.error) return Promise.reject(new Error(created.error));
       window.dispatchEvent(new CustomEvent('verstak:workspace-tree-changed'));
-      return Promise.resolve([{ workspaceId: created.id, name: created.name }, '']);
+      return Promise.resolve({ workspaceId: created.id, name: created.name });
     },
     GetWorkspaceByID: function (id) {
       var v2 = findWorkspaceNodeV2(id);

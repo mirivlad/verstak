@@ -139,7 +139,7 @@ export function PluginCancelImport(arg1:string,arg2:string):Promise<string>;
 
 export function PluginCloseImportSource(arg1:string,arg2:string):Promise<string>;
 
-export function PluginCreateWorkspace(arg1:string,arg2:string,arg3:string,arg4:workspacetree.DealRecipeSnapshot):Promise<Record<string, any>|string>;
+export function PluginCreateWorkspace(arg1:string,arg2:string,arg3:string,arg4:workspacetree.DealRecipeSnapshot):Promise<Record<string, any>>;
 
 export function PluginGitClone(arg1:string,arg2:Record<string, any>):Promise<Record<string, any>|string>;
 

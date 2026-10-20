@@ -1,5 +1,5 @@
 <script>
-  import { createEventDispatcher, onMount } from 'svelte';
+  import { createEventDispatcher, onMount, tick } from 'svelte';
   import { fade } from 'svelte/transition';
 
   export let title = '';
@@ -8,6 +8,44 @@
   let overlayElement;
 
   const dispatch = createEventDispatcher();
+
+  function manageFocus(dialog) {
+    const opener = document.activeElement;
+    const background = [];
+    let branch = dialog.parentElement;
+    while (branch?.parentElement) {
+      for (const sibling of branch.parentElement.children) {
+        if (sibling !== branch && sibling instanceof HTMLElement) {
+          background.push([sibling, sibling.inert]);
+          sibling.inert = true;
+        }
+      }
+      branch = branch.parentElement;
+    }
+    const focusable = () => [...dialog.querySelectorAll('button, input, select, textarea, a[href], [tabindex]')]
+      .filter((node) => !node.disabled && node.tabIndex >= 0 && node.getClientRects().length && !node.closest('[inert]'));
+    let disposed = false;
+    tick().then(() => {
+      if (!disposed) (dialog.querySelector('[data-modal-initial-focus]:not(:disabled)') || focusable()[0] || dialog).focus({ preventScroll: true });
+    });
+    function trapTab(event) {
+      if (event.key !== 'Tab' || !dialog.contains(document.activeElement)) return;
+      const targets = focusable();
+      const first = targets[0] || dialog;
+      const last = targets[targets.length - 1] || dialog;
+      if (!targets.length || (event.shiftKey && (document.activeElement === first || document.activeElement === dialog)) || (!event.shiftKey && document.activeElement === last)) {
+        event.preventDefault();
+        (event.shiftKey ? last : first).focus();
+      }
+    }
+    dialog.addEventListener('keydown', trapTab);
+    return { destroy() {
+      disposed = true;
+      dialog.removeEventListener('keydown', trapTab);
+      for (const [element, wasInert] of background) element.inert = wasInert;
+      if (opener?.isConnected && !opener.closest('[inert]')) opener.focus({ preventScroll: true });
+    } };
+  }
 
   function close() {
     dispatch('close');
@@ -33,6 +71,7 @@
     <div
       class="vt-modal" class:vt-modal-wide={wide}
       role="dialog" aria-modal="true" aria-label={title} tabindex="-1"
+      use:manageFocus
       transition:fade={{ duration: 120 }}
     >
       {#if title}
