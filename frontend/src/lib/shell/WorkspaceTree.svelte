@@ -8,6 +8,7 @@
   import TreeNode from './TreeNode.svelte';
   import { i18n } from '../i18n/index.js';
   import { executePluginCommand } from '../plugin-host/VerstakPluginAPI.js';
+  import { debug } from '../log/debug.js';
 
   let tree = { roots: [], currentWorkspaceId: '', revision: 0 };
   let loading = true;
@@ -204,7 +205,7 @@
   }
 
   async function openTemplates(parentFolderId = '') {
-    const requestedParentId = typeof parentFolderId === 'string' ? parentFolderId : parentFolderId?.detail || '';
+    const requestedParentId = typeof parentFolderId === 'string' ? parentFolderId : '';
     modal = { type: 'create-workspace' };
     formName = '';
     formParentId = requestedParentId;
@@ -225,22 +226,32 @@
   }
 
   async function doCreateWorkspace() {
+    if (formBusy) return;
     const name = formName.trim();
     if (!name) { formError = tr('workspaceTree.nameRequired'); return; }
     if (!selectedTemplateId) { formError = tr('workspaceTree.templatesError'); return; }
     formBusy = true;
     formError = '';
     try {
-      await executePluginCommand('verstak.templates', 'verstak.templates.createDeal', {
+      const response = await executePluginCommand('verstak.templates', 'verstak.templates.createDeal', {
         templateId: selectedTemplateId,
         parentFolderId: formParentId,
         name,
       });
-      if (formParentId) expandedIds['folder:' + formParentId] = true;
       modal = null;
       await loadTree();
-    } catch {
-      formError = tr('workspaceTree.createError');
+      ensureExpandedToWorkspace(response.result.workspaceId);
+      await saveExpanded();
+      await selectWorkspace(response.result.workspaceId);
+    } catch (error) {
+      debug.log('WorkspaceTree', 'createDeal failed', { message: error?.message || String(error), code: error?.code, missingTools: error?.missingTools });
+      const message = error?.message || String(error);
+      formError = error?.code === 'TEMPLATE_TOOLS_UNAVAILABLE'
+        ? tr('workspaceTree.missingTemplateTools', { tools: error.missingTools.join(', ') })
+        : /conflict:/.test(message) ? tr('workspaceTree.createConflict')
+        : /parent folder not found/.test(message) ? tr('workspaceTree.createParentMissing')
+        : /invalid.*name|name.*invalid|name.*required|name cannot|name contains/.test(message) ? tr('workspaceTree.createInvalidName')
+        : tr('workspaceTree.createError');
     } finally {
       formBusy = false;
     }
@@ -765,7 +776,7 @@
   <div class="wt-header">
     <span class="wt-title">{tr('workspaceTree.title')}</span>
     <div class="wt-header-actions">
-      <button class="ti-btn" on:click={openTemplates} title={tr('workspaceTree.newDeal')} aria-label={tr('workspaceTree.newDeal')}><Icon name="space" size={14} /></button>
+      <button class="ti-btn" on:click={() => openTemplates('')} title={tr('workspaceTree.newDeal')} aria-label={tr('workspaceTree.newDeal')}><Icon name="space" size={14} /></button>
       <button class="ti-btn" on:click={() => openCreateFolder('')} title={tr('workspaceTree.newFolder')} aria-label={tr('workspaceTree.newFolder')}><Icon name="folder" size={14} /></button>
     </div>
   </div>
@@ -820,7 +831,7 @@
           on:dragend={resetDragState}
           on:dragcancel={resetDragState}
           on:createFolder={(e) => openCreateFolder(e.detail)}
-          on:createWorkspace={openTemplates}
+          on:createWorkspace={(event) => openTemplates(event.detail)}
         />
       {/each}
     {/if}
@@ -951,8 +962,9 @@
 <Modal title={tr('workspaceTree.newDeal')} show={modal?.type === 'create-workspace'} on:close={closeModal} wide data-new-deal-dialog>
   <label class="vt-field">
     <span>{tr('workspaceTree.name')}</span>
-    <input class="vt-input" data-new-deal-name type="text" bind:value={formName} placeholder={tr('workspaceTree.namePlaceholder')} disabled={formBusy} on:keydown={(event) => event.key === 'Enter' && doCreateWorkspace()} />
+    <input class="vt-input" data-modal-initial-focus data-new-deal-name type="text" bind:value={formName} placeholder={tr('workspaceTree.namePlaceholder')} on:keydown={(event) => event.key === 'Enter' && doCreateWorkspace()} />
   </label>
+  <div class="vt-field"><span>{tr('workspaceTree.location')}</span><Select options={[{ value: '', label: tr('workspaceTree.root') }, ...flatFolders(tree.roots).map(f => ({ value: f.id, label: f.path }))]} bind:value={formParentId} aria-label={tr('workspaceTree.location')} disabled={formBusy} labelKey="label" valueKey="value" /></div>
   <div class="wt-template-picker" aria-label={tr('workspaceTree.chooseTemplate')}>
     <span class="wt-edit-tools-label">{tr('workspaceTree.template')}</span>
     {#if formBusy}
@@ -968,14 +980,14 @@
             data-new-deal-template={template.id}
             on:click={() => { selectedTemplateId = template.id; }}
           >
-            <span>{template.name}</span>
-            {#if template.description}<small>{template.description}</small>{/if}
+            <span>{template.displayName || template.name}</span>
+            {#if template.description}<small>{template.displayDescription || template.description}</small>{/if}
           </button>
         {/each}
       </div>
     {/if}
   </div>
-  {#if formError}<p class="vt-inline-alert error vt-ferr" data-new-deal-error>{formError}</p>{/if}
+  {#if formError}<p class="vt-inline-alert error vt-ferr" role="alert" data-new-deal-error>{formError}</p>{/if}
   <svelte:fragment slot="actions">
     <button type="button" class="vt-button secondary vt-btn" on:click={closeModal} disabled={formBusy}>{tr('common.cancel')}</button>
     <button type="button" class="vt-button primary vt-btn-p" data-new-deal-create on:click={doCreateWorkspace} disabled={formBusy || !selectedTemplateId}>{tr('common.create')}</button>

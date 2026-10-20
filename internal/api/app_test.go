@@ -3163,9 +3163,9 @@ func TestPluginCreateWorkspaceUsesRecipeSnapshotAndRequiresPermission(t *testing
 		InitialFiles:   []workspacetree.DealRecipeFile{{Path: "Notes/brief.md", Content: "# Brief\n"}},
 		Provenance:     workspacetree.RecipeProvenance{TemplateID: "user-template", TemplateName: "Research", TemplateVersion: 3},
 	}
-	created, errText := app.PluginCreateWorkspace("files.plugin", "", "Research Deal", recipe)
-	if errText != "" {
-		t.Fatalf("PluginCreateWorkspace: %s", errText)
+	created, createErr := app.PluginCreateWorkspace("files.plugin", "", "Research Deal", recipe)
+	if createErr != nil {
+		t.Fatalf("PluginCreateWorkspace: %s", createErr)
 	}
 	if created["workspaceId"] == "" || created["name"] != "Research Deal" {
 		t.Fatalf("created = %#v", created)
@@ -3173,34 +3173,57 @@ func TestPluginCreateWorkspaceUsesRecipeSnapshotAndRequiresPermission(t *testing
 	if _, err := os.Stat(filepath.Join(root, "Research Deal", "Notes", "brief.md")); err != nil {
 		t.Fatalf("recipe file missing: %v", err)
 	}
+	if result, err := app.PluginCreateWorkspace("files.plugin", "1", "Invalid parent", recipe); err == nil || result != nil {
+		t.Fatalf("invalid parent must reject without a result: result=%v, err=%v", result, err)
+	}
+	if result, err := app.PluginCreateWorkspace("files.plugin", "", "Research Deal", recipe); err == nil || result != nil {
+		t.Fatalf("duplicate name must reject without a result: result=%v, err=%v", result, err)
+	}
+	folder, err := app.treeV2.CreateFolder("", "Clients", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := app.PluginCreateWorkspace("files.plugin", folder.ID, "Client Deal", recipe); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(root, "Clients", "Client Deal", "Notes", "brief.md")); err != nil {
+		t.Fatal(err)
+	}
 
 	app.plugins = append(app.plugins, plugin.Plugin{
 		Manifest: plugin.Manifest{ID: "verstak.activity", Name: "Activity"},
 		Status:   plugin.StatusLoaded,
 		Enabled:  true,
 	})
-	_, errText = app.PluginCreateWorkspace("files.plugin", "", "Retired", workspacetree.DealRecipeSnapshot{
+	_, createErr = app.PluginCreateWorkspace("files.plugin", "", "Retired", workspacetree.DealRecipeSnapshot{
 		WorkspaceTools: []string{"verstak.activity"},
 		Provenance:     workspacetree.RecipeProvenance{TemplateID: "user-template"},
 	})
-	if !strings.Contains(errText, "workspace tool is not available: verstak.activity") {
-		t.Fatalf("retired service tool error = %q", errText)
+	if !strings.Contains(createErr.Error(), "workspace tool is not available: verstak.activity") {
+		t.Fatalf("retired service tool error = %q", createErr)
 	}
 
-	_, errText = app.PluginCreateWorkspace("files.plugin", "", "Rejected", workspacetree.DealRecipeSnapshot{
+	_, createErr = app.PluginCreateWorkspace("files.plugin", "", "Rejected", workspacetree.DealRecipeSnapshot{
 		WorkspaceTools: []string{"missing.plugin"},
 		Provenance:     workspacetree.RecipeProvenance{TemplateID: "user-template"},
 	})
-	if !strings.Contains(errText, "workspace tool is not available") {
-		t.Fatalf("invalid tool error = %q", errText)
+	if !strings.Contains(createErr.Error(), "workspace tool is not available") {
+		t.Fatalf("invalid tool error = %q", createErr)
 	}
 	if _, err := os.Stat(filepath.Join(root, "Rejected")); !os.IsNotExist(err) {
 		t.Fatalf("invalid recipe created a Deal: %v", err)
 	}
 
 	app.plugins[0].Manifest.Permissions = nil
-	if _, errText = app.PluginCreateWorkspace("files.plugin", "", "Denied", recipe); !strings.Contains(errText, "workspaces.create") {
-		t.Fatalf("permission error = %q", errText)
+	if _, createErr = app.PluginCreateWorkspace("files.plugin", "", "Denied", recipe); !strings.Contains(createErr.Error(), "workspaces.create") {
+		t.Fatalf("permission error = %q", createErr)
+	}
+}
+
+func TestPluginCreateWorkspaceUsesWailsErrorContract(t *testing.T) {
+	create, ok := reflect.TypeOf((*App)(nil)).MethodByName("PluginCreateWorkspace")
+	if !ok || create.Type.NumOut() != 2 || !create.Type.Out(1).Implements(reflect.TypeOf((*error)(nil)).Elem()) {
+		t.Fatal("Wails only propagates the second return value when it implements error")
 	}
 }
 
