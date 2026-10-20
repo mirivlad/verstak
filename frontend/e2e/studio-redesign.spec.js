@@ -131,6 +131,6 @@ test('the editor follows theme changes without losing the document', async ({ pa
   await expect(editor).toBeVisible();
   await page.locator('[data-theme-toggle]').click();
   await expect(editor.locator('.cm-content')).toContainText('Buy groceries');
-  expect(await editor.evaluate(node => getComputedStyle(node).backgroundColor)).toBe('rgb(255, 255, 255)');
-  expect(await editor.evaluate(node => getComputedStyle(node).color)).toBe('rgb(36, 36, 45)');
+  await expect(editor).toHaveCSS('background-color', 'rgb(255, 255, 255)');
+  await expect(editor).toHaveCSS('color', 'rgb(36, 36, 45)');
 });
