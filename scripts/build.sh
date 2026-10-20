@@ -88,27 +88,17 @@ fi
 # ── Wails ──
 echo ""
 echo "[wails]"
-WAILS=""
-if command -v wails &>/dev/null; then
-  WAILS="wails"
-else
-  GOBIN="$(go env GOBIN 2>/dev/null)"
-  GOPATH="$(go env GOPATH 2>/dev/null)"
-  if [ -n "$GOBIN" ] && [ -f "$GOBIN/wails" ]; then
-    WAILS="$GOBIN/wails"
-  elif [ -f "$GOPATH/bin/wails" ]; then
-    WAILS="$GOPATH/bin/wails"
-  fi
-  if [ -z "$WAILS" ]; then
-    echo "  📦 wails not found — installing..."
-    go install github.com/wailsapp/wails/v2/cmd/wails@latest
-    if [ -n "$GOBIN" ] && [ -f "$GOBIN/wails" ]; then
-      WAILS="$GOBIN/wails"
-    elif [ -f "$GOPATH/bin/wails" ]; then
-      WAILS="$GOPATH/bin/wails"
-    fi
-  fi
+# Build with the same CLI version as the linked Wails library. A globally
+# installed CLI or @latest can silently generate different bindings/assets.
+WAILS_VERSION="$(cd "$ROOT" && go list -m -f '{{.Version}}' github.com/wailsapp/wails/v2)"
+WAILS_TOOLS_DIR="$ROOT/build/tools/wails-$WAILS_VERSION"
+WAILS="$WAILS_TOOLS_DIR/wails"
+if [ ! -x "$WAILS" ]; then
+  echo "  📦 installing Wails CLI $WAILS_VERSION..."
+  mkdir -p "$WAILS_TOOLS_DIR"
+  GOBIN="$WAILS_TOOLS_DIR" go install "github.com/wailsapp/wails/v2/cmd/wails@$WAILS_VERSION"
 fi
+echo "  ✅ Wails CLI $WAILS_VERSION (from go.mod)"
 
 WAILS_BINARY="verstak-desktop"
 WAILS_TAGS=""
@@ -123,11 +113,6 @@ if command -v pkg-config &>/dev/null; then
   fi
 else
   echo "  ⚠️  pkg-config not found"
-fi
-
-if [ -z "$WAILS" ]; then
-  echo "  ❌ wails: could not find or install"
-  exit 1
 fi
 
 # Stamp the binary so the running application can say which build it is.
