@@ -56,7 +56,7 @@ async function click(selector, button = '1') {
   const rect = await waitFor(`(() => { const node = document.querySelector(${JSON.stringify(selector)}); if (!node || !node.getClientRects().length || node.disabled) return null; const box = node.getBoundingClientRect(); return {x:box.x + box.width/2, y:box.y + box.height/2}; })()`, selector);
   input('mousemove', '--window', windowId, String(Math.round(rect.x)), String(Math.round(rect.y)), 'click', button);
 }
-function screenshot(name) { execFileSync('import', ['-window', windowId, path.join(output, name + '.png')]); }
+async function screenshot(name) { input('mousemove', '--window', windowId, '1150', '700'); await delay(300); execFileSync('import', ['-window', windowId, path.join(output, name + '.png')]); }
 async function openRoot() {
   await click('[data-workspace-tree] button[aria-label="Новое Дело"]');
   await waitFor('document.querySelector("[data-new-deal-template=seed-general]")', 'template catalog');
@@ -81,7 +81,7 @@ try {
   await evaluate(`localStorage.setItem('verstak-debug','true'); window.__nativeCreationCalls = []; const original = window.go.api.App.PluginCreateWorkspace; window.go.api.App.PluginCreateWorkspace = async (...args) => { const call = {parent:args[1],name:args[2]}; window.__nativeCreationCalls.push(call); try { return await original(...args); } catch(error) { call.error = String(error); throw error; } };`);
   const root = await (async () => { await openRoot(); return create('Native Root'); })();
   assert.equal(root.createdFromTemplate.templateVersion, 2, 'legacy recipe was migrated');
-  screenshot('root-created');
+  await screenshot('root-created');
 
   await openRoot();
   for (let index = 0; index < 14; index++) {
@@ -94,7 +94,7 @@ try {
   await click('[data-new-deal-create]');
   await waitFor('document.querySelector("[data-new-deal-error]")?.textContent.includes("уже есть")', 'duplicate name error');
   assert.equal(await evaluate('document.querySelector("[data-new-deal-name]").value'), 'Native Root');
-  screenshot('duplicate-error');
+  await screenshot('duplicate-error');
   input('key', 'Escape');
   await waitFor('!document.querySelector("[data-new-deal-dialog]")', 'cancel duplicate');
   assert.equal(await evaluate('document.activeElement?.getAttribute("aria-label")'), 'Новое Дело', 'cancel restores opener focus');
@@ -115,7 +115,7 @@ try {
   await click('[data-new-deal-create]');
   await waitFor('document.querySelector("[data-new-deal-error]")?.textContent.includes("unknown.plugin")', 'missing tool error');
   assert.equal(fs.existsSync(path.join(vault, 'Should Not Exist')), false);
-  screenshot('missing-tool-error');
+  await screenshot('missing-tool-error');
   input('key', 'Escape');
   await waitFor('!document.querySelector("[data-new-deal-dialog]")', 'cancel missing tool');
 
@@ -132,7 +132,7 @@ try {
   await openRoot();
   const fresh = await create('Native Fresh');
   assert.equal(fresh.createdFromTemplate.templateVersion, 1, 'fresh vault seeds need no migration');
-  screenshot('fresh-created');
+  await screenshot('fresh-created');
   const plugins = await call('window.go.api.App.GetPlugins()');
   assert.equal(plugins.value.length, 17, 'shipping plugin count');
   assert.ok(plugins.value.every(plugin => plugin.status === 'loaded'), JSON.stringify(plugins.value.map(plugin => [plugin.manifest.id, plugin.status])));
@@ -142,35 +142,35 @@ try {
   await click('[data-workspace-config]');
   await waitFor('document.querySelector("[data-workspace-edit-modal]")', 'Deal settings from the tabs');
   await waitFor('document.querySelector("[data-workspace-edit-name]")?.disabled === false', 'Deal settings loaded');
-  screenshot('deal-tools-dark');
+  await screenshot('deal-tools-dark');
   input('key', 'Escape');
   await waitFor('!document.querySelector("[data-workspace-edit-modal]")', 'close Deal settings');
   await click('[data-theme-toggle]');
   await waitFor('document.documentElement.dataset.theme === "light"', 'native light theme');
   const configPath = path.join(path.dirname(vault), '.config/verstak/config.json');
   assert.equal(JSON.parse(fs.readFileSync(configPath)).theme, 'light');
-  screenshot('studio-light');
+  await screenshot('studio-light');
   await click('[data-create-deal]');
   await waitFor('document.querySelector("[data-new-deal-dialog]")', 'prominent creation action');
-  screenshot('create-light');
+  await screenshot('create-light');
   input('key', 'Escape');
   await waitFor('!document.querySelector("[data-new-deal-dialog]")', 'close light dialog');
   fs.mkdirSync(path.join(vault, 'Native Fresh/Notes'), { recursive: true });
   fs.writeFileSync(path.join(vault, 'Native Fresh/Notes/Design.md'), '# Design review\n\nA readable workspace in both themes.\n\n> Notes keep their own content and editor.\n\n- [ ] Review the layout\n- [x] Save the theme\n\n```js\nconst theme = "light";\n```\n');
   await click('[role=tab][title="Заметки"]');
   await waitFor('document.querySelector("[data-note-title=Design]")', 'real Notes list');
-  screenshot('notes-light');
+  await screenshot('notes-light');
   await click('[data-note-title=Design] [data-note-action=open]');
   await waitFor('document.querySelector(".de-prose")?.textContent.includes("A readable workspace")', 'real Markdown editor');
-  screenshot('editor-light');
+  await screenshot('editor-light');
   await click('[data-editor-action=mode-edit]');
   await waitFor('document.querySelector(".cm-content")?.textContent.includes("A readable workspace")', 'real CodeMirror');
   assert.equal(await evaluate('getComputedStyle(document.querySelector(".de-root")).backgroundColor'), 'rgb(255, 255, 255)');
-  screenshot('editor-edit-light');
+  await screenshot('editor-edit-light');
   await click('[data-theme-toggle]');
   await waitFor('document.documentElement.dataset.theme === "dark"', 'editor switches to dark');
   assert.equal(await evaluate('document.querySelector(".cm-content").textContent.includes("A readable workspace")'), true);
-  screenshot('editor-dark');
+  await screenshot('editor-dark');
   await click('[data-theme-toggle]');
   await waitFor('document.documentElement.dataset.theme === "light"', 'editor returns to light');
   await evaluate('setTimeout(() => location.reload(), 20)');
@@ -179,7 +179,7 @@ try {
   await click('[data-theme-toggle]');
   await waitFor('document.documentElement.dataset.theme === "dark"', 'native dark theme');
   assert.equal(JSON.parse(fs.readFileSync(configPath)).theme, 'dark');
-  screenshot('studio-dark');
+  await screenshot('studio-dark');
   fs.writeFileSync(path.join(output, 'results.json'), JSON.stringify({ root, fresh, stored, invalidParent, calls, plugins: plugins.value.map(plugin => ({ id: plugin.manifest.id, status: plugin.status })), theme: { light: true, reload: true, dark: true } }, null, 2) + '\n');
   console.log('Real desktop GUI checked: root click, folder menu, legacy/fresh recipes, focus, duplicate/missing tool, Wails rejection, themes saved through Wails/reload, Deal tools');
 } finally {
