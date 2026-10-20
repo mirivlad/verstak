@@ -442,7 +442,7 @@
     padding: 0 0.55rem;
     border: 1px solid var(--vt-color-border-strong);
     border-radius: var(--vt-radius-md);
-    background: #0f1424;
+    background: var(--vt-color-input, #0f1424);
     color: var(--vt-color-text-muted);
   }
 

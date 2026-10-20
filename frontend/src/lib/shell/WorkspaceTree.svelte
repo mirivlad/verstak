@@ -58,6 +58,7 @@
     window.addEventListener('verstak:workspace-active-changed', handleActiveWorkspace);
     // The empty Deal view offers a Create button; the dialog lives here.
     window.addEventListener('verstak:create-workspace-requested', handleCreateWorkspaceRequest);
+    window.addEventListener('verstak:edit-workspace-requested', handleEditWorkspaceRequest);
     window.addEventListener('keydown', handleDragKeyDown);
     await loadTree();
     if (typeof ResizeObserver !== 'undefined' && treeListElement) {
@@ -75,6 +76,7 @@
     window.removeEventListener('verstak:workspace-tree-changed', loadTree);
     window.removeEventListener('verstak:workspace-active-changed', handleActiveWorkspace);
     window.removeEventListener('verstak:create-workspace-requested', handleCreateWorkspaceRequest);
+    window.removeEventListener('verstak:edit-workspace-requested', handleEditWorkspaceRequest);
     window.removeEventListener('keydown', handleDragKeyDown);
     scrollObserver?.disconnect();
     resetDragState();
@@ -258,6 +260,11 @@
   }
 
   function openRename(kind, id, name) { modal = { type: 'rename', kind, id }; formName = name; formError = ''; formBusy = false; }
+  function handleEditWorkspaceRequest(event) {
+    const node = findNode(tree.roots, event.detail?.workspaceId);
+    if (node?.kind === 'workspace') openEditWorkspace(node.id, node.name);
+  }
+
   async function openEditWorkspace(id, name) {
     modal = { type: 'edit-workspace', id, origName: name };
     formName = name; formError = ''; formBusy = true;
@@ -1080,14 +1087,14 @@
 
   .vt-btn { min-height: 1.8rem; background: transparent; border: 1px solid var(--vt-color-border-strong); color: var(--vt-color-text-secondary); cursor: pointer; font-size: 0.78rem; padding: 0.3rem 0.6rem; border-radius: var(--vt-radius-sm); }
   .vt-btn:hover:not(:disabled) { color: var(--vt-color-text-primary); border-color: var(--vt-color-text-muted); }
-  .vt-btn-p { min-height: 1.8rem; background: var(--vt-color-accent); color: #101827; border: none; padding: 0.3rem 0.7rem; border-radius: var(--vt-radius-sm); cursor: pointer; font-size: 0.78rem; font-weight: 600; }
-  .vt-btn-p:hover:not(:disabled) { background: #3dbb92; }
-  .vt-btn-d { min-height: 1.8rem; background: var(--vt-color-danger); color: #fff; border: none; padding: 0.3rem 0.7rem; border-radius: var(--vt-radius-sm); cursor: pointer; font-size: 0.78rem; font-weight: 600; }
-  .vt-btn-d:hover:not(:disabled) { background: #d63851; }
+  .vt-btn-p { min-height: 1.8rem; background: var(--vt-color-action); color: var(--vt-color-on-action, #ffffff); border: none; padding: 0.3rem 0.7rem; border-radius: var(--vt-radius-sm); cursor: pointer; font-size: 0.78rem; font-weight: 600; }
+  .vt-btn-p:hover:not(:disabled) { background: var(--vt-color-action-hover, #3dbb92); }
+  .vt-btn-d { min-height: 1.8rem; background: var(--vt-color-danger-action); color: #fff; border: none; padding: 0.3rem 0.7rem; border-radius: var(--vt-radius-sm); cursor: pointer; font-size: 0.78rem; font-weight: 600; }
+  .vt-btn-d:hover:not(:disabled) { background: var(--vt-color-danger-action); }
   .vt-btn:disabled, .vt-btn-p:disabled, .vt-btn-d:disabled { opacity: 0.5; cursor: not-allowed; }
 
   .vt-field { display: grid; gap: 0.35rem; color: var(--vt-color-text-muted); font-size: 0.75rem; }
-  .vt-input { width: 100%; min-height: 2rem; box-sizing: border-box; border: 1px solid var(--vt-color-border-strong); border-radius: var(--vt-radius-sm); background: #0f1424; color: var(--vt-color-text-primary); padding: 0.35rem 0.5rem; font: inherit; font-size: 0.84rem; }
+  .vt-input { width: 100%; min-height: 2rem; box-sizing: border-box; border: 1px solid var(--vt-color-border-strong); border-radius: var(--vt-radius-sm); background: var(--vt-color-input, #0f1424); color: var(--vt-color-text-primary); padding: 0.35rem 0.5rem; font: inherit; font-size: 0.84rem; }
   .vt-input:focus { outline: none; border-color: var(--vt-color-accent); box-shadow: var(--vt-focus-ring); }
   .vt-ferr { margin: 0; color: var(--vt-color-danger); font-size: 0.78rem; line-height: 1.4; }
 

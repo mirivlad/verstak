@@ -26,7 +26,7 @@ test.describe('Desktop localization', () => {
     await expect(page.locator('.sidebar .plugin-item').filter({ hasText: 'Тест платформы' })).toBeVisible();
     await expect(page.locator('.sidebar .plugin-item').filter({ hasText: 'Проекты' })).toBeVisible();
     await expect(page.locator('[data-status-item-id="verstak.platform-test.status"]')).toContainText('Все тесты пройдены');
-    await page.getByRole('button', { name: 'Закрыть' }).click();
+    await page.getByRole('button', { name: 'Закрыть', exact: true }).click();
     await expect(page.getByRole('tab', { name: 'Проект', exact: true })).toBeVisible();
 
     const project = page.locator('.wt-node').filter({ hasText: 'Project' });

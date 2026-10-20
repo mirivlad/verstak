@@ -2,9 +2,11 @@
   import { createEventDispatcher, onDestroy, onMount } from 'svelte';
   import { executePluginCommand } from '../plugin-host/VerstakPluginAPI.js';
   import { i18n } from '../i18n/index.js';
+  import Icon from '../ui/Icon.svelte';
 
   export let workspaceRootPath = '';
   export let workspaceId = '';
+  export let workspaceTitle = '';
   export let availableTools = [];
   export let overviewProviders = [];
 
@@ -37,7 +39,7 @@
     ? recentChanges
     : recentChanges.filter(item => item.category === activeFilter);
   $: hasAttentionTools = (overviewProviders || []).length > 0;
-  $: hasOverviewSideContent = Boolean(keyResources.length || needsAttention.length || (loading && hasAttentionTools));
+  $: hasOverviewSideContent = Boolean(summaryItems.length || keyResources.length || needsAttention.length || (loading && hasAttentionTools));
 
   onMount(() => {
     unsubscribeLocale = i18n.subscribe((nextLocale) => {
@@ -258,7 +260,8 @@
 <div class="overview-root" aria-label={tr('workspace.overview')} data-overview-root>
   <div class="overview-header">
     <div>
-      <h2>{tr('workspace.overview')}</h2>
+      <span class="overview-eyebrow">{tr('workspace.overview')}</span>
+      <h1>{workspaceTitle || workspaceRootPath}</h1>
       <p title={lastActive ? absoluteTime(lastActive) : ''}>
         {#if loading}
           {tr('overview.loadingContext')}
@@ -269,7 +272,7 @@
         {/if}
       </p>
     </div>
-    <button type="button" data-overview-action="refresh" on:click={loadOverview}>{tr('overview.refresh')}</button>
+    <button class="vt-button ghost icon" type="button" aria-label={tr('overview.refresh')} title={tr('overview.refresh')} data-overview-action="refresh" on:click={loadOverview}><Icon name="refresh-cw" size={16} /></button>
   </div>
 
   <div class="overview-layout" class:overview-layout-wide={!hasOverviewSideContent}>
@@ -307,30 +310,13 @@
         {/if}
       </section>
 
-      <div class="overview-summary" data-overview-section="summary" aria-label={tr('overview.summary')}>
-        {#each summaryItems as item}
-          <button
-            type="button"
-            class="overview-summary-item"
-            data-overview-summary={item.key}
-            data-overview-action={item.actionKind}
-            aria-label={`${item.label}: ${item.actionLabel}`}
-            on:click={() => openTool(item.actionKind, item.toolRequest)}
-          >
-            <strong>{loading ? '...' : item.count}</strong>
-            <span>{item.label}</span>
-            <small>{loading ? tr('common.loading') : item.detail}</small>
-          </button>
-        {/each}
-      </div>
-
       <section class="overview-panel overview-recent" data-overview-section="recent">
         <div class="overview-panel-head">
           <div>
             <h3>{tr('overview.recentChanges')}</h3>
             <p>{tr('overview.recentChangesHint')}</p>
           </div>
-          <div class="overview-filters" aria-label={tr('overview.recentFilter')}>
+          {#if FILTERS.length > 1}<div class="overview-filters" aria-label={tr('overview.recentFilter')}>
             {#each FILTERS as filter}
               <button
                 type="button"
@@ -342,7 +328,7 @@
                 {filter.label}
               </button>
             {/each}
-          </div>
+          </div>{/if}
         </div>
         {#if loading}
           <p class="overview-empty">{tr('overview.loadingRecent')}</p>
@@ -372,6 +358,18 @@
 
     {#if hasOverviewSideContent}
     <aside class="overview-side">
+      {#if summaryItems.length}
+      <section class="overview-summary" data-overview-section="summary" aria-label={tr('overview.summary')}>
+        <h3>{tr('overview.toolsTitle')}</h3>
+        {#each summaryItems as item}
+          <button type="button" class="overview-summary-item" data-overview-summary={item.key} data-overview-action={item.actionKind}
+            aria-label={`${item.label}: ${item.actionLabel}`} on:click={() => openTool(item.actionKind, item.toolRequest)}>
+            <span>{item.label}</span><strong>{loading ? '...' : item.count}</strong>
+            <small>{loading ? tr('common.loading') : item.detail}</small>
+          </button>
+        {/each}
+      </section>
+      {/if}
       {#if hasAttentionTools && (needsAttention.length || loading)}
         <section class="overview-panel" data-overview-section="attention">
           <div class="overview-panel-head">
@@ -420,418 +418,64 @@
 </div>
 
 <style>
-  .overview-root {
-    height: 100%;
-    min-height: 0;
-    display: flex;
-    flex-direction: column;
-    background: var(--vt-color-background);
-    color: var(--vt-color-text-primary);
-    overflow: auto;
+  .overview-root { height: 100%; min-height: 0; overflow: auto; background: var(--vt-color-background); color: var(--vt-color-text-primary); container-type: inline-size; }
+  .overview-header { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 2.1rem 1.8rem 1.8rem; }
+  .overview-eyebrow { color: var(--vt-color-text-muted); font-size: 0.75rem; }
+  .overview-header h1 { margin: 0.6rem 0 0.5rem; font-size: 1.85rem; line-height: 1.2; font-weight: 500; letter-spacing: -0.04em; overflow-wrap: anywhere; }
+  .overview-header p { color: var(--vt-color-text-muted); font-size: 0.78rem; }
+  .overview-layout { display: grid; grid-template-columns: minmax(0, 1fr) 13rem; gap: 2rem; padding: 0 1.8rem 2rem; }
+  .overview-layout.overview-layout-wide { grid-template-columns: minmax(0, 1fr); }
+  .overview-main, .overview-side { min-width: 0; display: grid; align-content: start; gap: 2rem; }
+  .overview-side { border-left: 1px solid var(--vt-color-border); padding-left: 1.4rem; }
+  .overview-continue { display: grid; gap: 0.6rem; padding: 1.1rem 1.25rem; border: 1px solid var(--vt-color-border); border-radius: var(--vt-radius-lg); background: var(--vt-color-surface-muted); }
+  .overview-continue-copy { min-width: 0; display: grid; gap: 0.35rem; }
+  .overview-continue-copy span { color: var(--vt-color-text-muted); font-size: 0.75rem; font-weight: 400; }
+  .overview-continue-copy h3 { margin: 0; font-size: 0.95rem; font-weight: 500; }
+  .overview-continue-list { display: grid; gap: 0.35rem; }
+  .overview-continue-item { display: flex; align-items: center; gap: 1rem; width: 100%; padding: 0.5rem 0; border: 0; background: transparent; color: inherit; text-align: left; font-weight: 400; }
+  .overview-continue-item-copy { flex: 1; min-width: 0; display: grid; gap: 0.4rem; }
+  .overview-continue-item-copy strong { color: var(--vt-color-text-primary); font-size: 1rem; font-weight: 500; overflow-wrap: anywhere; }
+  .overview-continue-item-copy > span { color: var(--vt-color-text-muted); font-size: 0.75rem; overflow-wrap: anywhere; }
+  .overview-continue-item-action { color: var(--vt-color-text-secondary); font-size: 0.75rem; }
+  .overview-continue-empty { display: grid; gap: 0.4rem; padding: 0.35rem 0; }
+  .overview-continue-empty strong { font-size: 0.85rem; font-weight: 500; }
+  .overview-continue-empty p { font-size: 0.78rem; color: var(--vt-color-text-muted); }
+  .overview-summary { display: grid; gap: 0.2rem; }
+  .overview-summary h3 { margin: 0 0 0.7rem; color: var(--vt-color-text-muted); font-size: 0.78rem; font-weight: 500; }
+  .overview-summary-item { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 0.2rem 0.7rem; min-width: 0; padding: 0.6rem 0.25rem; border: 0; border-radius: var(--vt-radius-sm); background: transparent; color: var(--vt-color-text-primary); text-align: left; font-weight: 400; }
+  .overview-summary-item strong { color: var(--vt-color-text-muted); font-size: 0.75rem; font-weight: 400; }
+  .overview-summary-item span { font-size: 0.82rem; }
+  .overview-summary-item small { grid-column: 1 / -1; color: var(--vt-color-text-muted); font-size: 0.7rem; overflow-wrap: anywhere; }
+  .overview-panel { min-width: 0; display: flex; flex-direction: column; background: transparent; }
+  .overview-panel-head { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.75rem; margin-bottom: 1rem; }
+  .overview-panel h3 { margin: 0; font-size: 0.9rem; font-weight: 500; }
+  .overview-panel-head p { margin-top: 0.3rem; color: var(--vt-color-text-muted); font-size: 0.75rem; }
+  .overview-filters { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 0.25rem; }
+  .overview-filters button { min-height: 1.7rem; padding: 0.25rem 0.5rem; border: 1px solid transparent; background: transparent; color: var(--vt-color-text-muted); font-size: 0.75rem; font-weight: 400; }
+  .overview-filters button.is-active { background: var(--vt-color-accent-muted); color: var(--vt-color-accent); }
+  .overview-list { display: grid; gap: 0.3rem; }
+  .overview-row { min-width: 0; padding: 0.8rem 0.4rem; border: 0; border-radius: var(--vt-radius-sm); background: transparent; }
+  .overview-change-row { display: flex; align-items: center; justify-content: space-between; gap: 1rem; width: 100%; text-align: left; color: var(--vt-color-text-primary); font-weight: 400; }
+  .overview-change-copy { flex: 1; min-width: 0; display: grid; gap: 0.35rem; }
+  .overview-change-copy strong { font-weight: 500; font-size: 0.85rem; overflow-wrap: anywhere; }
+  .overview-change-copy > span { color: var(--vt-color-text-muted); font-size: 0.72rem; overflow-wrap: anywhere; }
+  .overview-row-action { flex-shrink: 0; color: var(--vt-color-text-muted); font-size: 0.72rem; }
+  .overview-attention-row, .overview-resource-row { display: grid; gap: 0.3rem; padding-inline: 0; }
+  .overview-attention-row > strong, .overview-resource-row > strong { font-size: 0.82rem; font-weight: 500; overflow-wrap: anywhere; }
+  .overview-attention-row > span, .overview-resource-row > span { color: var(--vt-color-text-muted); font-size: 0.72rem; overflow-wrap: anywhere; }
+  .overview-attention-row button, .overview-resource-row button { justify-self: start; min-height: 1.6rem; padding: 0.25rem 0; border: 0; background: transparent; color: var(--vt-color-accent); font-size: 0.75rem; font-weight: 400; }
+  .overview-empty { margin: 0; padding: 0.65rem 0; color: var(--vt-color-text-muted); font-size: 0.82rem; line-height: 1.5; }
+  @container (max-width: 760px) {
+    .overview-layout { grid-template-columns: minmax(0, 1fr); }
+    .overview-side { border-left: 0; border-top: 1px solid var(--vt-color-border); padding: 1.5rem 0 0; grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr)); gap: 1.5rem; }
   }
-
-  .overview-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 1rem;
-    padding: 1rem;
-    border-bottom: 1px solid var(--vt-color-border);
-    background: var(--vt-color-surface-muted);
-  }
-
-  .overview-header h2 {
-    margin: 0;
-    font-size: 1.05rem;
-  }
-
-  .overview-header p {
-    margin: 0.25rem 0 0;
-    color: var(--vt-color-text-muted);
-    font-size: 0.8rem;
-  }
-
-  .overview-summary {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
-    gap: 0.4rem;
-  }
-
-  .overview-summary-item {
-    min-width: 0;
-    display: grid;
-    grid-template-columns: auto minmax(0, 1fr);
-    grid-template-rows: auto auto;
-    align-items: center;
-    column-gap: 0.55rem;
-    row-gap: 0.12rem;
-    padding: 0.5rem 0.65rem;
-    border: 1px solid var(--vt-color-border);
-    border-radius: var(--vt-radius-lg);
-    background: var(--vt-color-surface);
-    color: inherit;
-    cursor: pointer;
-    font: inherit;
-    text-align: left;
-  }
-
-  .overview-summary-item:hover,
-  .overview-summary-item:focus-visible {
-    border-color: var(--vt-color-accent);
-    background: var(--vt-color-surface-hover);
-    outline: none;
-  }
-
-  .overview-summary-item strong {
-    grid-row: 1 / 3;
-    color: var(--vt-color-text-primary);
-    font-size: 1.05rem;
-    line-height: 1;
-  }
-
-  .overview-summary-item span,
-  .overview-summary-item small {
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    color: var(--vt-color-text-muted);
-    font-size: 0.72rem;
-  }
-
-  .overview-summary-item span {
-    color: var(--vt-color-text-secondary);
-    font-weight: 600;
-  }
-
-  .overview-layout {
-    min-height: 0;
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(17rem, 23rem);
-    gap: 0.75rem;
-    padding: 0.75rem;
-  }
-
-  .overview-layout.overview-layout-wide {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .overview-main,
-  .overview-side {
-    min-width: 0;
-    display: grid;
-    align-content: start;
-    gap: 0.75rem;
-  }
-
-  .overview-continue {
-    display: grid;
-    gap: 0.75rem;
-    padding: 0.9rem 1rem;
-    border: 1px solid rgba(78, 204, 163, 0.24);
-    border-radius: var(--vt-radius-lg);
-    background: var(--vt-color-accent-muted);
-  }
-
-  .overview-continue-copy {
-    min-width: 0;
-    display: grid;
-    gap: 0.22rem;
-  }
-
-  .overview-continue-copy span {
-    color: var(--vt-color-accent);
-    font-size: 0.72rem;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-  }
-
-  .overview-continue-copy h3 {
-    margin: 0;
-    color: var(--vt-color-text-primary);
-    font-size: 0.98rem;
-    font-weight: 600;
-  }
-
-  .overview-panel {
-    min-width: 0;
-    display: flex;
-    flex-direction: column;
-    border: 1px solid var(--vt-color-border);
-    border-radius: var(--vt-radius-lg);
-    background: var(--vt-color-surface);
-  }
-
-  .overview-recent {
-    min-height: 24rem;
-  }
-
-  .overview-panel.secondary {
-    background: var(--vt-color-surface-muted);
-  }
-
-  [data-overview-section='attention'] {
-    border-color: rgba(255, 200, 87, 0.45);
-    background: var(--vt-color-warning-muted);
-  }
-
-  .overview-panel-head {
-    min-height: 2.8rem;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 0.75rem;
-    padding: 0.65rem 0.75rem;
-    border-bottom: 1px solid var(--vt-color-border);
-  }
-
-  .overview-panel h3 {
-    margin: 0;
-    color: var(--vt-color-text-primary);
-    font-size: 0.9rem;
-  }
-
-  .overview-panel-head p {
-    margin: 0.2rem 0 0;
-    color: var(--vt-color-text-muted);
-    font-size: 0.74rem;
-  }
-
-  .overview-filters {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.25rem;
-    padding: 0.2rem;
-    border: 1px solid var(--vt-color-border);
-    border-radius: var(--vt-radius-md);
-    background: var(--vt-color-background);
-  }
-
-  .overview-filters button,
-  .overview-panel-head button,
-  .overview-header button,
-  .overview-continue-item,
-  .overview-list button {
-    min-height: 1.85rem;
-    padding: 0.3rem 0.65rem;
-    border: 1px solid var(--vt-color-border-strong);
-    border-radius: var(--vt-radius-md);
-    background: var(--vt-color-surface-hover);
-    color: var(--vt-color-text-secondary);
-    font-size: 0.76rem;
-    cursor: pointer;
-  }
-
-  .overview-filters button {
-    min-height: 1.55rem;
-    padding: 0.16rem 0.5rem;
-    border-color: transparent;
-    background: transparent;
-  }
-
-  .overview-filters button.is-active,
-  .overview-filters button:hover,
-  .overview-panel-head button:hover,
-  .overview-header button:hover,
-  .overview-continue-item:hover,
-  .overview-list button:hover {
-    border-color: var(--vt-color-accent);
-    color: var(--vt-color-text-primary);
-  }
-
-  .overview-filters button.is-active {
-    background: var(--vt-color-accent-muted);
-    color: var(--vt-color-accent);
-  }
-
-  .overview-empty {
-    flex: 1;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    margin: 0;
-    padding: 1rem;
-    color: var(--vt-color-text-muted);
-    font-size: 0.82rem;
-    line-height: 1.45;
-    text-align: center;
-  }
-
-  .overview-empty.compact {
-    min-height: 5rem;
-  }
-
-  .overview-list {
-    display: grid;
-    gap: 0.45rem;
-    padding: 0.65rem;
-  }
-
-  .overview-list.compact {
-    gap: 0.4rem;
-  }
-
-  .overview-row {
-    min-width: 0;
-    display: grid;
-    gap: 0.2rem;
-    padding: 0.55rem;
-    border: 1px solid var(--vt-color-border);
-    border-radius: var(--vt-radius-md);
-    background: var(--vt-color-surface-muted);
-    color: inherit;
-    font: inherit;
-    text-align: left;
-  }
-
-  .overview-change-row {
-    grid-template-columns: minmax(0, 1fr) auto;
-    align-items: center;
-    gap: 0.75rem;
-    width: 100%;
-    padding: 0.55rem 0.75rem;
-    border: 0;
-    border-bottom: 1px solid var(--vt-color-border);
-    border-radius: 0;
-    background: transparent;
-    cursor: pointer;
-  }
-
-  .overview-change-row:hover,
-  .overview-change-row:focus-visible {
-    background: var(--vt-color-surface-hover);
-    outline: none;
-  }
-
-  .overview-change-copy,
-  .overview-continue-item-copy {
-    min-width: 0;
-    display: grid;
-    gap: 0.2rem;
-  }
-
-  .overview-row-action,
-  .overview-continue-item-action {
-    color: var(--vt-color-text-muted);
-    font-size: 0.72rem;
-    white-space: nowrap;
-  }
-
-  .overview-recent .overview-list {
-    gap: 0;
-    padding: 0;
-  }
-
-  .overview-recent .overview-change-row:last-child {
-    border-bottom: 0;
-  }
-
-  .overview-attention-row,
-  .overview-resource-row {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .overview-row strong {
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    color: var(--vt-color-text-primary);
-    font-size: 0.85rem;
-  }
-
-  .overview-row span {
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    color: var(--vt-color-text-muted);
-    font-size: 0.75rem;
-  }
-
-  .overview-continue-list {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 0.5rem;
-  }
-
-  .overview-continue-item {
-    min-width: 0;
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    align-items: center;
-    gap: 0.6rem;
-    text-align: left;
-  }
-
-  .overview-continue-item strong,
-  .overview-continue-item-copy span {
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .overview-continue-item strong {
-    color: var(--vt-color-text-primary);
-    font-size: 0.8rem;
-  }
-
-  .overview-continue-item-copy span {
-    color: var(--vt-color-text-muted);
-    font-size: 0.72rem;
-  }
-
-  .overview-continue-empty {
-    display: grid;
-    gap: 0.22rem;
-    color: var(--vt-color-text-secondary);
-  }
-
-  .overview-continue-empty p {
-    margin: 0;
-    color: var(--vt-color-text-muted);
-    font-size: 0.8rem;
-  }
-
-  @container vt-content (max-width: 980px) {
-    .overview-layout {
-      grid-template-columns: 1fr;
-    }
-
-    .overview-panel-head {
-      align-items: stretch;
-      flex-direction: column;
-    }
-
-    .overview-filters {
-      overflow-x: auto;
-      justify-content: flex-start;
-    }
-
-    .overview-continue-list {
-      grid-template-columns: 1fr;
-    }
-
-    .overview-continue-item {
-      width: 100%;
-    }
-
-    .overview-change-row {
-      grid-template-columns: 1fr;
-      align-items: stretch;
-    }
-  }
-
-  @container vt-content (max-width: 620px) {
-    .overview-summary {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-
-    .overview-change-row {
-      grid-template-columns: 1fr;
-      gap: 0.3rem;
-    }
+  @container (max-width: 480px) {
+    .overview-header { padding: 1.4rem 1rem; }
+    .overview-header h1 { font-size: 1.6rem; }
+    .overview-layout { padding: 0 1rem 1.5rem; gap: 1.4rem; }
+    .overview-continue { padding: 1rem; }
+    .overview-continue-item { align-items: flex-start; flex-direction: column; gap: 0.5rem; }
+    .overview-row-action { display: none; }
+    .overview-side { grid-template-columns: minmax(0, 1fr); }
   }
 </style>

@@ -5,37 +5,45 @@
 }
 
 :root {
-  --vt-color-background: #101020;
-  --vt-color-surface: #15152c;
-  --vt-color-surface-muted: #111629;
-  --vt-color-surface-hover: #1b2440;
-  --vt-color-surface-selected: rgba(78, 204, 163, 0.14);
-  --vt-color-control: #1b2440;
-  --vt-color-control-hover: #203050;
-  --vt-color-input: #0f1424;
-  /* Placeholder text is read, so it is held to the 4.5:1 text threshold
-     against the input background rather than the 3:1 a decoration would get.
-     #69758f measured 3.96 and failed it. */
-  --vt-color-placeholder: #7c88a2;
+  color-scheme: dark;
+  --vt-color-background: #111216;
+  --vt-color-surface: #202128;
+  --vt-color-surface-muted: #18191f;
+  --vt-color-surface-hover: #24252e;
+  --vt-color-surface-selected: #2c293e;
+  --vt-color-control: #202128;
+  --vt-color-control-hover: #2b2c36;
+  --vt-color-input: #15161c;
+  /* Placeholder text must remain readable on each theme's input surface. */
+  --vt-color-placeholder: #a0a1af;
   /* Separators and dividers. Decorative, so no contrast floor applies. */
-  --vt-color-border: #202b46;
-  /* The visible boundary of controls -- inputs, buttons, the tree scrollbar
-     thumb. Where that boundary is the only thing identifying the control,
-     WCAG asks for 3:1; #2c456a measured 1.94 against every surface it sits
-     on. #4a6b9e clears it on the background, on surfaces and on inputs. */
-  --vt-color-border-strong: #4a6b9e;
-  --vt-color-text-primary: #f4f7fb;
-  --vt-color-text-secondary: #b7c0d4;
-  --vt-color-text-muted: #7f8aa3;
-  --vt-color-accent: #4ecca3;
-  --vt-color-accent-muted: rgba(78, 204, 163, 0.14);
-  --vt-color-danger: #e94560;
+  --vt-color-border: #30313b;
+  /* Strong boundaries identify controls and the custom tree scrollbar. */
+  --vt-color-border-strong: #737684;
+  --vt-color-text-primary: #f0f0f5;
+  --vt-color-text-secondary: #b9bac6;
+  --vt-color-text-muted: #a0a1af;
+  --vt-color-text: var(--vt-color-text-primary);
+  --vt-color-accent: #b8b0ff;
+  --vt-color-accent-muted: #2c293e;
+  --vt-color-accent-soft: var(--vt-color-accent-muted);
+  --vt-color-action: #6254d9;
+  --vt-color-action-hover: #5347b8;
+  --vt-color-on-action: #ffffff;
+  --vt-code-keyword: #c792ea;
+  --vt-code-string: #a6da95;
+  --vt-code-number: #f5a97f;
+  --vt-code-comment: #a0a1af;
+  --vt-code-symbol: #8aadf4;
+  --vt-code-variable: #eed49f;
+  --vt-color-danger: #f17b90;
+  --vt-color-danger-action: #b32944;
   --vt-color-danger-muted: rgba(233, 69, 96, 0.14);
   --vt-color-danger-foreground: #ffc6ce;
-  --vt-color-warning: #ffc857;
+  --vt-color-warning: #e4bd83;
   --vt-color-warning-muted: rgba(255, 200, 87, 0.14);
   --vt-color-warning-foreground: #ffe0a3;
-  --vt-color-success: #4ecca3;
+  --vt-color-success: #86d6b0;
   --vt-color-success-muted: rgba(78, 204, 163, 0.14);
   --vt-color-success-foreground: #9fe0c9;
   --vt-space-1: 0.25rem;
@@ -44,20 +52,57 @@
   --vt-space-4: 1rem;
   --vt-space-6: 1.5rem;
   --vt-space-8: 2rem;
-  --vt-radius-sm: 4px;
-  --vt-radius-md: 6px;
-  --vt-radius-lg: 8px;
+  --vt-radius-sm: 6px;
+  --vt-radius-md: 8px;
+  --vt-radius-lg: 12px;
   --vt-font-xs: 0.72rem;
   --vt-font-sm: 0.8rem;
   --vt-font-md: 0.88rem;
   --vt-font-lg: 1rem;
   --vt-control-height: 2rem;
   --vt-control-height-compact: 1.625rem;
-  --vt-focus-ring: 0 0 0 2px rgba(78, 204, 163, 0.34);
+  --vt-focus-ring: 0 0 0 2px var(--vt-color-accent);
   --vt-elevation-menu: 0 14px 32px rgba(0, 0, 0, 0.42);
   --vt-transition-fast: 150ms ease;
   --vt-overlay-backdrop: rgba(4, 8, 18, 0.7);
   --vt-overlay-z-index: 10000;
+}
+
+:root[data-theme='light'] {
+  color-scheme: light;
+  --vt-color-background: #ffffff;
+  --vt-color-surface: #ffffff;
+  --vt-color-surface-muted: #f5f5f8;
+  --vt-color-surface-hover: #ededf3;
+  --vt-color-surface-selected: #eeecfc;
+  --vt-color-control: #f9f9fc;
+  --vt-color-control-hover: #ededf3;
+  --vt-color-input: #ffffff;
+  --vt-color-placeholder: #646473;
+  --vt-color-border: #e5e5ed;
+  --vt-color-border-strong: #848392;
+  --vt-color-text-primary: #24242d;
+  --vt-color-text-secondary: #535363;
+  --vt-color-text-muted: #646473;
+  --vt-color-accent: #594ac9;
+  --vt-color-accent-muted: #eeecfc;
+  --vt-color-danger: #b32944;
+  --vt-color-danger-muted: #fcecf0;
+  --vt-color-danger-foreground: #9f1f3a;
+  --vt-color-warning: #856018;
+  --vt-color-warning-muted: #fff4df;
+  --vt-color-warning-foreground: #75500e;
+  --vt-color-success: #226545;
+  --vt-color-success-muted: #e7f5ed;
+  --vt-color-success-foreground: #226545;
+  --vt-code-keyword: #7b32a8;
+  --vt-code-string: #256944;
+  --vt-code-number: #9a4a23;
+  --vt-code-comment: #646473;
+  --vt-code-symbol: #315ba8;
+  --vt-code-variable: #805e1b;
+  --vt-elevation-menu: 0 14px 32px rgba(30, 30, 45, 0.14);
+  --vt-overlay-backdrop: rgba(24, 25, 31, 0.35);
 }
 
 html,
@@ -72,6 +117,7 @@ body {
   background: var(--vt-color-background);
   color: var(--vt-color-text-primary);
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-size: 14px;
 }
 
 button,
@@ -88,7 +134,7 @@ button,
   color: var(--vt-color-text-primary);
   font: inherit;
   font-size: var(--vt-font-sm);
-  font-weight: 600;
+  font-weight: 500;
   line-height: 1.2;
   cursor: pointer;
   transition:
@@ -103,7 +149,7 @@ button:hover:not(:disabled),
 .btn-secondary:hover:not(:disabled) {
   border-color: var(--vt-color-accent);
   background: var(--vt-color-control-hover);
-  color: #ffffff;
+  color: var(--vt-color-text-primary);
 }
 
 button:focus-visible,
@@ -128,16 +174,16 @@ button:disabled,
 }
 
 .vt-button.primary, .btn-primary {
-  border-color: var(--vt-color-accent);
-  background: var(--vt-color-accent);
-  color: #101827;
+  border-color: var(--vt-color-action);
+  background: var(--vt-color-action);
+  color: var(--vt-color-on-action);
 }
 
 .vt-button.primary:hover:not(:disabled),
 .btn-primary:hover:not(:disabled) {
-  border-color: #63d9b3;
-  background: #63d9b3;
-  color: #101827;
+  border-color: var(--vt-color-action-hover);
+  background: var(--vt-color-action-hover);
+  color: var(--vt-color-on-action);
 }
 
 .vt-button.secondary {
@@ -147,15 +193,16 @@ button:disabled,
 }
 
 .vt-button.danger, .btn-danger {
-  border-color: var(--vt-color-danger);
-  background: var(--vt-color-danger);
+  border-color: var(--vt-color-danger-action);
+  background: var(--vt-color-danger-action);
   color: #ffffff;
 }
 
 .vt-button.danger:hover:not(:disabled),
 .btn-danger:hover:not(:disabled) {
-  border-color: #ff5b73;
-  background: #ff5b73;
+  border-color: var(--vt-color-danger-action);
+  background: var(--vt-color-danger-action);
+  color: #ffffff;
 }
 
 .vt-button.ghost, .btn-ghost {
@@ -295,7 +342,7 @@ button:disabled,
   overflow-x: auto;
   padding: var(--vt-space-1) var(--vt-space-3) 0;
   border-bottom: 1px solid var(--vt-color-border);
-  background: #12162a;
+  background: var(--vt-color-surface-muted);
 }
 
 .vt-tab {
@@ -324,7 +371,7 @@ button:disabled,
 }
 
 .vt-list-row {
-  border-bottom: 1px solid rgba(32, 43, 70, 0.72);
+  border-bottom: 1px solid var(--vt-color-border);
   color: var(--vt-color-text-primary);
 }
 
@@ -437,7 +484,7 @@ button:disabled,
 }
 
 .vt-badge.accent {
-  border-color: rgba(78, 204, 163, 0.4);
+  border-color: var(--vt-color-accent);
   background: var(--vt-color-accent-muted);
   color: var(--vt-color-accent);
 }
@@ -636,7 +683,7 @@ button:disabled,
 }
 
 *::-webkit-scrollbar-thumb:hover {
-  background: #1a4a7a;
+  background: var(--vt-color-text-muted);
 }
 
 @media (prefers-reduced-motion: reduce) {

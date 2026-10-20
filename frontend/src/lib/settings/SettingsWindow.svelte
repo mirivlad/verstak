@@ -8,6 +8,7 @@
   import * as App from '../../../wailsjs/go/api/App';
   import { i18n } from '../i18n/index.js';
   import Icon from '../ui/Icon.svelte';
+  import { theme, setTheme } from '../ui/theme.js';
   import PluginBundleHost from '../plugin-host/PluginBundleHost.svelte';
   import { GetPluginFrontendInfo } from '../../../wailsjs/go/api/App';
 
@@ -314,6 +315,17 @@
     <div class="settings-content" role="tabpanel" aria-label={activeSectionData?.title || ''} data-settings-content>
       {#if activeSection === GENERAL}
         <h3>{tr('settings.section.general', undefined, 'General')}</h3>
+        <div class="settings-group">
+          <div class="settings-group-title" id="settings-theme-label">{tr('theme.title')}</div>
+          <div class="settings-choices" role="radiogroup" aria-labelledby="settings-theme-label">
+            {#each ['system', 'light', 'dark'] as appearance}
+              <button class="settings-choice" class:is-active={$theme.preference === appearance} type="button" role="radio"
+                aria-checked={$theme.preference === appearance} data-settings-theme={appearance} disabled={$theme.saving}
+                on:click={() => setTheme(appearance)}>{tr(`theme.${appearance}`)}</button>
+            {/each}
+          </div>
+          {#if $theme.error}<p role="alert" class="settings-hint">{tr('theme.saveError')}</p>{/if}
+        </div>
         <div class="settings-group">
           <div class="settings-group-title" id="settings-language-label">{tr('settings.language')}</div>
           <div class="settings-choices" role="radiogroup" aria-labelledby="settings-language-label">

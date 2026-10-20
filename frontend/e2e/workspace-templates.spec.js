@@ -241,7 +241,7 @@ test.describe('Deal templates plugin', () => {
     await deal.click();
     await expect(page.getByRole('tab', { name: 'Project' })).toBeVisible();
     await deal.click({ button: 'right' });
-    await page.getByRole('button', { name: 'Edit Deal' }).click();
+    await page.locator('[role=menu]').getByRole('button', { name: 'Edit Deal' }).click();
 
     const edit = page.locator('[data-workspace-edit-modal]');
     await expect(edit).toBeVisible();
@@ -266,7 +266,7 @@ test.describe('Deal templates plugin', () => {
 
     const renamedDeal = page.locator('.wt-node').filter({ hasText: 'EditableDealRenamed' });
     await renamedDeal.click({ button: 'right' });
-    await page.getByRole('button', { name: 'Edit Deal' }).click();
+    await page.locator('[role=menu]').getByRole('button', { name: 'Edit Deal' }).click();
     await expect(projects).toHaveAttribute('aria-pressed', 'false');
     await projects.click();
     await edit.getByRole('button', { name: 'Save' }).click();

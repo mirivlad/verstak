@@ -391,7 +391,8 @@
 <div class="workspace-host vt-page">
   {#if selectedWorkspace}
     {#if displayedTools.length > 0}
-      <div class="workspace-tabs vt-tabbar" bind:this={workspaceTabsElement}>
+      <div class="workspace-tabs vt-tabbar">
+        <div class="workspace-tab-rail" bind:this={workspaceTabsElement}>
         {#if hasPreviousTabPage}
           <button class="workspace-tab-page-control" data-workspace-tab-page-previous type="button" aria-label={tr('workspace.previousTools', undefined, 'Previous tools')} title={tr('workspace.previousTools', undefined, 'Previous tools')} on:click={() => showTabPage(tabPage - 1)}>
             <Icon name="chevron-left" size={16} />
@@ -421,6 +422,11 @@
             <Icon name="chevron-right" size={16} />
           </button>
         {/if}
+        </div>
+        <button class="vt-button ghost workspace-config" data-workspace-config type="button" title={tr('workspaceTree.editDeal')} aria-label={tr('workspaceTree.editDeal')}
+          on:click={() => window.dispatchEvent(new CustomEvent('verstak:edit-workspace-requested', { detail: { workspaceId } }))}>
+          <Icon name="sliders-horizontal" size={15} /><span>{tr('workspace.configureTools')}</span>
+        </button>
       </div>
       <div class="workspace-tab-measure" bind:this={workspaceTabsMeasureElement} aria-hidden="true">
         {#each displayedTools as tool (tool.id + tool.pluginId)}
@@ -433,6 +439,7 @@
             <OverviewSurface
               {workspaceRootPath}
               {workspaceId}
+              {workspaceTitle}
               availableTools={displayedTools}
               {overviewProviders}
               on:openTool={openWorkspaceTool}
@@ -502,12 +509,16 @@
     display: flex;
     align-items: center;
     gap: 0;
-    padding: var(--vt-space-1) var(--vt-space-3) 0;
-    background: #12162a;
+    padding: 0 1.8rem;
+    background: var(--vt-color-background);
     border-bottom: 1px solid var(--vt-color-border);
     flex-shrink: 0;
     overflow: hidden;
   }
+
+  .workspace-tab-rail { display: flex; align-items: center; flex: 1; min-width: 0; }
+  .workspace-config { margin-left: 0.5rem; flex-shrink: 0; font-weight: 400; }
+  @container vt-content (max-width: 600px) { .workspace-config span { display: none; } .workspace-tabs { padding-inline: 0.75rem; } }
 
   .workspace-tab-list,
   .workspace-tab-page {
@@ -531,11 +542,11 @@
   .workspace-tabs .vt-tab,
   .workspace-tab-measure .vt-tab {
     flex-shrink: 0;
-    min-height: 2rem;
-    padding: 0.35rem 0.8rem;
-    border: 1px solid transparent;
-    border-bottom: none;
-    border-radius: var(--vt-radius-md) var(--vt-radius-md) 0 0;
+    min-height: 2.75rem;
+    padding: 0.65rem 0.3rem;
+    border: 0;
+    border-bottom: 2px solid transparent;
+    border-radius: 0;
     background: transparent;
     color: var(--vt-color-text-muted);
     cursor: pointer;
@@ -549,9 +560,9 @@
   }
 
   .workspace-tabs .vt-tab.is-active {
-    color: var(--vt-color-accent);
+    color: var(--vt-color-text-primary);
     background: var(--vt-color-background);
-    border-color: var(--vt-color-border);
+    border-bottom-color: var(--vt-color-accent);
   }
 
   .workspace-tab-page-control {

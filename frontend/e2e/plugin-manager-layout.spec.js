@@ -70,7 +70,7 @@ test.describe('E: Plugin Manager layout', () => {
     });
     expect(buttonStyle.display).toBe('inline-flex');
     expect(buttonStyle.backgroundColor).not.toBe('rgba(0, 0, 0, 0)');
-    expect(buttonStyle.borderRadius).toBe('6px');
+    expect(buttonStyle.borderRadius).toBe('8px');
   });
 
   test('plugin manager summarizes plugin health and elevated permissions before the list', async ({ page }) => {

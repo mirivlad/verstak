@@ -103,9 +103,12 @@ test.describe('UX Overview workspace flow', () => {
     await expect(overview.locator('[data-overview-action="browser-inbox"]')).toHaveCount(0);
     await expect(overview).not.toContainText('Inbox material must stay hidden');
     await expect(overview.locator('.overview-side')).toHaveCount(0);
-    const layoutBox = await overview.locator('.overview-layout').boundingBox();
+    const availableWidth = await overview.locator('.overview-layout').evaluate(node => {
+      const style = getComputedStyle(node);
+      return node.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
+    });
     const mainBox = await overview.locator('.overview-main').boundingBox();
-    expect(mainBox.width / layoutBox.width).toBeGreaterThan(0.95);
+    expect(Math.abs(mainBox.width - availableWidth)).toBeLessThan(2);
   });
 
   test('Overview refreshes when Browser is disabled through plugin state changes', async ({ page }) => {

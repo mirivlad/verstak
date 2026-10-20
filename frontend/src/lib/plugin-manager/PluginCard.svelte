@@ -450,7 +450,7 @@
   }
 
   .btn-enable {
-    background: var(--vt-color-accent);
+    background: var(--vt-color-action);
     color: var(--vt-color-background);
     border: none;
     padding: 0.3rem 0.75rem;
@@ -461,7 +461,7 @@
   }
 
   .btn-enable:hover {
-    background: var(--vt-color-accent);
+    background: var(--vt-color-action);
   }
 
   .btn-disable {
@@ -480,7 +480,7 @@
   }
 
   .vault-hint {
-    color: #666;
+    color: var(--vt-color-text-muted);
     font-size: 0.75rem;
     font-style: italic;
   }

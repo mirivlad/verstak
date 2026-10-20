@@ -4,6 +4,7 @@
   import GlobalSearch from './lib/shell/GlobalSearch.svelte';
   import CommandPalette from './lib/shell/CommandPalette.svelte';
   import Icon from './lib/ui/Icon.svelte';
+  import ThemeToggle from './lib/ui/ThemeToggle.svelte';
   import StatusBar from './lib/shell/StatusBar.svelte';
   import ViewContainer from './lib/shell/ViewContainer.svelte';
   import VaultSelection from './lib/shell/VaultSelection.svelte';
@@ -20,6 +21,22 @@
   let vaultStatus = { status: 'unknown', path: '', vaultId: '' };
   let needsVaultSelection = false;
   let loading = true;
+  let navigationOpen = false;
+  let navigationCollapsed = false;
+  let viewportWidth = window.innerWidth;
+
+  function closeNavigation() {
+    navigationOpen = false;
+    tick().then(() => document.querySelector('[data-navigation-toggle]')?.focus());
+  }
+
+  function toggleNavigation() {
+    if (window.innerWidth <= 720) {
+      if (navigationOpen) closeNavigation();
+      else { navigationOpen = true; tick().then(() => document.querySelector('.sidebar .sidebar-header button')?.focus()); }
+    }
+    else navigationCollapsed = !navigationCollapsed;
+  }
   let locale = i18n.getLocale();
   const unsubscribeLocale = i18n.subscribe((nextLocale) => { locale = nextLocale; });
   $: tr = ((activeLocale) => (key, params, fallback) => {
@@ -286,6 +303,7 @@
   }
 
   function onOpenView(e) {
+    if (navigationOpen) closeNavigation();
     debug.log('[App] onOpenView:', e.detail.viewId, 'plugin:', e.detail.pluginId);
     activeView = e.detail.viewId;
     activeViewPluginId = e.detail.pluginId || '';
@@ -299,6 +317,7 @@
   // Plugin Manager, which is a page about installing plugins, not configuring
   // them.
   function onOpenSettings(e) {
+    if (navigationOpen) closeNavigation();
     debug.log('[App] onOpenSettings:', e.detail?.pluginId, e.detail?.panelId);
     const pluginId = e.detail?.pluginId || '';
     const panelId = e.detail?.panelId || '';
@@ -340,6 +359,7 @@
   }
 
   function onWorkspaceSelected(e) {
+    if (navigationOpen) closeNavigation();
     const name = e.detail?.workspaceName || e.detail?.workspaceRootPath || '';
     const id = e.detail?.workspaceId || '';
     const workspaceItemId = e.detail?.workspaceItemId || '';
@@ -412,6 +432,7 @@
   }
 
   function onGlobalKeydown(e) {
+    if (e.key === 'Escape' && navigationOpen && !document.querySelector('[role=dialog]')) { closeNavigation(); return; }
     handleHistoryRequest(keyHistoryDirection(e), e);
   }
 
@@ -468,6 +489,8 @@
   });
 </script>
 
+<svelte:window bind:innerWidth={viewportWidth} />
+
 {#if loading}
   <div class="app-loading">
     <p>{tr('app.loading')}</p>
@@ -479,11 +502,19 @@
     <Sidebar
       {activeView}
       {activeViewPluginId}
+      open={navigationOpen}
+      collapsed={navigationCollapsed}
+      on:toggleNavigation={toggleNavigation}
     />
+    {#if navigationOpen && viewportWidth <= 720}<button class="navigation-backdrop" type="button" aria-label={tr('sidebar.closeNavigation')} on:click={closeNavigation}></button>{/if}
     <CommandPalette />
 
-    <section class="content-shell">
+    <section class="content-shell" inert={navigationOpen && viewportWidth <= 720}>
       <header class="main-content-header" data-main-content-header>
+        <button class="vt-button ghost icon navigation-toggle" class:is-collapsed={navigationCollapsed} type="button" data-navigation-toggle
+          aria-label={tr('sidebar.openNavigation')} aria-expanded={viewportWidth <= 720 ? navigationOpen : !navigationCollapsed} on:click={toggleNavigation}>
+          <Icon name="panel-left" size={18} />
+        </button>
         <div class="main-content-title">
           {#if contentTitleIcon}<Icon name={contentTitleIcon} size={16} class="main-content-title-icon" />{/if}
           <span class="main-content-title-text">{contentTitle || defaultContentTitle || tr('workspace.select')}</span>
@@ -498,6 +529,7 @@
             </button>
           {/if}
           <GlobalSearch activeDealId={currentView === 'workspace' ? selectedWorkspaceId : ''} />
+          <ThemeToggle />
         </div>
       </header>
       <section class="content scroll-surface">
@@ -555,11 +587,10 @@
     align-items: center;
     justify-content: space-between;
     gap: 1rem;
-    padding: var(--vt-space-2) var(--vt-space-4);
-    border-bottom: 1px solid var(--vt-color-border);
-    background: var(--vt-color-surface-muted);
+    padding: 0.85rem 1.8rem;
+    background: var(--vt-color-background);
     flex-shrink: 0;
-    min-height: 2.75rem;
+    min-height: 3.75rem;
   }
 
   .main-content-title {
@@ -575,8 +606,8 @@
     text-overflow: ellipsis;
     white-space: nowrap;
     color: var(--vt-color-text-primary);
-    font-size: var(--vt-font-lg);
-    font-weight: 650;
+    font-size: var(--vt-font-sm);
+    font-weight: 500;
   }
 
   .main-content-title-sub {
@@ -620,13 +651,18 @@
     container-name: vt-content;
   }
 
+  .navigation-toggle { display: none; }
+  .navigation-toggle.is-collapsed { display: inline-flex; }
+  .navigation-backdrop { display: none; }
+
   @media (max-width: 720px) {
     main {
-      flex-direction: column;
+      flex-direction: row;
     }
-
-    .content {
-      padding: 0.75rem;
-    }
+    .main-content-header { padding: 0.65rem 0.75rem; gap: 0.5rem; flex-wrap: wrap; }
+    .main-content-title { flex: 1; }
+    .main-content-actions { width: 100%; min-width: 0; }
+    .navigation-toggle { display: inline-flex; }
+    .navigation-backdrop { display: block; position: absolute; inset: 0; z-index: 200; width: 100%; height: 100%; padding: 0; border: 0; border-radius: 0; background: var(--vt-overlay-backdrop); }
   }
 </style>

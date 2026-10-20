@@ -1,5 +1,5 @@
 <script>
-  import { onDestroy, onMount } from 'svelte';
+  import { createEventDispatcher, onDestroy, onMount } from 'svelte';
   import * as App from '../../../wailsjs/go/api/App';
   import WorkspaceTree from './WorkspaceTree.svelte';
   import Icon from '../ui/Icon.svelte';
@@ -8,6 +8,10 @@
 
   export let activeView = null;
   export let activeViewPluginId = '';
+  export let open = false;
+  export let collapsed = false;
+  const dispatch = createEventDispatcher();
+  $: vaultName = String(vaultStatus.path || '').replace(/[\\/]+$/, '').split(/[\\/]/).pop() || tr('vault.unnamed');
 
   function flog(msg) {
     App.WriteFrontendLog('Sidebar', msg);
@@ -180,11 +184,13 @@
   }
 </script>
 
-<aside class="sidebar" class:is-resizing={resizing} style="--sidebar-width:{visibleSidebarWidth}px">
+<aside class="sidebar" class:is-resizing={resizing} class:is-open={open} class:is-collapsed={collapsed} style="--sidebar-width:{visibleSidebarWidth}px">
   <div class="sidebar-header">
-    <Icon name="logo" size={20} class="sidebar-logo" />
-    <span class="sidebar-title">Verstak</span>
+    <span class="brand-mark"><Icon name="logo" class="sidebar-logo" size={18} /></span>
+    <div class="brand-copy"><span class="sidebar-title">{tr('app.name')}</span><small title={vaultStatus.path}>{vaultName}</small></div>
+    <button class="vt-button ghost icon" type="button" aria-label={tr('sidebar.closeNavigation')} on:click={() => dispatch('toggleNavigation')}><Icon name="panel-left-close" size={16} /></button>
   </div>
+  {#if vaultOpen}<button class="vt-button primary create-deal" data-create-deal type="button" on:click={() => window.dispatchEvent(new CustomEvent('verstak:create-workspace-requested', { detail: {} }))}><Icon name="plus" size={16} />{tr('sidebar.createDeal')}</button>{/if}
 
   {#if sidebarItems.length > 0}
     <div class="sidebar-section">
@@ -209,6 +215,7 @@
   {/if}
 
   <div class="sidebar-footer">
+    <button class="nav-item" type="button" data-settings-menu-button title={tr('settings.title')} aria-label={tr('settings.title')} on:click={() => window.dispatchEvent(new CustomEvent('verstak:open-settings', { detail: {} }))}><Icon name="settings" size={16} />{tr('settings.title')}</button>
     {#if errorMessage}
       <span class="sidebar-error">
         <Icon name="warning" size={10} class="sidebar-error-icon" />
@@ -258,7 +265,7 @@
   .sidebar-resizer:hover,
   .sidebar-resizer:focus-visible,
   .sidebar.is-resizing .sidebar-resizer {
-    background: var(--vt-color-accent);
+    background: var(--vt-color-action);
   }
   .sidebar-resizer:focus-visible {
     outline: none;
@@ -272,16 +279,14 @@
     display: flex;
     align-items: center;
     gap: 0.5rem;
-    padding: 1rem 1.25rem;
-    border-bottom: 1px solid var(--vt-color-border);
+    padding: 1.4rem 0.85rem 1.5rem;
   }
 
-  :global(.sidebar-logo) {
-    width: 1.2rem;
-    height: 1.2rem;
-    color: var(--vt-color-accent);
-    flex-shrink: 0;
-  }
+  .brand-mark { display: grid; place-items: center; flex-shrink: 0; width: 1.9rem; height: 1.9rem; border-radius: 0.55rem; background: var(--vt-color-text-primary); color: var(--vt-color-background); }
+  .brand-copy { min-width: 0; flex: 1; }
+  .brand-copy small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 0.2rem; font-size: 0.69rem; color: var(--vt-color-text-muted); }
+  .create-deal { margin: 0 0.85rem 1.1rem; min-height: 2.4rem; flex-shrink: 0; }
+  .sidebar.is-collapsed { display: none; }
 
   .sidebar-title {
     color: var(--vt-color-text-primary);
@@ -292,9 +297,11 @@
   .sidebar-section {
     display: flex;
     flex-direction: column;
-    padding: 0.45rem 0.6rem 0.55rem;
+    padding: 0.35rem 0.65rem 1.1rem;
     gap: 0.15rem;
-    border-bottom: 1px solid var(--vt-color-border);
+    flex-shrink: 0;
+    max-height: 36vh;
+    overflow-y: auto;
   }
 
   :global(workspace-tree) {
@@ -307,10 +314,9 @@
   .section-label {
     color: var(--vt-color-text-muted);
     font-size: 0.7rem;
-    text-transform: uppercase;
     letter-spacing: 0.05em;
     padding: 0.25rem 0.45rem 0.35rem;
-    font-weight: 600;
+    font-weight: 400;
   }
 
   .nav-item {
@@ -318,12 +324,13 @@
     align-items: center;
     justify-content: flex-start;
     gap: 0.45rem;
-    min-height: 1.85rem;
-    padding: 0.15rem 0.45rem;
+    min-height: 2.25rem;
+    flex-shrink: 0;
+    padding: 0.35rem 0.55rem;
     background: none;
     border: none;
     color: var(--vt-color-text-secondary);
-    font-size: 0.78rem;
+    font-size: 0.82rem;
     cursor: pointer;
     border-radius: var(--vt-radius-sm);
     text-align: left;
@@ -338,7 +345,7 @@
 
   .nav-item.is-active {
     background: var(--vt-color-surface-selected);
-    color: var(--vt-color-accent);
+    color: var(--vt-color-text-primary);
   }
 
   .nav-item.is-active :global(.nav-icon.icon-plugin) {
@@ -365,8 +372,7 @@
 
   .sidebar-footer {
     margin-top: auto;
-    padding: 0.75rem 1.25rem;
-    border-top: 1px solid var(--vt-color-border);
+    padding: 0.75rem;
   }
 
   .sidebar-error {
@@ -383,12 +389,15 @@
 
   @media (max-width: 720px) {
     .sidebar {
-      width: 100%;
+      display: none;
+      position: absolute;
+      inset: 0 auto 0 0;
+      z-index: 201;
+      width: min(18rem, calc(100% - 3rem));
       min-width: 0;
-      max-height: 14rem;
-      border-right: 0;
-      border-bottom: 1px solid var(--vt-color-border);
+      height: 100%;
     }
+    .sidebar.is-open { display: flex; }
 
     .sidebar-resizer {
       display: none;
@@ -399,12 +408,12 @@
     }
 
     .sidebar-section {
-      max-height: 5.5rem;
-      overflow: auto;
+      max-height: 32vh;
+      overflow-y: auto;
     }
 
     .sidebar-footer {
-      display: none;
+      display: block;
     }
   }
 </style>
