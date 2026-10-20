@@ -190,6 +190,7 @@ import syncStyle from '../../../../../verstak-official-plugins/plugins/sync/fron
     currentVaultPath: '/tmp/verstak-test/vault',
     recentVaults: [],
     language: localStorage.getItem('verstak-test-language') || 'system',
+    theme: localStorage.getItem('verstak-test-theme') || 'dark',
     sidebarWidth: Number(localStorage.getItem('verstak-test-sidebar-width') || 220),
     expandedFolderIds: [],
     settingsSection: ''
@@ -296,6 +297,7 @@ import syncStyle from '../../../../../verstak-official-plugins/plugins/sync/fron
   function applyAppSettingsPatch(patch) {
   appSettings = Object.assign({}, appSettings, patch || {});
   if (patch && patch.language) localStorage.setItem('verstak-test-language', patch.language);
+  if (patch && patch.theme) localStorage.setItem('verstak-test-theme', patch.theme);
   if (patch && patch.sidebarWidth) localStorage.setItem('verstak-test-sidebar-width', String(patch.sidebarWidth));
 }
 

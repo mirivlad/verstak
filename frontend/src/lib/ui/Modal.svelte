@@ -9,14 +9,22 @@
 
   const dispatch = createEventDispatcher();
 
+  // Dialogs remain visible when their owning navigation panel is collapsed.
+  function portal(node) {
+    document.body.appendChild(node);
+    return { destroy() { node.remove(); } };
+  }
+
   function manageFocus(dialog) {
     const opener = document.activeElement;
     const background = [];
     let branch = dialog.parentElement;
     while (branch?.parentElement) {
       for (const sibling of branch.parentElement.children) {
-        if (sibling !== branch && sibling instanceof HTMLElement) {
-          background.push([sibling, sibling.inert]);
+        if (sibling !== branch && sibling instanceof HTMLElement && !sibling.inert) {
+          // Already inert regions (for example the drawer background) belong
+          // to their owner; restoring them here would overwrite newer state.
+          background.push([sibling, false]);
           sibling.inert = true;
         }
       }
@@ -67,7 +75,7 @@
 <svelte:window on:keydown={onKeydown} />
 
 {#if show}
-  <div {...$$restProps} class="vt-modal-overlay" bind:this={overlayElement}>
+  <div {...$$restProps} class="vt-modal-overlay" bind:this={overlayElement} use:portal>
     <div
       class="vt-modal" class:vt-modal-wide={wide}
       role="dialog" aria-modal="true" aria-label={title} tabindex="-1"

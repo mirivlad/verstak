@@ -79,14 +79,6 @@
       }));
   }
 
-  // The gear opens the settings window. It used to open a dropdown holding
-  // the language choice, a link to the Plugin Manager and one entry per plugin
-  // settings panel -- a menu that grew with every plugin installed and had
-  // nowhere to put anything that was not a single choice.
-  function openSettingsWindow() {
-    window.dispatchEvent(new CustomEvent('verstak:open-settings', { detail: {} }));
-  }
-
   // Set when the opt-in startup check found a newer release; clicking opens
   // that release's page. Nothing is downloaded.
   let availableUpdate = null;
@@ -140,7 +132,6 @@
     </span>
     {#each leftItems as item}
       <span
-        class:status-bar-warning={item.handler}
         class="status-bar-item"
         data-status-item-id={item.id}
         title={item.label || item.id}
@@ -152,7 +143,6 @@
   <div class="status-bar-group status-center">
     {#each centerItems as item}
       <span
-        class:status-bar-warning={item.handler}
         class="status-bar-item"
         data-status-item-id={item.id}
         title={item.label || item.id}
@@ -164,7 +154,6 @@
   <div class="status-bar-group status-right">
     {#each rightItems as item}
       <span
-        class:status-bar-warning={item.handler}
         class="status-bar-item"
         data-status-item-id={item.id}
         title={item.label || item.id}
@@ -191,16 +180,6 @@
       >{tr('statusBar.updateAvailable', { version: availableUpdate.latest })}</button>
     {/if}
 
-    <button
-      class="settings-button"
-      type="button"
-      title={tr('settings.title')}
-      aria-label={tr('settings.title')}
-      data-settings-menu-button
-      on:click={openSettingsWindow}
-    >
-      <Icon name="settings" size={14} class="settings-icon" />
-    </button>
   </div>
 </footer>
 
@@ -214,10 +193,10 @@
     align-items: center;
     gap: 0.5rem;
     padding: 0.2rem 0.65rem;
-    border-top: 1px solid #16213e;
-    background: #111629;
-    color: #9fb2ca;
-    font-size: 0.74rem;
+    border-top: 1px solid var(--vt-color-border);
+    background: var(--vt-color-background);
+    color: var(--vt-color-text-muted);
+    font-size: 0.7rem;
   }
 
   .status-bar-group {
@@ -248,10 +227,6 @@
     white-space: nowrap;
   }
 
-  .status-bar-warning {
-    color: #ffc857;
-  }
-
   :global(.status-warning-icon) {
     flex-shrink: 0;
     color: currentColor;
@@ -266,17 +241,17 @@
     overflow: hidden;
     padding: 0.12rem 0.35rem;
     border-radius: 4px;
-    color: #a0a0b8;
+    color: var(--vt-color-text-muted, #a0a0b8);
     white-space: nowrap;
     text-overflow: ellipsis;
   }
 
   .vault-status.vault-open {
-    color: #4ecca3;
+    color: var(--vt-color-text-muted);
   }
 
   .vault-status.vault-closed {
-    color: #9fb2ca;
+    color: var(--vt-color-text-muted, #9fb2ca);
   }
 
   :global(.status-icon) {
@@ -307,25 +282,6 @@
   }
 
 
-  .settings-button {
-    min-height: 1.35rem;
-    height: 1.35rem;
-    padding: 0 0.35rem;
-    gap: 0.15rem;
-    border: 1px solid transparent;
-    border-radius: 4px;
-    background: transparent;
-    color: #9fb2ca;
-  }
-
-  .settings-button:hover,
-
-  :global(.settings-icon),
-  :global(.settings-chevron),
-  :global(.settings-menu-icon) {
-    flex-shrink: 0;
-    color: currentColor;
-  }
 
 
 

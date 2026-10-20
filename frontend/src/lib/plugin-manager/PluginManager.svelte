@@ -741,7 +741,7 @@
   .missing-hint { color: var(--vt-color-text-muted); font-size: 0.8rem; margin: 0 0 0.75rem; }
   .missing-card { border-color: var(--vt-color-danger); opacity: 0.8; }
   .missing-text { color: var(--vt-color-text-muted); font-size: 0.85rem; margin: 0.5rem 0 0; }
-  .source-hint { display: block; margin-top: 0.25rem; font-size: 0.75rem; color: #666; }
+  .source-hint { display: block; margin-top: 0.25rem; font-size: 0.75rem; color: var(--vt-color-text-muted); }
 
   .registry-section {
     background: var(--vt-color-surface); border: 1px solid var(--vt-color-border-strong);

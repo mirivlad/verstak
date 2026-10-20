@@ -3,6 +3,7 @@ import App from './App.svelte';
 import * as Backend from '../wailsjs/go/api/App';
 import { i18n } from './lib/i18n/index.js';
 import './lib/ui/design-system.css';
+import { initializeTheme } from './lib/ui/theme.js';
 
 // Replaced with a literal by Vite; false outside `--mode test`, so the mock
 // imports below are removed from the bundle rather than shipped and skipped.
@@ -69,9 +70,11 @@ async function start() {
 
   try {
     const settings = await Backend.GetAppSettings();
+    initializeTheme(settings?.theme);
     await i18n.initialize(settings?.language || 'system');
   } catch (error) {
     console.error('[i18n] initialization failed:', error);
+    initializeTheme('system');
     await i18n.initialize('system');
   }
 

@@ -242,7 +242,7 @@
   .trow.drag-over { background: var(--vt-color-accent-muted); outline: 1px dashed var(--vt-color-accent); outline-offset: -2px; }
   .trow.drop-before::before, .trow.drop-after::after {
     content: ''; position: absolute; left: 0.35rem; right: 0.35rem; height: 2px;
-    background: var(--vt-color-accent); border-radius: 999px; pointer-events: none; z-index: 2;
+    background: var(--vt-color-action); border-radius: 999px; pointer-events: none; z-index: 2;
   }
   .trow.drop-before::before { top: -1px; }
   .trow.drop-after::after { bottom: -1px; }

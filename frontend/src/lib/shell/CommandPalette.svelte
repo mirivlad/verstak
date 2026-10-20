@@ -319,9 +319,9 @@
     display: flex;
     flex-direction: column;
     overflow: hidden;
-    border: 1px solid #254466;
+    border: 1px solid var(--vt-color-border-strong);
     border-radius: 8px;
-    background: #101526;
+    background: var(--vt-color-surface);
     box-shadow: 0 18px 48px rgba(0, 0, 0, 0.45);
   }
 
@@ -331,8 +331,8 @@
     padding: 0.75rem 1rem;
     border: 0;
     border-bottom: 1px solid #213650;
-    background: #0b1020;
-    color: #f4f7fb;
+    background: var(--vt-color-input);
+    color: var(--vt-color-text-primary);
     font: inherit;
     font-size: 1rem;
     outline: none;
@@ -355,14 +355,14 @@
     border: 1px solid transparent;
     border-radius: 6px;
     background: transparent;
-    color: #e0e0f0;
+    color: var(--vt-color-text-primary, #e0e0f0);
     text-align: left;
   }
 
   .command-palette-item:hover,
   .command-palette-item.selected {
-    border-color: #4ecca3;
-    background: #17243a;
+    border-color: var(--vt-color-accent, #4ecca3);
+    background: var(--vt-color-surface-selected);
   }
 
   .command-palette-title {
@@ -373,7 +373,7 @@
   .command-palette-meta {
     max-width: 100%;
     overflow: hidden;
-    color: #8da2bd;
+    color: var(--vt-color-text-muted);
     font-size: 0.74rem;
     font-weight: 500;
     text-overflow: ellipsis;
@@ -382,7 +382,7 @@
 
   .command-palette-empty {
     padding: 1.25rem;
-    color: #8da2bd;
+    color: var(--vt-color-text-muted);
     font-size: 0.9rem;
     text-align: center;
   }
@@ -394,20 +394,20 @@
     z-index: 10001;
     max-width: min(420px, calc(100vw - 2rem));
     padding: 0.7rem 0.9rem;
-    border: 1px solid #254466;
+    border: 1px solid var(--vt-color-border-strong);
     border-radius: 8px;
-    background: #101526;
-    color: #e0e0f0;
+    background: var(--vt-color-surface);
+    color: var(--vt-color-text-primary, #e0e0f0);
     font-size: 0.85rem;
     box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
   }
 
   .command-palette-toast[data-command-palette-status="success"] {
-    border-color: #4ecca3;
+    border-color: var(--vt-color-accent, #4ecca3);
   }
 
   .command-palette-toast[data-command-palette-status="error"] {
-    border-color: #e74c3c;
-    color: #ffd6d1;
+    border-color: var(--vt-color-danger, #e74c3c);
+    color: var(--vt-color-danger-foreground);
   }
 </style>

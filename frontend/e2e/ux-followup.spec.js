@@ -70,15 +70,20 @@ test.describe('UX follow-up fixes', () => {
     await expect(page.locator('.browser-inbox-detail-title')).toHaveText('Research Search Result');
   });
 
-  test('mobile workspace layout gives content full width below the sidebar', async ({ page }) => {
+  test('mobile workspace uses a dismissible drawer and gives content full width', async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await page.reload();
     await waitForAppReady(page);
 
     const workspaceBox = await page.locator('.workspace-host').boundingBox();
-    const sidebarBox = await page.locator('.sidebar').boundingBox();
+    await expect(page.locator('.sidebar')).toBeHidden();
     expect(workspaceBox.width).toBeGreaterThan(340);
-    expect(workspaceBox.y).toBeGreaterThan(sidebarBox.y + sidebarBox.height - 1);
+    await page.locator('[data-navigation-toggle]').click();
+    await expect(page.locator('.sidebar')).toBeVisible();
+    await expect(page.locator('.content-shell')).toHaveAttribute('inert', '');
+    await page.keyboard.press('Escape');
+    await expect(page.locator('.sidebar')).toBeHidden();
+    await expect(page.locator('[data-navigation-toggle]')).toBeFocused();
     await expect(page.locator('.main-content-header [data-global-search-input]')).toBeVisible();
     await expect(page.getByRole('tab', { name: 'Overview' })).toBeVisible();
 
