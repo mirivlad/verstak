@@ -52,6 +52,7 @@ report "desktop brand icon generation" "$BRAND_ICONS_STATUS"
 echo "[release scripts]"
 for release_test in \
   test-package-formats.sh \
+  test-appimage-runtime.sh \
   test-build-windows.sh \
   test-publish-github-release.sh \
   test-resolve-official-plugins-ref.sh; do
