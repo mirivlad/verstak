@@ -1,4 +1,5 @@
 export default {
+  'workbench.resourceDialog': 'View material',
   'overview.toolsTitle': 'In this Deal',
   'app.name': 'Verstak',
   'sidebar.createDeal': 'Create Deal',

@@ -119,7 +119,8 @@ test.describe('E: Plugin Manager layout', () => {
     await expect(page.locator('.plugin-card')).toHaveCount(1);
     await expect(page.locator('.plugin-card')).toContainText('Todos');
     await page.locator('[data-plugin-filter-permission="secrets.read"]').check();
-    await expect(page.locator('.plugin-card')).toHaveCount(3);
+    await expect(page.locator('.plugin-card')).toHaveCount(4);
+    await expect(page.locator('.plugin-card').filter({ hasText: 'Default Editor' })).toHaveCount(1);
     await page.locator('[data-plugin-filter-permission="secrets.read"]').uncheck();
 
     await page.locator('[data-plugin-filter-reset]').click();

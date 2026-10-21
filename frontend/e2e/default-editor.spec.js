@@ -119,12 +119,11 @@ test.describe('F: Default Editor Plugin', () => {
     await expect(note.locator('[data-preview]')).toContainText('Target secret');
     await note.locator('.secret-link').click();
 
-    const secrets = page.locator('.secrets-root');
+    const secrets = page.locator('[data-resource-dialog] .secrets-dialog-content');
     await expect(secrets).toBeVisible({ timeout: 10000 });
-    await expect(secrets.locator('.secrets-item.active .secrets-item-title')).toHaveText('Target secret');
     await expect(secrets.locator('.secrets-card h2')).toHaveText('Target secret');
 
-    await page.locator('.main-content-header .close-btn').click();
+    await page.locator('[data-resource-dialog-close]').click();
     await expect(note).toBeVisible({ timeout: 10000 });
     await expect(note.locator('[data-preview]')).toContainText('Target secret');
     await expect(note.locator('.cm-content')).toHaveCount(0);
