@@ -73,6 +73,20 @@ func (a *App) PluginSecretsUnlock(pluginID, masterPassword string) string {
 	return ""
 }
 
+func (a *App) PluginSecretsArchiveAndReset(pluginID string, confirmed bool) (string, error) {
+	if err := a.requirePluginSecretsAccess(pluginID, true); err != nil {
+		return "", err
+	}
+	if !confirmed {
+		return "", fmt.Errorf("secret archive confirmation required")
+	}
+	session, err := a.ensureSecretsSession()
+	if err != nil {
+		return "", err
+	}
+	return session.ArchiveAndReset()
+}
+
 func (a *App) PluginSecretsList(pluginID string) ([]map[string]interface{}, string) {
 	if err := a.requirePluginSecretsAccess(pluginID, false); err != nil {
 		return nil, err.Error()

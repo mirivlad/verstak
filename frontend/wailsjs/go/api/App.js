@@ -306,6 +306,10 @@ export function PluginRotateBrowserReceiverToken(arg1) {
   return window['go']['api']['App']['PluginRotateBrowserReceiverToken'](arg1);
 }
 
+export function PluginSecretsArchiveAndReset(arg1, arg2) {
+  return window['go']['api']['App']['PluginSecretsArchiveAndReset'](arg1, arg2);
+}
+
 export function PluginSecretsCopyLink(arg1, arg2) {
   return window['go']['api']['App']['PluginSecretsCopyLink'](arg1, arg2);
 }

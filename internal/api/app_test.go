@@ -5004,6 +5004,42 @@ func TestPluginSecretsRejectWrongMasterPasswordAcrossSessions(t *testing.T) {
 	}
 }
 
+func TestPluginSecretsArchiveRequiresPermissionAndConfirmation(t *testing.T) {
+	app := newBridgeTestApp(t)
+	if err := app.PluginSecretsUnlock("secrets.plugin", "master password"); err != "" {
+		t.Fatal(err)
+	}
+	if _, err := app.PluginSecretsArchiveAndReset("no.storage", true); err == nil {
+		t.Fatal("archive without permission succeeded")
+	}
+	p, err := app.findPlugin("secrets.plugin")
+	if err != nil {
+		t.Fatal(err)
+	}
+	p.Manifest.Permissions = []string{"secrets.read"}
+	if _, err := app.PluginSecretsArchiveAndReset("secrets.plugin", true); err == nil || !strings.Contains(err.Error(), "secrets.write") {
+		t.Fatalf("archive with read-only permission = %v", err)
+	}
+	p.Manifest.Permissions = []string{"secrets.read", "secrets.write"}
+	if _, err := app.PluginSecretsArchiveAndReset("secrets.plugin", false); err == nil {
+		t.Fatal("archive without confirmation succeeded")
+	}
+	if !app.secretsSession.Unlocked() {
+		t.Fatal("rejected archive locked the store")
+	}
+	archive, err := app.PluginSecretsArchiveAndReset("secrets.plugin", true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(archive, "metadata.json")); err != nil {
+		t.Fatal(err)
+	}
+	status, errText := app.PluginSecretsStatus("secrets.plugin")
+	if errText != "" || status["initialized"] != false || status["unlocked"] != false {
+		t.Fatalf("status = %v, %s", status, errText)
+	}
+}
+
 func TestPluginBridgeSettingsRequireLoadedPluginAndStoragePermission(t *testing.T) {
 	app := newBridgeTestApp(t)
 

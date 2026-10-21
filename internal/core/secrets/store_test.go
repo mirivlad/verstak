@@ -275,3 +275,135 @@ func TestVaultSessionReportsInitializationAndRejectsWeakInitialPassword(t *testi
 		t.Fatal("secret session was not initialized")
 	}
 }
+
+func TestArchiveAndResetPreservesRecordsAndInvalidatesOldStore(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "secrets")
+	session := NewVaultSession(root)
+	old, err := session.Unlock("old master password")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := old.Write("admin", "old password"); err != nil {
+		t.Fatal(err)
+	}
+	before := readAllSecretStoreBytes(t, root)
+	archive, err := session.ArchiveAndReset()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(before, readAllSecretStoreBytes(t, archive)) {
+		t.Fatal("archive changed encrypted bytes")
+	}
+	if session.Unlocked() {
+		t.Fatal("archived session remains unlocked")
+	}
+	if initialized, err := session.Initialized(); err != nil || initialized {
+		t.Fatalf("Initialized = %v, %v", initialized, err)
+	}
+	if err := old.Write("late", "must not enter new store"); err == nil {
+		t.Fatal("stale store accepted write")
+	}
+	if _, err := old.Read("admin"); err == nil {
+		t.Fatal("stale store accepted read")
+	}
+	if err := old.Delete("admin"); err == nil {
+		t.Fatal("stale store accepted delete")
+	}
+	if _, err := old.ListRecords(); err == nil {
+		t.Fatal("stale store accepted list")
+	}
+	fresh, err := session.Unlock("new master password")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := fresh.Write("admin", "new password"); err != nil {
+		t.Fatal(err)
+	}
+	restored, err := NewVaultSession(archive).Unlock("old master password")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, err := restored.Read("admin"); err != nil || got != "old password" {
+		t.Fatalf("archive read = %q, %v", got, err)
+	}
+	if _, err := NewVaultSession(root).Unlock("old master password"); err == nil {
+		t.Fatal("old password opened fresh store")
+	}
+}
+
+func TestArchiveFailureLeavesUnlockedStoreUntouched(t *testing.T) {
+	parent := t.TempDir()
+	root := filepath.Join(parent, "secrets")
+	session := NewVaultSession(root)
+	store, err := session.Unlock("master password")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Write("admin", "unchanged"); err != nil {
+		t.Fatal(err)
+	}
+	before := readAllSecretStoreBytes(t, root)
+	if err := os.WriteFile(filepath.Join(parent, "secrets-archives"), []byte("blocked"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := session.ArchiveAndReset(); err == nil {
+		t.Fatal("archive unexpectedly succeeded")
+	}
+	if !session.Unlocked() || !bytes.Equal(before, readAllSecretStoreBytes(t, root)) {
+		t.Fatal("failed archive changed original store")
+	}
+	if got, err := store.Read("admin"); err != nil || got != "unchanged" {
+		t.Fatalf("read = %q, %v", got, err)
+	}
+}
+
+func TestMissingMetadataCannotOrphanRecordsAndCanBeArchived(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "secrets")
+	store, err := NewVaultSession(root).Unlock("master password")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Write("admin", "preserved"); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(filepath.Join(root, masterMetadataFileName)); err != nil {
+		t.Fatal(err)
+	}
+	locked := NewVaultSession(root)
+	if _, err := locked.Unlock("another password"); err == nil || !strings.Contains(err.Error(), "metadata missing") {
+		t.Fatalf("Unlock = %v", err)
+	}
+	before := readAllSecretStoreBytes(t, root)
+	archive, err := locked.ArchiveAndReset()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(before, readAllSecretStoreBytes(t, archive)) {
+		t.Fatal("archive changed orphan records")
+	}
+	if _, err := locked.Unlock("new master password"); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestCorruptMetadataCanBeArchivedWithoutUnlock(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "secrets")
+	if err := os.MkdirAll(root, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, masterMetadataFileName), []byte(`{"version":1,"nonce":"AA=="}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	session := NewVaultSession(root)
+	if _, err := session.Unlock("master password"); err == nil || !strings.Contains(err.Error(), "invalid secret metadata") {
+		t.Fatalf("Unlock = %v", err)
+	}
+	before := readAllSecretStoreBytes(t, root)
+	archive, err := session.ArchiveAndReset()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(before, readAllSecretStoreBytes(t, archive)) {
+		t.Fatal("archive changed damaged metadata")
+	}
+}

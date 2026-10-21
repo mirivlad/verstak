@@ -205,6 +205,9 @@ import syncStyle from '../../../../../verstak-official-plugins/plugins/sync/fron
   var pluginDealConfig = {};
   var folderAppearances = {};
   var secretRecords = makeDefaultSecretRecords();
+  var secretsInitialized = true;
+  var secretsUnlocked = true;
+  var secretsMasterPassword = 'test-master-password';
   var vaultFiles = makeDefaultVaultFiles();
   var externalOpens = [];
   var trashEntries = [];
@@ -955,12 +958,26 @@ function cloneJson(value) {
       return Promise.resolve('');
     },
     PluginSecretsStatus: function () {
-      return Promise.resolve([{ initialized: true, unlocked: true }, '']);
+      return Promise.resolve([{ initialized: secretsInitialized, unlocked: secretsUnlocked }, '']);
     },
-    PluginSecretsUnlock: function () {
+    PluginSecretsUnlock: function (_pluginId, password) {
+      if (secretsUnlocked) return Promise.resolve('');
+      if (secretsInitialized && password !== secretsMasterPassword) return Promise.resolve('invalid master password');
+      if (!secretsInitialized && password.length < 8) return Promise.resolve('master password must be at least 8 characters');
+      secretsMasterPassword = password;
+      secretsInitialized = true;
+      secretsUnlocked = true;
       return Promise.resolve('');
     },
+    PluginSecretsArchiveAndReset: function (_pluginId, confirmed) {
+      if (!confirmed) return Promise.reject(new Error('secret archive confirmation required'));
+      secretsInitialized = false;
+      secretsUnlocked = false;
+      secretRecords = [];
+      return Promise.resolve('/tmp/verstak-test/vault/.verstak/secrets-archives/test/secrets');
+    },
     PluginSecretsList: function () {
+      if (!secretsUnlocked) return Promise.resolve([null, 'secret store locked']);
       return Promise.resolve([secretRecords.map(function (record) {
         var listed = cloneJson(record);
         delete listed.value;
@@ -968,19 +985,23 @@ function cloneJson(value) {
       }), '']);
     },
     PluginSecretsRead: function (_pluginId, secretID) {
+      if (!secretsUnlocked) return Promise.resolve([null, 'secret store locked']);
       var record = secretRecords.find(function (item) { return item.id === secretID; });
       if (!record) return Promise.resolve([{}, 'not-found: secret ' + secretID]);
       return Promise.resolve([cloneJson(record), '']);
     },
     PluginSecretsWrite: function (_pluginId, nextRecord) {
+      if (!secretsUnlocked) return Promise.resolve([null, 'secret store locked']);
       var record = Object.assign({}, nextRecord || {});
-      if (!record.id) return Promise.resolve([{}, 'secret id is required']);
+      if (!record.id) record.id = 'secret-' + Date.now() + '-' + secretRecords.length;
       record.scope = record.scope || { kind: 'global' };
       record.updatedAt = new Date().toISOString();
       var index = secretRecords.findIndex(function (item) { return item.id === record.id; });
       if (index === -1) secretRecords.push(record);
       else secretRecords[index] = record;
-      return Promise.resolve([cloneJson(record), '']);
+      var written = cloneJson(record);
+      delete written.value;
+      return Promise.resolve([written, '']);
     },
     PluginSecretsDelete: function (_pluginId, secretID) {
       secretRecords = secretRecords.filter(function (record) { return record.id !== secretID; });
@@ -1876,6 +1897,7 @@ function cloneJson(value) {
 
   // ── Test helpers (exposed for Playwright) ──────────────────────────
   window.__wailsMock = {
+    lockSecrets: function () { secretsUnlocked = false; },
     reset: function () {
       pluginStates = makeDefaultPluginStates();
       vaultStatus = { status: 'open', path: '/tmp/verstak-test/vault', vaultId: 'test-vault-001' };
@@ -1893,6 +1915,9 @@ function cloneJson(value) {
       pluginDealConfig = {};
       folderAppearances = {};
       secretRecords = makeDefaultSecretRecords();
+      secretsInitialized = true;
+      secretsUnlocked = true;
+      secretsMasterPassword = 'test-master-password';
       vaultFiles = makeDefaultVaultFiles();
       externalOpens = [];
       trashEntries = [];

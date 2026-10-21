@@ -165,6 +165,8 @@ export function PluginResolveWorkspacePath(arg1:string,arg2:string):Promise<Reco
 
 export function PluginRotateBrowserReceiverToken(arg1:string):Promise<Record<string, string>|string>;
 
+export function PluginSecretsArchiveAndReset(arg1:string,arg2:boolean):Promise<string>;
+
 export function PluginSecretsCopyLink(arg1:string,arg2:string):Promise<string|string>;
 
 export function PluginSecretsDelete(arg1:string,arg2:string):Promise<string>;
