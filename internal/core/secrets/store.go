@@ -34,9 +34,10 @@ const (
 
 // Store encrypts secret records before writing them to disk.
 type Store struct {
-	mu   sync.RWMutex
-	root string
-	key  []byte
+	mu     sync.RWMutex
+	root   string
+	key    []byte
+	closed bool
 }
 
 type SecretScope struct {
@@ -154,6 +155,9 @@ func (s *Store) WriteRecord(record SecretRecord) error {
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.closed {
+		return fmt.Errorf("secret store archived")
+	}
 	return atomicWrite0600(s.pathForID(record.ID), data)
 }
 
@@ -172,8 +176,11 @@ func (s *Store) ReadRecord(id string) (SecretRecord, error) {
 	}
 
 	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if s.closed {
+		return SecretRecord{}, fmt.Errorf("secret store archived")
+	}
 	data, err := os.ReadFile(s.pathForID(id))
-	s.mu.RUnlock()
 	if err != nil {
 		return SecretRecord{}, fmt.Errorf("read secret %q: %w", id, err)
 	}
@@ -191,6 +198,9 @@ func (s *Store) Delete(id string) error {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.closed {
+		return fmt.Errorf("secret store archived")
+	}
 	if err := os.Remove(s.pathForID(id)); err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("delete secret %q: %w", id, err)
 	}
@@ -199,8 +209,11 @@ func (s *Store) Delete(id string) error {
 
 func (s *Store) ListRecords() ([]SecretRecord, error) {
 	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if s.closed {
+		return nil, fmt.Errorf("secret store archived")
+	}
 	entries, err := os.ReadDir(s.root)
-	s.mu.RUnlock()
 	if err != nil {
 		if os.IsNotExist(err) {
 			return []SecretRecord{}, nil
@@ -364,11 +377,49 @@ func (s *VaultSession) Store() (*Store, error) {
 }
 
 func (s *VaultSession) Initialized() (bool, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 	metadata, err := readMasterMetadata(s.root)
 	if err != nil {
 		return false, err
 	}
 	return metadata != nil, nil
+}
+
+// ArchiveAndReset preserves the complete encrypted store before allowing a new
+// master password. It never decrypts records or modifies the archived files.
+func (s *VaultSession) ArchiveAndReset() (string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.store != nil {
+		s.store.mu.Lock()
+		defer s.store.mu.Unlock()
+	}
+	info, err := os.Lstat(s.root)
+	if err != nil {
+		return "", fmt.Errorf("inspect secret store: %w", err)
+	}
+	if !info.IsDir() {
+		return "", fmt.Errorf("secret store must be a directory")
+	}
+	archives := filepath.Join(filepath.Dir(s.root), "secrets-archives")
+	if err := os.MkdirAll(archives, 0o700); err != nil {
+		return "", fmt.Errorf("create secret archives: %w", err)
+	}
+	container, err := os.MkdirTemp(archives, time.Now().UTC().Format("20060102T150405Z")+"-")
+	if err != nil {
+		return "", fmt.Errorf("create secret archive: %w", err)
+	}
+	archive := filepath.Join(container, "secrets")
+	if err := os.Rename(s.root, archive); err != nil {
+		os.Remove(container)
+		return "", fmt.Errorf("archive secret store: %w", err)
+	}
+	if s.store != nil {
+		s.store.closed = true
+	}
+	s.store = nil
+	return archive, nil
 }
 
 func (s *VaultSession) Unlock(masterPassword string) (*Store, error) {
@@ -428,6 +479,13 @@ func readMasterMetadata(root string) (*masterMetadata, error) {
 	data, err := os.ReadFile(filepath.Join(root, masterMetadataFileName))
 	if err != nil {
 		if os.IsNotExist(err) {
+			entries, readErr := os.ReadDir(filepath.Join(root, recordsDirName))
+			if readErr != nil && !os.IsNotExist(readErr) {
+				return nil, fmt.Errorf("inspect secret records: %w", readErr)
+			}
+			if len(entries) > 0 {
+				return nil, fmt.Errorf("secret metadata missing; archive the old store before creating a new one")
+			}
 			return nil, nil
 		}
 		return nil, fmt.Errorf("read secret metadata: %w", err)
@@ -438,6 +496,9 @@ func readMasterMetadata(root string) (*masterMetadata, error) {
 	}
 	if metadata.Version != masterMetadataVersion {
 		return nil, fmt.Errorf("unsupported secret metadata version %d", metadata.Version)
+	}
+	if len(metadata.Salt) != masterSaltSize || len(metadata.Nonce) != nonceSize || len(metadata.Ciphertext) != len(masterVerifierPlaintext)+16 {
+		return nil, fmt.Errorf("invalid secret metadata")
 	}
 	return &metadata, nil
 }

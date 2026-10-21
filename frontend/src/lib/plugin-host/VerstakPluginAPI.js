@@ -700,6 +700,12 @@ export function createPluginAPI(pluginId) {
     },
 
     secrets: {
+      archiveAndReset: function(confirmed) {
+        assertActive('secrets.archiveAndReset');
+        return callBackend(pluginId, 'secrets.archiveAndReset', function() {
+          return App.PluginSecretsArchiveAndReset(pluginId, confirmed === true);
+        });
+      },
       status: function() {
         assertActive('secrets.status');
         return callBackend(pluginId, 'secrets.status', function() {
