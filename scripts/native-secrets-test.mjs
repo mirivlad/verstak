@@ -85,6 +85,9 @@ const notePath=deal+'/Notes/Admin.md';
 const originalNote='Сайт. Админка: [логин/пароль](verstak-secret://'+encodeURIComponent(secretId)+')';
 try {
   await waitFor('document.querySelector(".sidebar")','application');
+  const parent = data(await call("window.go.api.App.CreateFolderV2('', 'Clients')"));
+  assert.ok(parent.id);
+  data(await call(`window.go.api.App.PluginCreateWorkspace('verstak.templates',${JSON.stringify(parent.id)},'Site',{workspaceTools:['verstak.secrets'],initialFolders:[],initialFiles:[],provenance:{templateId:'native-secrets'}})`));
   await sidebar('Секреты');
   await waitFor('document.querySelector("[data-secret-master-password-confirm]")','initial setup');
   await master(oldPassword,true);
@@ -107,6 +110,17 @@ try {
   await master(newPassword,true);
   await waitFor('document.querySelector("[data-secret-search]")','new store unlocked');
   assert.equal(data(await call(`window.go.api.App.PluginSecretsList('verstak.secrets')`)).length,0);
+  await click('.secrets-toolbar button');
+  const dealOptions = await evaluate(`[...document.querySelector('[data-secret-workspace]').options].map(option=>option.value)`);
+  assert.ok(dealOptions.includes('Clients/Site'),'nested Deal available immediately after unlock');
+  assert.ok(!dealOptions.includes('Clients'),'organizational folder excluded from Deal selector');
+  await setValue('[data-secret-title]','Nested site admin');
+  await setValue('[data-secret-value]','nested-test-value');
+  await evaluate(`const scope=document.querySelector('[data-secret-scope]');scope.value='workspace';scope.dispatchEvent(new Event('change'));document.querySelector('[data-secret-workspace]').value='Clients/Site'`);
+  await click('[data-secret-save]');
+  await waitFor('document.querySelector("[data-secret-edit]")','new nested Deal secret saved');
+  const nested = data(await call(`window.go.api.App.PluginSecretsList('verstak.secrets')`)).find(record=>record.title==='Nested site admin');
+  assert.equal(nested.scope.workspaceRootPath,'Clients/Site','new secret belongs to nested Deal');
   data(await call(`window.go.api.App.PluginCreateWorkspace('verstak.templates','',${JSON.stringify(deal)},{workspaceTools:['verstak.notes','verstak.secrets'],initialFolders:['Notes'],initialFiles:[],provenance:{templateId:'native-secrets'}})`));
   data(await call(`window.go.api.App.PluginSecretsWrite('verstak.secrets',{id:${JSON.stringify(secretId)},title:'Админка сайта',username:'deploy-user',value:'native-test-value',scope:{kind:'workspace',workspaceRootPath:${JSON.stringify(deal)}}})`));
   await call(`window.go.api.App.WriteVaultTextFile('verstak.default-editor',${JSON.stringify(notePath)},${JSON.stringify(originalNote)},{createIfMissing:true,overwrite:true})`);
@@ -150,8 +164,9 @@ try {
   await click('.cm-content');
   input('key','ctrl+a');
   input('type','--clearmodifiers','--delay','8','Site. Admin: login/password');
-  input('key','ctrl+End');
-  for (let i=0;i<'login/password'.length;i++) input('key','shift+Left');
+  await waitFor('document.querySelector(".cm-content")?.textContent==="Site. Admin: login/password"','note text typed accurately');
+  input('key','--delay','40','ctrl+End',...Array('login/password'.length).fill('shift+Left'));
+  await waitFor('window.getSelection()?.toString()==="login/password"','complete link label selected');
   await click('[data-editor-action="insert-secret-link"]');
   await click('[data-secret-picker-id="native.admin%25"]');
   await click('[data-editor-action="save"]');
@@ -170,11 +185,11 @@ try {
   assert.ok(shipping.every(plugin=>plugin.status==='loaded'),'shipping plugins loaded');
   const logs=fs.readFileSync(path.join(output,'app.log'),'utf8');
   const config=fs.readFileSync(path.join(path.dirname(vault),'.config/verstak/config.json'),'utf8');
-  for (const sensitive of [oldPassword,newPassword,'native-test-value','updated-native-value']) {
+  for (const sensitive of [oldPassword,newPassword,'native-test-value','updated-native-value','nested-test-value']) {
     assert.ok(!logs.includes(sensitive),'no credentials in application log');
     assert.ok(!config.includes(sensitive),'no credentials in app settings');
   }
-  const result={archivePreservedByteForByte:true,newStoreEmpty:true,noteStayedOpen:true,masterPromptCount:1,nativeClipboard:true,inPlaceEdit:true,dealScopePreserved:true,encodedStableId:true,selectedLabelPreserved:true,noPasswordInMarkdown:true,lightAndDark:true,vaultReopenLocks:true,noCredentialsInLogsOrSettings:true,shippingPlugins:shipping.length};
+  const result={archivePreservedByteForByte:true,newStoreEmpty:true,nestedDealSecretCreated:true,foldersExcluded:true,noteStayedOpen:true,masterPromptCount:1,nativeClipboard:true,inPlaceEdit:true,dealScopePreserved:true,encodedStableId:true,selectedLabelPreserved:true,noPasswordInMarkdown:true,lightAndDark:true,vaultReopenLocks:true,noCredentialsInLogsOrSettings:true,shippingPlugins:shipping.length};
   fs.writeFileSync(path.join(output,'result.json'),JSON.stringify(result,null,2)+'\n');
   console.log(JSON.stringify(result));
 } catch (error) {
