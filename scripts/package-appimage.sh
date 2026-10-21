@@ -41,6 +41,10 @@ if [[ ! -d "$WEBKIT_RUNTIME_DIR" ]] || [[ ! -x "$WEBKIT_RUNTIME_DIR/WebKitWebPro
   echo "Set VERSTAK_WEBKIT_RUNTIME_DIR to the WebKitGTK 4.1 runtime directory." >&2
   exit 1
 fi
+if [[ ! -x "$WEBKIT_RUNTIME_DIR/WebKitNetworkProcess" ]] || [[ ! -f "$WEBKIT_RUNTIME_DIR/injected-bundle/libwebkit2gtkinjectedbundle.so" ]]; then
+  echo "WebKit runtime is incomplete at $WEBKIT_RUNTIME_DIR" >&2
+  exit 1
+fi
 
 rm -rf "$APPDIR" "$ARCHIVE"
 mkdir -p "$APPDIR/usr/bin" "$APPDIR/usr/lib" "$APPDIR/usr/share/applications" \
@@ -108,6 +112,10 @@ while IFS= read -r candidate; do
   done < <(ldd "$candidate" | awk '/=> \/[^ ]+/ { print $3 } /^\// { print $1 }')
 done < "$APPDIR/.elf-queue"
 rm -f "$APPDIR/.elf-queue"
+
+# Release WebKit ignores WEBKIT_EXEC_PATH. Relocate its compiled helper path
+# without disabling its sandbox, and let AppRun select the injected bundle.
+python3 "$ROOT/scripts/relocate-webkit-runtime.py" "$APPDIR" "$WEBKIT_RUNTIME_DIR"
 
 if command -v glib-compile-schemas >/dev/null; then
   glib-compile-schemas "$APPDIR/usr/share/glib-2.0/schemas"

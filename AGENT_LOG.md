@@ -20,6 +20,21 @@
   official plugins v0.2.6. Release notes и pin подготовлены, выпуск ещё не создан.
 - AppImage v0.3.1 продолжает скачиваться в session 84859; после завершения
   проверить полный hash и нативный сценарий этого опубликованного AppImage.
+- Дополнение: AppImage v0.3.1 скачан полностью, SHA-256 совпал. В обычном запуске
+  без инспектора воспроизведён пустой экран. Список процессов показал системный
+  `/usr/lib/x86_64-linux-gnu/webkit2gtk-4.1/WebKitNetworkProcess` вместо собственного
+  helper. Release WebKit игнорирует `WEBKIT_EXEC_PATH`.
+- Пробная копия распакованного опубликованного AppImage с релокацией полного
+  NUL-terminated helper directory, cwd `usr/lib`, своим injected bundle и GIO
+  module dir загрузила UI и открыла Secrets. Дочерние Web/Network процессы идут
+  из `././webkit2gtk-4.1/`. Не выдавать эту изменённую копию за рабочий исходный
+  опубликованный AppImage. Решение соответствует механизму
+  [upstream Wails](https://github.com/wailsapp/wails/blob/73242d1eca0d7d940321e1a42fdf1df6605edab9/v3/internal/commands/appimage.go#L271).
+- Исправление включается в v0.3.2. Исполняемый тест собирает настоящую ELF .so,
+  проверяет helper lookup, неизменность размера и injected path, отказ на
+  неизвестном runtime и запуск AppRun с пробелами в пути. Sandbox не выключается.
+  Полный inspector-тест с библиотеками опубликованного AppImage пока не запускает
+  окно; обычный запуск проверен отдельно. Готовится независимый AT-SPI сценарий.
 - Наблюдение вне текущего среза: при очень быстрой смене документа редактор
   иногда пишет console.warn о draft write после API disposed. Не выдавать это
   за потерю данных без воспроизведения; отдельный возможный следующий аудит.

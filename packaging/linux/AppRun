@@ -4,10 +4,13 @@ set -eu
 HERE="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 export APPDIR="$HERE"
 export LD_LIBRARY_PATH="$HERE/usr/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+export GIO_MODULE_DIR="$HERE/usr/lib/gio/modules"
 export GIO_EXTRA_MODULES="$HERE/usr/lib/gio/modules"
 export GSETTINGS_SCHEMA_DIR="$HERE/usr/share/glib-2.0/schemas"
 export GST_PLUGIN_SYSTEM_PATH_1_0="$HERE/usr/lib/gstreamer-1.0"
 export WEBKIT_EXEC_PATH="$HERE/usr/lib/webkit2gtk-4.1"
+export WEBKIT_INJECTED_BUNDLE_PATH="$HERE/usr/lib/webkit2gtk-4.1/injected-bundle"
 
-cd "$HERE/usr/bin"
+# Release WebKit resolves its relocated helper path from this directory.
+cd "$HERE/usr/lib"
 exec "$HERE/usr/bin/verstak" "$@"
