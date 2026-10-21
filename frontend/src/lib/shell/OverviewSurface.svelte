@@ -132,7 +132,7 @@
       meta: metaParts.join(' · '),
       absolute: occurredAt ? absoluteTime(occurredAt) : '',
       actionKind: item.action.workspaceItemId,
-      actionLabel: tr('overview.openTool', { tool: target?.title || item.action.workspaceItemId }),
+      actionLabel: item.action.toolRequest ? tr('overview.openItem') : tr('overview.openTool', { tool: target?.title || item.action.workspaceItemId }),
       toolRequest: item.action.toolRequest || null,
       _sequence: sequence,
     };
@@ -406,7 +406,7 @@
               <div class="overview-row overview-resource-row">
                 <strong title={item.title}>{item.title}</strong>
                 <span title={item.meta}>{item.meta}</span>
-                <button type="button" on:click={() => openTool(item.actionKind, item.toolRequest)}>{item.actionLabel}</button>
+                <button type="button" aria-label={`${item.actionLabel}: ${item.title}`} on:click={() => openTool(item.actionKind, item.toolRequest)}>{item.actionLabel}</button>
               </div>
             {/each}
           </div>

@@ -42,12 +42,17 @@ async function shot(page, name) {
 test.describe('Visual audit: Overview', () => {
   test('empty Deal in Russian', async ({ page }) => {
     await prepare(page);
+    await page.evaluate(async () => {
+      const [, error] = await window.go.api.App.TrashVaultPath('verstak.notes', 'Project/Notes/Overview.md');
+      if (error) throw new Error(error);
+    });
+    await page.getByRole('tab', { name: 'Заметки', exact: true }).click();
+    await page.getByRole('tab', { name: 'Обзор', exact: true }).click();
     await expect(page.locator('[data-overview-section="continue"]')).toContainText('Пока неясно, с чего продолжить');
     await expect(page.locator('[data-overview-section="continue"]')).toContainText('Вернитесь к тому, на чём остановились.');
     await expect(page.locator('[data-overview-summary="attention"]')).toHaveCount(0);
     await expect(page.locator('[data-overview-section="summary"]')).toBeVisible();
-    await expect(page.locator('[data-overview-section="key-resources"]')).toContainText('Открыть «Заметки»');
-    await expect(page.locator('[data-overview-section="key-resources"]')).not.toContainText('Open Notes');
+    await expect(page.locator('[data-overview-section="key-resources"]')).toHaveCount(0);
     await shot(page, 'overview-empty-ru.png');
   });
 
