@@ -888,6 +888,27 @@ App settings хранятся **локально** (НЕ внутри vault) в 
 - `currentVaultPath` при запуске проверяется и vault открывается автоматически
 - Secrets НЕ хранятся в app settings
 
+### Secrets session and links
+
+The encrypted store lives in `<vault>/.verstak/secrets`. Unlocking it keeps
+the key in the current application session until the vault is closed or changed.
+Neither the master password nor decrypted values are saved in app settings.
+
+`secrets.archiveAndReset(true)` requires `secrets.read` and `secrets.write`.
+It moves the complete encrypted directory into
+`.verstak/secrets-archives/<timestamp>-<unique>/secrets`, invalidates the active
+store and returns the archive path. A failed move leaves the original usable.
+The old password is still required for the archive. The next unlock initializes
+a separate store; missing metadata beside existing records is never silently
+replaced with a new key.
+
+Markdown contains only `[label](verstak-secret://id)`. The editor's secret picker
+lists shared secrets and those of the current Deal without reading their values.
+Opening the link requests `presentation: 'dialog'` from the workbench; the shell
+mounts the contributed provider above the current note and restores focus when
+closed. The Secrets plugin owns unlocking, readonly login/value fields, copying,
+and in-place editing. Saving retains the record ID and Deal scope.
+
 ---
 
 ## Vault Plugin State

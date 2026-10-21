@@ -1560,6 +1560,7 @@ export namespace workbench {
 	    }
 	}
 	export class OpenResourceRequest {
+	    presentation?: string;
 	    kind: string;
 	    path: string;
 	    mode?: string;
@@ -1573,6 +1574,7 @@ export namespace workbench {
 	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.presentation = source["presentation"];
 	        this.kind = source["kind"];
 	        this.path = source["path"];
 	        this.mode = source["mode"];

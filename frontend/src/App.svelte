@@ -9,6 +9,7 @@
   import ViewContainer from './lib/shell/ViewContainer.svelte';
   import VaultSelection from './lib/shell/VaultSelection.svelte';
   import WorkbenchHost from './lib/shell/WorkbenchHost.svelte';
+  import ResourceDialog from './lib/shell/ResourceDialog.svelte';
   import WorkspaceHost from './lib/shell/WorkspaceHost.svelte';
   import SettingsWindow from './lib/settings/SettingsWindow.svelte';
   import { offerNavigation } from './lib/shell/navigation-handlers.js';
@@ -55,6 +56,8 @@
   let requestedSettingsSection = '';
   let activeSettingsPanelId = '';
   let openedResource = null;
+  let dialogResource = null;
+  $: if (needsVaultSelection || vaultStatus.status !== 'open') dialogResource = null;
 
   // Common header title emitted by child views
   let contentTitle = '';
@@ -226,6 +229,7 @@
   }
 
   function handleHistoryRequest(direction, event) {
+    if (dialogResource) return;
     if (!direction || event?.defaultPrevented) return;
     if (event?.type === 'mousedown' || event?.type === 'mouseup' || event?.type === 'auxclick' || event?.type === 'pointerdown') {
       const now = Date.now();
@@ -288,6 +292,7 @@
   }
 
   async function onVaultOpened() {
+    dialogResource = null;
     debug.log('[App] onVaultOpened');
     needsVaultSelection = false;
     vaultStatus = { status: 'open', path: '', vaultId: '' };
@@ -346,6 +351,10 @@
 
   function onWorkbenchOpened(e) {
     debug.log('[App] onWorkbenchOpened:', e.detail?.request?.path, e.detail?.providerId);
+    if (e.detail?.request?.presentation === 'dialog') {
+      dialogResource = e.detail;
+      return;
+    }
     if (currentView === 'workspace') pushNavigation();
     openedResource = e.detail;
     currentView = 'workbench';
@@ -554,6 +563,8 @@
     </section>
   </main>
 {/if}
+
+<ResourceDialog openedResource={dialogResource} on:close={() => dialogResource = null} />
 
 <style>
   .app-loading {

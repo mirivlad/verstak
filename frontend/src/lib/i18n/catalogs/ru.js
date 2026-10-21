@@ -1,4 +1,5 @@
 export default {
+  'workbench.resourceDialog': 'Просмотр материала',
   'overview.toolsTitle': 'В этом Деле',
   'app.name': 'Верстак',
   'sidebar.createDeal': 'Создать Дело',

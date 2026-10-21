@@ -430,9 +430,10 @@ func TestSelectProviderKindMismatch(t *testing.T) {
 func TestOpenResourceRoutesSecretResources(t *testing.T) {
 	r := NewRouter(Preferences{})
 	result, err := r.OpenResource(OpenResourceRequest{
-		Kind: "secret",
-		Path: "client-a.db",
-		Mode: "view",
+		Kind:         "secret",
+		Path:         "client-a.db",
+		Mode:         "view",
+		Presentation: "dialog",
 	}, []contribution.ContributionOpenProvider{
 		provider("verstak.secrets", "verstak.secrets.secret", 100, "SecretsView", plugin.OpenProviderSupport{
 			Kind:  "secret",
@@ -444,6 +445,9 @@ func TestOpenResourceRoutesSecretResources(t *testing.T) {
 	}
 	if result.Status != "opened" || result.ProviderPluginID != "verstak.secrets" || result.ProviderComponent != "SecretsView" {
 		t.Fatalf("secret open result = %+v", result)
+	}
+	if result.Request.Presentation != "dialog" {
+		t.Fatal("dialog presentation was lost during routing")
 	}
 }
 

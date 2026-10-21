@@ -33,12 +33,13 @@ type OpenResourceContext struct {
 }
 
 type OpenResourceRequest struct {
-	Kind      string              `json:"kind"`
-	Path      string              `json:"path"`
-	Mode      string              `json:"mode,omitempty"`
-	Mime      string              `json:"mime,omitempty"`
-	Extension string              `json:"extension,omitempty"`
-	Context   OpenResourceContext `json:"context,omitempty"`
+	Presentation string              `json:"presentation,omitempty"`
+	Kind         string              `json:"kind"`
+	Path         string              `json:"path"`
+	Mode         string              `json:"mode,omitempty"`
+	Mime         string              `json:"mime,omitempty"`
+	Extension    string              `json:"extension,omitempty"`
+	Context      OpenResourceContext `json:"context,omitempty"`
 }
 
 type OpenResourceResult struct {
