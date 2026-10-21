@@ -42,7 +42,8 @@ test.describe('UX Overview workspace flow', () => {
     await expect(overview.locator('[data-overview-summary="captures"]')).toContainText('0 captures to review');
     await expect(overview.locator('[data-overview-summary="activity"]')).toHaveCount(0);
     await expect(overview.locator('[data-overview-summary="journal"]')).toContainText('0 journal entries');
-    await expect(overview).toContainText('No clear resume point yet');
+    await expect(overview.locator('[data-overview-section="continue"]')).toContainText('Overview');
+    await expect(overview).not.toContainText('No clear resume point yet');
     await expect(overview).toContainText('No meaningful changes for this filter yet');
   });
 
@@ -240,11 +241,13 @@ test.describe('UX Overview workspace flow', () => {
 
     const resume = overview.locator('[data-overview-section="continue"]');
     const candidates = resume.locator('[data-overview-continue-item]');
-    await expect(candidates).toHaveCount(1);
-    await expect(candidates.nth(0)).toContainText('Write project summary');
+    await expect(candidates).toHaveCount(2);
+    await expect(candidates.filter({ hasText: 'Overview' })).toHaveCount(1);
+    const journalResume = candidates.filter({ hasText: 'Write project summary' });
+    await expect(journalResume).toHaveCount(1);
     await expect(resume).not.toContainText('Quote to process');
     await expect(resume).not.toContainText('Research Report');
-    await candidates.nth(0).click();
+    await journalResume.click();
 
     await expect(page.getByRole('tab', { name: 'Journal' })).toHaveAttribute('aria-selected', 'true');
     await expect(page.locator('.journal-root')).toBeVisible({ timeout: 10000 });

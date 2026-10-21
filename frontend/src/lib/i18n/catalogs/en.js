@@ -316,6 +316,7 @@ export default {
   'overview.viewActivity': 'View Activity',
   'overview.openJournal': 'Open Journal',
   'overview.openTool': 'Open “{tool}”',
+  'overview.openItem': 'Open',
   'overview.openTodos': 'Open Todos',
   'overview.reviewCandidate': 'Review candidate',
   'overview.reviewPending': 'Review pending items',

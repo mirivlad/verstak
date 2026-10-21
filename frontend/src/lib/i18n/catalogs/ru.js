@@ -317,6 +317,7 @@ export default {
   'overview.viewActivity': 'Открыть активность',
   'overview.openJournal': 'Открыть журнал',
   'overview.openTool': 'Открыть «{tool}»',
+  'overview.openItem': 'Открыть',
   'overview.openTodos': 'Открыть задачи',
   'overview.reviewCandidate': 'Просмотреть запись',
   'overview.reviewPending': 'Разобрать ожидающее',
