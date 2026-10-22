@@ -18,20 +18,21 @@ test.describe('F: Default Editor Plugin', () => {
     consoleCollector.assertNoErrors();
   });
 
-  for (const pendingWrite of [false, true]) {
-    test(`closing immediately preserves the latest draft${pendingWrite ? ' while an earlier write is pending' : ''}`, async ({ page }) => {
+  for (const { pendingWrite, markdown } of [{ pendingWrite: false }, { pendingWrite: true }, { markdown: true }]) {
+    test(`closing immediately preserves the latest ${markdown ? 'note ' : ''}draft${pendingWrite ? ' while an earlier write is pending' : ''}`, async ({ page }) => {
       const draftWarnings = [];
       page.on('console', message => {
         if (message.text().includes('[default-editor] draft write failed')) draftWarnings.push(message.text());
       });
-      const path = 'Docs/rapid-draft.txt';
-      const open = () => page.evaluate(async path => {
+      const path = markdown ? 'Project/Notes/Rapid.md' : 'Docs/rapid-draft.txt';
+      const open = () => page.evaluate(async ({ path, markdown }) => {
         const [result, error] = await window.go.api.App.OpenWorkbenchResource('verstak.platform-test', {
-          kind: 'vault-file', path, extension: '.txt',
+          kind: 'vault-file', path, extension: markdown ? '.md' : '.txt',
+          context: markdown ? { notesMode: true, notesScopePath: 'Project' } : {},
         });
         if (error) throw new Error(error);
         window.dispatchEvent(new CustomEvent('verstak:workbench-opened', { detail: result }));
-      }, path);
+      }, { path, markdown });
       await page.evaluate(async ({ path, pendingWrite }) => {
         const error = await window.go.api.App.WriteVaultTextFile('verstak.platform-test', path, 'base', { createIfMissing: true, overwrite: true });
         if (error) throw new Error(error);
@@ -48,8 +49,9 @@ test.describe('F: Default Editor Plugin', () => {
         }
       }, { path, pendingWrite });
       await open();
-      const editor = page.locator('[data-editor-mode="text"]');
+      const editor = page.locator(`[data-editor-mode="${markdown ? 'notes-markdown' : 'text'}"]`);
       const content = editor.locator('.cm-content');
+      if (markdown) await editor.locator('[data-editor-mode-button="edit"]').click();
       await expect(content).toBeVisible();
       await page.clock.install();
       await page.clock.pauseAt(new Date());
@@ -71,6 +73,7 @@ test.describe('F: Default Editor Plugin', () => {
         await page.evaluate(() => window.__releaseDraftWrite());
       }
       await expectDocument(editor, 'latest unsaved draft');
+      if (markdown) await page.waitForTimeout(400);
       const [disk, error] = await page.evaluate(path => window.go.api.App.ReadVaultTextFile('verstak.platform-test', path), path);
       expect(error).toBeFalsy();
       expect(disk).toBe('base');

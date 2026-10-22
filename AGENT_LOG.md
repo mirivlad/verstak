@@ -2,33 +2,45 @@
 
 > Каноническая точка продолжения ревизии между чатами. Перед новой работой сначала прочитать этот файл и сверить указанные ветки/PR/коммиты с GitHub. После каждого законченного среза или смены рабочей точки обновлять файл.
 
-## Текущая точка: 2026-10-22, черновики для v0.3.3
+## Текущая точка: 2026-10-22, финальный кандидат v0.3.3
 
 - Продолжается разрешённая цель развития с релизами после значимых этапов.
   v0.3.2 выпущен и проверен на фактических опубликованных пакетах (ниже).
-- Следующий срез воспроизвёл потерю последней правки при закрытии до таймера
-  150 ms. Chromium: контрольная пауза сохраняет draft, немедленный уход даёт
-  исходный `base`; console указывает на storage write после API disposed.
-  Опубликованный native Deb v0.3.2 подтвердил тот же red/control сценарий.
-- Core теперь принимает Promise из component unmount и освобождает API после
-  его завершения. Общий барьер по pluginId работает и между разными keyed host;
-  новое открытие ждёт последнего flush. Синхронная очистка остаётся немедленной,
-  ошибки очистки освобождают API; stale async mount защищён sequence token.
-  Editor возвращает завершение своей существующей очереди draftWrites.
-- Два E2E сначала упали на старом коде, затем прошли: немедленный уход и уход
-  с незавершённой предыдущей записью. Focused editor/Secrets/Overview: 20/20.
-  Нативная новая сборка подтвердила четыре сценария text/Markdown × pause/rapid,
-  восстановленный текст, actual JSON draft и неизменность исходного файла.
-  Нативный регрессионный gate добавлен в scripts/smoke-native-drafts.sh.
-- LSP references/definition редактора и lifecycle checked; lifecycle diagnostics
-  пустые. Unit tests проверяют sync/async, несколько host и отказ cleanup.
-  Plugins check прошёл; local desktop build прошёл. Общий gate 9 групп/205 E2E
-  ещё идёт. Публичный v0.3.3 пока НЕ выпускался. Подготовлены pin v0.2.7 и notes.
+- Воспроизведена потеря последней правки при закрытии до таймера 150 ms.
+  Chromium и опубликованный native Deb v0.3.2: контрольная пауза сохраняет
+  draft, немедленный уход возвращает `base`; console показывает API disposed.
+- Core принимает Promise из component unmount и освобождает API после его
+  завершения. Барьер по pluginId работает и между разными keyed host; новое
+  открытие ждёт flush. Синхронная очистка остаётся немедленной, ошибка cleanup
+  освобождает API; stale async mount защищён sequence token. Editor возвращает
+  завершение своей существующей очереди draftWrites.
+- Дополнительно подтверждено: восстановление draft при открытии Markdown для
+  чтения запускало preview autosave и записывало его в файл. Теперь recovered
+  draft открывается для редактирования, включая ручное восстановление конфликта.
+  Два browser теста сначала упали, затем прошли. Всего editor browser: 29/29.
+- Три E2E проверяют rapid close, pending previous write и открытие заметки для
+  чтения без автоматического сохранения. Focused editor/Secrets/Overview: 21/21.
+  Ранняя нативная сборка подтвердила четыре text/Markdown × pause/rapid сценария
+  в режиме edit; финальный native gate дополнен переоткрытием Markdown для
+  чтения и проверкой файла после preview autosave interval. Этот финальный
+  вариант предстоит прогнать на пакетах точного кандидата.
+- Первый общий gate прошёл 9/9 групп и 205 E2E; E2E там были до последней правки
+  preview flow, поэтому нужен финальный прогон 206 E2E на актуальном коде.
+  LSP references/definition редактора и lifecycle checked; diagnostics пустые.
+  Unit tests проверяют sync/async, несколько host и отказ cleanup.
+- CI кандидата 7401071 упал на Windows TestIntegrationPhysicalWorkspaceMove:
+  тест ждал изменения tree и сразу проверял event, хотя service публикует его
+  после обновления tree. Теперь ждёт и требуемое уведомление. App Go-код не
+  менялся; targeted тест прошёл 20 повторов, gopls definitions/references/check
+  выполнены, diagnostics пустые. Нужен новый полный Windows CI.
+- Official plugins main: 74379f6; целевой tag v0.2.7 ещё не опубликован.
+  Desktop pin/notes v0.3.3 подготовлены, публичный v0.3.3 НЕ выпускался.
 - Evidence: build/drafts-2026-10-22/{reproduction.json,e2e-red.log,e2e-green.log,
-  focused-e2e.log,native-red-final-input/,native-candidate-verified/,lsp-*.json}.
+  preview-red.log,focused-final.log,native-red-final-input/,
+  native-candidate-verified/,windows-failed.log,watcher-repeat.log,lsp-*.json}.
   Личный vault и установленное приложение не менялись.
-- Следующий шаг: дождаться общего gate, собрать пакеты точного кандидата и
-  проверить нативный сценарий перед публикацией v0.3.3 с plugins v0.2.7.
+- Следующий шаг: финальные пакеты/нативный gate и общий gate, зелёный CI точного
+  кандидата, затем публикация plugins v0.2.7 и desktop v0.3.3 с проверкой assets.
 
 ## Предыдущая точка: 2026-10-22, v0.3.2 опубликован и проверен
 
