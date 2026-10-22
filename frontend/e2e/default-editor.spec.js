@@ -18,6 +18,66 @@ test.describe('F: Default Editor Plugin', () => {
     consoleCollector.assertNoErrors();
   });
 
+  for (const pendingWrite of [false, true]) {
+    test(`closing immediately preserves the latest draft${pendingWrite ? ' while an earlier write is pending' : ''}`, async ({ page }) => {
+      const draftWarnings = [];
+      page.on('console', message => {
+        if (message.text().includes('[default-editor] draft write failed')) draftWarnings.push(message.text());
+      });
+      const path = 'Docs/rapid-draft.txt';
+      const open = () => page.evaluate(async path => {
+        const [result, error] = await window.go.api.App.OpenWorkbenchResource('verstak.platform-test', {
+          kind: 'vault-file', path, extension: '.txt',
+        });
+        if (error) throw new Error(error);
+        window.dispatchEvent(new CustomEvent('verstak:workbench-opened', { detail: result }));
+      }, path);
+      await page.evaluate(async ({ path, pendingWrite }) => {
+        const error = await window.go.api.App.WriteVaultTextFile('verstak.platform-test', path, 'base', { createIfMissing: true, overwrite: true });
+        if (error) throw new Error(error);
+        if (pendingWrite) {
+          const write = window.go.api.App.WritePluginDataJSON;
+          let first = true;
+          window.go.api.App.WritePluginDataJSON = (pluginId, key, record) => {
+            if (pluginId !== 'verstak.default-editor' || !key.startsWith('draft-') || !first) return write(pluginId, key, record);
+            first = false;
+            return new Promise(resolve => {
+              window.__releaseDraftWrite = () => resolve(write(pluginId, key, record));
+            });
+          };
+        }
+      }, { path, pendingWrite });
+      await open();
+      const editor = page.locator('[data-editor-mode="text"]');
+      const content = editor.locator('.cm-content');
+      await expect(content).toBeVisible();
+      await page.clock.install();
+      await page.clock.pauseAt(new Date());
+      if (pendingWrite) {
+        await content.fill('earlier draft');
+        await page.clock.runFor(200);
+        await expect.poll(() => page.evaluate(() => typeof window.__releaseDraftWrite)).toBe('function');
+      }
+      await content.fill('latest unsaved draft');
+      await expect(editor.locator('[data-save-state]')).toHaveText('Modified');
+      // Close before the 150 ms draft timer, with microtasks left running.
+      await page.evaluate(() => document.querySelector('.main-content-header .close-btn').click());
+      await page.clock.resume();
+      await expect(content).toHaveCount(0);
+      await open();
+      if (pendingWrite) {
+        await expect(page.locator('.plugin-bundle-host .loading')).toBeVisible();
+        await expect(content).toHaveCount(0);
+        await page.evaluate(() => window.__releaseDraftWrite());
+      }
+      await expectDocument(editor, 'latest unsaved draft');
+      const [disk, error] = await page.evaluate(path => window.go.api.App.ReadVaultTextFile('verstak.platform-test', path), path);
+      expect(error).toBeFalsy();
+      expect(disk).toBe('base');
+      expect(draftWarnings).toEqual([]);
+    });
+  }
+
   test('open .txt file shows plain text editor mode', async ({ page }) => {
     await page.evaluate(async () => {
       const [result, err] = await window.go.api.App.OpenWorkbenchResource('verstak.platform-test', {

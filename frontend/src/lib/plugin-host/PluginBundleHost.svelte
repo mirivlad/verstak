@@ -4,6 +4,7 @@
   import { i18n } from '../i18n/index.js';
 
   import { acquirePluginStyle, createPluginAPI, loadPluginBundle } from './VerstakPluginAPI.js';
+  import { unmountPluginComponent, waitForPluginCleanup } from './componentLifecycle.js';
 
   export let pluginId = null;
   export let componentId = null;
@@ -20,6 +21,7 @@
   let currentAPI = null;
   let releaseCurrentStyle = null;
   let currentPropsKey = '';
+  let sequence = 0;
   let locale = i18n.getLocale();
   let unsubscribeLocale = null;
 
@@ -50,24 +52,10 @@
   });
 
   function cleanup() {
+    sequence += 1;
     const reg = window.__VERSTAK_PLUGIN_REGISTRY__;
-    if (currentPluginId && currentComponent && reg && reg[currentPluginId]) {
-      const comp = reg[currentPluginId][currentComponent];
-      if (comp && comp.unmount && mountContainer) {
-        try {
-          comp.unmount(mountContainer);
-        } catch (e) {
-          console.error('[PluginBundleHost] unmount error:', e);
-        }
-      }
-    }
-    if (currentAPI && typeof currentAPI.dispose === 'function') {
-      try {
-        currentAPI.dispose();
-      } catch (e) {
-        console.error('[PluginBundleHost] API dispose error:', e);
-      }
-    }
+    const comp = reg?.[currentPluginId]?.[currentComponent];
+    if (currentAPI) unmountPluginComponent(currentPluginId, comp, mountContainer, currentAPI);
     if (releaseCurrentStyle) {
       releaseCurrentStyle();
       releaseCurrentStyle = null;
@@ -113,6 +101,7 @@
 
     // Cleanup previous
     cleanup();
+    const run = sequence;
 
     loadState = 'loading';
     errorText = '';
@@ -121,15 +110,19 @@
     currentPropsKey = nextPropsKey;
 
     try {
+      await waitForPluginCleanup(pId);
+      if (run !== sequence) return;
       let loaded;
       try {
         loaded = await loadPluginBundle(pId);
       } catch (bundleError) {
+        if (run !== sequence) return;
         pluginInfo = bundleError && bundleError.info ? bundleError.info : null;
         loadState = 'error';
         errorText = bundleErrorText(bundleError);
         return;
       }
+      if (run !== sequence) return;
       const info = loaded.info;
       pluginInfo = info;
 
@@ -138,10 +131,11 @@
       } catch (catalogError) {
         console.warn(`[PluginBundleHost] localization unavailable for ${pId}:`, catalogError);
       }
+      if (run !== sequence) return;
 
       if (info.style) {
         const releaseStyle = await acquirePluginStyle(pId, info.style);
-        if (currentPluginId !== pId || currentComponent !== compId) {
+        if (run !== sequence) {
           releaseStyle();
           return;
         }
@@ -166,6 +160,7 @@
         // Container must exist in DOM — wait for next tick
         await new Promise(r => requestAnimationFrame(r));
       }
+      if (run !== sequence) return;
       if (mountContainer) {
         try {
           comp.mount(mountContainer, Object.assign({ componentId: compId }, componentProps || {}), api);
@@ -180,6 +175,7 @@
         errorText = tr('bundle.mountUnavailable');
       }
     } catch (e) {
+      if (run !== sequence) return;
       loadState = 'error';
       errorText = reportError('bundle.unexpectedError', 'Could not open the plugin interface. Please try again.', e);
     }

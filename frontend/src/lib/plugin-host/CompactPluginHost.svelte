@@ -2,6 +2,7 @@
   import { onDestroy, onMount } from 'svelte';
   import * as App from '../../../wailsjs/go/api/App';
   import { acquirePluginStyle, createPluginAPI, loadPluginBundle } from './VerstakPluginAPI.js';
+  import { unmountPluginComponent, waitForPluginCleanup } from './componentLifecycle.js';
   import { i18n } from '../i18n/index.js';
 
   export let pluginId;
@@ -33,8 +34,7 @@
 
   function cleanup() {
     if (!current) return;
-    try { current.component?.unmount?.(container); } catch (_) {}
-    try { current.api?.dispose?.(); } catch (_) {}
+    unmountPluginComponent(current.pluginId, current.component, container, current.api);
     try { current.releaseStyle?.(); } catch (_) {}
     if (container) container.innerHTML = '';
     current = null;
@@ -48,6 +48,8 @@
 
     let releaseStyle = null;
     try {
+      await waitForPluginCleanup(nextPluginId);
+      if (run !== sequence) return;
       const loaded = await loadPluginBundle(nextPluginId);
       releaseStyle = await acquirePluginStyle(nextPluginId, loaded.info.style);
       const component = loaded.components?.[nextHandler];
