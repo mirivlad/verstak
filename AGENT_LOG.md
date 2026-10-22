@@ -2,45 +2,56 @@
 
 > Каноническая точка продолжения ревизии между чатами. Перед новой работой сначала прочитать этот файл и сверить указанные ветки/PR/коммиты с GitHub. После каждого законченного среза или смены рабочей точки обновлять файл.
 
-## Текущая точка: 2026-10-22, финальный кандидат v0.3.3
+## Текущая точка: 2026-10-22, v0.3.3 опубликован и проверен
 
-- Продолжается разрешённая цель развития с релизами после значимых этапов.
-  v0.3.2 выпущен и проверен на фактических опубликованных пакетах (ниже).
-- Воспроизведена потеря последней правки при закрытии до таймера 150 ms.
-  Chromium и опубликованный native Deb v0.3.2: контрольная пауза сохраняет
-  draft, немедленный уход возвращает `base`; console показывает API disposed.
-- Core принимает Promise из component unmount и освобождает API после его
-  завершения. Барьер по pluginId работает и между разными keyed host; новое
-  открытие ждёт flush. Синхронная очистка остаётся немедленной, ошибка cleanup
-  освобождает API; stale async mount защищён sequence token. Editor возвращает
-  завершение своей существующей очереди draftWrites.
-- Дополнительно подтверждено: восстановление draft при открытии Markdown для
-  чтения запускало preview autosave и записывало его в файл. Теперь recovered
-  draft открывается для редактирования, включая ручное восстановление конфликта.
-  Два browser теста сначала упали, затем прошли. Всего editor browser: 29/29.
-- Три E2E проверяют rapid close, pending previous write и открытие заметки для
-  чтения без автоматического сохранения. Focused editor/Secrets/Overview: 21/21.
-  Ранняя нативная сборка подтвердила четыре text/Markdown × pause/rapid сценария
-  в режиме edit; финальный native gate дополнен переоткрытием Markdown для
-  чтения и проверкой файла после preview autosave interval. Этот финальный
-  вариант предстоит прогнать на пакетах точного кандидата.
-- Первый общий gate прошёл 9/9 групп и 205 E2E; E2E там были до последней правки
-  preview flow, поэтому нужен финальный прогон 206 E2E на актуальном коде.
-  LSP references/definition редактора и lifecycle checked; diagnostics пустые.
-  Unit tests проверяют sync/async, несколько host и отказ cleanup.
-- CI кандидата 7401071 упал на Windows TestIntegrationPhysicalWorkspaceMove:
-  тест ждал изменения tree и сразу проверял event, хотя service публикует его
-  после обновления tree. Теперь ждёт и требуемое уведомление. App Go-код не
-  менялся; targeted тест прошёл 20 повторов, gopls definitions/references/check
-  выполнены, diagnostics пустые. Нужен новый полный Windows CI.
-- Official plugins main: 74379f6; целевой tag v0.2.7 ещё не опубликован.
-  Desktop pin/notes v0.3.3 подготовлены, публичный v0.3.3 НЕ выпускался.
-- Evidence: build/drafts-2026-10-22/{reproduction.json,e2e-red.log,e2e-green.log,
-  preview-red.log,focused-final.log,native-red-final-input/,
-  native-candidate-verified/,windows-failed.log,watcher-repeat.log,lsp-*.json}.
-  Личный vault и установленное приложение не менялись.
-- Следующий шаг: финальные пакеты/нативный gate и общий gate, зелёный CI точного
-  кандидата, затем публикация plugins v0.2.7 и desktop v0.3.3 с проверкой assets.
+- [Desktop v0.3.3](https://github.com/mirivlad/verstak/releases/tag/v0.3.3)
+  опубликован как стабильный latest. Tag: `8237a714a26028eff95f877d1c7380845797a61a`;
+  official plugins v0.2.7: `74379f6f2640ec4191b734528e1e305827526291`.
+  [CI точного коммита](https://github.com/mirivlad/verstak/actions/runs/39743121615)
+  и [публикация](https://github.com/mirivlad/verstak/actions/runs/39744860938)
+  завершились успешно. Финальный local gate: 9/9 групп, 206/206 E2E,
+  без ошибок и пропусков. Windows Go CI также прошёл.
+- Исправлена подтверждённая потеря последней правки при закрытии до draft timer
+  150 ms. Core принимает Promise из component unmount, сохраняет API до flush
+  и ждёт его перед новым mount того же плагина (включая разные keyed host).
+  Синхронная очистка остаётся немедленной; ошибка cleanup освобождает API.
+  Editor возвращает завершение существующей очереди draftWrites.
+- Исправлено самопроизвольное сохранение draft при открытии Markdown для чтения:
+  восстановленная правка открывается для редактирования, включая ручное
+  восстановление после внешнего конфликта. Само восстановление не меняет файл.
+  Новые сценарии сначала упали на старом коде, затем прошли. LSP definitions,
+  references и diagnostics редактора/lifecycle checked; diagnostics пустые.
+- Windows CI выявил гонку в тесте PhysicalWorkspaceMove: он видел новый tree
+  до публикации event. Изменён только тест — ожидание требуемого уведомления.
+  Production Go-код не менялся. 20 targeted повторов прошли; gopls check пустой.
+- Все три опубликованных установщика полностью скачаны, SHA-256 совпали с
+  SHA256SUMS и серверными digest. Windows ZIP CRC, Deb/Windows metadata
+  `v0.3.3`/`8237a71` и по 17 наборов plugin checksum проверены. Plugins v0.2.7
+  тоже скачаны в обоих форматах: SHA, server digest, CRC и 17 payloads прошли;
+  удалённый annotated tag указывает на `74379f6`.
+- Real desktop GUI checked на фактических опубликованных Deb и AppImage,
+  private HOME/Xvfb/D-Bus и синтетический vault. Deb прошёл четыре draft-сценария
+  text/Markdown × pause/rapid: Markdown переоткрывается для VIEW, восстановленная
+  правка доступна для edit, JSON draft на диске, исходный файл не меняется после
+  autosave interval. AppImage прошёл те же control/rapid шаги заметки из Notes UI
+  без inspector; проверены metadata живого binary и 17 live plugin packages.
+- Фактические Deb и AppImage также прошли Secrets regression: ссылка над
+  заметкой, один master prompt по Enter, системный clipboard, изменение в том
+  же окне с сохранением ID/scope, обе темы и физическое закрытие. Полный Deb gate
+  проверил archive/reset, nested Deal, выбранную подпись и re-lock после OpenVault.
+  AppImage подтвердил собственные WebKit helpers и отсутствие dummy credentials
+  в app.log. Скриншоты восстановленного draft и окна секрета просмотрены.
+- Evidence: `build/drafts-2026-10-22/{all-checks-final.log,candidate-full-ci.log,
+  release-publish-ci.log,plugins-published/verification.json}` и
+  `native-published-{deb,appimage}-{drafts,secrets}/result.json`;
+  `build/releases-2026-10-22/desktop-v0.3.3/{verification,binary-metadata}.json`.
+  Docs `76cf1c1` описывает восстановление; link check 25/25. Windows GUI/macOS
+  не запускались. Личный vault и установленное приложение не менялись.
+- Активная цель развития с релизами после значимых этапов продолжается. Один
+  конкретный следующий срез из существующего продуктового плана: ручное
+  добавление ссылки/текста в Browser Inbox. Сейчас UI принимает receiver events;
+  нового кода следующего среза ещё нет. Сначала проверить его текущий storage
+  и scope flow; реализация остаётся в плагине, очередь — device-local.
 
 ## Предыдущая точка: 2026-10-22, v0.3.2 опубликован и проверен
 
