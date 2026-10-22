@@ -445,6 +445,12 @@ contributions summary.
 - `settings.read()` — читает весь settings namespace текущего plugin.
 - `settings.read(key)` — читает один ключ.
 - `settings.write(key, value)` — обновляет один ключ и пишет namespace обратно.
+- `settings.upsertRecord(key, identityField, record, maxRecords)` — начиная с
+  desktop v0.3.4 атомарно добавляет или целиком заменяет запись по строковому
+  identity, помещает её первой и оставляет до `maxRecords` записей (1–10000).
+  Остальные settings keys сохраняются; ошибка формата массива не меняет файл.
+  Для старых hosts нужно проверять наличие метода. Объявленные в manifest sync
+  collections обрабатываются так же, как при `settings.write`.
 - `settings.writeAll(settings)` — заменяет settings namespace.
 - Backend требует plugin exists, enabled, status `loaded`/`degraded` и permission
   `storage.namespace`.
@@ -645,6 +651,7 @@ bundled runtime. Это реальный runtime contract для cooperative bun
 | `api.pluginId` | ✅ Работает | ID плагина |
 | `api.settings.read(key?)` | ✅ Работает | Читает plugin-scoped settings через backend bridge |
 | `api.settings.write(key, value)` | ✅ Работает | Пишет один settings key через backend bridge |
+| `api.settings.upsertRecord(key, identityField, record, maxRecords)` | ✅ С v0.3.4 | Атомарно обновляет запись в ограниченном массиве namespace плагина |
 | `api.settings.writeAll(settings)` | ✅ Работает | Заменяет settings namespace плагина |
 | `api.capabilities.list()` | ✅ Работает | Возвращает capability registry |
 | `api.capabilities.get(id)` | ✅ Работает | Возвращает capability entry/status |

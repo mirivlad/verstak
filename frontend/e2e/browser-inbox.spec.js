@@ -23,7 +23,7 @@ test.describe('Browser workflow', () => {
     await expect(inbox.locator('.browser-inbox-title')).toHaveText('Browser');
     await expect(inbox.locator('.browser-inbox-toolbar > .browser-inbox-count')).toHaveText('0 items');
     await expect(inbox.locator('.browser-inbox-empty')).toContainText('No browser materials yet');
-    await expect(inbox.locator('.browser-inbox-empty')).toContainText('Send a page, selection, or link from the extension');
+    await expect(inbox.locator('.browser-inbox-empty')).toContainText('Add a link or text here, or send one from the extension');
     await expect(inbox.locator('[data-browser-inbox-filter="status"]')).toBeVisible();
     await expect(inbox.locator('[data-browser-inbox-filter="workspace"]')).toBeVisible();
     await expect(inbox.locator('[data-browser-inbox-action="clear"]')).toBeDisabled();

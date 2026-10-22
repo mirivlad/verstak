@@ -449,6 +449,23 @@ func (a *App) WritePluginSetting(pluginID, key string, value interface{}) string
 	return ""
 }
 
+// UpsertPluginSettingRecord atomically updates one record in a bounded settings array.
+func (a *App) UpsertPluginSettingRecord(pluginID, key, identityField string, record map[string]interface{}, maxRecords int) string {
+	if _, err := a.requirePluginAccess(pluginID, "storage.namespace"); err != nil {
+		return err.Error()
+	}
+	if a.storage == nil {
+		return "storage not initialized"
+	}
+	before := a.snapshotPluginRecords(pluginID)
+	if err := a.storage.UpsertPluginSettingRecord(pluginID, key, identityField, record, maxRecords); err != nil {
+		log.Printf("[api] UpsertPluginSettingRecord(%s, %s): %v", pluginID, key, err)
+		return err.Error()
+	}
+	a.recordPluginRecordChanges(pluginID, before)
+	return ""
+}
+
 // ReadPluginDataJSON reads a named JSON data file for a plugin.
 func (a *App) ReadPluginDataJSON(pluginID, name string) map[string]interface{} {
 	if _, err := a.requirePluginAccess(pluginID, "storage.namespace"); err != nil {

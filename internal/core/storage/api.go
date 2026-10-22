@@ -168,6 +168,43 @@ func (s *Storage) WritePluginSetting(pluginID, key string, value interface{}) er
 	})
 }
 
+// UpsertPluginSettingRecord atomically moves a record to the front of a bounded
+// settings array, replacing any record with the same string identity.
+func (s *Storage) UpsertPluginSettingRecord(pluginID, key, identityField string, record map[string]interface{}, maxRecords int) error {
+	if strings.TrimSpace(key) == "" || strings.TrimSpace(identityField) == "" {
+		return fmt.Errorf("settings key and identity field are required")
+	}
+	id, ok := record[identityField].(string)
+	if !ok || strings.TrimSpace(id) == "" {
+		return fmt.Errorf("record identity must be a non-empty string")
+	}
+	if maxRecords < 1 || maxRecords > 10000 {
+		return fmt.Errorf("maxRecords must be between 1 and 10000")
+	}
+	return s.UpdatePluginSettings(pluginID, func(settings map[string]interface{}) error {
+		var existing []interface{}
+		if value := settings[key]; value != nil {
+			var ok bool
+			existing, ok = value.([]interface{})
+			if !ok {
+				return fmt.Errorf("setting is not a record array")
+			}
+		}
+		updated := []interface{}{record}
+		for _, value := range existing {
+			item, ok := value.(map[string]interface{})
+			if !ok {
+				return fmt.Errorf("setting contains a non-record value")
+			}
+			if item[identityField] != id {
+				updated = append(updated, item)
+			}
+		}
+		settings[key] = updated[:min(len(updated), maxRecords)]
+		return nil
+	})
+}
+
 // UpdatePluginSettings atomically reads, mutates, and writes a plugin's settings.
 func (s *Storage) UpdatePluginSettings(pluginID string, update func(map[string]interface{}) error) error {
 	if update == nil {

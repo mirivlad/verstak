@@ -289,6 +289,8 @@ export function UpdateWorkspaceMetadata(arg1:string,arg2:workspace.MetadataPatch
 
 export function UpdateWorkspaceV2Tools(arg1:string,arg2:Array<string>):Promise<string>;
 
+export function UpsertPluginSettingRecord(arg1:string,arg2:string,arg3:string,arg4:Record<string, any>,arg5:number):Promise<string>;
+
 export function WriteFrontendLog(arg1:string,arg2:string):Promise<void>;
 
 export function WritePluginDataJSON(arg1:string,arg2:string,arg3:Record<string, any>):Promise<string>;
