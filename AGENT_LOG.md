@@ -2,36 +2,50 @@
 
 > Каноническая точка продолжения ревизии между чатами. Перед новой работой сначала прочитать этот файл и сверить указанные ветки/PR/коммиты с GitHub. После каждого законченного среза или смены рабочей точки обновлять файл.
 
-## Текущая точка: 2026-10-22, завершающий этап Browser Inbox
+## Текущая точка: 2026-10-22, v0.3.4 опубликован; остановка по просьбе пользователя
 
-- Пользователь попросил завершить начатое и остановиться. Завершить только
-  ручное добавление Browser Inbox, выпустить v0.3.4 с plugins v0.2.8, затем
-  поставить активную цель на паузу. Следующие этапы не начинать.
-- SDK `2cd620e` опубликован в main: optional `settings.upsertRecord`.
-  Desktop предоставляет общий атомарный bounded record update с проверкой
-  storage.namespace, сохранением соседних записей и sync tracking для
-  объявленных коллекций. Нового Browser-specific API в core нет.
-- Browser Inbox: ссылка HTTP(S) и/или текст, необязательное название, UUID
-  Дела глобально / текущее Дело во вкладке. Стабильный ID при повторе,
-  введённое остаётся при ошибке. Очередь по-прежнему device-local.
-- Desktop `3221c42`, plugins `6fbc974`, docs `06a31a1` опубликованы в main.
-- Полный `scripts/verstak-check.sh`: 9/9 групп, 210/210 E2E, без ошибок
-  и пропусков. Local desktop build также прошёл.
-- Focused E2E 4/4, plugins check, SDK 38 tests, Go race atomic/concurrent
-  writer tests и bridge contracts прошли. Native Wails/WebKitGTK прошёл
-  сохранение трёх материалов на диск, nested Deal UUID, text-only/unassigned,
-  вкладку Дела, конвертацию в note, обе темы, границы диалога и белый текст
-  action. LSP definitions/references checked; gopls diagnostics пустые,
-  JS только прежние severity-4 hints. Screenshots inspected.
-- Старый Vite отдавал устаревший App binding; подтверждено HTTP response
-  против файла. Свежий сервер устранил ложное падение. Один промежуточный
-  E2E запуск пересёкся с пересборкой editor dist из plugins check и не был
-  принят как проверка; последовательный focused run прошёл.
-- Evidence: `build/manual-capture-2026-10-22/`: `ui-verified.log`,
-  `native-complete/result.json`, `plugins-check.log`, `sdk-final-{check,test}.log`,
-  `atomic-records-final.log`, `gopls-release.log`, `all-checks.log`.
-- Следующий шаг: собрать оба Linux-пакета, опубликовать
-  plugins v0.2.8 и desktop v0.3.4; проверить опубликованные assets и остановиться.
+- [Desktop v0.3.4](https://github.com/mirivlad/verstak/releases/tag/v0.3.4)
+  опубликован: tag `3483033bd2cedb0c5058f0ddeacdfe2209122a15`.
+  [Official plugins v0.2.8](https://github.com/mirivlad/verstak-official-plugins/releases/tag/v0.2.8):
+  tag `6fbc9745f2d271b7e57fddb49d07cca49b7c6d71`. SDK `2cd620e`, docs `06a31a1`
+  отправлены в main. Source feature commit desktop: `3221c42`.
+- Browser Inbox принимает ссылку HTTP(S), текст или оба поля через «Добавить
+  материал». Название необязательно. Глобально можно выбрать Дело по UUID
+  или оставить без привязки; во вкладке используется текущее Дело. Введённое
+  остаётся при ошибке, стабильный ID исключает дубликат при повторе. Новая
+  запись и поступления из расширения сохраняются атомарно. Очередь остаётся
+  device-local; созданные заметки и файлы синхронизируются обычным способом.
+- Core добавляет только общий `settings.upsertRecord`: namespace permission,
+  bounded array, полная замена по строковому ID, сохранение соседних ключей,
+  sync tracking для объявленных коллекций. SDK feature-detect optional method.
+  LSP definitions/references checked; gopls diagnostics пустые, JS hints only.
+- Полный local `scripts/verstak-check.sh`: 9/9 групп, 210/210 E2E, без ошибок
+  и пропусков. SDK 38 tests, Go race concurrent writers и bridge contracts
+  прошли. Local build, Deb и AppImage v0.3.4 собраны штатными scripts.
+- [CI точного релизного коммита](https://github.com/mirivlad/verstak/actions/runs/39755412117)
+  прошёл, включая Windows Go и E2E. [Публикация](https://github.com/mirivlad/verstak/actions/runs/39803330089)
+  завершилась успешно. Main был заморожен до завершения publish job.
+- Все три опубликованных установщика полностью скачаны; SHA-256 совпали с
+  SHA256SUMS и серверными digest. Deb/Windows metadata: `v0.3.4`/`3483033`;
+  Windows ZIP CRC и по 17 plugin checksums прошли. Все 17 checksum manifests
+  в Deb/Windows совпали с фактически опубликованными plugins v0.2.8.
+- Real desktop GUI checked на опубликованном Deb: три записи на диске,
+  nested Deal UUID, text-only/unassigned, вкладка Дела, конвертация в заметку,
+  навигация, валидация URL, границы диалога, белый action text, обе темы.
+  Опубликованный AppImage запущен обычным способом без inspector: AT-SPI
+  подтвердил ручную запись на диске, отмену без записи, обе темы, собственные
+  WebKit helpers, живой binary `v0.3.4`/`3483033` и 17 plugin checksums.
+  Скриншоты обеих сборок просмотрены. Windows GUI/macOS не запускались.
+- Evidence: `build/manual-capture-2026-10-22/RESULT.md`, `all-checks.log`,
+  `{candidate,release}-ci-status.json`, `release-ci.log`, `local-packages.log`,
+  `native-{complete,published-deb,published-appimage}/result.json`,
+  `plugins-published/verification.json`; фактические desktop assets и metadata:
+  `build/releases-2026-10-22/desktop-v0.3.4/`.
+- Все шесть checkout чистые, main соответствует origin/main после fetch.
+  Личный vault и установленное приложение не менялись.
+- Пользователь явно попросил «завершай и останавливайся». Текущий этап
+  завершён, дальнейшую разработку остановить и поставить активную цель на
+  паузу после фиксации этого отчёта. Новые этапы — только по новой команде.
 
 ## Предыдущий выпуск: 2026-10-22, v0.3.3 опубликован и проверен
 
