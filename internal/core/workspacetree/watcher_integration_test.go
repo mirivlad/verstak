@@ -613,7 +613,20 @@ func TestIntegrationPhysicalWorkspaceMove(t *testing.T) {
 
 	waitFor(t, 3*time.Second, func() bool {
 		ws, ok := svc.GetWorkspaceByID(wsID)
-		return ok && ws.RootPath == "Archive/Client1"
+		if !ok || ws.RootPath != "Archive/Client1" {
+			return false
+		}
+		// Reconciliation updates the tree before publishing its events. Wait
+		// for the notification too, rather than racing its publisher.
+		mu.Lock()
+		defer mu.Unlock()
+		for _, evt := range treeEvents {
+			p, _ := evt.Payload.(map[string]interface{})
+			if p["workspaceId"] == wsID && p["action"] == "workspace.external-moved" {
+				return true
+			}
+		}
+		return false
 	})
 
 	ws, _ := svc.GetWorkspaceByID(wsID)
