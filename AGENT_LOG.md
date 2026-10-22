@@ -14,6 +14,9 @@
 - Browser Inbox: ссылка HTTP(S) и/или текст, необязательное название, UUID
   Дела глобально / текущее Дело во вкладке. Стабильный ID при повторе,
   введённое остаётся при ошибке. Очередь по-прежнему device-local.
+- Desktop `3221c42`, plugins `6fbc974`, docs `06a31a1` опубликованы в main.
+- Полный `scripts/verstak-check.sh`: 9/9 групп, 210/210 E2E, без ошибок
+  и пропусков. Local desktop build также прошёл.
 - Focused E2E 4/4, plugins check, SDK 38 tests, Go race atomic/concurrent
   writer tests и bridge contracts прошли. Native Wails/WebKitGTK прошёл
   сохранение трёх материалов на диск, nested Deal UUID, text-only/unassigned,
@@ -26,8 +29,8 @@
   принят как проверка; последовательный focused run прошёл.
 - Evidence: `build/manual-capture-2026-10-22/`: `ui-verified.log`,
   `native-complete/result.json`, `plugins-check.log`, `sdk-final-{check,test}.log`,
-  `atomic-records-final.log`, `gopls-release.log`. Полный gate ещё идёт.
-- Следующий шаг: завершить gate, собрать оба Linux-пакета, опубликовать
+  `atomic-records-final.log`, `gopls-release.log`, `all-checks.log`.
+- Следующий шаг: собрать оба Linux-пакета, опубликовать
   plugins v0.2.8 и desktop v0.3.4; проверить опубликованные assets и остановиться.
 
 ## Предыдущий выпуск: 2026-10-22, v0.3.3 опубликован и проверен
