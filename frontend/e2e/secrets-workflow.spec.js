@@ -53,6 +53,17 @@ test('secret link unlocks once, copies and edits in a dialog above the note', as
   await editor.locator('.secret-link').click();
   const dialog = page.locator('[data-resource-dialog]');
   await expect(dialog.locator('[data-secret-master-password]')).toBeVisible();
+  async function expectControlsInsideDialog() {
+    const outside = await dialog.evaluate(root => {
+      const bounds = root.querySelector('[role="dialog"]').getBoundingClientRect();
+      return [...root.querySelectorAll('input, textarea, button')].filter(node => {
+        if (!node.getClientRects().length) return false;
+        const rect = node.getBoundingClientRect();
+        return rect.top < bounds.top - 1 || rect.bottom > bounds.bottom + 1 || rect.left < bounds.left - 1 || rect.right > bounds.right + 1;
+      }).map(node => node.getAttribute('data-secret-dialog-value') ?? node.tagName);
+    });
+    expect(outside).toEqual([]);
+  }
   await dialog.locator('[data-secret-master-password]').fill('test-master-password');
   await dialog.locator('[data-secret-master-password]').press('Enter');
   const username = dialog.locator('[data-secret-dialog-username]');
@@ -60,11 +71,13 @@ test('secret link unlocks once, copies and edits in a dialog above the note', as
   await expect(username).toHaveValue('target-user');
   await expect(value).toHaveValue('target-value');
   await expect(value).toHaveAttribute('readonly', '');
+  await expectControlsInsideDialog();
   await dialog.locator('[data-secret-copy-username]').click();
   expect(await page.evaluate(() => navigator.clipboard.readText())).toBe('target-user');
   await dialog.locator('[data-secret-copy-value]').click();
   expect(await page.evaluate(() => navigator.clipboard.readText())).toBe('target-value');
   await dialog.locator('[data-secret-edit]').click();
+  await expectControlsInsideDialog();
   await dialog.locator('[data-secret-username]').fill('new-admin');
   await dialog.locator('[data-secret-value]').fill('new-secret-value');
   await page.evaluate(() => {
@@ -80,6 +93,7 @@ test('secret link unlocks once, copies and edits in a dialog above the note', as
   await expect(dialog.locator('[data-secret-value]')).toHaveValue('new-secret-value');
   await dialog.locator('[data-secret-save]').click();
   await expect(value).toHaveValue('new-secret-value');
+  await expectControlsInsideDialog();
   await dialog.locator('[data-resource-dialog-close]').click();
   await expect(editor.locator('.secret-link')).toHaveText('логин/пароль');
   await expect(editor.locator('.secret-link')).toBeFocused();

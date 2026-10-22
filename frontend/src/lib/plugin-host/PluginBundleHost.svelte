@@ -9,6 +9,7 @@
   export let componentId = null;
   export let viewPluginId = null;
   export let componentProps = {};
+  export let autoHeight = false;
 
   let loadState = 'idle'; // idle | loading | loaded | error
   let pluginInfo = null;
@@ -191,7 +192,7 @@
   }
 </script>
 
-<div class="plugin-bundle-host">
+<div class="plugin-bundle-host" class:auto-height={autoHeight}>
   {#if loadState === 'idle'}
     <div class="host-state idle">
       <p>{tr('pluginView.select')}</p>
@@ -228,7 +229,7 @@
       bind:this={mountContainer}
       data-plugin-id={currentPluginId}
       data-component={currentComponent}
-      style="flex:1;min-width:0;min-height:0;height:100%;display:flex;flex-direction:column;position:relative;"
+      style={`flex:${autoHeight ? '0 0 auto' : '1'};min-width:0;min-height:0;height:${autoHeight ? 'auto' : '100%'};display:flex;flex-direction:column;position:relative;`}
     ></div>
   {/if}
 </div>
@@ -252,6 +253,11 @@
     justify-content: center;
     padding: 2rem;
     text-align: center;
+  }
+
+  .plugin-bundle-host.auto-height {
+    flex: 0 0 auto;
+    height: auto;
   }
 
   .host-state.idle {

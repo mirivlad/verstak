@@ -18,7 +18,7 @@
 <Modal show={!!openedResource} wide title={tr('workbench.resourceDialog', 'View material')} on:close={() => dispatch('close')} data-resource-dialog>
   {#if openedResource?.status === 'opened'}
     {#key [openedResource.providerId, openedResource.request?.path].join(':')}
-      <PluginBundleHost pluginId={openedResource.providerPluginId} componentId={openedResource.providerComponent} componentProps={openedResource} />
+      <PluginBundleHost autoHeight pluginId={openedResource.providerPluginId} componentId={openedResource.providerComponent} componentProps={openedResource} />
     {/key}
   {:else}
     <p>{tr('workbench.noViewer')}</p>
