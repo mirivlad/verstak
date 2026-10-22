@@ -128,6 +128,22 @@ func TestPluginSettingWriteRecordsOnePerChangedRecord(t *testing.T) {
 	}
 }
 
+func TestAtomicSettingsRecordUsesDeclaredSyncCollection(t *testing.T) {
+	app := newRecordSyncApp(t, "atomic-writer")
+	for _, record := range []map[string]interface{}{{"id": "a", "title": "first"}, {"id": "a", "title": "updated"}, {"id": "b", "title": "second"}} {
+		if err := app.UpsertPluginSettingRecord("verstak.todo", "todos:global", "id", record, 1); err != "" {
+			t.Fatal(err)
+		}
+	}
+	counts := make(map[string]int)
+	for _, op := range unpushedOps(t, app) {
+		counts[op.OpType]++
+	}
+	if counts[syncsvc.OpCreate] != 2 || counts[syncsvc.OpUpdate] != 1 || counts[syncsvc.OpDelete] != 1 {
+		t.Fatalf("sync operations = %#v", counts)
+	}
+}
+
 // The point of the whole exercise: a todo added on each device ends up on both.
 func TestPluginRecordOpsFromAnotherDeviceMergeRatherThanReplace(t *testing.T) {
 	laptop := newRecordSyncApp(t, "laptop")

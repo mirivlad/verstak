@@ -554,6 +554,10 @@ export function UpdateWorkspaceV2Tools(arg1, arg2) {
   return window['go']['api']['App']['UpdateWorkspaceV2Tools'](arg1, arg2);
 }
 
+export function UpsertPluginSettingRecord(arg1, arg2, arg3, arg4, arg5) {
+  return window['go']['api']['App']['UpsertPluginSettingRecord'](arg1, arg2, arg3, arg4, arg5);
+}
+
 export function WriteFrontendLog(arg1, arg2) {
   return window['go']['api']['App']['WriteFrontendLog'](arg1, arg2);
 }

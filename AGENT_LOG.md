@@ -2,7 +2,35 @@
 
 > Каноническая точка продолжения ревизии между чатами. Перед новой работой сначала прочитать этот файл и сверить указанные ветки/PR/коммиты с GitHub. После каждого законченного среза или смены рабочей точки обновлять файл.
 
-## Текущая точка: 2026-10-22, v0.3.3 опубликован и проверен
+## Текущая точка: 2026-10-22, завершающий этап Browser Inbox
+
+- Пользователь попросил завершить начатое и остановиться. Завершить только
+  ручное добавление Browser Inbox, выпустить v0.3.4 с plugins v0.2.8, затем
+  поставить активную цель на паузу. Следующие этапы не начинать.
+- SDK `2cd620e` опубликован в main: optional `settings.upsertRecord`.
+  Desktop предоставляет общий атомарный bounded record update с проверкой
+  storage.namespace, сохранением соседних записей и sync tracking для
+  объявленных коллекций. Нового Browser-specific API в core нет.
+- Browser Inbox: ссылка HTTP(S) и/или текст, необязательное название, UUID
+  Дела глобально / текущее Дело во вкладке. Стабильный ID при повторе,
+  введённое остаётся при ошибке. Очередь по-прежнему device-local.
+- Focused E2E 4/4, plugins check, SDK 38 tests, Go race atomic/concurrent
+  writer tests и bridge contracts прошли. Native Wails/WebKitGTK прошёл
+  сохранение трёх материалов на диск, nested Deal UUID, text-only/unassigned,
+  вкладку Дела, конвертацию в note, обе темы, границы диалога и белый текст
+  action. LSP definitions/references checked; gopls diagnostics пустые,
+  JS только прежние severity-4 hints. Screenshots inspected.
+- Старый Vite отдавал устаревший App binding; подтверждено HTTP response
+  против файла. Свежий сервер устранил ложное падение. Один промежуточный
+  E2E запуск пересёкся с пересборкой editor dist из plugins check и не был
+  принят как проверка; последовательный focused run прошёл.
+- Evidence: `build/manual-capture-2026-10-22/`: `ui-verified.log`,
+  `native-complete/result.json`, `plugins-check.log`, `sdk-final-{check,test}.log`,
+  `atomic-records-final.log`, `gopls-release.log`. Полный gate ещё идёт.
+- Следующий шаг: завершить gate, собрать оба Linux-пакета, опубликовать
+  plugins v0.2.8 и desktop v0.3.4; проверить опубликованные assets и остановиться.
+
+## Предыдущий выпуск: 2026-10-22, v0.3.3 опубликован и проверен
 
 - [Desktop v0.3.3](https://github.com/mirivlad/verstak/releases/tag/v0.3.3)
   опубликован как стабильный latest. Tag: `8237a714a26028eff95f877d1c7380845797a61a`;

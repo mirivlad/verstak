@@ -646,6 +646,12 @@ export function createPluginAPI(pluginId) {
         });
         return this.read();
       },
+      upsertRecord: function(key, identityField, record, maxRecords) {
+        assertActive('settings.upsertRecord(' + key + ')');
+        return callBackendErrorString(pluginId, 'settings.upsertRecord(' + key + ')', function() {
+          return App.UpsertPluginSettingRecord(pluginId, key, identityField, record, maxRecords);
+        });
+      },
       writeAll: function(settings) {
         assertActive('settings.writeAll');
         return callBackendErrorString(pluginId, 'settings.writeAll', function() {

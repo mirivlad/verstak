@@ -1027,6 +1027,18 @@ function cloneJson(value) {
       pluginSettings[pluginId][key] = value;
       return Promise.resolve('');
     },
+    UpsertPluginSettingRecord: function (pluginId, key, identityField, record, maxRecords) {
+      var error = requirePluginPermission(pluginId, 'storage.namespace');
+      if (error) return Promise.resolve(error);
+      if (!key || !key.trim() || !identityField || !identityField.trim() || !record || typeof record[identityField] !== 'string' || !record[identityField].trim()) return Promise.resolve('record identity and settings key are required');
+      if (!Number.isInteger(maxRecords) || maxRecords < 1 || maxRecords > 10000) return Promise.resolve('maxRecords must be between 1 and 10000');
+      var settings = Object.assign({}, pluginSettings[pluginId] || {});
+      var existing = settings[key] == null ? [] : settings[key];
+      if (!Array.isArray(existing) || existing.some(function (item) { return !item || typeof item !== 'object' || Array.isArray(item); })) return Promise.resolve('setting is not a record array');
+      settings[key] = [cloneJson(record)].concat(existing.filter(function (item) { return item[identityField] !== record[identityField]; })).slice(0, maxRecords);
+      pluginSettings[pluginId] = settings;
+      return Promise.resolve('');
+    },
     ReplacePluginNotifications: function (pluginId, items) {
       pluginNotifications[pluginId] = Array.isArray(items) ? items.slice() : [];
       return Promise.resolve('');
