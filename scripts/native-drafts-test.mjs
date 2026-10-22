@@ -81,8 +81,8 @@ try {
       const content = 'native rapid draft';
       const writeError = data(await call(`window.go.api.App.WriteVaultTextFile('verstak.default-editor',${JSON.stringify(notePath)},'base',{createIfMissing:true,overwrite:true})`));
       assert.ok(!writeError, writeError);
-      const open = async () => {
-        const request = { kind: 'vault-file', path: notePath, extension: markdown ? '.md' : '.txt', mode: 'edit', context: markdown ? { notesMode: true, notesScopePath: 'Drafts' } : {} };
+      const open = async (reopening = false) => {
+        const request = { kind: 'vault-file', path: notePath, extension: markdown ? '.md' : '.txt', mode: markdown && reopening ? 'view' : 'edit', context: markdown ? { notesMode: true, notesScopePath: 'Drafts' } : {} };
         const opened = data(await call(`window.go.api.App.OpenWorkbenchResource('verstak.default-editor',${JSON.stringify(request)})`));
         assert.equal(opened.status, 'opened');
         await evaluate(`window.dispatchEvent(new CustomEvent('verstak:workbench-opened',{detail:${JSON.stringify(opened)}}))`);
@@ -97,8 +97,9 @@ try {
       if (settled) await delay(400);
       input('mousemove', '--window', windowId, String(Math.round(close.x)), String(Math.round(close.y)), 'click', '1');
       await waitFor('!document.querySelector(".cm-content")', 'closed editor');
-      await open();
+      await open(true);
       const reopened = await waitFor(`(() => { const text = [...document.querySelectorAll('.cm-content .cm-line')].map(n => n.textContent).join('\\n'); return text === ${JSON.stringify(content)} && text; })()`, 'restored latest draft');
+      await delay(400); // The preview autosave timer must not save a recovered draft.
       assert.equal(fs.readFileSync(path.join(vault, notePath), 'utf8'), 'base', 'the file is not implicitly saved');
       const draftFiles = fs.readdirSync(vault, { recursive: true }).filter(file => file.includes('draft-') && file.endsWith('.json'));
       const draft = draftFiles.map(file => JSON.parse(fs.readFileSync(path.join(vault, file), 'utf8'))).find(record => record.path === notePath);
