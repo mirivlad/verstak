@@ -69,6 +69,21 @@ the created Deal. Logs, screenshots and results go to `build/native-create-deal`
 `VERSTAK_PROBE_OUT`, `VERSTAK_PROBE_DISPLAY` and
 `VERSTAK_PROBE_INSPECTOR_PORT` can separate concurrent local runs.
 
+### Draft preservation regression gate
+
+After building the desktop and plugins, run:
+
+```bash
+bash scripts/smoke-native-drafts.sh
+```
+
+This uses the same isolated Wails/WebKitGTK, Xvfb and private D-Bus setup as
+the creation gate. Physical input edits both a plain text file and a Markdown
+note, then closes and reopens each immediately and after a control pause.
+It checks the restored text, the actual draft JSON on disk and the unchanged
+underlying document. `VERSTAK_DRAFTS_BINARY` selects another built binary;
+`VERSTAK_PROBE_OUT` selects the evidence directory (default `build/native-drafts`).
+
 ### Rendering probe
 
 `scripts/gui-probe.sh` starts the built `build/bin/verstak-desktop` on an Xvfb
