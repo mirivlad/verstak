@@ -45,6 +45,7 @@ func (a *App) CreateVault(path string) error {
 	if a.vault == nil {
 		return fmt.Errorf("vault service not initialized")
 	}
+	a.stopPluginProcesses("")
 	a.closeImportService()
 	if err := a.vault.CreateVault(path); err != nil {
 		return err
@@ -63,6 +64,7 @@ func (a *App) OpenVault(path string) error {
 	if a.vault == nil {
 		return fmt.Errorf("vault service not initialized")
 	}
+	a.stopPluginProcesses("")
 	a.closeImportService()
 	if err := a.vault.OpenVault(path); err != nil {
 		return err
@@ -84,6 +86,7 @@ func (a *App) CloseVault() error {
 	if a.fileWatcher != nil {
 		a.fileWatcher.Stop()
 	}
+	a.stopPluginProcesses("")
 	a.closeImportService()
 	a.stopScheduledSnapshotScan()
 	a.vault.CloseVault()
@@ -101,6 +104,7 @@ func (a *App) SetCurrentVault(path string) string {
 	if a.vault == nil {
 		return "vault service not initialized"
 	}
+	a.stopPluginProcesses("")
 	a.closeImportService()
 	// Try to open the vault first
 	if err := a.vault.OpenVault(path); err != nil {

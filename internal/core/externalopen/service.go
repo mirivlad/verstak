@@ -15,7 +15,12 @@ type Service struct {
 
 func NewService() *Service {
 	return NewServiceFor(runtime.GOOS, func(name string, args ...string) error {
-		return exec.Command(name, args...).Start()
+		cmd := exec.Command(name, args...)
+		if err := cmd.Start(); err != nil {
+			return err
+		}
+		go func() { _ = cmd.Wait() }()
+		return nil
 	})
 }
 

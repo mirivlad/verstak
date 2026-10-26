@@ -81,6 +81,10 @@ if [ -f "$PATCH_FILE" ]; then
   (cd "$ROOT" && patch -p0 --forward < "$PATCH_FILE" 2>/dev/null || true)
   rm -f "$ROOT/vendor/github.com/wailsapp/wails/v2/internal/frontend/desktop/linux/window.c.rej"
   echo "  ✅ window.c patched"
+  # Process review includes literal user argv. GTK must never treat it as a
+  # printf format, and Enter in a question dialog must default to refusal.
+  (cd "$ROOT" && patch -p0 --forward < "$ROOT/patches/window.c.message-dialog.patch")
+  echo "  ✅ native message text and safe question default patched"
 else
   echo "  ℹ️  patch file not found at $PATCH_FILE — skipping"
 fi

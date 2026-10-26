@@ -1,5 +1,6 @@
 import * as App from '../../../wailsjs/go/api/App';
 import { i18n } from '../i18n/index.js';
+import { CORE_ICONS } from '../ui/icons/core.js';
 import { matchesShortcut } from '../ui/shortcuts.js';
 import { registerNavigationHandler } from '../shell/navigation-handlers.js';
 
@@ -466,6 +467,29 @@ export function createPluginAPI(pluginId) {
   return {
     pluginId: pluginId,
 
+    processes: {
+      approved: function(request) {
+        assertActive('processes.approved');
+        return callBackend(pluginId, 'processes.approved', () => App.PluginProcessApproved(pluginId, request));
+      },
+      review: function(request) {
+        assertActive('processes.review');
+        return callBackend(pluginId, 'processes.review', () => App.PluginProcessReview(pluginId, request));
+      },
+      revoke: function(request) {
+        assertActive('processes.revoke');
+        return callBackendErrorString(pluginId, 'processes.revoke', () => App.PluginProcessRevoke(pluginId, request));
+      },
+      run: function(operationId, request) {
+        assertActive('processes.run');
+        return callBackend(pluginId, 'processes.run', () => App.PluginProcessRun(pluginId, operationId, request));
+      },
+      cancel: function(operationId) {
+        assertActive('processes.cancel');
+        return callBackendErrorString(pluginId, 'processes.cancel', () => App.PluginProcessCancel(pluginId, operationId));
+      },
+    },
+
     // Shortcut matching is a host service on purpose. Left to plugins it gets
     // reimplemented with event.key, which silently stops working on any
     // non-Latin keyboard layout.
@@ -537,6 +561,24 @@ export function createPluginAPI(pluginId) {
     },
 
     ui: {
+      createIcon: function(name, size = 18) {
+        assertActive('ui.createIcon');
+        const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        const attrs = { viewBox: '0 0 24 24', width: size, height: size, fill: 'none', stroke: 'currentColor', 'stroke-width': 2, 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'aria-hidden': 'true', 'data-icon': name };
+        Object.entries(attrs).forEach(([key, value]) => svg.setAttribute(key, value));
+        (CORE_ICONS[name] || CORE_ICONS.circle).forEach(([tag, attributes]) => {
+          const node = document.createElementNS('http://www.w3.org/2000/svg', tag);
+          Object.entries(attributes).forEach(([key, value]) => node.setAttribute(key, value));
+          svg.appendChild(node);
+        });
+        return svg;
+      },
+      openView: async function(viewId) {
+        assertActive('ui.openView');
+        const views = await callBackend(pluginId, 'ui.openView', () => App.GetContributions());
+        if (!(views?.views || []).some(view => view.pluginId === pluginId && view.id === viewId)) throw new Error('unknown plugin view');
+        window.dispatchEvent(new CustomEvent('verstak:open-view', { detail: { pluginId, viewId } }));
+      },
       openSettings: function(panelId) {
         assertActive('ui.openSettings');
         window.dispatchEvent(new CustomEvent('verstak:open-settings', {

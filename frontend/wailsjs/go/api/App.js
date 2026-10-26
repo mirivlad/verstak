@@ -294,6 +294,26 @@ export function PluginListWorkspaces(arg1) {
   return window['go']['api']['App']['PluginListWorkspaces'](arg1);
 }
 
+export function PluginProcessApproved(arg1, arg2) {
+  return window['go']['api']['App']['PluginProcessApproved'](arg1, arg2);
+}
+
+export function PluginProcessCancel(arg1, arg2) {
+  return window['go']['api']['App']['PluginProcessCancel'](arg1, arg2);
+}
+
+export function PluginProcessReview(arg1, arg2) {
+  return window['go']['api']['App']['PluginProcessReview'](arg1, arg2);
+}
+
+export function PluginProcessRevoke(arg1, arg2) {
+  return window['go']['api']['App']['PluginProcessRevoke'](arg1, arg2);
+}
+
+export function PluginProcessRun(arg1, arg2, arg3) {
+  return window['go']['api']['App']['PluginProcessRun'](arg1, arg2, arg3);
+}
+
 export function PluginReadImportText(arg1, arg2, arg3) {
   return window['go']['api']['App']['PluginReadImportText'](arg1, arg2, arg3);
 }

@@ -3,6 +3,7 @@ package capability
 const CorePluginID = "verstak-desktop"
 
 var platformCapabilities = []string{
+	"verstak/core/processes/v1",
 	"verstak/core/plugin-manager/v1",
 	"verstak/core/capability-registry/v1",
 	"verstak/core/contribution-registry/v1",

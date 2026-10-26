@@ -136,12 +136,13 @@ type FlatOpenProvider struct {
 }
 
 type FlatWorkspaceItem struct {
-	PluginID  string `json:"pluginId"`
-	ID        string `json:"id"`
-	Title     string `json:"title"`
-	Icon      string `json:"icon,omitempty"`
-	Order     int    `json:"order,omitempty"`
-	Component string `json:"component"`
+	AlwaysAvailable bool   `json:"alwaysAvailable,omitempty"`
+	PluginID        string `json:"pluginId"`
+	ID              string `json:"id"`
+	Title           string `json:"title"`
+	Icon            string `json:"icon,omitempty"`
+	Order           int    `json:"order,omitempty"`
+	Component       string `json:"component"`
 }
 
 type FlatAction struct {
@@ -248,7 +249,7 @@ func buildContributionSummary(r *contribution.Registry) ContributionSummary {
 	}
 	workspaceItems := make([]FlatWorkspaceItem, len(regWorkspaceItems))
 	for i, v := range regWorkspaceItems {
-		workspaceItems[i] = FlatWorkspaceItem{PluginID: v.PluginID, ID: v.Item.ID, Title: v.Item.Title, Icon: v.Item.Icon, Order: v.Item.Order, Component: v.Item.Component}
+		workspaceItems[i] = FlatWorkspaceItem{PluginID: v.PluginID, ID: v.Item.ID, Title: v.Item.Title, Icon: v.Item.Icon, Order: v.Item.Order, Component: v.Item.Component, AlwaysAvailable: v.Item.AlwaysAvailable}
 	}
 	fileActions := make([]FlatAction, len(regFileActions))
 	for i, v := range regFileActions {
@@ -283,6 +284,12 @@ func (a *App) GetContributions() ContributionSummary {
 
 // ReloadPlugins re-discovers plugins from disk and returns a summary.
 func (a *App) ReloadPlugins() (int, string) {
+	a.processMu.Lock()
+	defer a.processMu.Unlock()
+	a.processEpoch++
+	if a.processes != nil {
+		a.processes.Stop("")
+	}
 	if service := a.currentImportService(); service != nil {
 		service.CloseAll()
 	}
@@ -733,6 +740,8 @@ func (a *App) EnablePlugin(pluginID string) string {
 
 // DisablePlugin disables a plugin in the vault.
 func (a *App) DisablePlugin(pluginID string) string {
+	a.processMu.Lock()
+	defer a.processMu.Unlock()
 	if a.pluginState == nil {
 		return "plugin state not initialized"
 	}
@@ -741,6 +750,10 @@ func (a *App) DisablePlugin(pluginID string) string {
 	}
 	if err := a.pluginState.DisablePlugin(pluginID); err != nil {
 		return err.Error()
+	}
+	a.processEpoch++
+	if a.processes != nil {
+		a.processes.Stop(a.processOwner(pluginID))
 	}
 	return ""
 }

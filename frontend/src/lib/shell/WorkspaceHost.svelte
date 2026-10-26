@@ -184,7 +184,7 @@
       if (f.secrets) allowed.push('verstak.secrets');
     }
     const allowedSet = new Set(allowed);
-    return tools.filter(tool => allowedSet.has(tool.pluginId));
+    return tools.filter(tool => tool.alwaysAvailable || allowedSet.has(tool.pluginId));
   }
 
   function resultOrError(response, fallbackValue) {
