@@ -2,7 +2,49 @@
 
 > Каноническая точка продолжения ревизии между чатами. Перед новой работой сначала прочитать этот файл и сверить указанные ветки/PR/коммиты с GitHub. После каждого законченного среза или смены рабочей точки обновлять файл.
 
-## Текущая точка: 2026-10-22, v0.3.4 опубликован; остановка по просьбе пользователя
+## Текущая точка: 2026-10-27, Actions 2.0 — локальные сборки, ожидание проверки владельцем
+
+- Три ветки `feat/actions-2` отправлены в origin; main не менялся, тегов и релизов нет.
+  Desktop: `7bf67b8` (общая process infrastructure), `7f0dbb1` (Actions E2E).
+  SDK: `a0963e5` (контракты), `5ba9a34` (generated dist из актуального src).
+  Official plugins: `ee923e7` (новый `verstak.actions`).
+- Core: `verstak/core/processes/v1`, literal executable/argv/cwd, wait/detached,
+  bounded stdout/stderr, timeout/cancel, HTTP(S) system handler. Permission
+  `process.spawn` переиспользуется, `external.openURL` добавлен. Все Go вызовы
+  проверяют permission/capability и актуальный disable. Native exact-request
+  approvals хранятся вне vault и не синхронизируются. Linux Wails patch исключает
+  printf-интерпретацию текста, задаёт отказ по Enter и scroll для длинного review.
+  Shared frontend остаётся trusted context, не sandbox. Core не содержит Actions ID/логику.
+- Actions: CRUD/order, global/Deal UUID, sidebar + вкладка каждого Дела,
+  palette launcher, 10 Lucide иконок, RU/EN, обе темы, output/Stop/revoke.
+  Данные — существующий settings/plugin-record sync. Загрузка/import/sync/enable
+  не запускают действий. Локальных path mappings нет; file associations не
+  предоставляются (можно явное приложение + аргумент файла). SSHKeeper не начат.
+- Local gate `scripts/verstak-check.sh`: 9/9 групп, 220/220 E2E, SDK 39/39;
+  opt-in Go SKIP: real-server smoke, supplied backups, synthetic cost test.
+  Focused Go `-race` passed; реальный Linux printf/no-shell, stderr/exit/cwd,
+  cancellation/time/output/descendants и device-local approvals checked.
+  Sync record-op replay двух временных vault checked; реальный server/два
+  физических устройства не проверялись. Windows/macOS process tests — compile only.
+  gopls чистый; две старые TS LSP test-file diagnostics совпали с baseline.
+- Build checked: SDK, plugins, desktop, Deb и AppImage. Готовые пакеты:
+  `release/verstak_0.3.5-actions.2_amd64.deb` и
+  `release/verstak-linux-x86_64-0.3.5-actions.2.AppImage`.
+  Бинарники: `0.3.5-actions.2 (7f0dbb1)`. В обоих 18 shipping plugins,
+  checksums и Actions source match passed. SHA-256 — `build/actions-2/artifacts.json`.
+- Real desktop GUI checked на development binary, извлечённом Deb и самом AppImage:
+  private HOME/Xvfb/software, physical buttons, native No/Yes, literal printf,
+  one-click repeat, long review, missing executable, cancelled sleep, xmessage
+  GUI (возврат ~1.3s до закрытия), темы и Deal tab с Notes/Files. Четыре записи
+  подтверждены на диске; аргументы отсутствуют в app.log. Личный vault и
+  установленное приложение не менялись; пользовательский GPU не проверялся.
+- Evidence/report: `build/actions-2/REPORT.md`, `verification.json`, `all-checks.log`,
+  `native{,-deb,-appimage}/result.json`, PNG, package logs/metadata/checksums.
+  GitHub CI не является доказательством комплекта: workflows берут соседей из main.
+- Сборки переданы для ручной проверки. Остановиться, ждать обратной связи;
+  никаких следующих этапов, merge/release или SSHKeeper без нового задания.
+
+## Предыдущая точка: 2026-10-22, v0.3.4 опубликован; остановка по просьбе пользователя
 
 - [Desktop v0.3.4](https://github.com/mirivlad/verstak/releases/tag/v0.3.4)
   опубликован: tag `3483033bd2cedb0c5058f0ddeacdfe2209122a15`.
