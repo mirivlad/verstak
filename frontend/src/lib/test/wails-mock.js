@@ -29,6 +29,10 @@ import templatesManifest from '../../../../../verstak-official-plugins/plugins/t
 import milestonesManifest from '../../../../../verstak-official-plugins/plugins/milestones/plugin.json';
 import milestonesSource from '../../../../../verstak-official-plugins/plugins/milestones/frontend/src/index.js?raw';
 import gitManifest from '../../../../../verstak-official-plugins/plugins/git/plugin.json';
+import actionsManifest from '../../../../../verstak-official-plugins/plugins/actions/plugin.json';
+import actionsSource from '../../../../../verstak-official-plugins/plugins/actions/frontend/src/index.js?raw';
+import actionsEnCatalog from '../../../../../verstak-official-plugins/plugins/actions/locales/en.json';
+import actionsRuCatalog from '../../../../../verstak-official-plugins/plugins/actions/locales/ru.json';
 import notesSource from '../../../../../verstak-official-plugins/plugins/notes/frontend/src/index.js?raw';
 import projectsSource from '../../../../../verstak-official-plugins/plugins/projects/frontend/src/index.js?raw';
 import browserInboxSource from '../../../../../verstak-official-plugins/plugins/browser-inbox/frontend/src/index.js?raw';
@@ -94,7 +98,8 @@ import syncStyle from '../../../../../verstak-official-plugins/plugins/sync/fron
     [searchManifest, 'search'],
     [templatesManifest, 'templates'],
     [milestonesManifest, 'milestones'],
-    [gitManifest, 'git']
+    [gitManifest, 'git'],
+    [actionsManifest, 'actions']
   ];
 
   function makeDefaultPluginStates() {
@@ -125,7 +130,8 @@ import syncStyle from '../../../../../verstak-official-plugins/plugins/sync/fron
     'verstak.file-preview': { en: filePreviewEnCatalog, ru: filePreviewRuCatalog },
     'verstak.journal': { en: journalEnCatalog, ru: journalRuCatalog },
     'verstak.todo': { en: todoEnCatalog, ru: todoRuCatalog },
-    'verstak.git': { en: gitEnCatalog, ru: gitRuCatalog }
+    'verstak.git': { en: gitEnCatalog, ru: gitRuCatalog },
+    'verstak.actions': { en: actionsEnCatalog, ru: actionsRuCatalog }
   };
 
   var russianPluginNames = {
@@ -883,6 +889,39 @@ function cloneJson(value) {
       window.__wailsMockOpenedUpdatePages = (window.__wailsMockOpenedUpdatePages || []).concat([lastUpdateResult.url]);
       return Promise.resolve('');
     },
+    // Process execution is simulated here. Real OS behavior is covered by Go and native smokes.
+    PluginProcessApproved: async function(pluginId, request) {
+      var err = requirePluginPermission(pluginId, request.kind === 'url' ? 'external.openURL' : 'process.spawn');
+      if (err) throw new Error(err);
+      return !!(window.__actionsMockGrants || {})[JSON.stringify([pluginId,request])];
+    },
+    PluginProcessReview: async function(pluginId, request) {
+      var err = requirePluginPermission(pluginId, request.kind === 'url' ? 'external.openURL' : 'process.spawn');
+      if (err) throw new Error(err);
+      window.__actionsMockReviews = (window.__actionsMockReviews || 0) + 1;
+      if (!window.__actionsMockAllowReview) return false;
+      window.__actionsMockGrants = window.__actionsMockGrants || {};
+      window.__actionsMockGrants[JSON.stringify([pluginId,request])] = true;
+      return true;
+    },
+    PluginProcessRun: async function(pluginId, operationId, request) {
+      var err = requirePluginPermission(pluginId, request.kind === 'url' ? 'external.openURL' : 'process.spawn');
+      if (err) throw new Error(err);
+      if (!(window.__actionsMockGrants || {})[JSON.stringify([pluginId,request])]) throw new Error('approval_required');
+      window.__actionsMockRuns = (window.__actionsMockRuns || []).concat([{operationId,request}]);
+      if (request.executable === 'missing-verstak-program') throw new Error('program_not_found');
+      return {started:true,exitCode:request.mode==='detached'?-1:0,stdout:'literal result: '+(request.args || []).join('|'),stderr:'',timedOut:false,cancelled:false,outputLimited:false};
+    },
+    PluginProcessCancel: async function(pluginId) {
+      var err = requirePluginPermission(pluginId, 'process.spawn');
+      if (err) throw new Error(err);
+      window.__actionsMockCancels = (window.__actionsMockCancels || 0) + 1;
+    },
+    PluginProcessRevoke: async function(pluginId, request) {
+      var err = requirePluginPermission(pluginId, request.kind === 'url' ? 'external.openURL' : 'process.spawn');
+      if (err) throw new Error(err);
+      delete (window.__actionsMockGrants || {})[JSON.stringify([pluginId,request])];
+    },
     GetPluginFrontendInfo: function (pluginId) {
       var s = pluginStates[pluginId];
       if (s && s.manifest && s.manifest.frontend) {
@@ -1276,6 +1315,7 @@ function cloneJson(value) {
       if (pluginId === milestonesManifest.id && assetPath === milestonesManifest.frontend.entry) {
         return Promise.resolve(milestonesSource);
       }
+      if (pluginId === actionsManifest.id && assetPath === actionsManifest.frontend.entry) return Promise.resolve(actionsSource);
       if (pluginId === gitManifest.id && assetPath === gitManifest.frontend.entry) {
         return Promise.resolve(gitSource);
       }
