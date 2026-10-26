@@ -405,6 +405,7 @@ export default {
 
   'workspaceTree.iconSearch': 'Поиск значка',
 
+  'common.defaultIcon': 'Стандартный значок',
   'workspaceTree.defaultIcon': 'Стандартный значок папки',
 
   'workspaceTree.resetColor': 'По умолчанию',

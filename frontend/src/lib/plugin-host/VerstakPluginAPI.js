@@ -1,6 +1,6 @@
 import * as App from '../../../wailsjs/go/api/App';
 import { i18n } from '../i18n/index.js';
-import { CORE_ICONS } from '../ui/icons/core.js';
+import { CORE_ICONS, ICON_ALIASES } from '../ui/icons/core.js';
 import { matchesShortcut } from '../ui/shortcuts.js';
 import { registerNavigationHandler } from '../shell/navigation-handlers.js';
 
@@ -566,12 +566,27 @@ export function createPluginAPI(pluginId) {
         const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
         const attrs = { viewBox: '0 0 24 24', width: size, height: size, fill: 'none', stroke: 'currentColor', 'stroke-width': 2, 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'aria-hidden': 'true', 'data-icon': name };
         Object.entries(attrs).forEach(([key, value]) => svg.setAttribute(key, value));
-        (CORE_ICONS[name] || CORE_ICONS.circle).forEach(([tag, attributes]) => {
-          const node = document.createElementNS('http://www.w3.org/2000/svg', tag);
-          Object.entries(attributes).forEach(([key, value]) => node.setAttribute(key, value));
-          svg.appendChild(node);
-        });
+        const iconName = Object.prototype.hasOwnProperty.call(ICON_ALIASES, name) ? ICON_ALIASES[name] : name;
+        const coreNodes = Array.isArray(CORE_ICONS[iconName]) ? CORE_ICONS[iconName] : null;
+        function draw(nodes) {
+          svg.replaceChildren();
+          nodes.forEach(([tag, attributes]) => {
+            const node = document.createElementNS('http://www.w3.org/2000/svg', tag);
+            Object.entries(attributes).forEach(([key, value]) => node.setAttribute(key, value));
+            svg.appendChild(node);
+          });
+        }
+        draw(coreNodes || CORE_ICONS.circle);
+        if (!coreNodes) import('../ui/Icon.svelte').then(({ loadIconNodes }) => loadIconNodes(iconName)).then(draw);
         return svg;
+      },
+      pickIcon: async function(current = '') {
+        assertActive('ui.pickIcon');
+        const { openIconPicker } = await import('../ui/icon-picker.js');
+        assertActive('ui.pickIcon');
+        const picker = openIconPicker(current);
+        const cleanup = trackCleanup(picker.cancel);
+        return picker.result.finally(cleanup);
       },
       openView: async function(viewId) {
         assertActive('ui.openView');
