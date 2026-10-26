@@ -27,12 +27,22 @@
 
   export function resolveIconName(name) {
     const requested = String(name || '');
-    return ICON_ALIASES[requested] || requested;
+    return Object.prototype.hasOwnProperty.call(ICON_ALIASES, requested) ? ICON_ALIASES[requested] : requested;
   }
 
   // Exported so a test can assert the vocabulary without running a browser.
   export function iconIsCore(name) {
     return Object.prototype.hasOwnProperty.call(CORE_ICONS, resolveIconName(name));
+  }
+
+  // Also used by DOM-based plugins so picker selections use the same sprite.
+  export function loadIconNodes(name) {
+    const iconName = resolveIconName(name);
+    return loadSprite().then((loaded) => {
+      if (Object.prototype.hasOwnProperty.call(loaded, iconName)) return loaded[iconName];
+      warnUnknown(iconName);
+      return CORE_ICONS.circle;
+    });
   }
 
   function warnUnknown(name) {

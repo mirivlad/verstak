@@ -404,6 +404,7 @@ export default {
 
   'workspaceTree.iconSearch': 'Search icons',
 
+  'common.defaultIcon': 'Default icon',
   'workspaceTree.defaultIcon': 'Default folder icon',
 
   'workspaceTree.resetColor': 'Default',
