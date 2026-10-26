@@ -201,6 +201,14 @@ func (a *App) workspaceHasTool(workspaceID, pluginID string) bool {
 	if !ok {
 		return false
 	}
+	// Utility contributions opt into all Deals through the public manifest.
+	if p, err := a.findPlugin(pluginID); err == nil && p.Manifest.Contributes != nil {
+		for _, item := range p.Manifest.Contributes.WorkspaceItems {
+			if item.AlwaysAvailable {
+				return true
+			}
+		}
+	}
 	metadata, err := a.treeV2.ReadDealMetadata(workspaceID, workspace.RootPath)
 	if err != nil {
 		return true

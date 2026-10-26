@@ -24,6 +24,7 @@ import (
 	"github.com/verstak/verstak-desktop/internal/core/permissions"
 	"github.com/verstak/verstak-desktop/internal/core/plugin"
 	"github.com/verstak/verstak-desktop/internal/core/pluginstate"
+	"github.com/verstak/verstak-desktop/internal/core/processes"
 	coresecrets "github.com/verstak/verstak-desktop/internal/core/secrets"
 	"github.com/verstak/verstak-desktop/internal/core/storage"
 	syncsvc "github.com/verstak/verstak-desktop/internal/core/sync"
@@ -50,6 +51,11 @@ type notificationService interface {
 
 // App is the main application struct exposed to the Wails frontend.
 type App struct {
+	processMu             sync.Mutex
+	processReviewMu       sync.Mutex
+	processes             *processes.Service
+	processEpoch          uint64
+	confirmProcess        func(context.Context, runtime.MessageDialogOptions) (string, error)
 	ctx                   context.Context
 	capRegistry           *capability.Registry
 	contribRegistry       *contribution.Registry
@@ -173,6 +179,7 @@ func (a *App) DomReady(ctx context.Context) {
 
 // Shutdown stops scheduled delivery before releasing native notification resources.
 func (a *App) Shutdown(ctx context.Context) {
+	a.stopPluginProcesses("")
 	if service := a.currentImportService(); service != nil {
 		service.CloseAll()
 	}
@@ -255,7 +262,7 @@ func (a *App) requirePluginAccess(pluginID, permission string) (*plugin.Plugin, 
 	if err != nil {
 		return nil, err
 	}
-	if !p.Enabled || (p.Status != plugin.StatusLoaded && p.Status != plugin.StatusDegraded) {
+	if (a.pluginState != nil && a.pluginState.IsDisabled(pluginID)) || !p.Enabled || (p.Status != plugin.StatusLoaded && p.Status != plugin.StatusDegraded) {
 		return nil, fmt.Errorf("plugin %q is not enabled and loaded: status=%s enabled=%v", pluginID, p.Status, p.Enabled)
 	}
 	if permission != "" && !hasString(p.Manifest.Permissions, permission) {

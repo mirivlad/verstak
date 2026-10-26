@@ -1,0 +1,37 @@
+--- vendor/github.com/wailsapp/wails/v2/internal/frontend/desktop/linux/window.c
++++ vendor/github.com/wailsapp/wails/v2/internal/frontend/desktop/linux/window.c
+@@ -734,7 +734,33 @@
+                                     GTK_DIALOG_DESTROY_WITH_PARENT,
+                                     messageType,
+                                     flags,
+-                                    options->message, NULL);
++                                    "%s", options->message);
++    if (messageType == GTK_MESSAGE_QUESTION)
++    {
++        gtk_dialog_set_default_response(GTK_DIALOG(dialog), GTK_RESPONSE_NO);
++    }
++    // Long reviews must remain fully readable without pushing buttons offscreen.
++    if (strlen(options->message) > 600)
++    {
++        GtkWidget *area = gtk_message_dialog_get_message_area(GTK_MESSAGE_DIALOG(dialog));
++        GList *labels = gtk_container_get_children(GTK_CONTAINER(area));
++        for (GList *item = labels; item != NULL; item = item->next)
++        {
++            gtk_widget_hide(GTK_WIDGET(item->data));
++        }
++        g_list_free(labels);
++        GtkWidget *scroll = gtk_scrolled_window_new(NULL, NULL);
++        gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scroll), GTK_POLICY_NEVER, GTK_POLICY_AUTOMATIC);
++        gtk_widget_set_size_request(scroll, 480, 300);
++        GtkWidget *text = gtk_text_view_new();
++        gtk_text_view_set_editable(GTK_TEXT_VIEW(text), FALSE);
++        gtk_text_view_set_cursor_visible(GTK_TEXT_VIEW(text), FALSE);
++        gtk_text_view_set_wrap_mode(GTK_TEXT_VIEW(text), GTK_WRAP_WORD_CHAR);
++        gtk_text_buffer_set_text(gtk_text_view_get_buffer(GTK_TEXT_VIEW(text)), options->message, -1);
++        gtk_container_add(GTK_CONTAINER(scroll), text);
++        gtk_box_pack_start(GTK_BOX(area), scroll, TRUE, TRUE, 0);
++        gtk_widget_show_all(scroll);
++    }
+     gtk_window_set_title(GTK_WINDOW(dialog), options->title);
+     GtkResponseType result = gtk_dialog_run(GTK_DIALOG(dialog));
+     if (result == GTK_RESPONSE_YES)

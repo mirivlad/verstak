@@ -11,6 +11,7 @@ import {plugin} from '../models';
 import {workspace} from '../models';
 import {workspacetree} from '../models';
 import {importservice} from '../models';
+import {processes} from '../models';
 import {notifications} from '../models';
 
 export function ArchiveWorkspaceNode(arg1:string):Promise<string>;
@@ -158,6 +159,16 @@ export function PluginGitStatus(arg1:string,arg2:Record<string, any>):Promise<Re
 export function PluginListImportEntries(arg1:string,arg2:string,arg3:string):Promise<importservice.EntryPage|string>;
 
 export function PluginListWorkspaces(arg1:string):Promise<Array<api.PluginWorkspaceDTO>|string>;
+
+export function PluginProcessApproved(arg1:string,arg2:processes.Request):Promise<boolean>;
+
+export function PluginProcessCancel(arg1:string,arg2:string):Promise<void>;
+
+export function PluginProcessReview(arg1:string,arg2:processes.Request):Promise<boolean>;
+
+export function PluginProcessRevoke(arg1:string,arg2:processes.Request):Promise<void>;
+
+export function PluginProcessRun(arg1:string,arg2:string,arg3:processes.Request):Promise<processes.Result>;
 
 export function PluginReadImportText(arg1:string,arg2:string,arg3:string):Promise<string|string>;
 

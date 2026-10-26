@@ -195,9 +195,11 @@ type ContributionOpenProvider struct {
 
 // ContributionWorkspaceItem represents a workspace tool contribution.
 type ContributionWorkspaceItem struct {
-	ID    string `json:"id"`
-	Title string `json:"title"`
-	Icon  string `json:"icon,omitempty"`
+	// AlwaysAvailable keeps a utility tab available in every Deal, independent of recipes.
+	AlwaysAvailable bool   `json:"alwaysAvailable,omitempty"`
+	ID              string `json:"id"`
+	Title           string `json:"title"`
+	Icon            string `json:"icon,omitempty"`
 	// Order places this tool among the tabs of a Deal. Lower comes first;
 	// items without one sort after those with one, then by title. The shell
 	// used to carry a hardcoded table of plugin names to decide this, which

@@ -47,6 +47,7 @@ export namespace api {
 	    }
 	}
 	export class FlatWorkspaceItem {
+	    alwaysAvailable?: boolean;
 	    pluginId: string;
 	    id: string;
 	    title: string;
@@ -60,6 +61,7 @@ export namespace api {
 	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.alwaysAvailable = source["alwaysAvailable"];
 	        this.pluginId = source["pluginId"];
 	        this.id = source["id"];
 	        this.title = source["title"];
@@ -1259,6 +1261,7 @@ export namespace plugin {
 	    }
 	}
 	export class ContributionWorkspaceItem {
+	    alwaysAvailable?: boolean;
 	    id: string;
 	    title: string;
 	    icon?: string;
@@ -1271,6 +1274,7 @@ export namespace plugin {
 	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.alwaysAvailable = source["alwaysAvailable"];
 	        this.id = source["id"];
 	        this.title = source["title"];
 	        this.icon = source["icon"];
@@ -1534,6 +1538,61 @@ export namespace plugin {
 		}
 	}
 	
+
+}
+
+export namespace processes {
+
+	export class Request {
+	    kind: string;
+	    executable?: string;
+	    args?: string[];
+	    cwd?: string;
+	    mode?: string;
+	    timeoutMs?: number;
+	    maxOutputBytes?: number;
+	    url?: string;
+
+	    static createFrom(source: any = {}) {
+	        return new Request(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.kind = source["kind"];
+	        this.executable = source["executable"];
+	        this.args = source["args"];
+	        this.cwd = source["cwd"];
+	        this.mode = source["mode"];
+	        this.timeoutMs = source["timeoutMs"];
+	        this.maxOutputBytes = source["maxOutputBytes"];
+	        this.url = source["url"];
+	    }
+	}
+	export class Result {
+	    started: boolean;
+	    exitCode: number;
+	    stdout: string;
+	    stderr: string;
+	    timedOut: boolean;
+	    cancelled: boolean;
+	    outputLimited: boolean;
+
+	    static createFrom(source: any = {}) {
+	        return new Result(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.started = source["started"];
+	        this.exitCode = source["exitCode"];
+	        this.stdout = source["stdout"];
+	        this.stderr = source["stderr"];
+	        this.timedOut = source["timedOut"];
+	        this.cancelled = source["cancelled"];
+	        this.outputLimited = source["outputLimited"];
+	    }
+	}
 
 }
 
