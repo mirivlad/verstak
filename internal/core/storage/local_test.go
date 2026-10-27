@@ -8,6 +8,7 @@ import (
 
 func TestLocalDataStaysOutsideVaultAndIsScoped(t *testing.T) {
 	home := t.TempDir()
+	t.Setenv("HOME", home)
 	t.Setenv("XDG_CONFIG_HOME", home)
 	t.Setenv("APPDATA", home)
 	t.Setenv("LOCALAPPDATA", home)
@@ -38,9 +39,11 @@ func TestLocalDataStaysOutsideVaultAndIsScoped(t *testing.T) {
 		t.Fatal("local data inside vault", localPath)
 	}
 	// A second device with the same vault path still has its own configuration.
-	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
-	t.Setenv("APPDATA", t.TempDir())
-	t.Setenv("LOCALAPPDATA", t.TempDir())
+	otherDevice := t.TempDir()
+	t.Setenv("HOME", otherDevice)
+	t.Setenv("XDG_CONFIG_HOME", otherDevice)
+	t.Setenv("APPDATA", otherDevice)
+	t.Setenv("LOCALAPPDATA", otherDevice)
 	got, err = s.ReadPluginLocalJSON("actions", "trust")
 	if err != nil || len(got) != 0 {
 		t.Fatal("trust crossed devices", got, err)
@@ -49,6 +52,7 @@ func TestLocalDataStaysOutsideVaultAndIsScoped(t *testing.T) {
 
 func TestLocalDataRejectsInvalidPathsAndCorruption(t *testing.T) {
 	home := t.TempDir()
+	t.Setenv("HOME", home)
 	t.Setenv("XDG_CONFIG_HOME", home)
 	t.Setenv("APPDATA", home)
 	t.Setenv("LOCALAPPDATA", home)
