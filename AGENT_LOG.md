@@ -2,91 +2,50 @@
 
 > Каноническая точка продолжения ревизии между чатами. Перед новой работой сначала прочитать этот файл и сверить указанные ветки/PR/коммиты с GitHub. После каждого законченного среза или смены рабочей точки обновлять файл.
 
-## Новая модель доверия Actions: исходники реализованы, проверка кандидата в работе
+## Текущая точка: 2026-10-27, Actions 2.0 — кандидат 0.3.5-actions.4, ожидание проверки владельцем
 
-- Те же `feat/actions-2`, UI-срез b304e0e/326bd74/dfd7347 сохранён отдельно.
-- `processes.run` больше не требует request grant, но Go checks plugin loaded,
-  persisted disable, capability и process.spawn/external.openURL на каждом вызове.
-  `confirm` — отдельное native confirmation без выдачи прав/сохранения approval.
-  Старые approved/review/revoke оставлены deprecated ради API-совместимости.
-- Generic `storage.local` хранит JSON вне vault, в namespace vault-path/plugin,
-  Windows — LocalAppData. В sync/import этот store не участвует и прав не даёт.
-- Actions доверяет только form-save или принятому confirmation; SHA-256 от
-  authored request + confirmEveryRun. Title/icon/rank/scope не влияют.
-  Командный save/import/sync не записывают доверие. Щит удалён; optional
-  «Спрашивать подтверждение перед каждым запуском» по умолчанию выключен.
-- Источники проверены: local record diff записывает операции, remote apply пишет
-  через storage напрямую. UI-only trust boundary отделяет авторство без новых
-  полей источника в sync. Старые определения сохраняются; без local hash —
-  одно подтверждение, вместо предположений об их авторстве.
-- Целевые проверки: UI 18/18; SDK 39/39; Go process/storage/API -race passed;
-  gopls clean; TS LSP 0 новых ошибок (2 прежних в SDK test file).
-- Следующий шаг: полный gate, локальные пакеты 0.3.5-actions.4 и native smokes.
-  Без релиза, тега или merge main. Подробный контракт — docs/PROCESSES_API.md.
-
-## Текущая точка: 2026-10-27 — UI Actions проверен, новая модель доверия в работе
-
-- Три ветки `feat/actions-2`, без изменений main/релизов.
-- UI: desktop `b304e0e`, SDK `326bd74`, plugins `dfd7347`.
-  Компактные карточки с hover/focus controls, общая модалка значков,
-  строка аргументов с кавычками, постоянная памятка убрана.
-- Проверки: общий gate 9/9, 224 E2E; целевые UI 15/15; SDK 39/39;
-  196 argv roundtrip cases. LSP: 0 новых ошибок, 2 прежних в SDK test file.
-- Кандидат `0.3.5-actions.3`: .deb и AppImage в `release/`. Оба реально
-  запущены в WebKitGTK/Xvfb с физическими кликами и private HOME/vault.
-  24 карточки помещаются в окно 1200x800, обе темы/RU, picker, аргументы,
-  текущий native review/отзыв прошли. Это ещё прежняя модель доверия.
-  Доказательства: `build/actions-2-ux/`, REPORT.md и package-check.log.
-- Владелец дал следующую задачу: локальные UI-создания/правки доверенные,
-  внешние изменения executable части требуют разового подтверждения;
-  локальное доверие не sync/import; optional confirmEveryRun; убрать щит.
-  Process permissions/capabilities, backend lifecycle/access checks,
-  literal argv, limits/cancel и безопасные URL/logging сохраняются.
-  UI-правки не переделывать. Отдельные коммиты в тех же feature-ветках.
-- Следующий шаг: исследовать реальные пути local/sync/import record operations,
-  выбрать минимальный локальный механизм доверия и реализовать тесты новой модели.
-
-## Основа Actions 2.0: предыдущий кандидат 0.3.5-actions.2
-
-- Три ветки `feat/actions-2` отправлены в origin; main не менялся, тегов и релизов нет.
-  Desktop: `7bf67b8` (общая process infrastructure), `7f0dbb1` (Actions E2E).
-  SDK: `a0963e5` (контракты), `5ba9a34` (generated dist из актуального src).
-  Official plugins: `ee923e7` (новый `verstak.actions`).
-- Core: `verstak/core/processes/v1`, literal executable/argv/cwd, wait/detached,
-  bounded stdout/stderr, timeout/cancel, HTTP(S) system handler. Permission
-  `process.spawn` переиспользуется, `external.openURL` добавлен. Все Go вызовы
-  проверяют permission/capability и актуальный disable. Native exact-request
-  approvals хранятся вне vault и не синхронизируются. Linux Wails patch исключает
-  printf-интерпретацию текста, задаёт отказ по Enter и scroll для длинного review.
-  Shared frontend остаётся trusted context, не sandbox. Core не содержит Actions ID/логику.
-- Actions: CRUD/order, global/Deal UUID, sidebar + вкладка каждого Дела,
-  palette launcher, 10 Lucide иконок, RU/EN, обе темы, output/Stop/revoke.
-  Данные — существующий settings/plugin-record sync. Загрузка/import/sync/enable
-  не запускают действий. Локальных path mappings нет; file associations не
-  предоставляются (можно явное приложение + аргумент файла). SSHKeeper не начат.
-- Local gate `scripts/verstak-check.sh`: 9/9 групп, 220/220 E2E, SDK 39/39;
-  opt-in Go SKIP: real-server smoke, supplied backups, synthetic cost test.
-  Focused Go `-race` passed; реальный Linux printf/no-shell, stderr/exit/cwd,
-  cancellation/time/output/descendants и device-local approvals checked.
-  Sync record-op replay двух временных vault checked; реальный server/два
-  физических устройства не проверялись. Windows/macOS process tests — compile only.
-  gopls чистый; две старые TS LSP test-file diagnostics совпали с baseline.
-- Build checked: SDK, plugins, desktop, Deb и AppImage. Готовые пакеты:
-  `release/verstak_0.3.5-actions.2_amd64.deb` и
-  `release/verstak-linux-x86_64-0.3.5-actions.2.AppImage`.
-  Бинарники: `0.3.5-actions.2 (7f0dbb1)`. В обоих 18 shipping plugins,
-  checksums и Actions source match passed. SHA-256 — `build/actions-2/artifacts.json`.
-- Real desktop GUI checked на development binary, извлечённом Deb и самом AppImage:
-  private HOME/Xvfb/software, physical buttons, native No/Yes, literal printf,
-  one-click repeat, long review, missing executable, cancelled sleep, xmessage
-  GUI (возврат ~1.3s до закрытия), темы и Deal tab с Notes/Files. Четыре записи
-  подтверждены на диске; аргументы отсутствуют в app.log. Личный vault и
-  установленное приложение не менялись; пользовательский GPU не проверялся.
-- Evidence/report: `build/actions-2/REPORT.md`, `verification.json`, `all-checks.log`,
-  `native{,-deb,-appimage}/result.json`, PNG, package logs/metadata/checksums.
-  GitHub CI не является доказательством комплекта: workflows берут соседей из main.
-- Сборки переданы для ручной проверки. Остановиться, ждать обратной связи;
-  никаких следующих этапов, merge/release или SSHKeeper без нового задания.
+- Ветки `feat/actions-2`; main, теги и релизы не менялись.
+  Desktop: `38861d6` (новая модель/API/local data), `77f60c6` (изоляция тестового
+  config на всех ОС, metadata бинарников). SDK: `b7b2353`; plugins: `b016588`.
+- Локальные form-save Actions доверенные, запускаются сразу; внешняя новая
+  запись/изменение executable части требует одного подтверждения. Импортные
+  approved/trusted и public save не выдают доверие. Cosmetic edits его сохраняют.
+  Optional confirmEveryRun — запрос каждый раз, по умолчанию false. Щит удалён.
+- SHA-256 authored request + confirmEveryRun хранится через generic storage.local
+  вне vault, namespace vault-path/plugin (Windows LocalAppData). В sync/import
+  не участвует. Старые определения не меняются; без локального следа — одно
+  подтверждение вместо предположения об их авторстве.
+- process.run проверяет loaded/persisted disable, capability и permission Go.
+  Confirm — отдельный диалог без выдачи прав и записи старого approval store.
+  Approved/review/revoke deprecated, оставлены для API-совместимости, запуском
+  не управляют. Literal argv, limits/output/cancel, URL validation/log hygiene
+  сохранены. Shared JS context остаётся trusted code, не sandbox/authentication.
+- Фактический source boundary: local settings write -> recordPluginRecordChanges;
+  remote apply -> storage напрямую + plugin.records.changed. Только form handler
+  и принятый confirm пишут локальный hash. Источник из synced fields не выводится.
+- Полный local gate: 9/9 групп, 227/227 E2E. Целевые UI: 18/18; SDK 39/39;
+  process/storage/API -race passed, gopls clean, TS LSP 0 новых ошибок
+  (2 прежних в SDK test file). Opt-in Go SKIP: real-server two-vault,
+  supplied-backups, synthetic cost. Storage Windows/macOS — compile only.
+- Оба фактических пакета .deb и AppImage запущены в WebKitGTK/Xvfb/private HOME
+  с физическими кликами: local no-dialog, foreign/changed confirmation, every-run
+  option, cosmetic edits, fresh-device store, stop, disabled refusal, no autorun,
+  no old approvals file, hashes only, обе темы/RU, 24 cards без overflow 1200x800.
+  18 shipping plugins/assets совпали с dist; argv отсутствуют в app.log.
+- Пакеты: `release/verstak_0.3.5-actions.4_amd64.deb` и
+  `release/verstak-linux-x86_64-0.3.5-actions.4.AppImage` (77f60c6).
+  Доказательства/отчёт: `build/actions-2-trust/REPORT.md`, packages.json,
+  artifacts.json, all-checks.log, native-{deb,appimage}/result.json + PNG.
+  Один ранний native-deb-fixture-failure — ошибка тестового драйвера (command
+  result wrapper), исправлен без правки приложения; успешный прогон — native-deb.
+- Согласованный UI сохранён отдельным срезом b304e0e / 326bd74 / dfd7347:
+  компактные карточки, hover/focus, общая модалка иконок, строка аргументов.
+  Старые кандидаты .2/.3 с прежней моделью заменены .4; их proof остаётся в
+  build/actions-2/ и build/actions-2-ux/. Не предлагать старые пакеты как актуальные.
+- GitHub check workflow берёт соседние SDK/plugins из main и не подтверждает
+  этот комплект feature-веток. Доказательство комплекта — локальный gate.
+- Следующий шаг: остановиться и ждать ручной проверки .4 владельцем. Никаких
+  новых этапов, merge/release или SSHKeeper без нового задания.
 
 ## Предыдущая точка: 2026-10-22, v0.3.4 опубликован; остановка по просьбе пользователя
 
