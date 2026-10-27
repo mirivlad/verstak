@@ -52,19 +52,50 @@ test.describe('Actions 2.0',()=>{
   await page.locator('button[title="New Deal"]').click();await page.locator('[data-new-deal-name]').fill('Another Deal');await page.locator('[data-new-deal-create]').click();await tab(page);
   await expect(view(page).locator('[data-action="run"]')).toHaveCount(1);await expect(view(page)).not.toContainText('Local to Project');
  });
- test('review decline, one-click launch, edited arguments and permission revoke',async({page})=>{
+ test('local creation and editing launch immediately without confirmation',async({page})=>{
   await openGlobal(page);await add(page);
-  await page.locator('[data-action="run"]').click();await expect(page.locator('[data-action-status]')).toContainText('nothing was run');
-  expect(await page.evaluate(()=>window.__actionsMockRuns || [])).toHaveLength(0);
-  await page.evaluate(()=>window.__actionsMockAllowReview=true);
+  await expect(page.locator('[data-action="forget"]')).toHaveCount(0);
   await page.locator('[data-action="run"]').click();await expect(page.locator('[data-action-output]')).toContainText('two words; $(literal)');
-  const reviews=await page.evaluate(()=>window.__actionsMockReviews);
-  await page.locator('[data-action="run"]').click();await expect.poll(()=>page.evaluate(()=>window.__actionsMockRuns.length)).toBe(2);
-  expect(await page.evaluate(()=>window.__actionsMockReviews)).toBe(reviews);
-  await page.locator('.actions-card').hover();await page.locator('[data-action="edit"]').click();await page.locator('[data-action-field="args"]').fill('changed');await page.locator('[data-action="save"]').click();await page.locator('[data-action="run"]').click();
-  await expect.poll(()=>page.evaluate(()=>window.__actionsMockReviews)).toBe(reviews+1);await expect(page.locator('[data-action-output]')).toContainText('changed');
-  await page.locator('.actions-card').hover();await page.locator('[data-action="forget"]').click();await expect(page.locator('[data-action-status]')).toContainText('revoked');
-  expect(await page.evaluate(()=>Object.keys(window.__actionsMockGrants))).toHaveLength(1);
+  expect(await page.evaluate(()=>window.__actionsMockReviews||0)).toBe(0);
+  await page.locator('.actions-card').hover();await page.locator('[data-action="edit"]').click();
+  await page.locator('[data-action-field="args"]').fill('changed');await page.locator('[data-action-field="cwd"]').fill('/tmp');
+  await page.locator('[data-action="save"]').click();await expect(page.locator('[data-action-form]')).toBeHidden();await page.locator('[data-action="run"]').click();
+  await expect(page.locator('[data-action-output]')).toContainText('changed');expect(await page.evaluate(()=>window.__actionsMockReviews||0)).toBe(0);
+  expect(await page.evaluate(()=>window.__actionsMockRuns[1].request.cwd)).toBe('/tmp');
+ });
+ test('external create and executable edits require confirmation; cosmetic edits keep trust',async({page})=>{
+  await openGlobal(page);await add(page);
+  // Same command, a new record identity, and forged trust flags must still ask.
+  await page.evaluate(async()=>{const [rows]=await window.go.api.App.ReadPluginSetting('verstak.actions','actions');await window.go.api.App.WritePluginSetting('verstak.actions','actions',[{...rows[0],id:'external',approved:true,trusted:true}]);window.__VERSTAK_DISPATCH_BACKEND_EVENT__({name:'plugin.records.changed',payload:{pluginId:'verstak.actions',document:'actions'}});});
+  await page.locator('[data-action="run"]').click();await expect(page.locator('[data-action-status]')).toContainText('nothing was run');
+  expect(await page.evaluate(()=>window.__actionsMockRuns||[])).toHaveLength(0);
+  await page.evaluate(()=>window.__actionsMockAllowReview=true);await page.locator('[data-action="run"]').click();await expect(page.locator('[data-action-output]')).toBeVisible();
+  const count=await page.evaluate(()=>window.__actionsMockReviews);await page.locator('[data-action="run"]').click();await expect.poll(()=>page.evaluate(()=>window.__actionsMockRuns.length)).toBe(2);expect(await page.evaluate(()=>window.__actionsMockReviews)).toBe(count);
+  await page.evaluate(async()=>{const [rows]=await window.go.api.App.ReadPluginSetting('verstak.actions','actions');await window.go.api.App.WritePluginSetting('verstak.actions','actions',[{...rows[0],title:'Cosmetic update',icon:'rocket'}]);window.__VERSTAK_DISPATCH_BACKEND_EVENT__({name:'plugin.records.changed',payload:{pluginId:'verstak.actions',document:'actions'}});});
+  await expect(page.locator('[data-action="run"]')).toHaveText('Cosmetic update');await page.locator('[data-action="run"]').click();await expect.poll(()=>page.evaluate(()=>window.__actionsMockRuns.length)).toBe(3);expect(await page.evaluate(()=>window.__actionsMockReviews)).toBe(count);
+  await page.evaluate(async()=>{window.__actionsMockAllowReview=false;const [rows]=await window.go.api.App.ReadPluginSetting('verstak.actions','actions');await window.go.api.App.WritePluginSetting('verstak.actions','actions',[{...rows[0],args:['remote args'],cwd:'/remote'}]);window.__VERSTAK_DISPATCH_BACKEND_EVENT__({name:'plugin.records.changed',payload:{pluginId:'verstak.actions',document:'actions'}});});
+  await page.locator('[data-action="run"]').click();await expect(page.locator('[data-action-status]')).toContainText('nothing was run');expect(await page.evaluate(()=>window.__actionsMockRuns.length)).toBe(3);
+  await page.evaluate(()=>window.__actionsMockAllowReview=true);await page.locator('[data-action="run"]').click();await expect(page.locator('[data-action-output]')).toContainText('remote args');
+  // A new device receives definitions, never this device's trust map.
+  await page.evaluate(()=>{window.__actionsMockAllowReview=false;localStorage.removeItem('mock-plugin-local:verstak.actions:action-trust-v1');});
+  const before=await page.evaluate(()=>window.__actionsMockRuns.length);await page.locator('[data-action="run"]').click();await expect(page.locator('[data-action-status]')).toContainText('nothing was run');expect(await page.evaluate(()=>window.__actionsMockRuns.length)).toBe(before);
+ });
+ test('explicit confirm-every-launch applies to trusted actions and can be switched off locally',async({page})=>{
+  await openGlobal(page);await add(page);await page.locator('.actions-card').hover();await page.locator('[data-action="edit"]').click();
+  await expect(page.locator('[data-action-field="confirmEveryRun"]')).not.toBeChecked();await page.locator('[data-action-field="confirmEveryRun"]').check();await page.locator('[data-action="save"]').click();await expect(page.locator('[data-action-form]')).toBeHidden();
+  await page.locator('[data-action="run"]').click();await expect(page.locator('[data-action-status]')).toContainText('nothing was run');
+  await page.evaluate(()=>window.__actionsMockAllowReview=true);
+  for(let n=1;n<=2;n++){await page.locator('[data-action="run"]').click();await expect.poll(()=>page.evaluate(()=>window.__actionsMockRuns.length)).toBe(n);}
+  expect(await page.evaluate(()=>window.__actionsMockReviews)).toBe(3);
+  await page.locator('.actions-card').hover();await page.locator('[data-action="edit"]').click();await page.locator('[data-action-field="confirmEveryRun"]').uncheck();await page.locator('[data-action="save"]').click();await expect(page.locator('[data-action-form]')).toBeHidden();
+  await page.locator('[data-action="run"]').click();await expect.poll(()=>page.evaluate(()=>window.__actionsMockRuns.length)).toBe(3);expect(await page.evaluate(()=>window.__actionsMockReviews)).toBe(3);
+ });
+ test('command/import saves never claim UI authorship, and confirmation rechecks current definition',async({page})=>{
+  await openGlobal(page);
+  await page.evaluate(async()=>{const api=window.createPluginAPI('verstak.actions');try{await api.commands.execute('verstak.actions.save',{title:'Imported command',type:'application',target:'printf',args:['imported'],approved:true});}finally{api.dispose();}});
+  await openGlobal(page);await expect(page.locator('[data-action="run"]')).toHaveCount(1);await page.locator('[data-action="run"]').click();await expect(page.locator('[data-action-status]')).toContainText('nothing was run');
+  await page.evaluate(()=>{window.go.api.App.PluginProcessConfirm=async()=>{const [rows]=await window.go.api.App.ReadPluginSetting('verstak.actions','actions');await window.go.api.App.WritePluginSetting('verstak.actions','actions',[{...rows[0],target:'changed-during-confirmation'}]);return true;};});
+  await page.locator('[data-action="run"]').click();await expect(page.getByRole('alert')).toContainText('changed during confirmation');expect(await page.evaluate(()=>window.__actionsMockRuns||[])).toHaveLength(0);
  });
  test('absent program gives a recovery message',async({page})=>{
   await openGlobal(page);await add(page,{target:'missing-verstak-program'});await page.evaluate(()=>window.__actionsMockAllowReview=true);

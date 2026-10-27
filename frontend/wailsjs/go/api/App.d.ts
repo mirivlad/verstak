@@ -164,6 +164,8 @@ export function PluginProcessApproved(arg1:string,arg2:processes.Request):Promis
 
 export function PluginProcessCancel(arg1:string,arg2:string):Promise<void>;
 
+export function PluginProcessConfirm(arg1:string,arg2:processes.Request):Promise<boolean>;
+
 export function PluginProcessReview(arg1:string,arg2:processes.Request):Promise<boolean>;
 
 export function PluginProcessRevoke(arg1:string,arg2:processes.Request):Promise<void>;
@@ -221,6 +223,8 @@ export function ReadPluginDataJSON(arg1:string,arg2:string):Promise<Record<strin
 export function ReadPluginDataNDJSON(arg1:string,arg2:string):Promise<Array<Record<string, any>>>;
 
 export function ReadPluginDealConfig(arg1:string,arg2:string):Promise<Record<string, any>|string>;
+
+export function ReadPluginLocalDataJSON(arg1:string,arg2:string):Promise<Record<string, any>>;
 
 export function ReadPluginSetting(arg1:string,arg2:string):Promise<any>;
 
@@ -309,6 +313,8 @@ export function WritePluginDataJSON(arg1:string,arg2:string,arg3:Record<string, 
 export function WritePluginDataNDJSON(arg1:string,arg2:string,arg3:Array<Record<string, any>>):Promise<string>;
 
 export function WritePluginDealConfig(arg1:string,arg2:string,arg3:Record<string, any>):Promise<string>;
+
+export function WritePluginLocalDataJSON(arg1:string,arg2:string,arg3:Record<string, any>):Promise<string>;
 
 export function WritePluginSetting(arg1:string,arg2:string,arg3:any):Promise<string>;
 

@@ -468,6 +468,10 @@ export function createPluginAPI(pluginId) {
     pluginId: pluginId,
 
     processes: {
+      confirm: function(request) {
+        assertActive('processes.confirm');
+        return callBackend(pluginId, 'processes.confirm', () => App.PluginProcessConfirm(pluginId, request));
+      },
       approved: function(request) {
         assertActive('processes.approved');
         return callBackend(pluginId, 'processes.approved', () => App.PluginProcessApproved(pluginId, request));
@@ -718,6 +722,16 @@ export function createPluginAPI(pluginId) {
     },
 
     storage: {
+      local: {
+        read: function(name) {
+          assertActive('storage.local.read');
+          return callBackend(pluginId, 'storage.local.read', () => App.ReadPluginLocalDataJSON(pluginId, name));
+        },
+        write: function(name, data) {
+          assertActive('storage.local.write');
+          return callBackendErrorString(pluginId, 'storage.local.write', () => App.WritePluginLocalDataJSON(pluginId, name, data));
+        }
+      },
       data: {
         read: function(name) {
           assertActive('storage.data.read(' + name + ')');

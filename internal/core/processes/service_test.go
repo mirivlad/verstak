@@ -69,9 +69,6 @@ func testRequest(t *testing.T, mode string, args ...string) Request {
 func testService(t *testing.T, r Request) *Service {
 	t.Helper()
 	s := New(filepath.Join(t.TempDir(), "device", "approvals.json"))
-	if err := s.SetApproval("test", r, true); err != nil {
-		t.Fatal(err)
-	}
 	return s
 }
 func TestExactArgumentsDirectoryAndExit(t *testing.T) {
@@ -145,25 +142,32 @@ func TestLimitsAndCancellation(t *testing.T) {
 		})
 	}
 }
-func TestApprovalsAreExactLocalAndNotInDefinition(t *testing.T) {
+func TestLegacyReviewStoreIsLocalButNotAProcessPermission(t *testing.T) {
 	r := testRequest(t, "echo", "sensitive-test-argument")
 	s := testService(t, r)
+	if err := s.SetApproval("test", r, true); err != nil {
+		t.Fatal(err)
+	}
 	if approved, err := New(s.approvalPath).Approved("test", r); err != nil || !approved {
 		t.Fatal("approval did not reload", err)
 	}
 	for _, owner := range []string{"other-plugin", "other-vault"} {
-		if _, err := s.Start(context.Background(), owner, "x", r); err == nil {
-			t.Fatal("approval crossed owner")
+		if approved, err := s.Approved(owner, r); err != nil || approved {
+			t.Fatal("legacy review crossed owner", err)
 		}
 	}
 	changed := r
 	changed.Args = append(append([]string{}, r.Args...), "changed")
-	if _, err := s.Start(context.Background(), "test", "x", changed); err == nil {
-		t.Fatal("edited command inherited approval")
+	if approved, err := s.Approved("test", changed); err != nil || approved {
+		t.Fatal("legacy review crossed request", err)
 	}
 	fresh := New(filepath.Join(t.TempDir(), "approvals.json"))
-	if _, err := fresh.Start(context.Background(), "test", "x", r); err == nil {
-		t.Fatal("imported definition was authorized")
+	run, err := fresh.Start(context.Background(), "authorized-plugin", "first-run", r)
+	if err != nil {
+		t.Fatal("process service still requires a request grant", err)
+	}
+	if got := run.Wait(); got.ExitCode != 7 {
+		t.Fatal(got)
 	}
 	data, err := os.ReadFile(s.approvalPath)
 	if err != nil || strings.Contains(string(data), "sensitive-test-argument") {

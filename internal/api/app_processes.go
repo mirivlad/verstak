@@ -6,6 +6,8 @@ import (
 	"os"
 	"path/filepath"
 	goruntime "runtime"
+	"strconv"
+	"strings"
 
 	"github.com/verstak/verstak-desktop/internal/core/processes"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
@@ -59,6 +61,15 @@ func (a *App) PluginProcessApproved(pluginID string, request processes.Request) 
 // PluginProcessReview grants only the exact request shown by the HOST in a
 // native confirmation. No boolean from a plugin grants access.
 func (a *App) PluginProcessReview(pluginID string, request processes.Request) (bool, error) {
+	return a.confirmProcessRequest(pluginID, request, true)
+}
+
+// PluginProcessConfirm is an optional user confirmation, not a permission grant.
+func (a *App) PluginProcessConfirm(pluginID string, request processes.Request) (bool, error) {
+	return a.confirmProcessRequest(pluginID, request, false)
+}
+
+func (a *App) confirmProcessRequest(pluginID string, request processes.Request, remember bool) (bool, error) {
 	a.processReviewMu.Lock()
 	defer a.processReviewMu.Unlock()
 	a.processMu.Lock()
@@ -68,15 +79,15 @@ func (a *App) PluginProcessReview(pluginID string, request processes.Request) (b
 	if err != nil {
 		return false, err
 	}
-	title, message, allow, deny := "Allow on this device?", "Only approve programs and arguments you trust. Definitions may come from another device.\n\nPlugin: ", "Yes", "No"
+	title, message, allow, deny := "Run this action?", "Review the program and arguments before running.\n\nPlugin: ", "Yes", "No"
 	if a.appSettings != nil && a.appSettings.Get().Language == "ru" {
-		title, message, allow, deny = "Разрешить на этом устройстве?", "Разрешайте только программы и аргументы, которым доверяете. Определение могло прийти с другого устройства.\n\nПлагин: ", "Yes", "No"
+		title, message, allow, deny = "Запустить действие?", "Проверьте программу и аргументы перед запуском.\n\nПлагин: ", "Yes", "No"
 	}
 	confirm := a.confirmProcess
 	if confirm == nil {
 		confirm = runtime.MessageDialog
 	}
-	answer, err := confirm(a.ctx, runtime.MessageDialogOptions{Type: runtime.QuestionDialog, Title: title, Message: message + pluginID + "\n\n" + processes.Preview(r), Buttons: []string{deny, allow}, DefaultButton: deny, CancelButton: deny})
+	answer, err := confirm(a.ctx, runtime.MessageDialogOptions{Type: runtime.QuestionDialog, Title: title, Message: message + pluginID + "\n\n" + processConfirmationPreview(r, a.appSettings != nil && a.appSettings.Get().Language == "ru"), Buttons: []string{deny, allow}, DefaultButton: deny, CancelButton: deny})
 	if err != nil {
 		return false, errors.New("review_failed")
 	}
@@ -92,8 +103,10 @@ func (a *App) PluginProcessReview(pluginID string, request processes.Request) (b
 	if epoch != a.processEpoch || owner != currentOwner || processes.Preview(current) != processes.Preview(r) {
 		return false, errors.New("review_expired")
 	}
-	if err := a.processes.SetApproval(owner, r, true); err != nil {
-		return false, err
+	if remember {
+		if err := a.processes.SetApproval(owner, r, true); err != nil {
+			return false, err
+		}
 	}
 	return true, nil
 }
@@ -117,13 +130,6 @@ func (a *App) PluginProcessRun(pluginID, operationID string, request processes.R
 	}
 	if r.Kind == "url" {
 		defer a.processMu.Unlock()
-		approved, err := a.processes.Approved(owner, r)
-		if err != nil {
-			return processes.Result{}, err
-		}
-		if !approved {
-			return processes.Result{}, errors.New("approval_required")
-		}
 		if err := a.externalOpenService().OpenPath(r.URL); err != nil {
 			return processes.Result{}, errors.New("open_failed")
 		}
@@ -165,4 +171,20 @@ func (a *App) stopPluginProcesses(owner string) {
 	if a.processes != nil {
 		a.processes.Stop(owner)
 	}
+}
+
+// Keep the user-facing confirmation focused on what will actually execute.
+func processConfirmationPreview(r processes.Request, russian bool) string {
+	if r.Kind == "url" {
+		return "URL: " + r.URL
+	}
+	labels := []string{"Program", "Arguments", "Working directory"}
+	if russian {
+		labels = []string{"Программа", "Аргументы", "Рабочий каталог"}
+	}
+	args := make([]string, len(r.Args))
+	for i, arg := range r.Args {
+		args[i] = strconv.Quote(arg)
+	}
+	return labels[0] + ": " + r.Executable + "\n" + labels[1] + ": " + strings.Join(args, " ") + "\n" + labels[2] + ": " + r.Cwd
 }
