@@ -1,5 +1,5 @@
 // Package storage provides a safe, namespace-isolated JSON storage API for plugins.
-// All data is stored within the vault's .verstak directory, scoped per plugin.
+// Vault data lives in .verstak; device-local metadata lives outside the vault.
 package storage
 
 import (
@@ -14,7 +14,7 @@ import (
 	"github.com/verstak/verstak-desktop/internal/core/vault"
 )
 
-// Storage provides plugin-scoped JSON storage (settings, data, cache).
+// Storage provides plugin-scoped JSON storage (settings, data, cache, local).
 type Storage struct {
 	mu    sync.RWMutex
 	vault *vault.Vault

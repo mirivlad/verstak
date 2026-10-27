@@ -118,6 +118,7 @@ func TestNativeReviewExpiresOnStateChange(t *testing.T) {
 
 func TestSyncedActionsNeverTransferDeviceApprovalOrExecute(t *testing.T) {
 	home := t.TempDir()
+	t.Setenv("HOME", home)
 	t.Setenv("XDG_CONFIG_HOME", home)
 	t.Setenv("APPDATA", home)
 	t.Setenv("LOCALAPPDATA", home)
