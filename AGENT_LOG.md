@@ -2,17 +2,47 @@
 
 > Каноническая точка продолжения ревизии между чатами. Перед новой работой сначала прочитать этот файл и сверить указанные ветки/PR/коммиты с GitHub. После каждого законченного среза или смены рабочей точки обновлять файл.
 
-## Текущая точка: 2026-10-27, подготовка релиза v0.3.5 по команде владельца
+## Текущая точка: 2026-10-27, Actions 2.0 выпущен в v0.3.5
 
-- Владелец явно запросил релиз после кандидата Actions 2.0. Разрешены интеграция
-  feature-веток в main и публикация штатным release workflow.
-- Выпуск Desktop v0.3.5 закрепляет official plugins v0.2.9;
-  SDK b7b2353 объединён в main. Release notes описывают итоговую модель доверия
-  и согласованные компактные карточки/иконки/строку аргументов.
-- Документация Actions и Process API обновлена в verstak-docs.
-- Свежие проверки и доказательства публикации: `build/releases-2026-10-27/`.
-  Публикация ещё не выполнена; окончательный статус будет записан после CI,
-  скачивания и проверки фактических установщиков.
+- По явной команде владельца feature-ветки объединены fast-forward в main.
+  [Desktop v0.3.5](https://github.com/mirivlad/verstak/releases/tag/v0.3.5)
+  и [official plugins v0.2.9](https://github.com/mirivlad/verstak-official-plugins/releases/tag/v0.2.9)
+  опубликованы как stable/latest. Теги: desktop `0c931b7`, plugins `0cd219d`;
+  SDK main `b7b2353`, docs main `a1c30a7`. Feature-ветки сохранены.
+- Включены итоговая модель доверия Actions и согласованные компактные карточки,
+  hover/focus controls без щита, общий выбор иконок и строка аргументов.
+  Локальное сохранение доверенное; внешнее определение/изменение executable
+  части требует подтверждения. Optional confirmEveryRun сохранён.
+- Свежий local gate: 9/9 групп, 227/227 E2E, SDK 39/39. Локальные build,
+  Deb и AppImage v0.3.5 собраны. Opt-in Go tests real-server/supplied-backups/
+  synthetic-cost не запускались; пропуски групп отсутствуют.
+- [CI релизного коммита](https://github.com/mirivlad/verstak/actions/runs/40467400255)
+  прошёл, включая Windows Go. E2E: 225 first-pass + 2 flaky, прошедших retry:
+  Actions shared-icon assertion не дождался async glyph; прежний editor test
+  clock.pauseAt попал в прошлое. Локально оба прошли без retry; правки продукта
+  ради этих timing-тестов не делались. SDK/plugins CI также зелёные.
+- [Release workflow](https://github.com/mirivlad/verstak/actions/runs/40469077432)
+  собрал и опубликовал Deb, AppImage, Windows ZIP и SHA256SUMS после smoke.
+  Main не менялся между dispatch и публикацией. Все файлы обоих релизов
+  скачаны, SHA-256 совпали с SHA256SUMS и серверными digest. Бинарники всех
+  платформ содержат v0.3.5 / 0c931b7. Все файлы 18 shipping plugins внутри
+  каждого установщика совпали с опубликованными архивами plugins v0.2.9.
+- Real desktop GUI checked на опубликованных файлах: Deb — 16 native checks
+  через WebKitGTK/физический ввод; AppImage — 17 checks обычным запуском без
+  inspector, через AT-SPI/xdotool, с собственными WebKit helpers. Проверены local
+  create/edit без диалога, external flags/изменения/cosmetic, optional every-run,
+  fresh-device trust, cancel, no autorun, обе темы. Deb также disabled refusal,
+  RU и 24 cards без overflow. Маркеры argv не попали в app.log.
+- Несколько ранних попыток native QA сохранены отдельно: checkbox click miss,
+  Xvfb readiness race, несовместимый inspector env старого bundled WebKit,
+  различие accessible names. Исправлены только ignored-драйверы; успешные
+  результаты — `native-published-{deb,appimage}/result.json`. Windows GUI,
+  macOS и реальный пользовательский vault не проверялись и не менялись.
+- Доказательства: `build/releases-2026-10-27/REPORT.md`, source-commits.json,
+  download-verification.json, native-verification.json, desktop/package-verification.json,
+  CI logs/status, native PNG и final-repositories.json.
+- Выпуск завершён. Остановиться и ждать замечаний владельца; новых функций,
+  следующего релиза или интеграции SSHKeeper без нового задания не начинать.
 
 ## Предыдущая точка: 2026-10-27, Actions 2.0 — кандидат 0.3.5-actions.4
 
