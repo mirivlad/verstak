@@ -2,7 +2,33 @@
 
 > Каноническая точка продолжения ревизии между чатами. Перед новой работой сначала прочитать этот файл и сверить указанные ветки/PR/коммиты с GitHub. После каждого законченного среза или смены рабочей точки обновлять файл.
 
-## Текущая точка: 2026-10-27, Actions 2.0 выпущен в v0.3.5
+## Текущая точка: 2026-10-27, видимый checkbox области поиска
+
+- По замечанию владельца исправлена индикация «Искать в этом Деле».
+  Ветка `fix/search-scope-indicator`, код `36fab3f` отправлен в origin.
+- Причина воспроизведена на v0.3.5 в WebKitGTK: checked менялся, но checkbox
+  имел ширину 0px из-за общих правил `.global-search input` и flex-сжатия.
+  Стили текстового поля ограничены `.global-search-box input`; checkbox получил
+  16×16 и flex-shrink:0. Логика фильтрации и хранения состояния не менялась.
+- Focused search E2E: 15/15. На фактическом Deb 0.3.6-search.1 проверены
+  off/on/off в тёмной и светлой темах, 16×16 во всех состояниях, переключение
+  кликом по label и Space. Скриншоты просмотрены; before/after и debug logs
+  находятся в `build/search-scope-2026-10-27/`.
+- Локальные build, Deb и AppImage 0.3.6-search.1 собраны. Общий local gate:
+  9/9 групп, 227/227 E2E без retry, SDK 39/39. Группы не пропускались;
+  прежние opt-in Go real-server/backup/cost тесты не включались.
+- [CI кода 36fab3f](https://github.com/mirivlad/verstak/actions/runs/40517441088):
+  E2E и Windows Go прошли; E2E 226 first-pass + 1 retry прежнего flaky
+  shared-icon assertion Actions. Check job на последней сверке ещё выполнял
+  установку системных зависимостей, общий зелёный CI не заявляется.
+- Сборки: `release/verstak_0.3.6-search.1_amd64.deb` и
+  `release/verstak-linux-x86_64-0.3.6-search.1.AppImage`. SHA-256 в
+  `build/search-scope-2026-10-27/artifacts.json`, отчёт в REPORT.md.
+  Публичный релиз и main в рамках этого исправления не менялись.
+- Исправление готово для проверки владельцем. Остановиться; следующий
+  релиз/merge без нового задания не начинать.
+
+## Предыдущая точка: 2026-10-27, Actions 2.0 выпущен в v0.3.5
 
 - По явной команде владельца feature-ветки объединены fast-forward в main.
   [Desktop v0.3.5](https://github.com/mirivlad/verstak/releases/tag/v0.3.5)
