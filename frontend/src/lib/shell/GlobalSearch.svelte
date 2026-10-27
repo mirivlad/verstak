@@ -458,6 +458,10 @@
   }
 
   .global-search-deal-scope input {
+    width: 1rem;
+    height: 1rem;
+    margin: 0;
+    flex-shrink: 0;
     accent-color: var(--vt-color-accent);
   }
 
@@ -466,7 +470,7 @@
     flex-shrink: 0;
   }
 
-  .global-search input {
+  .global-search-box input {
     width: 100%;
     min-width: 0;
     border: 0;
@@ -477,7 +481,7 @@
     font-size: 0.78rem;
   }
 
-  .global-search input::placeholder {
+  .global-search-box input::placeholder {
     color: var(--vt-color-text-muted);
   }
 
