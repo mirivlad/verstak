@@ -30,7 +30,7 @@ func NewRegistry() *Registry {
 
 func (r *Registry) registerDefaults() {
 	defaults := []Entry{
-		{Name: "external.openURL", Description: "Open reviewed HTTP(S) URLs with the system handler", Dangerous: true},
+		{Name: "external.openURL", Description: "Open HTTP(S) URLs with the system handler", Dangerous: true},
 		{Name: "vault.read", Description: "Read vault files and metadata", Dangerous: false},
 		{Name: "vault.write", Description: "Write vault files and metadata", Dangerous: true},
 		{Name: "vault.watch", Description: "Watch vault file changes", Dangerous: false},

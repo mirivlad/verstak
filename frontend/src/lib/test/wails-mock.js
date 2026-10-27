@@ -890,6 +890,19 @@ function cloneJson(value) {
       return Promise.resolve('');
     },
     // Process execution is simulated here. Real OS behavior is covered by Go and native smokes.
+    ReadPluginLocalDataJSON: async function(pluginId, name) {
+      var err = requirePluginPermission(pluginId,'storage.namespace'); if(err)throw new Error(err);
+      return JSON.parse(localStorage.getItem('mock-plugin-local:'+pluginId+':'+name)||'{}');
+    },
+    WritePluginLocalDataJSON: async function(pluginId, name, data) {
+      var err = requirePluginPermission(pluginId,'storage.namespace'); if(err)return err;
+      localStorage.setItem('mock-plugin-local:'+pluginId+':'+name,JSON.stringify(data));return '';
+    },
+    PluginProcessConfirm: async function(pluginId, request) {
+      var err = requirePluginPermission(pluginId,request.kind==='url'?'external.openURL':'process.spawn');if(err)throw new Error(err);
+      window.__actionsMockReviews=(window.__actionsMockReviews||0)+1;
+      return !!window.__actionsMockAllowReview;
+    },
     PluginProcessApproved: async function(pluginId, request) {
       var err = requirePluginPermission(pluginId, request.kind === 'url' ? 'external.openURL' : 'process.spawn');
       if (err) throw new Error(err);
@@ -907,7 +920,6 @@ function cloneJson(value) {
     PluginProcessRun: async function(pluginId, operationId, request) {
       var err = requirePluginPermission(pluginId, request.kind === 'url' ? 'external.openURL' : 'process.spawn');
       if (err) throw new Error(err);
-      if (!(window.__actionsMockGrants || {})[JSON.stringify([pluginId,request])]) throw new Error('approval_required');
       window.__actionsMockRuns = (window.__actionsMockRuns || []).concat([{operationId,request}]);
       if (request.executable === 'missing-verstak-program') throw new Error('program_not_found');
       return {started:true,exitCode:request.mode==='detached'?-1:0,stdout:'literal result: '+(request.args || []).join('|'),stderr:'',timedOut:false,cancelled:false,outputLimited:false};

@@ -2,6 +2,28 @@
 
 > Каноническая точка продолжения ревизии между чатами. Перед новой работой сначала прочитать этот файл и сверить указанные ветки/PR/коммиты с GitHub. После каждого законченного среза или смены рабочей точки обновлять файл.
 
+## Новая модель доверия Actions: исходники реализованы, проверка кандидата в работе
+
+- Те же `feat/actions-2`, UI-срез b304e0e/326bd74/dfd7347 сохранён отдельно.
+- `processes.run` больше не требует request grant, но Go checks plugin loaded,
+  persisted disable, capability и process.spawn/external.openURL на каждом вызове.
+  `confirm` — отдельное native confirmation без выдачи прав/сохранения approval.
+  Старые approved/review/revoke оставлены deprecated ради API-совместимости.
+- Generic `storage.local` хранит JSON вне vault, в namespace vault-path/plugin,
+  Windows — LocalAppData. В sync/import этот store не участвует и прав не даёт.
+- Actions доверяет только form-save или принятому confirmation; SHA-256 от
+  authored request + confirmEveryRun. Title/icon/rank/scope не влияют.
+  Командный save/import/sync не записывают доверие. Щит удалён; optional
+  «Спрашивать подтверждение перед каждым запуском» по умолчанию выключен.
+- Источники проверены: local record diff записывает операции, remote apply пишет
+  через storage напрямую. UI-only trust boundary отделяет авторство без новых
+  полей источника в sync. Старые определения сохраняются; без local hash —
+  одно подтверждение, вместо предположений об их авторстве.
+- Целевые проверки: UI 18/18; SDK 39/39; Go process/storage/API -race passed;
+  gopls clean; TS LSP 0 новых ошибок (2 прежних в SDK test file).
+- Следующий шаг: полный gate, локальные пакеты 0.3.5-actions.4 и native smokes.
+  Без релиза, тега или merge main. Подробный контракт — docs/PROCESSES_API.md.
+
 ## Текущая точка: 2026-10-27 — UI Actions проверен, новая модель доверия в работе
 
 - Три ветки `feat/actions-2`, без изменений main/релизов.

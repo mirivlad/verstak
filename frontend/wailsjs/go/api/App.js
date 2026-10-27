@@ -302,6 +302,10 @@ export function PluginProcessCancel(arg1, arg2) {
   return window['go']['api']['App']['PluginProcessCancel'](arg1, arg2);
 }
 
+export function PluginProcessConfirm(arg1, arg2) {
+  return window['go']['api']['App']['PluginProcessConfirm'](arg1, arg2);
+}
+
 export function PluginProcessReview(arg1, arg2) {
   return window['go']['api']['App']['PluginProcessReview'](arg1, arg2);
 }
@@ -416,6 +420,10 @@ export function ReadPluginDataNDJSON(arg1, arg2) {
 
 export function ReadPluginDealConfig(arg1, arg2) {
   return window['go']['api']['App']['ReadPluginDealConfig'](arg1, arg2);
+}
+
+export function ReadPluginLocalDataJSON(arg1, arg2) {
+  return window['go']['api']['App']['ReadPluginLocalDataJSON'](arg1, arg2);
 }
 
 export function ReadPluginSetting(arg1, arg2) {
@@ -592,6 +600,10 @@ export function WritePluginDataNDJSON(arg1, arg2, arg3) {
 
 export function WritePluginDealConfig(arg1, arg2, arg3) {
   return window['go']['api']['App']['WritePluginDealConfig'](arg1, arg2, arg3);
+}
+
+export function WritePluginLocalDataJSON(arg1, arg2, arg3) {
+  return window['go']['api']['App']['WritePluginLocalDataJSON'](arg1, arg2, arg3);
 }
 
 export function WritePluginSetting(arg1, arg2, arg3) {

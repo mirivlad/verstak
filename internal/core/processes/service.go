@@ -1,4 +1,4 @@
-// Package processes runs explicitly reviewed local programs. It never uses a shell.
+// Package processes runs local programs for authorized callers. It never uses a shell.
 package processes
 
 import (
@@ -199,6 +199,7 @@ type Run struct{ done chan Result }
 func (r *Run) Wait() Result { return <-r.done }
 
 // Start registers cancellation before returning so disable cannot race the launch.
+// The caller enforces plugin access. Action trust is not a process permission.
 // Caller must serialize its access check + Start against plugin disable/reload.
 func (s *Service) Start(parent context.Context, owner, id string, r Request) (*Run, error) {
 	if r.Kind != "process" || id == "" || len(id) > 128 {
@@ -206,13 +207,6 @@ func (s *Service) Start(parent context.Context, owner, id string, r Request) (*R
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	grants, err := s.approvals()
-	if err != nil {
-		return nil, err
-	}
-	if !grants[fingerprint(owner, r)] {
-		return nil, errors.New("approval_required")
-	}
 	key := owner + ":" + id
 	if _, exists := s.active[key]; exists {
 		return nil, errors.New("operation_in_progress")
